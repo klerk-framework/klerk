@@ -22,7 +22,7 @@ val gsonVersion = "2.9.0"
 val webauthnVersion = "2.5.2"
 
 group = "dev.klerkframework"
-version = "1.0.0-beta.1"
+version = "1.0.0-beta.2"
 
 repositories {
     // Use Maven Central for resolving dependencies.

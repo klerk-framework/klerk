@@ -32,7 +32,7 @@ public data class Config<C : KlerkContext, V>(
     val persistence: Persistence,
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
-    val contextProvider: ((dev.klerkframework.klerk.ActorIdentity) -> C)?,
+    val contextProvider: ((ActorIdentity) -> C)?,
 ) {
     lateinit var gson: Gson
 
@@ -58,7 +58,12 @@ public data class Config<C : KlerkContext, V>(
         parametersWithReferencesMustHaveCollectionValidation()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
+        checkContextProviderExistIfConfigContainsTimeTriggers()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
+    }
+
+    private fun checkContextProviderExistIfConfigContainsTimeTriggers() {
+        // TODO("Not yet implemented")
     }
 
     /**

@@ -164,8 +164,9 @@ internal class EventProcessor<C : KlerkContext, V>(
     ): ProcessingData<T, C, V> {
         val processingData = ProcessingData<T, C, V>(remainingTimeTrigger = model, primaryModel = model.id)
         readWriteLock.acquireRead()
-        val reader = ReaderWithoutAuth<C, V>(klerk)
-        val result = process(processingData, null, reader, isPrimary = true, options, time)
+        val reader = ReaderWithoutAuth(klerk)
+        val context = klerk.config.contextProvider!!.invoke(SystemIdentity)
+        val result = process(processingData, context, reader, isPrimary = true, options, time)
         readWriteLock.releaseRead()
         return result
     }
@@ -189,7 +190,7 @@ internal class EventProcessor<C : KlerkContext, V>(
      */
     private fun <Primary : Any> process(
         processingData: ProcessingData<Primary, C, V>,
-        context: C?,
+        context: C,
         reader: Reader<C, V>,
         isPrimary: Boolean,
         options: ProcessingOptions,
@@ -217,7 +218,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         processingData: ProcessingData<Primary, C, V>,
         options: ProcessingOptions,
         reader: Reader<C, V>,
-        context: C?,
+        context: C,
     ): ProcessingData<Primary, C, V> {
         // is there a timeTrigger?
         processingData.remainingTimeTrigger?.let { model ->
@@ -238,7 +239,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         val remaining = processingData.remainingCommands.drop(1)
         logger.log(DebugOptions.sequence, options) { "Processing command ${currentCommand.event}" }
 
-        klerk.validator.validateCommand(currentCommand, reader, requireNotNull(context))
+        klerk.validator.validateCommand(currentCommand, reader, context)
             ?.let { return ProcessingData(problems = listOf(it)) }
 
         val modelId = currentCommand.model
@@ -271,7 +272,7 @@ internal class EventProcessor<C : KlerkContext, V>(
      */
     private fun <Primary : Any, T : Any, P> processBlocks(
         processingData: ProcessingData<Primary, C, V>,
-        context: C?,
+        context: C,
         reader: Reader<C, V>,
         options: ProcessingOptions,
         time: Instant
@@ -309,7 +310,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 processingData.currentCommand as Command<T, P>
                 val args = ArgForVoidEvent(
                     requireNotNull(processingData.currentCommand),
-                    requireNotNull(context),
+                    context,
                     reader
                 )
 
@@ -325,7 +326,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 @Suppress("UNCHECKED_CAST")
                 processingData.currentCommand as Command<T, P>
                 val command = requireNotNull(processingData.currentCommand)
-                val args = ArgForInstanceEvent(requireNotNull(model), command, requireNotNull(context), reader)
+                val args = ArgForInstanceEvent(requireNotNull(model), command, context, reader)
 
                 @Suppress("UNCHECKED_CAST")
                 currentBlock.executables.map { it as InstanceEventExecutable<T, P, C, V> }
