@@ -389,6 +389,12 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
     if (ktype.isSubtypeOf(FloatContainer::class.starProjectedType)) {
         return PropertyType.Float
     }
+    if (ktype.isSubtypeOf(InstantContainer::class.starProjectedType)) {
+        return PropertyType.Long
+    }
+    if (ktype.isSubtypeOf(DurationContainer::class.starProjectedType)) {
+        return PropertyType.Long
+    }
 
 /*    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
         return PropertyType.Enum

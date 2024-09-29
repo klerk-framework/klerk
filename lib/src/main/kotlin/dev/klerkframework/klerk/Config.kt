@@ -4,7 +4,6 @@ import com.google.gson.Gson
 import dev.klerkframework.klerk.collection.ModelCollection
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
@@ -437,7 +436,53 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
             eventLogPositiveRules.addAll(block.positiveBlock.rules)
             eventLogNegativeRules.addAll(block.negativeBlock.rules)
         }
+
+        public fun insecureAllowEverything(): AuthorizationRulesBlock<C, V>.() -> Unit = {
+            logger.warn { "The authorization rules allows everything. The application is insecure!" }
+            readModels {
+                positive {
+                    rule(::everybodyCanReadModels)
+                }
+                negative {
+                }
+            }
+
+            readProperties {
+                positive {
+                    rule(::everybodyCanReadAllProperties)
+                }
+                negative {
+                }
+            }
+            commands {
+                positive {
+                    rule(::everybodyCanDoEverything)
+                }
+                negative {
+                }
+            }
+            eventLog {
+                positive {
+                    rule(::everybodyCanReadEventLog)
+                }
+                negative {}
+            }
+        }
+
+        private fun everybodyCanReadModels(args: ArgModelContextReader<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanReadAllProperties(args: ArgsForPropertyAuth<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanDoEverything(args: ArgCommandContextReader<*, C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanReadEventLog(args: ArgContextReader<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
     }
+
 
     @ConfigMarker
     public class AuthorizationReadRulesBlock<C : KlerkContext, V> {

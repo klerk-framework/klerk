@@ -22,7 +22,7 @@ val gsonVersion = "2.9.0"
 val webauthnVersion = "2.5.2"
 
 group = "dev.klerkframework"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.3"
 
 repositories {
     // Use Maven Central for resolving dependencies.
@@ -70,20 +70,6 @@ publishing {
         create<MavenPublication>("Maven") {
             artifactId = "klerk"
             from(components["java"])
-        }
-    }
-
-    repositories {
-        maven {
-            url = uri("https://gitlab.com/api/v4/projects/33843632/packages/maven")
-            name = "GitLab"
-            credentials(HttpHeaderCredentials::class) {
-                name = "Private-Token"
-                value = findProperty("gitLabPrivateToken") as String?
-            }
-            authentication {
-                create("header", HttpHeaderAuthentication::class)
-            }
         }
     }
 }
