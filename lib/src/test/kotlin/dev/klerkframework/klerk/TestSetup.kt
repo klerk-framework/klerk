@@ -51,8 +51,7 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
             //model(Shop::class, cudStateMachine(Shop::class), views.shops)
         }
         authorization {
-            apply(insecureAllowEverything())
-/*            readModels {
+            readModels {
                 positive {
                     rule(::`Everybody can read`)
                 }
@@ -83,8 +82,6 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                 }
                 negative {}
             }
-
- */
         }
         contextProvider(::myContextProvider)
     }.withPlugin(
