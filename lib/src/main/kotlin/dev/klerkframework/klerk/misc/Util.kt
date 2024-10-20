@@ -18,7 +18,7 @@ internal fun <T : Any, P, C:KlerkContext, V> getStateMachine(
     return stateMachine as StateMachine<T, *, C, V>
 }
 
-internal fun camelCaseToPretty(s: String): String {
+public fun camelCaseToPretty(s: String): String {
     var result = ""
     s.toCharArray().forEachIndexed { index, c ->
         run {
@@ -59,7 +59,7 @@ internal fun extractNameFromFunctionString(funString: String): String {
     return funString.substring(startIndex, endIndex)
 }
 
-internal fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): String {
+public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): String {
     try {
         val kFunction = (f as KFunction<*>)
         if (kFunction.name == "execute") {
@@ -77,3 +77,7 @@ internal fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): 
         return "?"
     }
 }
+
+// why does Ktor have its own implementation of these?
+internal fun String.encodeBase64(): String = Base64.getEncoder().encodeToString(this.toByteArray())
+internal fun String.decodeBase64String(): String = String(Base64.getDecoder().decode(this))

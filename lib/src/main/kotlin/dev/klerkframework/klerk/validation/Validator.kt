@@ -95,7 +95,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     }
 
     private fun validateContext(context: C, eventReference: EventReference): Collection<Problem> {
-        return klerk.config.getEvent(eventReference)._contextRules.mapNotNull {
+        return klerk.config.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
             if (result is Validity.Invalid) InvalidParametersProblem(
                 violatedRule = RuleDescription(

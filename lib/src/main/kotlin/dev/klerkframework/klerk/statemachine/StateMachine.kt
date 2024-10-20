@@ -17,9 +17,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
 
     internal lateinit var modelCollections: ModelCollections<T, C>
     private lateinit var currentState: State<T, ModelStates, C, V>
-    internal val states = mutableListOf<State<T, ModelStates, C, V>>()
-    internal lateinit var voidState: VoidState<T, ModelStates, C, V>
-    internal val instanceStates: List<InstanceState<T, ModelStates, C, V>>
+    public val states: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
+    public lateinit var voidState: VoidState<T, ModelStates, C, V>
+    public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
         get() = states.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
 
     internal val declaredEvents = mutableListOf<Event<T, *>>()
@@ -111,10 +111,10 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         return voidState.getEvents().filter { it.isExternal } .map { it.id }.toSet()
     }
 
-    internal fun getExternalEvents(): Set<EventReference> =
+    public fun getExternalEvents(): Set<EventReference> =
         states.flatMap { state -> state.getEvents().filter { it.isExternal }.map { it.id } }.toSet()
 
-    internal fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
+    public fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 
 
     // -------- Builder ---------------------

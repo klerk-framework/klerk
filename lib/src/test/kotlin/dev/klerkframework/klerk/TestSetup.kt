@@ -26,7 +26,6 @@ import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
-import dev.klerkframework.plugins.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -84,14 +83,7 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
             }
         }
         contextProvider(::myContextProvider)
-    }.withPlugin(
-        PostmarkEmailService(
-            System.getenv("POSTMARK_API_KEY") ?: "dummyKey",
-            PostmarkEmailWebhooksAuth("abc", "123"),
-            serverID = 13744766,
-            defaultFromAddress = BasicEmail.EmailAndName("linus.tornkrantz@bostadskontrollen.se", "Linus Törnkrantz"),
-        ),
-    ).withPlugin(MagicLinkAuthentication("http://localhost:8080/login"))
+    }
 }
 
 fun myContextProvider(actorIdentity: dev.klerkframework.klerk.ActorIdentity): Context {
@@ -320,7 +312,6 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
             }
 
             onEvent(ImproveAuthor) {
-                sendEmail(::notifyPublisher)
                 transitionWhen(
                     linkedMapOf(
                         ShouldSendNotificationAlgorithm::execute to Improving
@@ -334,16 +325,6 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
         }
 
     }
-
-fun notifyPublisher(args: ArgForInstanceEvent<Author, Nothing?, Context, MyCollections>) =
-    PostmarkEmail(
-        From = BasicEmail.EmailAndName("linus.tornkrantz@bostadskontrollen.se", "Linus Törnkrantz").toStringWithoutDots(),
-        To = BasicEmail.EmailAndName("linus.tornkrantz@bostadskontrollen.se", "Linus Törnkrantz").toStringWithoutDots(),
-        // replyTo = EmailAndName("linus.tornkrantz@bostadskontrollen.se", "Linus Törnkrantz"),
-        Subject = "Author has improved",
-        TextBody = null,
-        HtmlBody = "<b>Hello</b> this is html",
-        )
 
 fun someUpdate(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Author {
     return args.model.props.copy(lastName = LastName("efter"))
@@ -816,4 +797,25 @@ open class EnglishTranslation : DefaultTranslator() {
             else -> super.property(property)
         }
     }
+}
+
+
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, true, CreateBookParams::class)
+
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, true)
+
+object DeleteBook : InstanceEventNoParameters<Book>(Book::class, true)
+
+data class CreateBookParams(
+    val title: BookTitle,
+    val author: ModelID<Author>,
+    val coAuthors: Set<ModelID<Author>> = emptySet(),
+    val previousBooksInSameSeries: List<ModelID<Book>> = emptyList(),
+    val tags: Set<BookTag> = emptySet(),
+    val averageScore: AverageScore
+)
+
+class AverageScore(value: Float) : FloatContainer(value) {
+    override val min: Float = 0f
+    override val max: Float = Float.MAX_VALUE
 }

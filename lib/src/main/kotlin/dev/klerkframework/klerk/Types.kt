@@ -23,8 +23,8 @@ public data class StateId(val modelName: String, val stateName: String) {
 public data class CollectionId(val modelName: String, val shortId: String) {
     override fun toString(): String = "c.$modelName.$shortId"
 
-    internal companion object {
-        internal fun from(string: String): CollectionId {
+    public companion object {
+        public fun from(string: String): CollectionId {
             val parts = string.split(".")
             require(parts.size == 3) { "CollectionId must contain three parts separated by dots" }
             require(parts.first() == "c") { "CollectionId must start with 'c.'" }
@@ -103,9 +103,9 @@ public sealed class Event<T : Any, P>(private val forModel: KClass<T>, internal 
     a Reader). But that is not the reason! The point is that you can reuse rules
     in the state machine over different kind of events!
      */
-    internal var _contextRules: Set<(KlerkContext) -> Validity> = emptySet()
+    private var _contextRules: Set<(KlerkContext) -> Validity> = emptySet()
 
-    internal fun <C : KlerkContext> getContextRules(): Set<(C) -> Validity> =
+    public fun <C : KlerkContext> getContextRules(): Set<(C) -> Validity> =
         _contextRules
 
     internal fun <C : KlerkContext> setContextRules(rules: Set<(C) -> Validity>) {
@@ -334,7 +334,7 @@ public sealed class Validity {
  * Returns microseconds since 1970.
  * It only works for instants between years -290308 and +294247.
  */
-internal fun Instant.to64bitMicroseconds(): Long {
+public fun Instant.to64bitMicroseconds(): Long {
     if (this <= klerkInstantMin) return Long.MIN_VALUE
     if (this >= klerkInstantMax) return Long.MAX_VALUE
     return BigInteger.valueOf(this.epochSeconds).multiply(ONE_MILLION)
@@ -348,7 +348,7 @@ private val klerkInstantMax = decode64bitMicroseconds(Long.MAX_VALUE)
 private val ONE_MILLION = BigInteger.valueOf(1000000)
 private val ONE_THOUSAND = BigInteger.valueOf(1000)
 
-internal fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
+public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
     // can be improved, e.g. this cannot handle Instant.EPOCH + 1 nanosecond
     if (microsecondsSince1970 == 0L) {
         return Instant.fromEpochSeconds(0)

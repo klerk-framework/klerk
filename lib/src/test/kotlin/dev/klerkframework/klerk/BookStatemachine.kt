@@ -58,24 +58,3 @@ fun bookStateMachine(allAuthors: ModelCollection<Author, Context>, collections: 
 fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
     return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 }
-
-data class CreateBookParams(
-    val title: BookTitle,
-    val author: ModelID<Author>,
-    val coAuthors: Set<ModelID<Author>> = emptySet(),
-    val previousBooksInSameSeries: List<ModelID<Book>> = emptyList(),
-    val tags: Set<BookTag> = emptySet(),
-    val averageScore: AverageScore
-)
-
-class AverageScore(value: Float) : FloatContainer(value) {
-    override val min: Float = 0f
-    override val max: Float = Float.MAX_VALUE
-}
-
-enum class AgeGroup {
-    smallChildren,
-    children,
-    teenagers,
-    grownUps
-}

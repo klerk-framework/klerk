@@ -22,7 +22,7 @@ public class InvalidParametersProblem(
 
     internal var exception: Exception? = null
 
-    internal constructor(exception: Exception) : this(message = exception.message) {
+    public constructor(exception: Exception) : this(message = exception.message) {
         this.exception = exception
     }
 

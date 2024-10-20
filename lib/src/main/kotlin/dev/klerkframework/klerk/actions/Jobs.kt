@@ -54,7 +54,7 @@ public enum class JobResult {
     Fail
 }
 
-internal typealias JobId = Long
+public typealias JobId = Long
 
 internal class JobManagerImpl<C:KlerkContext, V>(val klerkImpl: KlerkImpl<C, V>) : JobManager<C, V> {
 

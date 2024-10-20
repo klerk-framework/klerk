@@ -118,9 +118,3 @@ fun generousAuthRules(): ConfigBuilder<Context, MyCollections>.() -> Unit = {
         }
     }
 }
-
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, true, CreateBookParams::class)
-
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, true)
-
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, true)

@@ -9,7 +9,7 @@ import kotlin.time.Duration
 
 @ConfigMarker
 public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
-    internal val name: String, internal val modelName: String
+    public val name: String, internal val modelName: String
 ) {
 
     public val id: StateId = StateId(modelName, name)
@@ -32,7 +32,7 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(name
 
     override var enterBlock: Block<T, ModelStates, C, V> = VoidNonEventBlock("Enter block for state '$name'", Enter)
     override var exitBlock: Block<T, ModelStates, C, V> = VoidNonEventBlock("Exit block for state '$name'", Exit)
-    internal val onEventBlocks: MutableList<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>> =
+    public val onEventBlocks: MutableList<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
 
     public fun <P : Any?> onEvent(event: VoidEvent<T, P>, init: VoidEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
@@ -61,7 +61,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     override var enterBlock: Block<T, ModelStates, C, V> = InstanceNonEventBlock("Enter block for state '$name'", Enter)
     override var exitBlock: Block<T, ModelStates, C, V> = InstanceNonEventBlock("Exit block for state '$name'", Exit)
     internal var timeBlock: InstanceNonEventBlock<T, ModelStates, C, V>? = null
-    internal val onEventBlocks: MutableList<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>> =
+    public val onEventBlocks: MutableList<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
     internal var afterDuration: Duration? = null
     internal var atTimeFunction: ((args: ArgForInstanceNonEvent<T, C, V>) -> Instant)? = null

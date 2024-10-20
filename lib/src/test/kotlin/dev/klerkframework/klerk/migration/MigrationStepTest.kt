@@ -2,7 +2,6 @@ package dev.klerkframework.klerk.migration
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.storage.SqlPersistence
-import dev.klerkframework.webutils.generateSampleData
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals

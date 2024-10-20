@@ -24,7 +24,7 @@ import kotlin.time.Duration
 internal val logger = KotlinLogging.logger {}
 
 public data class Config<C : KlerkContext, V>(
-    internal val collections: V,
+    public val collections: V,
     public val authorization: AuthorizationConfig<C, V>,
     val meterRegistry: MeterRegistry,
     val managedModels: Set<ManagedModel<*, *, C, V>>,
@@ -33,7 +33,7 @@ public data class Config<C : KlerkContext, V>(
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
     val contextProvider: ((ActorIdentity) -> C)?,
 ) {
-    lateinit var gson: Gson
+    internal lateinit var gson: Gson
 
     internal fun initialize(): Unit {
         validate()
@@ -155,11 +155,11 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    internal fun getManagedClasses(): Set<KClass<out Any>> {
+    public fun getManagedClasses(): Set<KClass<out Any>> {
         return managedModels.map { it.kClass }.toSet()
     }
 
-    internal fun <T : Any> getView(clazz: KClass<*>): ModelCollections<T, C> {
+    public fun <T : Any> getView(clazz: KClass<*>): ModelCollections<T, C> {
         val mm = managedModels.find { it.kClass == clazz }
             ?: throw NoSuchElementException("Cannot find view for ${clazz.qualifiedName}")
         @Suppress("UNCHECKED_CAST")
@@ -209,18 +209,18 @@ public data class Config<C : KlerkContext, V>(
         //   .filter { it.parameters.isEmpty() }
     }
 
-    internal fun getCollections(): List<Pair<KClass<out Any>, ModelCollection<out Any, C>>> {
+    public fun getCollections(): List<Pair<KClass<out Any>, ModelCollection<out Any, C>>> {
         return managedModels.flatMap { managed ->
             managed.collections.getCollections().map { Pair(managed.kClass, it) }
         }
     }
 
-    internal fun getCollection(id: CollectionId): ModelCollection<out Any, C> {
+    public fun getCollection(id: CollectionId): ModelCollection<out Any, C> {
         val managed = managedModels.single { it.kClass.simpleName == id.modelName }
         return managed.collections.getCollections().single { it.getFullId() == id }
     }
 
-    internal fun getValidationCollectionFor(
+    public fun getValidationCollectionFor(
         eventReference: EventReference,
         parameter: EventParameter
     ): ModelCollection<out Any, C>? {
@@ -233,7 +233,7 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    internal fun getEvent(eventId: EventReference): Event<Any, Any?> {
+    public fun getEvent(eventId: EventReference): Event<Any, Any?> {
         @Suppress("UNCHECKED_CAST")
         return getStateMachine(eventId).states.flatMap { it.getEvents() }
             .first { it.id == eventId } as Event<Any, Any?>
@@ -257,7 +257,7 @@ public data class Config<C : KlerkContext, V>(
         return sm
     }
 
-    internal fun getParameters(eventReference: EventReference): EventParameters<*>? {
+    public fun getParameters(eventReference: EventReference): EventParameters<*>? {
         @Suppress("UNCHECKED_CAST")
         return when (val event = getEvent(eventReference)) {
             is InstanceEventNoParameters -> null
@@ -267,7 +267,7 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    internal fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, context: C): Set<EventReference> {
+    public fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, context: C): Set<EventReference> {
         return getStateMachine(clazz).getExternalEventsForVoidState(context)
     }
 
@@ -281,17 +281,25 @@ public data class Config<C : KlerkContext, V>(
         return plugin.mergeConfig(this).copy(plugins = updatedPlugins)
     }
 
+    /**
+     * This exists so that it is possible to use the configuration of the Gson instance.
+     * It will probably be removed in the future so don't rely on this.
+     */
+    public fun <T> fromJson(json: String, typeOfT: Class<T>): T {
+        return gson.fromJson(json, typeOfT)
+    }
+
 }
 
 public data class AuthorizationConfig<C : KlerkContext, V>(
-    val readModelPositiveRules: Set<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>,
-    val readModelNegativeRules: Set<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>,
-    val readPropertyPositiveRules: Set<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>,
-    val readPropertyNegativeRules: Set<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>,
-    val eventPositiveRules: Set<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>,
-    val eventNegativeRules: Set<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>,
-    val eventLogPositiveRules: Set<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>,
-    val eventLogNegativeRules: Set<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>
+    val readModelPositiveRules: Set<(ArgModelContextReader<C, V>) -> PositiveAuthorization>,
+    val readModelNegativeRules: Set<(ArgModelContextReader<C, V>) -> NegativeAuthorization>,
+    val readPropertyPositiveRules: Set<(ArgsForPropertyAuth<C, V>) -> PositiveAuthorization>,
+    val readPropertyNegativeRules: Set<(ArgsForPropertyAuth<C, V>) -> NegativeAuthorization>,
+    val eventPositiveRules: Set<(ArgCommandContextReader<*, C, V>) -> PositiveAuthorization>,
+    val eventNegativeRules: Set<(ArgCommandContextReader<*, C, V>) -> NegativeAuthorization>,
+    val eventLogPositiveRules: Set<(args: ArgContextReader<C, V>) -> PositiveAuthorization>,
+    val eventLogNegativeRules: Set<(args: ArgContextReader<C, V>) -> NegativeAuthorization>
 )
 
 @DslMarker

@@ -28,7 +28,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     private var isAuthorizedToReadProperty: Boolean =
         true    // true until it is set by the framework, this makes unit testing simpler.
 
-    internal val value: T =
+    public val value: T =
         valueWithoutAuthorization
         get() {
             if (!isAuthorizedToReadProperty) {

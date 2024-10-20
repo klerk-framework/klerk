@@ -39,18 +39,18 @@ internal val dateTimeFormatter = LocalDateTime.Format {
  * It uses reflection and "un-camel-case" in order to extract properties.
  * If populateRelations() is called within a ModelReader, some functions will be able to return more detailed information.
  */
-internal class ReflectedModel<T : Any>(val original: Model<T>) {
+public class ReflectedModel<T : Any>(public val original: Model<T>) {
 
     override fun toString(): String = original.toString()
 
-    val id: ModelID<*>
+    public val id: ModelID<*>
         get() = original.id
 
-    val nonReferenceCollectionsPretty: Map<String, Collection<*>>
+    private val nonReferenceCollectionsPretty: Map<String, Collection<*>>
 
     private val relatedModels: MutableMap<ModelID<*>, Model<Any>> = mutableMapOf()
 
-    var idsOfModelsWithReferencesToThis: List<ReflectedModel<Any>>? = null
+    private var idsOfModelsWithReferencesToThis: List<ReflectedModel<Any>>? = null
 
     init {
         val nonReferenceCollectionsPrettyInit: MutableMap<String, Collection<*>> = mutableMapOf()
@@ -66,7 +66,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
     /**
      * If this is called, some functions will be able to return more detailed information.
      */
-    fun <V, C:KlerkContext> populateRelations(): Reader<C, V>.() -> Unit = {
+    public fun <V, C:KlerkContext> populateRelations(): Reader<C, V>.() -> Unit = {
         original.props::class.memberProperties.forEach { property ->
             val value = property.getter.call(original.props)
             if (value is ModelID<*>) {
@@ -87,7 +87,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
             getAllRelatedIds(id).map { ReflectedModel(get(it as ModelID<Any>)) }
     }
 
-    fun getMeta(): List<ReflectedProperty> {
+    public fun getMeta(): List<ReflectedProperty> {
         val result = mutableListOf<ReflectedProperty>()
         original::class.memberProperties.forEach { property ->
             if (property.name != Model<Any>::props.name) {
@@ -104,7 +104,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
         return result
     }
 
-    fun getMetaAndProperties(): List<ReflectedProperty> {
+    private fun getMetaAndProperties(): List<ReflectedProperty> {
         val result = getMeta().toMutableList()
         original.props::class.memberProperties.forEach { property ->
             result.add(
@@ -119,7 +119,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
         return result
     }
 
-    fun propertiesPretty(): Map<String, String> {
+    private fun propertiesPretty(): Map<String, String> {
         val result: MutableMap<String, String> = mutableMapOf()
         original.props::class.memberProperties.forEach { property ->
             val value = property.getter.call(original.props)
@@ -134,7 +134,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
         return result
     }
 
-    fun referencesPretty(): Map<String, List<Model<Any>>> {
+    public fun referencesPretty(): Map<String, List<Model<Any>>> {
         val result = mutableMapOf<String, List<Model<Any>>>()
         original.props::class.memberProperties.forEach { property ->
             if (isCollectionOfModelId(property.returnType)) {
@@ -153,7 +153,7 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
      * Returns a list of ReflectedModels that has a reference to this model.
      * This is null until it has been populated.
      */
-    fun referencesToThis(): List<ReflectedModel<Any>>? = idsOfModelsWithReferencesToThis
+    public fun referencesToThis(): List<ReflectedModel<Any>>? = idsOfModelsWithReferencesToThis
 
     private fun isCollectionOfModelId(type: KType): Boolean {
         val AnyType = KTypeProjection(KVariance.OUT, Any::class.createType())
@@ -163,9 +163,9 @@ internal class ReflectedModel<T : Any>(val original: Model<T>) {
     }
 }
 
-internal class ReflectedProperty(
+public class ReflectedProperty(
     private val original: KProperty1<out Model<Any>, *>,
-    val value: Any?,
+    public val value: Any?,
     private val relatedModels: MutableMap<ModelID<*>, Model<Any>>
 ) {
 
@@ -177,7 +177,7 @@ internal class ReflectedProperty(
         }
     }
 
-    fun description(): String? {
+    public fun description(): String? {
         if (value is ModelID<*>) {
             val referencedModelName = (relatedModels[value] ?: "").toString()
             return "$referencedModelName (id: ${value.toInt()})"
@@ -189,11 +189,11 @@ internal class ReflectedProperty(
         return null
     }
 
-    fun name(): String {
+    public fun name(): String {
         return camelCaseToPretty(original.name)
     }
 
-    fun getRelatedModel(): Model<Any>? {
+    private fun getRelatedModel(): Model<Any>? {
         return relatedModels[value]
     }
 
@@ -260,7 +260,7 @@ public data class EventParameter(val raw: KParameter) {
             return raw.type.withNullability(false).arguments.single().type.toString()
         }
 
-    internal fun validate() {
+    public fun validate() {
         val ktype = raw.type.withNullability(false)
         validate(ktype)
     }
@@ -291,7 +291,7 @@ public data class EventParameter(val raw: KParameter) {
 
 
 
-    internal fun validationRulesDescription(): Map<String, String> {
+    public fun validationRulesDescription(): Map<String, String> {
         val result = mutableMapOf<String, String>()
         when (type) {
             PropertyType.String -> {
@@ -319,7 +319,7 @@ public data class EventParameter(val raw: KParameter) {
 /**
  * A Field is a property with a value (can be null)
  */
-internal data class Field(private val kProperty1: KProperty1<*, *>, private val valueObj: Any?) {
+public data class Field(private val kProperty1: KProperty1<*, *>, private val valueObj: Any?) {
 
     val name: String
         get() = kProperty1.name

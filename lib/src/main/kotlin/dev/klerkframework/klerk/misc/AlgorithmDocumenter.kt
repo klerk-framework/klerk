@@ -3,14 +3,14 @@ package dev.klerkframework.klerk.misc
 import mu.KotlinLogging
 
 // a hack!
-internal object AlgorithmDocumenter {
+public object AlgorithmDocumenter {
 
     private val logger = KotlinLogging.logger {}
 
     internal val documentation: MutableSet<AlgorithmDocumentation> = mutableSetOf()
-    internal var algorithms: Set<FlowChartAlgorithm<*, *>> = emptySet()
+    public var algorithms: Set<FlowChartAlgorithm<*, *>> = emptySet()
 
-    fun notify(blockName: String, executableType: String, functionToString: String) {
+    public fun notify(blockName: String, executableType: String, functionToString: String) {
         if (!functionToString.startsWith("fun ") || !functionToString.contains(".execute(")) {
             return
         }
@@ -18,11 +18,11 @@ internal object AlgorithmDocumenter {
         documentation.add(AlgorithmDocumentation(blockName, executableType, algoQualifiedName))
     }
 
-    fun setKnownAlgorithms(algorithms: Set<FlowChartAlgorithm<*, *>>) {
+    public fun setKnownAlgorithms(algorithms: Set<FlowChartAlgorithm<*, *>>) {
         this.algorithms = algorithms
     }
 
-    fun getAlgorithm(algorithmName: String): FlowChartAlgorithm<*, *> {
+    public fun getAlgorithm(algorithmName: String): FlowChartAlgorithm<*, *> {
         return algorithms.single { it::class.qualifiedName == algorithmName }
     }
 

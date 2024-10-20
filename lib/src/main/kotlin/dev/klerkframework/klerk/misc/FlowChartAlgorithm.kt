@@ -43,7 +43,7 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 public class AlgorithmBuilder<P, R>(private val name: String) {
 
     private var startNodeId: Decision<*, P>? = null
-    private val nodes = mutableSetOf<Node<P, R>>()
+    public val nodes: MutableSet<Node<P, R>> = mutableSetOf<Node<P, R>>()
 
     public fun start(decision: Decision<*, P>) {
         startNodeId = decision
@@ -69,13 +69,13 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
 
 }
 
-internal sealed class Node<P, R> {
-    abstract fun execute(params: P): NodeExecutionResult<P, R>
+public sealed class Node<P, R> {
+    public abstract fun execute(params: P): NodeExecutionResult<P, R>
 
-    abstract val id: String
-    abstract val humanReadable: String
-    abstract val goTos: Map<*, Decision<out Any, P>>
-    abstract val terminations: Map<*, R>
+    public abstract val id: String
+    public abstract val humanReadable: String
+    public abstract val goTos: Map<*, Decision<out Any, P>>
+    public abstract val terminations: Map<*, R>
 
     internal data class BooleanNode<P, R>(
         val decision: Decision<Boolean, P>,
@@ -132,9 +132,9 @@ internal sealed class Node<P, R> {
     }
 }
 
-internal sealed class NodeExecutionResult<P, R> {
-    data class Termination<P, R>(val terminationResult: R, val functionResult: String) : NodeExecutionResult<P, R>()
-    data class Next<P, R>(val decision: Decision<out Any, P>, val functionResult: String) : NodeExecutionResult<P, R>()
+public sealed class NodeExecutionResult<P, R> {
+    public data class Termination<P, R>(val terminationResult: R, val functionResult: String) : NodeExecutionResult<P, R>()
+    public data class Next<P, R>(val decision: Decision<out Any, P>, val functionResult: String) : NodeExecutionResult<P, R>()
 }
 
 public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {

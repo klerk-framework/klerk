@@ -40,6 +40,6 @@ public open class ModelCollections<T : Any, C : KlerkContext> {
         modelCollections.add(modelCollection)
     }
 
-    internal fun getCollections(): List<ModelCollection<T, C>> = modelCollections
+    public fun getCollections(): List<ModelCollection<T, C>> = modelCollections
 
 }

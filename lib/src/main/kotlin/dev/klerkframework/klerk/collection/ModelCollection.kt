@@ -1,8 +1,9 @@
 package dev.klerkframework.klerk.collection
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.misc.decodeBase64String
+import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.read.Reader
-import io.ktor.util.*
 import kotlinx.datetime.Instant
 
 public abstract class ModelCollection<T : Any, C : KlerkContext>(private val parent: ModelCollection<T, C>?) {

@@ -40,10 +40,10 @@ public interface Persistence {
 /**
  * Keeps all data in memory. Should only be used for testing.
  */
-internal class RamStorage : Persistence {
+public class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
-    override val currentModelSchemaVersion = 1
+    override val currentModelSchemaVersion: Int = 1
 
     override fun <T : Any, P, C:KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
@@ -102,7 +102,7 @@ internal class RamStorage : Persistence {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
     }
 
-    fun <T : Any, P, C:KlerkContext, V> createAuditEntry(
+    public fun <T : Any, P, C:KlerkContext, V> createAuditEntry(
         command: Command<T, P>,
         result: ProcessingData<out T, C, V>,
         context: C

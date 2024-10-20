@@ -3,10 +3,10 @@ package dev.klerkframework.klerk.storage
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.read.ReadResult
 import dev.klerkframework.klerk.read.Reader
-import io.ktor.util.collections.*
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KTypeProjection
@@ -231,7 +231,7 @@ internal object ModelCache {
      * Calculates the relations. This must be done when models have been added using #storeFromPersistence.
      */
     internal fun initRelations() {
-        val concurrentMap = ConcurrentMap<Int, MutableSet<Int>>()
+        val concurrentMap = ConcurrentHashMap<Int, MutableSet<Int>>()
         models.values.parallelStream().forEach { model ->
             updateRelations(model, concurrentMap, false)
         }

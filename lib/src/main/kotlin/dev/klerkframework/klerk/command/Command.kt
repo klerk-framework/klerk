@@ -2,7 +2,8 @@ package dev.klerkframework.klerk.command
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.defaultDebugOptions
-import io.ktor.util.*
+import dev.klerkframework.klerk.misc.decodeBase64String
+import dev.klerkframework.klerk.misc.encodeBase64
 import org.slf4j.event.Level
 import kotlinx.datetime.Instant
 import kotlinx.datetime.Clock
