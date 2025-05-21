@@ -12,13 +12,11 @@ import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Instant
 import mu.KLogger
 import org.slf4j.event.Level
-import kotlin.time.Duration
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
     private val config: Config<C, V>,
@@ -37,7 +35,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions,
-    ): _root_ide_package_.dev.klerkframework.klerk.CommandResult<T, C, V> {
+    ): CommandResult<T, C, V> {
         logger.log(sequence, options) { "Executing command ${command.event}" }
 
         validateToken(options.token, context)?.let {
@@ -48,7 +46,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             logger.log(misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)
             val delta = eventProcessor.processPrimaryCommand(command, context, withoutAuth, options)
-            return _root_ide_package_.dev.klerkframework.klerk.CommandResult.from(delta, withoutAuth, context, config)
+            return CommandResult.from(delta, withoutAuth, context, config)
         }
 
         val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
@@ -59,7 +57,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             // contain data that the user is not authorized to access.
             val readerWithoutAuth = ReaderWithoutAuth(klerk)
             val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
-            when (val commandResult = _root_ide_package_.dev.klerkframework.klerk.CommandResult.from(delta, readerWithoutAuth, context, config)) {
+            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
                 is Failure -> {
                     logger.log(result, options) { "Command ${command.event} failed: ${commandResult.problem}" }
                     commandResult
@@ -194,7 +192,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         commit<Any, Nothing>(delta, null, null)
 
         try {
-            delta.actions.forEach { it.f.invoke() }
+            delta.unmanagedJobs.forEach { it.f.invoke() }
         } catch (e: Exception) {
             logger.warn(e) {
                 "The processing of the time-triggered model was successful but an exception was thrown " +

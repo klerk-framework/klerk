@@ -86,7 +86,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
         if (result is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success<T, C, V>) {
             try {
-                result.actions.forEach { it.f.invoke() }
+                result.unmanagedJobs.forEach { it.f.invoke() }
             } catch (e: Exception) {
                 logger.warn(e) {
                     "The command was successful but an exception was thrown when calling an action " +

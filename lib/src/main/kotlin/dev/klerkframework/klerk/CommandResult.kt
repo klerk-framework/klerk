@@ -3,7 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.actions.Job
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
-import dev.klerkframework.klerk.statemachine.GeneralAction
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 
 public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkContext, V> {
 
@@ -35,7 +35,7 @@ public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkCon
         val transitionedModels: List<dev.klerkframework.klerk.ModelID<out Any>>,
         val secondaryEvents: List<dev.klerkframework.klerk.EventReference>,
         val jobs: List<Job<C, V>>,
-        val actions: List<GeneralAction>,
+        val unmanagedJobs: List<UnmanagedJob>,
         val authorizedModels: Map<dev.klerkframework.klerk.ModelID<out Any>, dev.klerkframework.klerk.Model<out Any>>,
         val log: List<String>,
     ) : dev.klerkframework.klerk.CommandResult<T, C, V>()
@@ -59,7 +59,7 @@ public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkCon
                     transitionedModels = delta.transitions,
                     jobs = delta.newJobs,
                     secondaryEvents = emptyList(),
-                    actions = delta.actions,
+                    unmanagedJobs = delta.unmanagedJobs,
                     authorizedModels = delta.aggregatedModelState.filter {
                         isAuthorized(
                             it.value,

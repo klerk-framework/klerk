@@ -19,7 +19,6 @@ import kotlinx.datetime.Clock
 import mu.KotlinLogging
 import kotlinx.datetime.Instant
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -409,7 +408,7 @@ internal class EventProcessor<C : KlerkContext, V>(
 public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     val primaryModel: ModelID<Primary>? = null,
     val currentModel: ModelID<out Any>? = null,
-    val actions: List<GeneralAction> = emptyList(),
+    val unmanagedJobs: List<UnmanagedJob> = emptyList(),
     val createdModels: List<ModelID<out Any>> = emptyList(),
     val updatedModels: List<ModelID<out Any>> = emptyList(),
     val transitions: List<ModelID<out Any>> = emptyList(),
@@ -446,7 +445,7 @@ public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
         )
         return copy(
             currentModel = currentModel ?: subsequent.currentModel,
-            actions = actions.plus(subsequent.actions),
+            unmanagedJobs = unmanagedJobs.plus(subsequent.unmanagedJobs),
             createdModels = createdModels.plus(subsequent.createdModels),
             updatedModels = updatedModels.plus(subsequent.updatedModels),
             deletedModels = deletedModels.plus(subsequent.deletedModels),

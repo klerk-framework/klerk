@@ -12,7 +12,7 @@ import kotlin.test.Test
 class InstanceNonInstanceEventBlockTest {
 
     @Test
-    fun actionOrder() {
+    fun unmanagedJobOrder() {
 
         runBlocking {
 

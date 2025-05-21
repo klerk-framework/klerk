@@ -45,7 +45,7 @@ internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
     val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 }
 
-public  data class GeneralAction(public val f: () -> Unit, public val description: String)
+public data class UnmanagedJob(public val f: () -> Unit, public val description: String)
 
 @ConfigMarker
 public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(internal val name: String, internal val type: BlockType) {
@@ -81,19 +81,19 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         /**
-         * A "fire and forget" action that will be executed asynchronously.
+         * A "fire and forget" job that will be executed asynchronously.
          *
-         * Note that exceptions thrown by the action will be pretty much ignored, so make sure that the action
+         * Note that exceptions thrown by the job will be pretty much ignored, so make sure that the job
          * catches all exceptions.
          *
-         * The action will be executed on the master node using the default dispatcher. This may have an impact on
-         * system performance, so consider a job instead if you need to do anything non-trivial.
+         * The job will be executed on the main node in the background after the command has been processed. This may have an impact on
+         * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
-        public fun action(
+        public fun unmanagedJob(
             function: (args: ArgForVoidEvent<T, P, C, V>) -> Unit,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
         ) {
-            executables.add(VoidEventAction(function, onCondition))
+            executables.add(VoidEventUnmanagedJob(function, onCondition))
         }
 
         override fun toString(): String {
@@ -141,19 +141,19 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         /**
-         * A "fire and forget" action that will be executed asynchronously.
+         * A "fire and forget" job that will be executed asynchronously.
          *
-         * Note that exceptions thrown by the action will be pretty much ignored, so make sure that the action
+         * Note that exceptions thrown by the job will be pretty much ignored, so make sure that the job
          * catches all exceptions.
          *
-         * The action will be executed on the master node using the default dispatcher. This may have an impact on
-         * system performance, so consider a job instead if you need to do anything non-trivial.
+         * The job will be executed on the main node in the background after the command has been processed. This may have an impact on
+         * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
-        public fun action(
+        public fun unmanagedJob(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> Unit,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventAction(function, onCondition))
+            executables.add(InstanceNonEventUnmanagedJob(function, onCondition))
         }
 
         public fun job(
@@ -216,19 +216,19 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         /**
-         * A "fire and forget" action that will be executed asynchronously.
+         * A "fire and forget" job that will be executed asynchronously.
          *
-         * Note that exceptions thrown by the action will be pretty much ignored, so make sure that the action
+         * Note that exceptions thrown by the job will be pretty much ignored, so make sure that the job
          * catches all exceptions.
          *
-         * The action will be executed on the master node using the default dispatcher. This may have an impact on
-         * system performance, so consider a job instead if you need to do anything non-trivial.
+         * The job will be executed on the main node in the background after the command has been processed. This may have an impact on
+         * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
-        public fun action(
+        public fun unmanagedJob(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> Unit,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceEventAction(function, onCondition))
+            executables.add(InstanceEventUnmanagedJob(function, onCondition))
         }
 
         override fun toString(): String {

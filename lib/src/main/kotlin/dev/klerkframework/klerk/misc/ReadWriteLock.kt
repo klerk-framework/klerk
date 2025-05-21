@@ -8,11 +8,12 @@ import kotlinx.coroutines.sync.Mutex
  */
 internal class ReadWriteLock {
 
-    // Unfortunately, there is no ReadWriteLock or similar for coroutines yet
+    // Unfortunately, there is no ReadWriteLock or similar for coroutines in the standard library yet
     // (see https://github.com/Kotlin/kotlinx.coroutines/issues/94
     // and https://github.com/Kotlin/kotlinx.coroutines/pull/2045)
     // Until it arrives (or we write our own) we use a Mutex, which provides a happens-before relationship
     // (see https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.sync/-mutex/)
+    // There are other implementations, see e.g. https://github.com/MayakaApps/KMP-RWMutex
 
     private val mutex = Mutex()
 

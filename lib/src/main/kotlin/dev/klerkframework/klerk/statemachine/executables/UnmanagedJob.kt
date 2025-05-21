@@ -3,12 +3,12 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.misc.extractNameFromFunction
-import dev.klerkframework.klerk.statemachine.GeneralAction
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
-internal class VoidEventAction<T : Any, P, C : KlerkContext, V>(
+internal class VoidEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
     val action: (args: ArgForVoidEvent<T, P, C, V>) -> Unit,
     override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
@@ -21,8 +21,8 @@ internal class VoidEventAction<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
         ProcessingData(
-            actions = listOf(
-                GeneralAction(
+            unmanagedJobs = listOf(
+                UnmanagedJob(
                     f = { action(args) },
                     description = "Action: ${extractNameFromFunction(action)}"
                 )
@@ -32,7 +32,7 @@ internal class VoidEventAction<T : Any, P, C : KlerkContext, V>(
 
 }
 
-internal class InstanceNonEventAction<T : Any, C : KlerkContext, V>(
+internal class InstanceNonEventUnmanagedJob<T : Any, C : KlerkContext, V>(
     val action: (args: ArgForInstanceNonEvent<T, C, V>) -> Unit,
     override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
 ) : InstanceNonEventExecutable<T, C, V> {
@@ -45,8 +45,8 @@ internal class InstanceNonEventAction<T : Any, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
         ProcessingData(
-            actions = listOf(
-                GeneralAction(
+            unmanagedJobs = listOf(
+                UnmanagedJob(
                     f = { action(args) },
                     description = "Action: ${extractNameFromFunction(action)}"
                 )
@@ -56,7 +56,7 @@ internal class InstanceNonEventAction<T : Any, C : KlerkContext, V>(
 
 }
 
-internal class InstanceEventAction<T : Any, P, C : KlerkContext, V>(
+internal class InstanceEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
     val action: (args: ArgForInstanceEvent<T, P, C, V>) -> Unit,
     override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
@@ -69,8 +69,8 @@ internal class InstanceEventAction<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
         ProcessingData(
-            actions = listOf(
-                GeneralAction(
+            unmanagedJobs = listOf(
+                UnmanagedJob(
                     f = { action(args) },
                     description = "Action: ${extractNameFromFunction(action)}"
                 )

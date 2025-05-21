@@ -258,7 +258,7 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
 
         state(Amateur) {
             onEnter {
-                action(::onEnterAmateurStateAction)
+                unmanagedJob(::onEnterAmateurStateAction)
             }
 
             onEvent(UpdateAuthor) {
@@ -274,7 +274,7 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
             }
 
             onEvent(ImproveAuthor) {
-                action(::showNotification, onCondition = ShouldSendNotificationAlgorithm::execute)
+                unmanagedJob(::showNotification, onCondition = ShouldSendNotificationAlgorithm::execute)
                 transitionTo(Improving)
             }
 
@@ -286,14 +286,14 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
             after(30.seconds) {
                 transitionTo(Established)
                 update(::someUpdate)
-                action(::sayHello)
+                unmanagedJob(::sayHello)
             }
 
         }
 
         state(Improving) {
             onEnter {
-                action(::onEnterImprovingStateAction)
+                unmanagedJob(::onEnterImprovingStateAction)
                 transitionWhen(
                     linkedMapOf(
                         ::isAnImpostor to Amateur,

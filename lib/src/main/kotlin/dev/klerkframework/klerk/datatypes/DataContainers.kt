@@ -239,8 +239,6 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Long>(v
  * A container for geo positions (latitude and longitude).
  *
  * The precision is at least 6 decimals, which translates to sub-meter precision.
- *
- * Implementation details: the lat and long are converted to Ints and combined into one ULong.
  */
 public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<ULong>(value.uLongEncoded) {
     public val geoPosition: GeoPosition = value

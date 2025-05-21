@@ -81,7 +81,7 @@ class ActionTest {
 
             voidState {
                 onEvent(CreateBook) {
-                    action(::throwSomething)
+                    unmanagedJob(::throwSomething)
                     createModel(BookStates.Draft, ::newBook)
                 }
             }
