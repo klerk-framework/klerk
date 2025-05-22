@@ -33,6 +33,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
+import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -784,6 +785,15 @@ class SwedishTranslation : EnglishTranslation() {
             CreateAuthor.id -> "Ny författare"
             else -> super.event(event)
         }
+    }
+
+    override fun function(f: KFunction<*>): String {
+        (f.annotations.firstOrNull { it is MyFunctionAnnotation } as? MyFunctionAnnotation)?.let { return it.name }
+        return when (f) {
+            ::myGreatFunction -> "Min fantastiska funktion"
+            else -> super.function(f)
+        }
+
     }
 
 }

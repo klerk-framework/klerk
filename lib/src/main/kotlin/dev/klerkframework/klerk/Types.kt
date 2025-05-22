@@ -12,6 +12,7 @@ import dev.klerkframework.klerk.statemachine.StateMachine
 import kotlinx.datetime.Instant
 import java.math.BigInteger
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
 
@@ -296,6 +297,7 @@ public interface KlerkContext {
 public interface Translator {
     public fun property(property: KProperty1<*, *>): String
     public fun event(event: EventReference): String
+    public fun function(function: KFunction<*>): String
 }
 
 /**
@@ -310,6 +312,10 @@ public open class DefaultTranslator : Translator {
 
     override fun event(event: EventReference): String {
         return camelCaseToPretty(event.eventName)
+    }
+
+    override fun function(f: KFunction<*>): String {
+        return camelCaseToPretty(f.name)
     }
 }
 
