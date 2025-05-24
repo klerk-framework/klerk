@@ -7,6 +7,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.misc.EventParameter
 import dev.klerkframework.klerk.misc.extractNameFromFunction
+
 import dev.klerkframework.klerk.misc.getStateMachine
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
@@ -97,7 +98,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     private fun validateContext(context: C, eventReference: EventReference): Collection<Problem> {
         return klerk.config.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
-            if (result is Validity.Invalid) InvalidParametersProblem(
+            if (result is Validity.Invalid) ValidationProblem(
                 violatedRule = RuleDescription(
                     it,
                     RuleType.ContextValidation
@@ -119,9 +120,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val value = prop.getter.call(parameters) as ModelID<*>
                 if (collection != null && !collection.contains(value, reader)) {
                     logger.info { collection }
-                    return InvalidParametersProblem(
+                    return InvalidPropertyProblem(
                         "Did not find $value in ${collection.getFullId()} for parameter ${parameter.name}",
-                        parameterName = parameter.name
+                        propertyName = parameter.name ?: "?"
                     )
                 }
             }
@@ -129,11 +130,11 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return null
     }
 
-    fun validateDataContainers(instance: Any): Set<InvalidParametersProblem> {
-        val problems = mutableSetOf<InvalidParametersProblem>()
+    fun validateDataContainers(instance: Any, context: C): Set<InvalidPropertyProblem> {
+        val problems = mutableSetOf<InvalidPropertyProblem>()
         instance::class.memberProperties.forEach { property ->
             if (property.returnType.isSubtypeOf(DataContainer::class.starProjectedType)) {
-                val problem = (property.getter.call(instance) as DataContainer<*>).validate(property.name)
+                val problem = (property.getter.call(instance) as DataContainer<*>).validate(property.name, context.translation)
                 if (problem != null) {
                     problems.add(problem)
                 }
@@ -203,7 +204,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     ): Boolean {
         if (validateContext(context, eventReference).any()) return false
         parameters?.let {
-            if (validateDataContainers(it).any()) return false
+            if (validateDataContainers(it, context).any()) return false
             if (validateReferences(eventReference, parameters, context) != null) return false
         }
         return true
@@ -223,9 +224,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             }
         }
 
-        command.params?.let {
-            problems.addAll(validateDataContainers(it))
-            problems.addAll(validateParametersAsAUnit(it))
+        command.params?.let { p ->
+            problems.addAll(validateDataContainers(p, context))
+            problems.addAll(validateParametersAsAUnit(p))
         }
 
         problems.addAll(validateContext(context, command.event.id))
@@ -304,4 +305,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
     }
 
+}
+
+public sealed class PropertyValidation {
+    public data object Valid : PropertyValidation()
+    public class Invalid(public val translationInfo: String? = null) : PropertyValidation()
 }

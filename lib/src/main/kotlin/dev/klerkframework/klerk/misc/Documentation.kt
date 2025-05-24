@@ -1,6 +1,7 @@
+import dev.klerkframework.klerk.KlerkTranslation
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.misc.Node
-import dev.klerkframework.klerk.misc.extractNameFromFunction
+
 import dev.klerkframework.klerk.statemachine.Block
 import dev.klerkframework.klerk.statemachine.InstanceState
 import dev.klerkframework.klerk.statemachine.State
@@ -18,12 +19,13 @@ import kotlin.collections.forEach
 
 public fun <V> generateStateDiagram(
     stateMachine: StateMachine<out Any, out Enum<*>, *, V>,
-    showUpdateNotes: Boolean
+    showUpdateNotes: Boolean,
+    translation: KlerkTranslation
 ): String {
     var result = "stateDiagram-v2\n"
     stateMachine.states.filterNot { it.name == "void" }.forEach { result += generateStateVariable(it) }
     result += generateVoidTransitions(stateMachine.voidState)
-    result += generateTransitions(stateMachine.instanceStates)
+    result += generateTransitions(stateMachine.instanceStates, translation)
     if (showUpdateNotes) {
         result += generateUpdateNotes(stateMachine.instanceStates)
     }
@@ -47,7 +49,7 @@ private fun <V> generateVoidTransitions(initialState: VoidState<out Any, out Enu
     return result
 }
 
-private fun <V> generateTransitions(states: List<InstanceState<out Any, out Enum<*>, *, V>>): String {
+private fun <V> generateTransitions(states: List<InstanceState<out Any, out Enum<*>, *, V>>, translation: KlerkTranslation): String {
     var result = ""
     states.forEach { state ->
 
@@ -62,9 +64,7 @@ private fun <V> generateTransitions(states: List<InstanceState<out Any, out Enum
                 .forEach { transition ->
                     transition.branches.forEach { branch ->
                         result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
-                            extractNameFromFunction(
-                                branch.key
-                            )
+                            translation.function(branch.key)
                         }\n"
                     }
                 }
@@ -84,9 +84,7 @@ private fun <V> generateTransitions(states: List<InstanceState<out Any, out Enum
                         .forEach { transition ->
                             transition.branches.forEach { branch ->
                                 result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
-                                    extractNameFromFunction(
-                                        branch.key
-                                    )
+                                    translation.function(branch.key)
                                 }\n"
                             }
                         }

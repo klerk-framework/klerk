@@ -26,7 +26,7 @@ class ValidatableTest {
                         FirstName("James"),
                         LastName("Clavell"),
                         PhoneNumber("123"),
-                        age = EvenIntContainer(44),
+                        age = PositiveEvenIntContainer(44),
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
                     )
@@ -89,7 +89,7 @@ class ValidatableTest {
                         FirstName("August"),
                         LastName("Strindberg"),
                         PhoneNumber("123456"),
-                        age = EvenIntContainer(44),
+                        age = PositiveEvenIntContainer(44),
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
                     )

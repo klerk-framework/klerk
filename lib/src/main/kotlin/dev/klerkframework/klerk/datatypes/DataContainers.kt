@@ -1,10 +1,11 @@
 package dev.klerkframework.klerk.datatypes
 
-import dev.klerkframework.klerk.AuthorizationException
-import dev.klerkframework.klerk.InvalidParametersProblem
+import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.logger
-import dev.klerkframework.klerk.to64bitMicroseconds
+import dev.klerkframework.klerk.validation.PropertyValidation
+import dev.klerkframework.klerk.validation.PropertyValidation.*
 import kotlinx.datetime.Instant
+import kotlin.reflect.KFunction
 import kotlin.time.Duration
 
 // optimization: can we make these as value classes? See https://kotlinlang.org/docs/inline-classes.html
@@ -48,10 +49,10 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
             return field
         }
 
-    public open val validators: Set<() -> InvalidParametersProblem?> =
+    public open val validators: Set<(translator: Translation) -> PropertyValidation> =
         emptySet()
 
-    public abstract fun validate(fieldName: String): InvalidParametersProblem?
+    public abstract fun validate(propertyName: String, context: Translation): InvalidPropertyProblem?
 
     internal fun initAuthorization(isAuthorized: Boolean) {
         this.isAuthorizedToReadProperty = isAuthorized
@@ -96,27 +97,37 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
 
     public val string: String = value
 
-    override fun validate(fieldName: String): InvalidParametersProblem? {
-
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
         if (valueWithoutAuthorization.length < minLength) {
-            return InvalidParametersProblem(if (valueWithoutAuthorization.isEmpty()) "$fieldName cannot be empty" else "$fieldName is too short")
+            return InvalidPropertyProblem(if (valueWithoutAuthorization.isEmpty()) "$propertyName cannot be empty" else "$propertyName is too short", propertyName)
         }
 
         if (valueWithoutAuthorization.length > maxLength) {
-            return InvalidParametersProblem("$fieldName is too long")
+            return InvalidPropertyProblem("$propertyName is too long", propertyName)
         }
         if (valueWithoutAuthorization.lines().size > maxLines) {
-            return InvalidParametersProblem("$fieldName contains too many lines")
+            return InvalidPropertyProblem("$propertyName contains too many lines", propertyName)
         }
         val regex = regexPattern
         if (regex != null && !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
                 .matches(valueWithoutAuthorization)) {
-            return InvalidParametersProblem("$fieldName is invalid")
+            return InvalidPropertyProblem("$propertyName is invalid", propertyName)
         }
-        return validators.mapNotNull { it.invoke() }.firstOrNull()
-            ?.let { InvalidParametersProblem("$fieldName: ${it.message}") }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid}
+            .map { functionAndResult ->
+                    InvalidPropertyProblem(
+                        endUserTranslatedMessage = translation.klerk.invalidProperty(
+                            propertyName,
+                            (functionAndResult.first as KFunction<*>).name,
+                            (functionAndResult.second as Invalid).translationInfo
+                        ), propertyName = propertyName
+                    )
+            }
+            .firstOrNull()
     }
 
 }
@@ -131,17 +142,28 @@ public abstract class IntContainer(value: Int) :
 
     public val int: Int = value
 
-    override fun validate(fieldName: String): InvalidParametersProblem? {
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
 
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidParametersProblem("$fieldName cannot be less than $min")
+            return InvalidPropertyProblem(translation.klerk.fieldCannotBeLessThan(propertyName, min), propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidParametersProblem("$fieldName cannot be greater than $max")
+            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
         }
-        return validators.mapNotNull { it.invoke() }.firstOrNull()
-            ?.let { InvalidParametersProblem("$fieldName: ${it.message}") }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid}
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
     }
 
 }
@@ -152,16 +174,27 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
 
     public val long: Long = value
 
-    override fun validate(fieldName: String): InvalidParametersProblem? {
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidParametersProblem("$fieldName cannot be less than $min")
+            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidParametersProblem("$fieldName cannot be greater than $max")
+            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
         }
-        return validators.mapNotNull { it.invoke() }.firstOrNull()
-            ?.let { InvalidParametersProblem("$fieldName: ${it.message}") }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid}
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
     }
 }
 
@@ -171,16 +204,27 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
 
     public val long: ULong = value
 
-    override fun validate(fieldName: String): InvalidParametersProblem? {
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidParametersProblem("$fieldName cannot be less than $min")
+            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidParametersProblem("$fieldName cannot be greater than $max")
+            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
         }
-        return validators.mapNotNull { it.invoke() }.firstOrNull()
-            ?.let { InvalidParametersProblem("$fieldName: ${it.message}") }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid}
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
     }
 }
 
@@ -190,22 +234,33 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
 
     public val float: Float = value
 
-    override fun validate(fieldName: String): InvalidParametersProblem? {
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidParametersProblem("$fieldName cannot be less than $min")
+            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidParametersProblem("$fieldName cannot be greater than $max")
+            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
         }
-        return validators.mapNotNull { it.invoke() }.firstOrNull()
-            ?.let { InvalidParametersProblem("$fieldName: ${it.message}") }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid}
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
     }
 }
 
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
     public val boolean: Boolean = value
-    override fun validate(fieldName: String): InvalidParametersProblem? = null
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 /* Not supported yet. We attempted an implementation but got stuck on how auto-UI should behave. Current guess is that
@@ -223,16 +278,12 @@ abstract class EnumContainer<T : Enum<T>>(value: Enum<T>) : DataContainer<Enum<T
  */
 public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
     public val instant: Instant = value
-    override fun validate(fieldName: String): InvalidParametersProblem? {
-        return null
-    }
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {
     public val duration: Duration = value
-    override fun validate(fieldName: String): InvalidParametersProblem? {
-        return null
-    }
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 /**
@@ -242,9 +293,7 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Long>(v
  */
 public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<ULong>(value.uLongEncoded) {
     public val geoPosition: GeoPosition = value
-    override fun validate(fieldName: String): InvalidParametersProblem? {
-        return null
-    }
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 public data class GeoPosition(val latitude: Double, val longitude: Double) {

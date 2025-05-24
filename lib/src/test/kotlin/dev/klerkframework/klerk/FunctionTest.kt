@@ -21,7 +21,7 @@ class FunctionTest {
                 firstName = FirstName("Mike"),
                 lastName = LastName("Litoris"),
                 phone = PhoneNumber("234"),
-                age = EvenIntContainer(44),
+                age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)))
         val args = ArgForVoidEvent(command, Context.system(), DummyReader)
 

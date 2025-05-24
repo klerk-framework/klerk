@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.misc.EventParameters
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
+import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlinx.datetime.Instant
 import java.math.BigInteger
 import kotlin.reflect.KClass
@@ -288,24 +289,33 @@ interface CommandProducer<C:IContext, V> {
 
 
 public interface KlerkContext {
-    public val actor: dev.klerkframework.klerk.ActorIdentity
+    public val actor: ActorIdentity
     public val auditExtra: String?
-    public val translator: Translator
+    public val translation: Translation
     public val time: Instant
 }
 
-public interface Translator {
+public interface Translation {
+    public val klerk: KlerkTranslation
+}
+
+public interface KlerkTranslation {
     public fun property(property: KProperty1<*, *>): String
     public fun event(event: EventReference): String
-    public fun function(function: KFunction<*>): String
+    public fun function(f: Function<Any>): String
+    public fun fieldCannotBeLessThan(fieldName: String, value: Number): String
+    public fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String
 }
 
 /**
- * The DefaultTranslator can be used
- * 1. when you don't want to translate your application
- * 2. as a fallback for your other translators
+ * The DefaultTranslator can be used when you don't want to translate your application
  */
-public open class DefaultTranslator : Translator {
+public object DefaultTranslation : Translation {
+    override val klerk: KlerkTranslation = DefaultKlerkTranslation
+}
+
+public object DefaultKlerkTranslation : KlerkTranslation {
+
     override fun property(property: KProperty1<*, *>): String {
         return camelCaseToPretty(property.name)
     }
@@ -314,9 +324,22 @@ public open class DefaultTranslator : Translator {
         return camelCaseToPretty(event.eventName)
     }
 
-    override fun function(f: KFunction<*>): String {
-        return camelCaseToPretty(f.name)
+    override fun function(f: Function<Any>): String {
+        val name = (f as KFunction<*>).name
+        return camelCaseToPretty(name)
     }
+
+    override fun fieldCannotBeLessThan(fieldName: String, value: Number): String =
+        "Field $fieldName cannot be less than $value"
+
+    override fun invalidProperty(
+        propertyName: String,
+        functionName: String,
+        translationInfo: String?
+    ): String {
+        return camelCaseToPretty(functionName)
+    }
+
 }
 
 public sealed class Validity {
@@ -326,9 +349,9 @@ public sealed class Validity {
         public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
         public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
     ) : Validity() {
-        public fun toProblem(): InvalidParametersProblem {
-            return InvalidParametersProblem(
-                message = this.message,
+        public fun toProblem(): ValidationProblem {
+            return ValidationProblem(
+                endUserTranslatedMessage = this.message,
                 fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
                 fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull)
             )
@@ -364,11 +387,6 @@ public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
     val micros = str.substring(str.length - 6).toLong()
     return Instant.fromEpochSeconds(epochSeconds, micros * 1000)
 }
-
-
-@Target(AnnotationTarget.FUNCTION)
-@Retention(AnnotationRetention.RUNTIME)
-public annotation class HumanReadable(val name: String)
 
 public interface KlerkPlugin<C : KlerkContext, V> {
     public val name: String

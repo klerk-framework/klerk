@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.misc.extractNameFromFunction
+
 import kotlin.reflect.KProperty0
 
 public abstract class Problem {
@@ -12,26 +12,38 @@ public abstract class Problem {
 
 }
 
-public class InvalidParametersProblem(
-    internal val message: String? = null,
-    public val parameterName: String? = null,
+public open class ValidationProblem(
+    public val endUserTranslatedMessage: String? = null,
     public val fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
     public val fieldsMustNotBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
-    public override val violatedRule: RuleDescription? = null
+    override val violatedRule: RuleDescription? = null
 ) : Problem() {
+    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    public override val recommendedHttpCode: Int = 400
+}
+
+public class InvalidPropertyProblem(
+    endUserTranslatedMessage: String? = null,
+    public val propertyName: String,
+    fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
+    fieldsMustNotBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
+    public override val violatedRule: RuleDescription? = null
+) : ValidationProblem(endUserTranslatedMessage, fieldsMustBeNull, fieldsMustNotBeNull) {
 
     internal var exception: Exception? = null
 
-    public constructor(exception: Exception) : this(message = exception.message) {
+/*    public constructor(exception: Exception) : this(endUserTranslatedMessage = exception.message) {
         this.exception = exception
     }
+
+ */
 
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     public override val recommendedHttpCode: Int = 400
 
     override fun toString(): String {
-        if (message != null) {
-            return message
+        if (endUserTranslatedMessage != null) {
+            return endUserTranslatedMessage
         }
         if (fieldsMustBeNull?.isNotEmpty() == true) {
             return "${fieldsMustBeNull.first().returnType.javaClass.name} must be null"
@@ -45,7 +57,7 @@ public class InvalidParametersProblem(
 }
 
 public data class RuleDescription(val function: Function<Any>, val type: RuleType) {
-    public override fun toString(): String = extractNameFromFunction(function)
+    public override fun toString(): String = "not implemented" // TODO: should use a translation
 }
 
 public enum class RuleType {

@@ -66,12 +66,7 @@ public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): St
             return kFunction.toString().split(".execute").first().split(".")
                 .last() // should probably lookup the algorithm in config and use that to find the name (primarily using annotations)
         }
-        return try {
-            kFunction.annotations.filterIsInstance<HumanReadable>().firstOrNull()?.name
-                ?: if (pretty) camelCaseToPretty(kFunction.name) else kFunction.name
-        } catch (e: Error) {
-            if (pretty) camelCaseToPretty(kFunction.name) else kFunction.name
-        }
+        return DefaultKlerkTranslation.function(f)
     } catch (e: ClassCastException) {
         logger.warn { "Could not figure out function name. It is probably a lambda." }
         return "?"

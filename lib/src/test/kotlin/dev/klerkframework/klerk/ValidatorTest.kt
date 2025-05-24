@@ -38,7 +38,7 @@ class ValidatorTest {
                 firstName = FirstName("Mike"),
                 lastName = LastName("Litoris"),
                 phone = PhoneNumber("234"),
-                age = EvenIntContainer(44),
+                age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
             val command = Command(CreateAuthor,
@@ -59,7 +59,7 @@ class ValidatorTest {
                 firstName = FirstName("Pelle"),
                 lastName = LastName("Svensson"),
                 phone = PhoneNumber("234"),
-                age = EvenIntContainer(44),
+                age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
             val command = Command(CreateAuthor,
@@ -78,7 +78,7 @@ class ValidatorTest {
                 firstName = FirstName("Daniel"),
                 lastName = LastName("Svensson"),
                 phone = PhoneNumber("234"),
-                age = EvenIntContainer(44),
+                age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
             val command = Command(CreateAuthor,

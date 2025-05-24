@@ -26,6 +26,7 @@ import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
+import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -206,7 +207,7 @@ data class CreateAuthorParams(
     val firstName: FirstName,
     val lastName: LastName,
     val phone: PhoneNumber,
-    val age: EvenIntContainer = EvenIntContainer(68),
+    val age: PositiveEvenIntContainer = PositiveEvenIntContainer(68),
     //  val address: Address,
     val secretToken: SecretPasscode,
     val favouriteColleague: ModelID<Author>? = null
@@ -214,7 +215,6 @@ data class CreateAuthorParams(
 
     override fun validators(): Set<() -> Validity> = setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
 
-    @HumanReadable("Testar att namnge en funktion")
     private fun augustStrindbergCannotHaveCertainPhoneNumber(): Validity {
         return if (firstName.value == "August" && lastName.value == "Strindberg" && phone.value == "123456") Invalid() else Valid
     }
@@ -573,17 +573,17 @@ class PhoneNumber(value: String) : StringContainer(value) {
     override val maxLines: Int = 1
 }
 
-class EvenIntContainer(value: Int) : IntContainer(value) {
-    override val min: Int = Int.MIN_VALUE
+class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
+    override val min: Int = 2
     override val max: Int = Int.MAX_VALUE
 
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(): InvalidParametersProblem? {
+    fun mustBeEven(t: Translation): PropertyValidation {
         if (valueWithoutAuthorization % 2 == 0) {
-            return null
+            return PropertyValidation.Valid
         }
-        return InvalidParametersProblem("Must be even")
+        return PropertyValidation.Invalid()
     }
 
 }
@@ -607,8 +607,8 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(): InvalidParametersProblem? {
-        return null
+    private fun `title must be catchy`(translation: Translation): PropertyValidation {
+        return PropertyValidation.Valid
     }
 }
 
@@ -734,23 +734,23 @@ data class Context(
     override val actor: dev.klerkframework.klerk.ActorIdentity,
     override val auditExtra: String? = null,
     override val time: Instant = Clock.System.now(),
-    override val translator: Translator = DefaultTranslator(),
+    override val translation: Translation = DefaultTranslation,
     val user: Model<User>? = null,
     val purpose: String = "Pass the butter",
 ) : KlerkContext {
 
     companion object {
         fun fromUser(user: Model<User>): Context {
-            return Context(dev.klerkframework.klerk.ModelIdentity(user), user = user)
+            return Context(ModelIdentity(user), user = user)
         }
 
-        fun unauthenticated(): Context = Context(dev.klerkframework.klerk.Unauthenticated)
+        fun unauthenticated(): Context = Context(Unauthenticated)
 
-        fun authenticationIdentity(): Context = Context(dev.klerkframework.klerk.AuthenticationIdentity)
+        fun authenticationIdentity(): Context = Context(AuthenticationIdentity)
 
-        fun system(): Context = Context(dev.klerkframework.klerk.SystemIdentity)
+        fun system(): Context = Context(SystemIdentity)
 
-        fun swedishUnauthenticated(): Context = Context(dev.klerkframework.klerk.Unauthenticated, translator = SwedishTranslation())
+        fun swedishUnauthenticated(): Context = Context(Unauthenticated, translation = SwedishTranslation)
     }
 
 }
@@ -770,12 +770,18 @@ object MyJob : Job<Context, MyCollections> {
 
 }
 
-class SwedishTranslation : EnglishTranslation() {
+val english = EnglishKlerkTranslation(DefaultKlerkTranslation)
+
+object SwedishTranslation : Translation {
+    override val klerk: KlerkTranslation = SwedishKlerkTranslation(english)
+}
+
+class SwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation by default {
 
     override fun property(property: KProperty1<*, *>): String {
         return when (property) {
             CreateAuthorParams::firstName -> "Förnamn på den nya författaren"
-            else -> super.property(property)
+            else -> default.property(property)
         }
     }
 
@@ -783,30 +789,48 @@ class SwedishTranslation : EnglishTranslation() {
         return when (event) {
             PublishBook.id -> "Publicera bok"
             CreateAuthor.id -> "Ny författare"
-            else -> super.event(event)
+            else -> default.event(event)
         }
     }
 
-    override fun function(f: KFunction<*>): String {
-        (f.annotations.firstOrNull { it is MyFunctionAnnotation } as? MyFunctionAnnotation)?.let { return it.name }
+    override fun function(f: Function<Any>): String {
+        ((f as KFunction<*>).annotations
+            .firstOrNull { it is MyFunctionAnnotation } as? MyFunctionAnnotation)?.let { return it.name }
         return when (f) {
             ::myGreatFunction -> "Min fantastiska funktion"
-            else -> super.function(f)
+            else -> default.function(f)
         }
-
     }
+
+    override fun invalidProperty(
+        propertyName: String,
+        functionName: String,
+        translationInfo: String?
+    ): String {
+        return when (functionName) {
+            PositiveEvenIntContainer::mustBeEven.name -> "Förväntade mig ett jämt nummer"
+            else -> return default.invalidProperty(propertyName, functionName, translationInfo)
+        }
+    }
+
+    override fun fieldCannotBeLessThan(fieldName: String, value: Number) =
+        "Fältet $fieldName kan inte vara mindre än $value"
 
 }
 
+class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation by default {
 
-open class EnglishTranslation : DefaultTranslator() {
     override fun property(property: KProperty1<*, *>): String {
         return when (property) {
             CreateAuthorParams::firstName -> "First name of the new writer"
             CreateAuthorParams::lastName -> "Last name of the new writer"
-            else -> super.property(property)
+            else -> default.property(property)
         }
     }
+
+    override fun fieldCannotBeLessThan(fieldName: String, value: Number) =
+        "Oops, $fieldName is too low, man!"
+
 }
 
 
