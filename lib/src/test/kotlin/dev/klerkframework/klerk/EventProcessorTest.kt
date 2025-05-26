@@ -57,8 +57,8 @@ class EventProcessorTest {
                 ProcessingOptions(CommandToken.simple())
             )
             when (willFail) {
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> assertTrue(willFail.problem.toString().contains("since these models have a reference to it"))
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> fail()
+                is CommandResult.Failure -> assertTrue(willFail.problems.first().toString().contains("since these models have a reference to it"))
+                is CommandResult.Success -> fail()
             }
 
             val willNotFail = klerk.handle(

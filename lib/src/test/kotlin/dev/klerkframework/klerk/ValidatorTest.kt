@@ -46,8 +46,8 @@ class ValidatorTest {
                 params)
             val options = ProcessingOptions(CommandToken.simple())
             when (val result = klerk.handle(command, Context.system(), options)) {
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> assertTrue(result.problem.violatedRule == null)
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> fail()
+                is CommandResult.Failure -> assertTrue(result.problems.first().violatedRule == null)
+                is CommandResult.Success -> fail()
             }
         }
     }
@@ -67,7 +67,7 @@ class ValidatorTest {
                 params)
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Context.unauthenticated(), options)
-            assertTrue(result is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure, result.toString())
+            assertTrue(result is CommandResult.Failure, result.toString())
         }
     }
 
@@ -86,7 +86,7 @@ class ValidatorTest {
                 params)
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Context.system(), options)
-            assertTrue(result is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure)
+            assertTrue(result is CommandResult.Failure)
         }
     }
 }

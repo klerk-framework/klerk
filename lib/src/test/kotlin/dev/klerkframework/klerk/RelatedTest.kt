@@ -36,8 +36,8 @@ class RelatedTest {
                 Context.system(),
                 ProcessingOptions(CommandToken.simple()),
             )) {
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> assert(result.problem.asException().message!!.contains("Did not find"))
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> fail("Should not succeed")
+                is CommandResult.Failure -> assert(result.problems.first().asException().message!!.contains("Did not find"))
+                is CommandResult.Success -> fail("Should not succeed")
             }
 
         }

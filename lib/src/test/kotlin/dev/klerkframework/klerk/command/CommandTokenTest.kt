@@ -58,8 +58,8 @@ class CommandTokenTest {
             )
 
             when (result) {
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> assertIs<IdempotenceProblem>(result.problem)
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> fail()
+                is CommandResult.Failure -> assertIs<IdempotenceProblem>(result.problems.first())
+                is CommandResult.Success -> fail()
             }
 
         }
@@ -98,8 +98,8 @@ class CommandTokenTest {
             )
 
             when (result) {
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> assertIs<StateProblem>(result.problem)
-                is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> fail()
+                is CommandResult.Failure -> assertIs<StateProblem>(result.problems.first())
+                is CommandResult.Success -> fail()
             }
 
         }

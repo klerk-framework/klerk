@@ -76,15 +76,15 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions
-    ): _root_ide_package_.dev.klerkframework.klerk.CommandResult<T, C, V> {
+    ): CommandResult<T, C, V> {
         val result = try {
             events.handle(command, context, options)
         } catch (e: Exception) {
             logger.error(e) { "Bug in Klerk: Could not process command (${command.event})" }
-            return _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure(InternalProblem())
+            return CommandResult.Failure(listOf(InternalProblem()))
         }
 
-        if (result is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success<T, C, V>) {
+        if (result is CommandResult.Success<T, C, V>) {
             try {
                 result.unmanagedJobs.forEach { it.f.invoke() }
             } catch (e: Exception) {

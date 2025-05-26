@@ -70,7 +70,7 @@ class InstanceNonInstanceEventBlockTest {
                 ProcessingOptions(CommandToken.simple())
             )
 
-            assert(result2 is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success)
+            assert(result2 is CommandResult.Success)
 
         }
     }

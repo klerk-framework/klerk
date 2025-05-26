@@ -36,7 +36,7 @@ class ValidatableTest {
             )
 
             when (result) {
-                is Failure -> assertIs<StateProblem>(result.problem)
+                is Failure -> assertIs<StateProblem>(result.problems.first())
                 is Success -> fail()
             }
         }
@@ -67,7 +67,7 @@ class ValidatableTest {
             )
 
             when (result) {
-                is Failure -> assertIs<StateProblem>(result.problem)
+                is Failure -> assertIs<StateProblem>(result.problems.first())
                 is Success -> fail()
             }
         }
@@ -100,8 +100,8 @@ class ValidatableTest {
 
             when (result) {
                 is Failure -> {
-                    assertIs<StateProblem>(result.problem)
-                    result.problem.violatedRule?.let { println("Violated rule: $it") }
+                    assertIs<StateProblem>(result.problems.first())
+                    result.problems.first().violatedRule?.let { println("Violated rule: $it") }
                 }
                 is Success -> fail()
             }

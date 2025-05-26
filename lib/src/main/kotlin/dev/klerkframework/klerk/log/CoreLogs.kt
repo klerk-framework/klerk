@@ -45,7 +45,7 @@ internal class LogAccessedKlerkLog(context: KlerkContext) : CoreLogEntry(KlerkLo
 internal class LogCommandSucceeded<C : KlerkContext, V>(
     command: Command<out Any, *>,
     context: C,
-    result: _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success<out Any, C, V>,
+    result: CommandResult.Success<out Any, C, V>,
 ) : CoreLogEntry(Event, context) {
     override val headingTemplate = "Command ${command.event} was successful."
 

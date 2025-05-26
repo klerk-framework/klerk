@@ -39,7 +39,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         logger.log(sequence, options) { "Executing command ${command.event}" }
 
         validateToken(options.token, context)?.let {
-            return Failure(it)
+            return Failure(listOf(it))
         }
 
         if (options.dryRun) {
@@ -59,7 +59,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
             when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
                 is Failure -> {
-                    logger.log(result, options) { "Command ${command.event} failed: ${commandResult.problem}" }
+                    logger.log(result, options) { "Command ${command.event} failed: ${commandResult.problems.joinToString(", ") { it.toString() }}" }
                     commandResult
                 }
 

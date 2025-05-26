@@ -5,19 +5,19 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
 
-public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkContext, V> {
+public sealed class CommandResult<T : Any, C : KlerkContext, V> {
 
-    public fun orThrow(): dev.klerkframework.klerk.CommandResult.Success<T, C, V> {
+    public fun orThrow(): Success<T, C, V> {
         return when (this) {
-            is dev.klerkframework.klerk.CommandResult.Failure -> throw this.problem.asException()
-            is dev.klerkframework.klerk.CommandResult.Success -> this
+            is Failure -> throw this.problems.firstOrNull()?.asException() ?: RuntimeException("Unknown problem")
+            is Success -> this
         }
     }
 
-    public fun getOrHandle(default: (dev.klerkframework.klerk.CommandResult.Failure<T, C, V>) -> dev.klerkframework.klerk.CommandResult.Success<T, C, V>): dev.klerkframework.klerk.CommandResult.Success<T, C, V> {
+    public fun getOrHandle(default: (Failure<T, C, V>) -> Success<T, C, V>): Success<T, C, V> {
         return when (this) {
-            is dev.klerkframework.klerk.CommandResult.Failure -> default(this)
-            is dev.klerkframework.klerk.CommandResult.Success -> this
+            is Failure -> default(this)
+            is Success -> this
         }
     }
 
@@ -27,32 +27,32 @@ public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkCon
      * @property authorizedModels contains the models as they are after the command. Note that if the context doesn't
      * allow reading any of the models, that model will not be present.
      */
-    public data class Success<T : Any, C : dev.klerkframework.klerk.KlerkContext, V>(
-        val primaryModel: dev.klerkframework.klerk.ModelID<T>?,
-        val createdModels: List<dev.klerkframework.klerk.ModelID<out Any>>,
-        val modelsWithUpdatedProps: List<dev.klerkframework.klerk.ModelID<out Any>>,
-        val deletedModels: List<dev.klerkframework.klerk.ModelID<out Any>>,
-        val transitionedModels: List<dev.klerkframework.klerk.ModelID<out Any>>,
-        val secondaryEvents: List<dev.klerkframework.klerk.EventReference>,
+    public data class Success<T : Any, C : KlerkContext, V>(
+        val primaryModel: ModelID<T>?,
+        val createdModels: List<ModelID<out Any>>,
+        val modelsWithUpdatedProps: List<ModelID<out Any>>,
+        val deletedModels: List<ModelID<out Any>>,
+        val transitionedModels: List<ModelID<out Any>>,
+        val secondaryEvents: List<EventReference>,
         val jobs: List<Job<C, V>>,
         val unmanagedJobs: List<UnmanagedJob>,
-        val authorizedModels: Map<dev.klerkframework.klerk.ModelID<out Any>, dev.klerkframework.klerk.Model<out Any>>,
+        val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
-    ) : dev.klerkframework.klerk.CommandResult<T, C, V>()
+    ) : CommandResult<T, C, V>()
 
-    public data class Failure<T : Any, C : dev.klerkframework.klerk.KlerkContext, V>(val problem: dev.klerkframework.klerk.Problem) :
-        dev.klerkframework.klerk.CommandResult<T, C, V>()
+    public data class Failure<T : Any, C : KlerkContext, V>(val problems: List<Problem>) :
+        CommandResult<T, C, V>()
 
     internal companion object {
-        fun <T : Any, V, C : dev.klerkframework.klerk.KlerkContext> from(
-            delta: dev.klerkframework.klerk.ProcessingData<T, C, V>,
+        fun <T : Any, V, C : KlerkContext> from(
+            delta: ProcessingData<T, C, V>,
             reader: ReaderWithoutAuth<C, V>,
             context: C,
-            config: dev.klerkframework.klerk.Config<C, V>
-        ): dev.klerkframework.klerk.CommandResult<T, C, V> {
+            config: Config<C, V>
+        ): CommandResult<T, C, V> {
             return if (delta.problems.isEmpty()) {
-                _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success(
-                    primaryModel = delta.primaryModel as dev.klerkframework.klerk.ModelID<T>,
+                Success(
+                    primaryModel = delta.primaryModel as ModelID<T>,
                     createdModels = delta.createdModels,
                     modelsWithUpdatedProps = delta.updatedModels,
                     deletedModels = delta.deletedModels,
@@ -70,7 +70,7 @@ public sealed class CommandResult<T : Any, C : dev.klerkframework.klerk.KlerkCon
                     },
                     log = delta.log
                 )
-            } else _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure(delta.problems.first())
+            } else Failure(delta.problems)
         }
     }
 }

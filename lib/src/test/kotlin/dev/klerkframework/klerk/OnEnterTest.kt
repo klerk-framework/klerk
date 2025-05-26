@@ -47,8 +47,8 @@ class OnEnterTest {
                 ProcessingOptions(CommandToken.simple())
             )
                 when (result) {
-                    is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Failure -> fail(result.problem.toString())
-                    is _root_ide_package_.dev.klerkframework.klerk.CommandResult.Success -> {
+                    is CommandResult.Failure -> fail(result.problems.first().toString())
+                    is CommandResult.Success -> {
                         sleep(5)
                         assertTrue(amateurTriggered)
                         assertTrue(improvedTriggered)

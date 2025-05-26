@@ -51,7 +51,7 @@ public interface Klerk<C : KlerkContext, D> {
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions
-    ): _root_ide_package_.dev.klerkframework.klerk.CommandResult<T, C, D>
+    ): CommandResult<T, C, D>
 
     /**
      * Read stuff
