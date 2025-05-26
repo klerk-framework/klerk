@@ -238,8 +238,10 @@ internal class EventProcessor<C : KlerkContext, V>(
         val remaining = processingData.remainingCommands.drop(1)
         logger.log(DebugOptions.sequence, options) { "Processing command ${currentCommand.event}" }
 
-        klerk.validator.validateCommand(currentCommand, reader, context)
-            ?.let { return ProcessingData(problems = listOf(it)) }
+        val commandValidationProblems = klerk.validator.validateCommand(currentCommand, reader, context)
+        if (commandValidationProblems.isNotEmpty()) {
+            return ProcessingData(problems = commandValidationProblems)
+        }
 
         val modelId = currentCommand.model
         val model = processingData.aggregatedModelState[modelId] ?: currentCommand.model?.let { reader.getOrNull(it) }

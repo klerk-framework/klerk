@@ -45,7 +45,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         id: ModelID<T>?,
         params: P,
         reader: Reader<C, V>
-    ): Collection<Problem> {
+    ): List<Problem> {
         val validityList: List<Validity> = when (event) {
 
             is VoidEventNoParameters<T> -> {
@@ -147,19 +147,25 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         currentCommand: Command<out Any, P>,
         reader: Reader<C, V>,
         context: C
-    ): Problem? {
+    ): List<Problem> {
         currentCommand.model?.let {
             if (reader.getOrNull(it) == null) {
-                return NotFoundProblem("The model with id=$it could not be found")
+                return listOf(NotFoundProblem("The model with id=$it could not be found"))
             }
         }
-        return isEventPossibleGivenModelState(currentCommand, reader)
-            ?: validateEvent(currentCommand, context, reader)
-            ?: checkAuthorization(
-                currentCommand,
-                reader,
-                context
-            )
+        val stateProblem = isEventPossibleGivenModelState(currentCommand, reader)
+        if (stateProblem != null) return listOf(stateProblem)
+        val eventValidationProblems = validateEvent(currentCommand, context, reader)
+        if (eventValidationProblems.isNotEmpty()) return eventValidationProblems
+        val authorizationProblem = checkAuthorization(
+            currentCommand,
+            reader,
+            context
+        )
+        if (authorizationProblem != null) {
+            return listOf(authorizationProblem)
+        }
+        return emptyList()
     }
 
     private fun <T : Any, P> checkAuthorization(
@@ -214,13 +220,13 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         command: Command<T, P>,
         context: C,
         reader: Reader<C, V>
-    ): Problem? {
+    ): List<Problem> {
         val problems = mutableListOf<Problem>()
         val stateMachine = getStateMachine(command, klerk.config.managedModels)
         if (command.model != null) {
             val model = ModelCache.read(command.model).getOrThrow()
             if (model.props::class != stateMachine.type) {
-                return BadRequestProblem("The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'")
+                return listOf(BadRequestProblem("The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'"))
             }
         }
 
@@ -233,10 +239,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         validateReferences(command.event.id, command.params, context)?.let { problems.add(it) }
 
         if (problems.isNotEmpty()) {
-            return problems.first()
+            return problems
         }
 
-        return validateEventRules(context, command.event, command.model, command.params, reader).firstOrNull()
+        return validateEventRules(context, command.event, command.model, command.params, reader)
     }
 
     private fun validateParametersAsAUnit(params: Any): Collection<Problem> {
