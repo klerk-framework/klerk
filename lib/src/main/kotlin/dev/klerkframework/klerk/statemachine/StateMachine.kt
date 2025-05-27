@@ -143,7 +143,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> Validity>)
+        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
     public fun <P:Any> event(event: VoidEventWithParameters<T, P>, init: VoidEventRulesWithParameters<T, P, C, V>.() -> Unit) {
@@ -152,9 +152,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> Validity>)
+        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
         @Suppress("UNCHECKED_CAST")
-        event.paramRulesForVoidEvent = (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> Validity>)
+        event.paramRulesForVoidEvent = (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity>)
         event.validRefs = rules.validRefs
     }
 
@@ -164,7 +164,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> Validity>)
+        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
     public fun <P:Any> event(event: InstanceEventWithParameters<T, P>, init: InstanceEventRulesWithParameters<T, P, C, V>.() -> Unit) {
@@ -173,9 +173,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> Validity>)
+        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
         @Suppress("UNCHECKED_CAST")
-        event.paramRulesForInstanceEvent = (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> Validity>)
+        event.paramRulesForInstanceEvent = (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity>)
         event.validRefs = rules.validRefs    }
 
 }

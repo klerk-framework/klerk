@@ -78,7 +78,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
-        if (context.actor == dev.klerkframework.klerk.SystemIdentity) {
+        if (context.actor == SystemIdentity) {
             return model
         }
         initPropertyAuthorization(model, context, withoutAuth, klerk.config)
@@ -111,17 +111,21 @@ internal fun <T : Any, C:KlerkContext, V> evaluateAuthorization(
     config: Config<C, V>,
     reader: ReaderWithoutAuth<C, V>
 ): ReadResult<T> {
-    if (context.actor == dev.klerkframework.klerk.SystemIdentity) {
+    if (context.actor == SystemIdentity) {
         return ReadResult.Ok(model)
     }
-    if (config.authorization.readModelNegativeRules.map { it(ArgModelContextReader(model, context, reader)) }
-            .any { it == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
-        return ReadResult.Fail(AuthorizationProblem())
+    val brokenRule = config.authorization.readModelNegativeRules
+        .firstOrNull { it(ArgModelContextReader(model, context, reader)) == NegativeAuthorization.Deny }
+
+    if (brokenRule != null) {
+        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized,
+            RuleDescription(brokenRule, RuleType.Authorization)))
     }
 
     if (config.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
-            .none { it == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
-        return ReadResult.Fail(AuthorizationProblem("No policy explicitly allowed the request"))
+            .none { it == PositiveAuthorization.Allow }) {
+        logger.info("No policy explicitly allowed the request")
+        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized, null))
     }
     return ReadResult.Ok(model)
 }

@@ -101,7 +101,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
     private suspend fun validateToken(token: CommandToken, context: C): Problem? {
         if (processedCommandTokens.contains(token)) {
-            return IdempotenceProblem()
+            return IdempotenceProblem("CommandToken has already been used")
         }
         val anyModified = klerk.models.read(context) {
             token.models.any { modelId ->

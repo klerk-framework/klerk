@@ -60,7 +60,7 @@ internal fun validateModelProps(Any: Any): List<Problem> {
     if (Any !is Validatable) {
         return emptyList()
     }
-    return Any.validators().filter { it.invoke() is Validity.Invalid }.map {
+    return Any.validators().filter { it.invoke() is PropertyCollectionValidity.Invalid }.map {
         StateProblem(
             "The command would result in an invalid model",
             violatedRule = RuleDescription(it, RuleType.ModelValidation)

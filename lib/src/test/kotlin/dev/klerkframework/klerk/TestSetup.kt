@@ -5,8 +5,8 @@ import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
 import dev.klerkframework.klerk.AuthorStates.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
-import dev.klerkframework.klerk.Validity.Invalid
-import dev.klerkframework.klerk.Validity.Valid
+import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
+import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
 import dev.klerkframework.klerk.actions.Job
 import dev.klerkframework.klerk.actions.JobContext
 import dev.klerkframework.klerk.actions.JobId
@@ -184,9 +184,9 @@ data class Book(
 }
 
 data class Author(val firstName: FirstName, val lastName: LastName, val address: Address) : Validatable {
-    override fun validators(): Set<() -> Validity> = setOf(::noAuthorCanBeNamedJamesClavell)
+    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
-    private fun noAuthorCanBeNamedJamesClavell(): Validity {
+    private fun noAuthorCanBeNamedJamesClavell(): PropertyCollectionValidity {
         return if (firstName.value == "James" && lastName.value == "Clavell") Invalid() else Valid
     }
 
@@ -213,9 +213,9 @@ data class CreateAuthorParams(
     val favouriteColleague: ModelID<Author>? = null
 ) : Validatable {
 
-    override fun validators(): Set<() -> Validity> = setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
+    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
 
-    private fun augustStrindbergCannotHaveCertainPhoneNumber(): Validity {
+    private fun augustStrindbergCannotHaveCertainPhoneNumber(): PropertyCollectionValidity {
         return if (firstName.value == "August" && lastName.value == "Strindberg" && phone.value == "123456") Invalid() else Valid
     }
 }
@@ -427,23 +427,23 @@ fun updateAuthor(args: ArgForInstanceEvent<Author, Author, Context, MyCollection
 }
 
 
-fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): Validity {
+fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Daniel" && args.context.actor != dev.klerkframework.klerk.AuthenticationIdentity) Invalid() else Valid
 }
 
-fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): Validity {
+fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris") Invalid() else Valid
 }
 
-fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): Validity {
+fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
 }
 
-fun preventUnauthenticated(context: Context): Validity {
+fun preventUnauthenticated(context: Context): PropertyCollectionValidity {
     return if (context.actor == dev.klerkframework.klerk.Unauthenticated) Invalid() else Valid
 }
 
-fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): Validity {
+fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
     args.reader.apply {
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
@@ -813,8 +813,7 @@ class SwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
         }
     }
 
-    override fun fieldCannotBeLessThan(fieldName: String, value: Number) =
-        "Fältet $fieldName kan inte vara mindre än $value"
+    override fun mustBeAtLeast(value: Number) = "Måste vara minst $value"
 
 }
 
@@ -828,8 +827,7 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
         }
     }
 
-    override fun fieldCannotBeLessThan(fieldName: String, value: Number) =
-        "Oops, $fieldName is too low, man!"
+    override fun mustBeAtLeast(value: Number) = "Oops, we need at least $value, man!"
 
 }
 

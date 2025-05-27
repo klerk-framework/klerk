@@ -67,7 +67,7 @@ class ValidatableTest {
             )
 
             when (result) {
-                is Failure -> assertIs<StateProblem>(result.problems.first())
+                is Failure -> assertIs<InvalidPropertyCollectionProblem>(result.problems.first())
                 is Success -> fail()
             }
         }
@@ -100,7 +100,7 @@ class ValidatableTest {
 
             when (result) {
                 is Failure -> {
-                    assertIs<StateProblem>(result.problems.first())
+                    assertIs<InvalidPropertyCollectionProblem>(result.problems.first())
                     result.problems.first().violatedRule?.let { println("Violated rule: $it") }
                 }
                 is Success -> fail()

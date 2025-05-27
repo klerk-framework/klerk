@@ -81,7 +81,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
             events.handle(command, context, options)
         } catch (e: Exception) {
             logger.error(e) { "Bug in Klerk: Could not process command (${command.event})" }
-            return CommandResult.Failure(listOf(InternalProblem()))
+            return CommandResult.Failure(listOf(InternalProblem(DefaultKlerkTranslation.internalError)))
         }
 
         if (result is CommandResult.Success<T, C, V>) {

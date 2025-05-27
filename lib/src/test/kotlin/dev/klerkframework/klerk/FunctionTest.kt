@@ -26,7 +26,7 @@ class FunctionTest {
         val args = ArgForVoidEvent(command, Context.system(), DummyReader)
 
         val result = onlyAuthenticationIdentityCanCreateDaniel(args)
-        assertEquals(Validity.Valid, result)
+        assertEquals(PropertyCollectionValidity.Valid, result)
     }
 
 }

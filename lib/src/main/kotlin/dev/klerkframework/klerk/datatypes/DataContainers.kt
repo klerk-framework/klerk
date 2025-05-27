@@ -101,19 +101,19 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
         if (valueWithoutAuthorization.length < minLength) {
-            return InvalidPropertyProblem(if (valueWithoutAuthorization.isEmpty()) "$propertyName cannot be empty" else "$propertyName is too short", propertyName)
+            return InvalidPropertyProblem(if (valueWithoutAuthorization.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(minLength), propertyName)
         }
 
         if (valueWithoutAuthorization.length > maxLength) {
-            return InvalidPropertyProblem("$propertyName is too long", propertyName)
+            return InvalidPropertyProblem(translation.klerk.tooLong(maxLength), propertyName)
         }
         if (valueWithoutAuthorization.lines().size > maxLines) {
-            return InvalidPropertyProblem("$propertyName contains too many lines", propertyName)
+            return InvalidPropertyProblem(translation.klerk.tooManyLines(maxLines), propertyName)
         }
         val regex = regexPattern
         if (regex != null && !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
                 .matches(valueWithoutAuthorization)) {
-            return InvalidPropertyProblem("$propertyName is invalid", propertyName)
+            return InvalidPropertyProblem(translation.klerk.invalid, propertyName)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
@@ -146,10 +146,10 @@ public abstract class IntContainer(value: Int) :
 
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidPropertyProblem(translation.klerk.fieldCannotBeLessThan(propertyName, min), propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
@@ -177,10 +177,10 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
@@ -207,10 +207,10 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toDouble()), propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toDouble()), propertyName)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
@@ -237,10 +237,10 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (valueWithoutAuthorization < min) {
-            return InvalidPropertyProblem("$propertyName cannot be less than $min", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
         if (valueWithoutAuthorization > max) {
-            return InvalidPropertyProblem("$propertyName cannot be greater than $max", propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }

@@ -69,7 +69,7 @@ public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): St
         return DefaultKlerkTranslation.function(f)
     } catch (e: ClassCastException) {
         logger.warn { "Could not figure out function name. It is probably a lambda." }
-        return "?"
+        return "? unknown function name"
     }
 }
 

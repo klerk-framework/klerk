@@ -9,7 +9,6 @@ import dev.klerkframework.klerk.misc.EventParameters
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
-import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlinx.datetime.Instant
 import java.math.BigInteger
 import kotlin.reflect.KClass
@@ -62,7 +61,7 @@ public data class Model<T : Any>(
 
 
 public fun interface Validatable {
-    public fun validators(): Set<() -> Validity>
+    public fun validators(): Set<() -> PropertyCollectionValidity>
 }
 
 public data class EventWithParameters<T : Any>(val eventReference: EventReference, val parameters: EventParameters<T>)
@@ -105,14 +104,14 @@ public sealed class Event<T : Any, P>(private val forModel: KClass<T>, internal 
     a Reader). But that is not the reason! The point is that you can reuse rules
     in the state machine over different kind of events!
      */
-    private var _contextRules: Set<(KlerkContext) -> Validity> = emptySet()
+    private var _contextRules: Set<(KlerkContext) -> PropertyCollectionValidity> = emptySet()
 
-    public fun <C : KlerkContext> getContextRules(): Set<(C) -> Validity> =
+    public fun <C : KlerkContext> getContextRules(): Set<(C) -> PropertyCollectionValidity> =
         _contextRules
 
-    internal fun <C : KlerkContext> setContextRules(rules: Set<(C) -> Validity>) {
+    internal fun <C : KlerkContext> setContextRules(rules: Set<(C) -> PropertyCollectionValidity>) {
         @Suppress("UNCHECKED_CAST")
-        _contextRules = rules as Set<(KlerkContext) -> Validity>
+        _contextRules = rules as Set<(KlerkContext) -> PropertyCollectionValidity>
     }
 
     override fun toString(): String = id.toString()
@@ -122,20 +121,20 @@ public sealed class Event<T : Any, P>(private val forModel: KClass<T>, internal 
 public sealed class VoidEvent<T : Any, P>(forModel: KClass<T>, isExternal: Boolean) :
     Event<T, P>(forModel, isExternal) {
 
-    internal var noParamRules: Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> Validity> = setOf()
+    internal var noParamRules: Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
 
     internal fun <C : KlerkContext, V> getNoParamRulesForVoidEvent() =
-        noParamRules as Set<(ArgForVoidEvent<T, Nothing?, C, V>) -> Validity>
+        noParamRules as Set<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity>
 
 }
 
 public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, isExternal: Boolean) :
     Event<T, P>(forModel, isExternal) {
 
-    internal var noParamRules: Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> Validity> = setOf()
+    internal var noParamRules: Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
 
     internal fun <C : KlerkContext, V> getNoParamRulesForInstanceEvent() =
-        noParamRules as Set<(ArgForInstanceEvent<T, Nothing?, C, V>) -> Validity>
+        noParamRules as Set<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity>
 }
 
 public abstract class VoidEventWithParameters<T : Any, P : Any>(
@@ -144,11 +143,11 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
     public val parametersClass: KClass<P>
 ) : VoidEvent<T, P>(forModel, isExternal) {
 
-    internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> Validity> = setOf()
+    internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
     internal var validRefs: Map<String, ModelCollection<out Any, *>?> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
-        paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> Validity>
+        paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
     @Suppress("UNCHECKED_CAST")
     internal fun <C : KlerkContext> getValidRefs(name: String): ModelCollection<out Any, C>? =
@@ -166,11 +165,11 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
     public val parametersClass: KClass<P>
 ) : InstanceEvent<T, P>(forModel, isExternal) {
 
-    internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> Validity> = setOf()
+    internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
     internal var validRefs: Map<String, ModelCollection<out Any, *>?> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
-        paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> Validity>
+        paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
     @Suppress("UNCHECKED_CAST")
     internal fun <C : KlerkContext> getValidRefs(name: String): ModelCollection<out Any, C>? =
@@ -303,8 +302,17 @@ public interface KlerkTranslation {
     public fun property(property: KProperty1<*, *>): String
     public fun event(event: EventReference): String
     public fun function(f: Function<Any>): String
-    public fun fieldCannotBeLessThan(fieldName: String, value: Number): String
+    public fun mustBeAtLeast(value: Number): String
+    public fun mustBeAtMost(value: Number): String
     public fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String
+    public val mustBeProvided: String
+    public fun tooShort(minLength: Int): String
+    public fun tooLong(maxLength: Int): String
+    public fun tooManyLines(maxLines: Int): String
+    public val invalid: String
+    public val internalError: String
+    public val unauthorized: String
+    public val noAllowingRule: String
 }
 
 /**
@@ -329,8 +337,6 @@ public object DefaultKlerkTranslation : KlerkTranslation {
         return camelCaseToPretty(name)
     }
 
-    override fun fieldCannotBeLessThan(fieldName: String, value: Number): String =
-        "Field $fieldName cannot be less than $value"
 
     override fun invalidProperty(
         propertyName: String,
@@ -340,20 +346,42 @@ public object DefaultKlerkTranslation : KlerkTranslation {
         return camelCaseToPretty(functionName)
     }
 
+    override val mustBeProvided: String = "Must be provided"
+    override fun tooShort(minLength: Int): String = "Must be at least $minLength characters"
+    override fun tooLong(maxLength: Int): String = "Must be at most $maxLength characters"
+    override fun tooManyLines(maxLines: Int): String = "Must be at most $maxLines lines"
+    override fun mustBeAtLeast(value: Number): String = "Must be at least $value"
+    override fun mustBeAtMost(value: Number): String = "Must be at most $value"
+    override val invalid: String = "Invalid"
+    override val internalError: String = "Internal error"
+    override val unauthorized: String = "Unauthorized"
+    override val noAllowingRule: String = "No policy explicitly allowed the request"
+
 }
 
-public sealed class Validity {
-    public data object Valid : Validity()
+/**
+ * Describes the validity of a collection of properties (i.e. a class) given that each individual property is valid.
+ * E.g. for a class containing two properties x: EvenIntContainer and y: OddIntContainer where x and y are valid,
+ * a PropertyCollectionValidity can express that {x, y} is not valid since x > y.
+ */
+public sealed class PropertyCollectionValidity {
+    public data object Valid : PropertyCollectionValidity()
     public class Invalid(
-        public val message: String? = null,
+        public val endUserTranslatedMessage: String? = null,
         public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
         public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
-    ) : Validity() {
-        public fun toProblem(): ValidationProblem {
-            return ValidationProblem(
-                endUserTranslatedMessage = this.message,
+    ) : PropertyCollectionValidity() {
+        public fun toProblem(f: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem {
+            return InvalidPropertyCollectionProblem(
+                endUserTranslatedMessage = this.endUserTranslatedMessage ?: translation.klerk.function(f),
                 fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
                 fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull)
+            )
+        }
+
+        public fun toProblem(): InvalidPropertyCollectionProblem {  // TODO: if possible, remove this function
+            return InvalidPropertyCollectionProblem(
+                endUserTranslatedMessage = this.endUserTranslatedMessage ?: "? other toProblem",
             )
         }
     }

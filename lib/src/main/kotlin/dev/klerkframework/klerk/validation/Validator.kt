@@ -6,7 +6,6 @@ import dev.klerkframework.klerk.PositiveAuthorization.Allow
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.misc.EventParameter
-import dev.klerkframework.klerk.misc.extractNameFromFunction
 
 import dev.klerkframework.klerk.misc.getStateMachine
 import dev.klerkframework.klerk.read.Reader
@@ -46,7 +45,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         params: P,
         reader: Reader<C, V>
     ): List<Problem> {
-        val validityList: List<Validity> = when (event) {
+        val propertyCollectionValidityList: List<PropertyCollectionValidity> = when (event) {
 
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
@@ -92,13 +91,14 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             }
 
         }
-        return validityList.filterIsInstance<Validity.Invalid>().map { it.toProblem() }
+        return propertyCollectionValidityList.filterIsInstance<PropertyCollectionValidity.Invalid>().map { it.toProblem() }
     }
 
     private fun validateContext(context: C, eventReference: EventReference): Collection<Problem> {
         return klerk.config.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
-            if (result is Validity.Invalid) ValidationProblem(
+            if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
+                endUserTranslatedMessage = result.endUserTranslatedMessage ?: "? context",
                 violatedRule = RuleDescription(
                     it,
                     RuleType.ContextValidation
@@ -184,7 +184,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 ) == Deny
             }
         if (negativeAuthProblem != null) {
-            return AuthorizationProblem(extractNameFromFunction(negativeAuthProblem))
+            return AuthorizationProblem(context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization))
         }
         if (klerk.config.authorization.eventPositiveRules.none {
                 it(
@@ -195,7 +195,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                     )
                 ) == Allow
             }) {
-            return AuthorizationProblem("Event '${command.event}' was not created since no policy allowed the operation")
+            logger.info("Event '${command.event}' was not created since no policy allowed the operation")
+            return AuthorizationProblem(context.translation.klerk.unauthorized, null)
         }
         return null
     }
@@ -232,7 +233,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
         command.params?.let { p ->
             problems.addAll(validateDataContainers(p, context))
-            problems.addAll(validateParametersAsAUnit(p))
+            problems.addAll(validatePropertyCollection(p, context.translation))
         }
 
         problems.addAll(validateContext(context, command.event.id))
@@ -245,16 +246,14 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return validateEventRules(context, command.event, command.model, command.params, reader)
     }
 
-    private fun validateParametersAsAUnit(params: Any): Collection<Problem> {
+    private fun validatePropertyCollection(params: Any, translation: Translation): Collection<Problem> {
         if (params !is Validatable) {
             return emptyList()
         }
-        return params.validators().filter { it.invoke() is Validity.Invalid }.map {
-            StateProblem(
-                "The parameters are invalid",
-                violatedRule = RuleDescription(it, RuleType.ParametersValidation)
-            )
-        }
+        return params.validators()
+            .associateWith { it.invoke() }
+            .filter { it.value is PropertyCollectionValidity.Invalid }
+            .map { (it.value as PropertyCollectionValidity.Invalid).toProblem(it.key, translation) }
     }
 
     fun <T : Any> validateWithoutParameters(
@@ -269,7 +268,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
         @Suppress("UNCHECKED_CAST")
         return validateEventRulesWithoutParams(klerk.config.getEvent(eventRef) as Event<T, Any?>, context, model, readerWithoutAuth)
-            .filterIsInstance<Validity.Invalid>()
+            .filterIsInstance<PropertyCollectionValidity.Invalid>()
             .isEmpty()
     }
 
@@ -278,7 +277,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         context: C,
         model: Model<T>?,
         reader: ReaderWithoutAuth<C, V>
-    ): List<Validity> {
+    ): List<PropertyCollectionValidity> {
         return when (event) {
 
             is VoidEventNoParameters<T> -> {
