@@ -15,6 +15,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
+import kotlin.time.Duration
 
 public data class StateId(val modelName: String, val stateName: String) {
     override fun toString(): String = "s.$modelName.$stateName"
@@ -257,6 +258,10 @@ public value class ModelID<T : Any>(private val value: Int) {
         public fun <T : Any> from(value: String): ModelID<T> = ModelID(value.toInt(36))
     }
 }
+
+public data class KeyValueID<T : Any>(public val id: UInt, public val type: KClass<T>)
+
+public class BlobToken(public val id: UInt)
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous

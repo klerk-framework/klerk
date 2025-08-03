@@ -31,12 +31,7 @@ public class InvalidPropertyProblem(
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     public override val recommendedHttpCode: Int = 400
 
-    override fun toString(): String {
-        if (endUserTranslatedMessage != null) {
-            return endUserTranslatedMessage
-        }
-        return "Unknown problem"
-    }
+    override fun toString(): String = endUserTranslatedMessage
 
 }
 

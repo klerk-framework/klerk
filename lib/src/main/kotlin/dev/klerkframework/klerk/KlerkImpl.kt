@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.actions.JobManagerImpl
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.keyvaluestore.KeyValueStoreImpl
 import dev.klerkframework.klerk.log.KlerkLogImpl
 import dev.klerkframework.klerk.log.LogCommandSucceeded
 import dev.klerkframework.klerk.log.LogKlerkStarted
@@ -26,6 +27,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs)
     private val klerkMeta = KlerkMetaImpl(this)
+    private val klerkKeyValueStore = KeyValueStoreImpl(config)
     private val klerkLog = KlerkLogImpl()
     internal val validator = Validator(this)
 
@@ -71,6 +73,8 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
     override val meta = klerkMeta
 
     override val log = klerkLog
+
+    override val keyValueStore = klerkKeyValueStore
 
     override suspend fun <T : Any, P> handle(
         command: Command<T, P>,

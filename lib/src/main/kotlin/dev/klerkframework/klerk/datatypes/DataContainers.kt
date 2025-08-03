@@ -7,6 +7,9 @@ import dev.klerkframework.klerk.validation.PropertyValidation.*
 import kotlinx.datetime.Instant
 import kotlin.reflect.KFunction
 import kotlin.time.Duration
+import kotlin.toString
+
+private const val MASKED = "[••••••]"
 
 // optimization: can we make these as value classes? See https://kotlinlang.org/docs/inline-classes.html
 
@@ -29,8 +32,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     private var isAuthorizedToReadProperty: Boolean =
         true    // true until it is set by the framework, this makes unit testing simpler.
 
-    public val value: T =
-        valueWithoutAuthorization
+    public val value: T = valueWithoutAuthorization
         get() {
             if (!isAuthorizedToReadProperty) {
                 val message = "The actor is not allowed to access ${this::class.simpleName}"
@@ -64,7 +66,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
         return try {
             value.toString()
         } catch (e: Exception) {
-            "[••••••]"
+            MASKED
         }
     }
 
@@ -279,6 +281,13 @@ abstract class EnumContainer<T : Enum<T>>(value: Enum<T>) : DataContainer<Enum<T
 public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
     public val instant: Instant = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun toString(): String {
+        return try {
+            value.toString()
+        } catch (e: Exception) {
+            MASKED
+        }
+    }
 }
 
 public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {

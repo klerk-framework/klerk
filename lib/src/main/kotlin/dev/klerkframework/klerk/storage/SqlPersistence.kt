@@ -19,7 +19,9 @@ import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.io.InputStream
 import javax.sql.DataSource
 import kotlin.reflect.KClass
 import kotlin.system.measureTimeMillis
@@ -42,6 +44,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 SchemaUtils.create(AuditLog)
                 SchemaUtils.create(Models)
                 SchemaUtils.create(ModelSchemaMigrations)
+                SchemaUtils.create(KeyValueStrings)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
             } catch (e: Exception) {
@@ -227,11 +230,77 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         logger.info { "Migration done (version is now $currentModelSchemaVersion)" }
     }
 
+    override fun putKeyValue(id: UInt, value: String, ttl: Instant?) {
+        transaction(database) {
+            KeyValueStrings.insert {
+                it[this.id] = id
+                it[this.value] = value
+                it[this.ttl] = ttl?.to64bitMicroseconds()
+            }
+        }
+    }
+
+    override fun putKeyValue(id: UInt, value: Int, ttl: Instant?) {
+        transaction(database) {
+            KeyValueInts.insert {
+                it[this.id] = id
+                it[this.value] = value
+                it[this.ttl] = ttl?.to64bitMicroseconds()
+            }
+        }
+    }
+
+    override fun putKeyValue(id: UInt, value: InputStream, ttl: Instant?) {
+        transaction(database) {
+            KeyValueBlobs.upsert {
+                it[this.id] = id
+                it[this.value] = ExposedBlob(value)
+                it[this.ttl] = null
+                it[this.active] = false
+            }
+        }
+    }
+
+    override fun updateBlob(id: UInt, ttl: Instant?, active: Boolean) {
+        TODO("Not yet implemented")
+    }
+
+    override fun getKeyValueString(id: UInt): Pair<String, Instant?>? =
+        transaction(database) {
+            KeyValueStrings.selectAll()
+                .where { KeyValueStrings.id eq id }
+                .map {
+                    it[KeyValueStrings.value] to it[KeyValueStrings.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
+                }.firstOrNull()
+        }
+
+    override fun getKeyValueInt(id: UInt): Pair<Int, Instant?>? =
+        transaction(database) {
+            KeyValueInts.selectAll()
+                .where { KeyValueInts.id eq id }
+                .map {
+                    it[KeyValueInts.value] to it[KeyValueInts.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
+                }.firstOrNull()
+        }
+
+    override fun getKeyValueBlob(id: UInt): Triple<InputStream, Instant?, Boolean>? =
+        transaction(database) {
+            KeyValueBlobs.selectAll()
+                .where { KeyValueBlobs.id eq id }
+                .map {
+                    Triple(
+                        it[KeyValueBlobs.value].inputStream,
+                        it[KeyValueBlobs.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) },
+                        it[KeyValueBlobs.active]
+                    )
+                }.firstOrNull()
+        }
+
     internal object AuditLog : Table("\"klerk_audit_log\"") {
         val timestamp = long("timestamp")   // microseconds since 1970
         val event = varchar("event_id", length = 100)
         val modelId = integer("model_id")
-        val params = varchar("params", length = 5000)
+        val params = varchar("params", length = 100000)
         val actorIdentityType = byte("actor_identity_type")
         val actorIdentityReference = integer("actor_identity_reference").nullable()
         val actorIdentityExternalId = long("actor_identity_externalId").nullable()
@@ -247,7 +316,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val lastTransitionAt = long("last_transition_at")   // microseconds since 1970
         val state = varchar("state", length = 50)
         val timeTrigger = long("time_trigger").nullable()  // microseconds since 1970
-        val properties = varchar("props", length = 5000)
+        val properties = varchar("props", length = 100000)
         override val primaryKey = PrimaryKey(id)
     }
 
@@ -261,10 +330,32 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val executionTimeMillis = integer("execution_time_ms")
     }
 
+    internal object KeyValueStrings : Table("\"klerk_strings\"") {
+        val id = uinteger("id")
+        val value = varchar("value", length = 100000)
+        val ttl = long("ttl").nullable() // microseconds since 1970
+        override val primaryKey = PrimaryKey(id)
+    }
+
+    internal object KeyValueInts : Table("\"klerk_ints\"") {
+        val id = uinteger("id")
+        val value = integer("value")
+        val ttl = long("ttl").nullable() // microseconds since 1970
+        override val primaryKey = PrimaryKey(id)
+    }
+
+    internal object KeyValueBlobs : Table("\"klerk_blobs\"") {
+        val id = uinteger("id")
+        val value = blob("value")
+        val ttl = long("ttl").nullable() // microseconds since 1970
+        val active = bool("active")  // blobs are first prepared, then activated in the second step
+        override val primaryKey = PrimaryKey(id)
+    }
+
     private fun migrateV1toV1(migration: MigrationStepV1toV1, row: ResultRow) {
         val before = MigrationModelV1(
             type = row[Models.type],
-            id = row[Models.id]!!.toInt(),
+            id = row[Models.id],
             createdAt = decode64bitMicroseconds(row[Models.createdAt]),
             lastPropsUpdatedAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
             lastTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),

@@ -285,9 +285,11 @@ public data class Config<C : KlerkContext, V>(
      * This exists so that it is possible to use the configuration of the Gson instance.
      * It will probably be removed in the future so don't rely on this.
      */
-    public fun <T> fromJson(json: String, typeOfT: Class<T>): T {
-        return gson.fromJson(json, typeOfT)
-    }
+    @Deprecated("Do not use")
+    public fun <T> fromJson(json: String, typeOfT: Class<T>): T = gson.fromJson(json, typeOfT)
+
+    @Deprecated("Do not use")
+    public fun toJson(props: Any): String = gson.toJson(props)
 
 }
 

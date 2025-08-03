@@ -11,6 +11,7 @@ import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 
 import kotlinx.datetime.Instant
+import java.io.InputStream
 import java.util.*
 import kotlin.time.Duration
 
@@ -35,6 +36,11 @@ public interface Klerk<C : KlerkContext, D> {
     public val events: EventsManager<C, D>
     public val jobs: JobManager<C, D>
     public val models: KlerkModels<C, D>
+
+    /**
+     * Note that the keys are generated for you, i.e. you cannot give your own names to the keys.
+     */
+    public val keyValueStore: KlerkKeyValueStore<C>
     public val meta: KlerkMeta
     public val log: KlerkLog
 
@@ -163,6 +169,44 @@ public interface JobManager<C : KlerkContext, V> {
      * @return the completed job or null if timeout was reached before job completed.
      */
     public suspend fun awaitCompletion(id: JobId, timeout: Duration): JobMetadata?
+}
+
+public interface KlerkKeyValueStore<C : KlerkContext> {
+
+    /**
+     * Put a String value in the key-value store.
+     */
+    public suspend fun put(value: String, ttl: Duration? = null) : KeyValueID<String>
+
+    /**
+     * Put an Int value in the key-value store.
+     * @throws AuthorizationException if the actor isn't authorized
+     */
+    public suspend fun put(value: Int, ttl: Duration? = null) : KeyValueID<Int>
+
+    /**
+     * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
+     * doesn't make it available in the key-value store. The reason for this extra step is that large blobs may
+     * take a long time to upload and store in the database, and we don't want to block other operations during this
+     * time. Therefore, this step happens without acquiring any lock.
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     */
+    public fun prepareBlob(value: InputStream) : BlobToken
+
+    /**
+     * Put a blob in the key-value store.
+     * @throws AuthorizationException if the actor isn't authorized
+     */
+    public suspend fun put(token: BlobToken, ttl: Duration? = null) : KeyValueID<InputStream>
+
+    /**
+     * Retrieve a value from the key-value store.
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
+     */
+    public suspend fun <T : Any> get(id: KeyValueID<T>, context: C) : T
+
 }
 
 public interface KlerkMeta {

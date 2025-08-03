@@ -4,6 +4,8 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.migration.MigrationStep
 import kotlinx.datetime.Instant
+import java.io.InputStream
+import kotlin.collections.set
 
 public data class AuditEntry(
     val time: Instant,
@@ -35,6 +37,14 @@ public interface Persistence {
     public fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit
     public fun setConfig(config: Config<*, *>): Unit
     public fun migrate(migrations: List<MigrationStep>): Unit
+
+    public fun putKeyValue(id: UInt, value: String, ttl: Instant?): Unit
+    public fun putKeyValue(id: UInt, value: Int, ttl: Instant?): Unit
+    public fun putKeyValue(id: UInt, value: InputStream, ttl: Instant?): Unit
+    public fun updateBlob(id: UInt, ttl: Instant?, active: Boolean): Unit
+    public fun getKeyValueString(id: UInt): Pair<String, Instant?>?
+    public fun getKeyValueInt(id: UInt): Pair<Int, Instant?>?
+    public fun getKeyValueBlob(id: UInt): Triple<InputStream, Instant?, Boolean>?
 }
 
 /**
@@ -44,6 +54,9 @@ public class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
+    private val keyValueStrings = mutableMapOf<UInt, Pair<String, Instant?>>()
+    private val keyValueInts = mutableMapOf<UInt, Pair<Int, Instant?>>()
+    private val keyValueBlobs = mutableMapOf<UInt, Triple<ByteArray, Instant?, Boolean>>()
 
     override fun <T : Any, P, C:KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
@@ -62,7 +75,7 @@ public class RamStorage : Persistence {
 
         delta.deletedModels.forEach { models.remove(it.toInt()) }
         delta.newJobs.forEach {
-
+            // TODO
         }
     }
 
@@ -101,6 +114,32 @@ public class RamStorage : Persistence {
     override fun migrate(migrations: List<MigrationStep>) {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
     }
+
+    override fun putKeyValue(id: UInt, value: String, ttl: Instant?) {
+        keyValueStrings[id] = Pair(value, ttl)
+    }
+
+    override fun putKeyValue(id: UInt, value: Int, ttl: Instant?) {
+        keyValueInts[id] = Pair(value, ttl)
+    }
+
+    override fun putKeyValue(id: UInt, value: InputStream, ttl: Instant?) {
+        keyValueBlobs[id] = Triple(value.readAllBytes(), ttl, false)
+    }
+
+    override fun updateBlob(id: UInt, ttl: Instant?, active: Boolean) {
+        val old = keyValueBlobs[id]
+        if (old == null) {
+            logger.warn { "Could not find blob with id $id" }
+            return
+        }
+        keyValueBlobs[id] = Triple(old.first, ttl, active)
+    }
+
+    override fun getKeyValueString(id: UInt): Pair<String, Instant?>? = keyValueStrings[id]
+    override fun getKeyValueInt(id: UInt): Pair<Int, Instant?>? = keyValueInts[id]
+    override fun getKeyValueBlob(id: UInt): Triple<InputStream, Instant?, Boolean>? =
+        keyValueBlobs[id]?.let { Triple(it.first.inputStream(), it.second, it.third) }
 
     public fun <T : Any, P, C:KlerkContext, V> createAuditEntry(
         command: Command<T, P>,
