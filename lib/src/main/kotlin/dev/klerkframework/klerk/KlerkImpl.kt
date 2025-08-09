@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.read.KlerkModelsImpl
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.validation.Validator
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.measureTime
 
@@ -113,37 +114,50 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 }
 
 internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C, V>) : KlerkMeta {
+    private val state = AtomicInteger(0)    // 0 = not started, 1 = started, 2 = stopped
+
     override suspend fun start(installShutdownHook: Boolean) {
-        require(klerk.settings.eraseAuditLogAfterModelDeletion == null || klerk.settings.eraseAuditLogAfterModelDeletion == Duration.ZERO) { "settings.eraseAuditLogAfterModelDeletion can only be null or zero" }
+        if (state.compareAndSet(0, 1)) {
+            require(klerk.settings.eraseAuditLogAfterModelDeletion == null || klerk.settings.eraseAuditLogAfterModelDeletion == Duration.ZERO) { "settings.eraseAuditLogAfterModelDeletion can only be null or zero" }
 
-        if (installShutdownHook) {
-            Runtime.getRuntime().addShutdownHook(object : Thread() {
-                override fun run() {
-                    klerk.meta.stop()
+            if (installShutdownHook) {
+                Runtime.getRuntime().addShutdownHook(object : Thread() {
+                    override fun run() {
+                        klerk.meta.stop()
+                    }
+                })
+            }
+
+            val startTime = measureTime {
+                ModelCache.clear()
+                klerk.config.persistence.setConfig(klerk.config)
+
+                val migrations = klerk.config.migrationSteps.toMutableList()
+                migrations.removeIf { it.migratesToVersion <= klerk.config.persistence.currentModelSchemaVersion }
+                if (migrations.isNotEmpty()) {
+                    klerk.config.persistence.migrate(migrations)
                 }
-            })
-        }
 
-        val startTime = measureTime {
-            ModelCache.clear()
-            klerk.config.persistence.setConfig(klerk.config)
-
-            val migrations = klerk.config.migrationSteps.toMutableList()
-            migrations.removeIf { it.migratesToVersion <= klerk.config.persistence.currentModelSchemaVersion }
-            if (migrations.isNotEmpty()) {
-                klerk.config.persistence.migrate(migrations)
+                klerk.eventsManager.start()
+                klerk.config.plugins.forEach {
+                    logger.info { "Initializing plugin: ${it.name}" }
+                    it.start(klerk)
+                }
             }
-
-            klerk.eventsManager.start()
-            klerk.config.plugins.forEach {
-                logger.info { "Initializing plugin: ${it.name}" }
-                it.start(klerk)
-            }
+            klerk.log.add(LogKlerkStarted(startTime))
+        } else {
+            throw IllegalStateException("Klerk has already been started")
         }
-        klerk.log.add(LogKlerkStarted(startTime))
     }
 
     override fun stop() {
+        val previousState = state.getAndSet(2)
+        if (previousState == 0) {
+            throw IllegalStateException("Klerk has not been started")
+        }
+        if (previousState == 2) {
+            return  // already stopped
+        }
         klerk.eventsManager.stop()
         //   JobManagerImpl.stop() // stopping jobs after events in case a job is created that must execute on this instance.
         klerk.log.add(LogKlerkStopped())

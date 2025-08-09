@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.keyvaluestore
 
 import dev.klerkframework.klerk.AuthorCollections
+import dev.klerkframework.klerk.BinaryKeyValueID
 import dev.klerkframework.klerk.BookCollections
 import dev.klerkframework.klerk.Context
 import dev.klerkframework.klerk.KeyValueID
@@ -50,7 +51,7 @@ class KeyValueStoreImplTest {
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val token = klerk.keyValueStore.prepareBlob("pelle".toByteArray().inputStream())
-            val badKey = KeyValueID(token.id, InputStream::class)
+            val badKey = BinaryKeyValueID(token.id)
             try {
                 klerk.keyValueStore.get(badKey, Context.system())
                 fail("Expected exception")  // the key cannot be used until we have used put(token)

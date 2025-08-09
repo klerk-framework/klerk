@@ -176,13 +176,13 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
     /**
      * Put a String value in the key-value store.
      */
-    public suspend fun put(value: String, ttl: Duration? = null) : KeyValueID<String>
+    public suspend fun put(value: String, ttl: Duration? = null) : StringKeyValueID
 
     /**
      * Put an Int value in the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(value: Int, ttl: Duration? = null) : KeyValueID<Int>
+    public suspend fun put(value: Int, ttl: Duration? = null) : IntKeyValueID
 
     /**
      * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
@@ -198,14 +198,28 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
      * Put a blob in the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(token: BlobToken, ttl: Duration? = null) : KeyValueID<InputStream>
+    public suspend fun put(token: BlobToken, ttl: Duration? = null) : BinaryKeyValueID
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun <T : Any> get(id: KeyValueID<T>, context: C) : T
+    public suspend fun get(id: StringKeyValueID, context: C) : String
+
+    /**
+     * Retrieve a value from the key-value store.
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
+     */
+    public suspend fun get(id: IntKeyValueID, context: C) : Int
+
+    /**
+     * Retrieve a value from the key-value store.
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
+     */
+    public suspend fun get(id: BinaryKeyValueID, context: C) : InputStream
 
 }
 

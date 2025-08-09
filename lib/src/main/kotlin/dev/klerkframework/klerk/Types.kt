@@ -259,9 +259,17 @@ public value class ModelID<T : Any>(private val value: Int) {
     }
 }
 
-public data class KeyValueID<T : Any>(public val id: UInt, public val type: KClass<T>)
+public abstract class KeyValueID(public val id: Long) {
+    override fun equals(other: Any?): Boolean {
+        return other != null && id == (other as? KeyValueID)?.id
+    }
+    override fun hashCode(): Int = id.hashCode()
+}
+public class StringKeyValueID(id: Long) : KeyValueID(id)
+public class IntKeyValueID(id: Long) : KeyValueID(id)
+public class BinaryKeyValueID(id: Long) : KeyValueID(id)
 
-public class BlobToken(public val id: UInt)
+public class BlobToken(public val id: Long)
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous
@@ -425,7 +433,7 @@ public interface KlerkPlugin<C : KlerkContext, V> {
     public val name: String
     public val description: String
     public fun mergeConfig(previous: Config<C, V>): Config<C, V>
-    public fun start(klerk: Klerk<C, V>): Unit
+    public suspend fun start(klerk: Klerk<C, V>): Unit
 }
 
 public class JobIdContainer(value: Long) : LongContainer(value) {

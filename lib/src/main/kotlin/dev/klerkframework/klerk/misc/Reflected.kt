@@ -363,6 +363,7 @@ public enum class PropertyType {
     Float,
     Boolean,
     Ref,
+    KeyValueRef,
     Enum,
 }
 
@@ -372,6 +373,10 @@ public enum class PropertyType {
 private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
     if (ktype.isSubtypeOf(ModelID::class.starProjectedType)) {
         return PropertyType.Ref
+    }
+
+    if (ktype.isSubtypeOf(KeyValueID::class.starProjectedType)) {
+        return PropertyType.KeyValueRef
     }
 
     if (ktype.isSubtypeOf(StringContainer::class.starProjectedType)) {

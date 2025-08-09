@@ -26,7 +26,7 @@ internal val logger = KotlinLogging.logger {}
 public data class Config<C : KlerkContext, V>(
     public val collections: V,
     public val authorization: AuthorizationConfig<C, V>,
-    val meterRegistry: MeterRegistry,
+    public val meterRegistry: MeterRegistry,
     val managedModels: Set<ManagedModel<*, *, C, V>>,
     val persistence: Persistence,
     val migrationSteps: SortedSet<MigrationStep>,

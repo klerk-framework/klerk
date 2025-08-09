@@ -45,6 +45,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 SchemaUtils.create(Models)
                 SchemaUtils.create(ModelSchemaMigrations)
                 SchemaUtils.create(KeyValueStrings)
+                SchemaUtils.create(KeyValueInts)
+                SchemaUtils.create(KeyValueBlobs)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
             } catch (e: Exception) {
@@ -230,17 +232,17 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         logger.info { "Migration done (version is now $currentModelSchemaVersion)" }
     }
 
-    override fun putKeyValue(id: UInt, value: String, ttl: Instant?) {
+    override fun putKeyValue(id: Long, value: String, ttl: Instant?) {
         transaction(database) {
             KeyValueStrings.insert {
-                it[this.id] = id
+                it[this.id] = id.toLong()
                 it[this.value] = value
                 it[this.ttl] = ttl?.to64bitMicroseconds()
             }
         }
     }
 
-    override fun putKeyValue(id: UInt, value: Int, ttl: Instant?) {
+    override fun putKeyValue(id: Long, value: Int, ttl: Instant?) {
         transaction(database) {
             KeyValueInts.insert {
                 it[this.id] = id
@@ -250,31 +252,37 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun putKeyValue(id: UInt, value: InputStream, ttl: Instant?) {
+    override fun putKeyValue(id: Long, value: InputStream, ttl: Instant?) {
         transaction(database) {
             KeyValueBlobs.upsert {
                 it[this.id] = id
                 it[this.value] = ExposedBlob(value)
-                it[this.ttl] = null
+                it[this.ttl] = ttl?.to64bitMicroseconds()
                 it[this.active] = false
             }
         }
     }
 
-    override fun updateBlob(id: UInt, ttl: Instant?, active: Boolean) {
-        TODO("Not yet implemented")
+    override fun updateBlob(id: Long, ttl: Instant?, active: Boolean) {
+        transaction(database) {
+            KeyValueBlobs.update(where = { KeyValueBlobs.id eq id }) {
+                it[this.id] = id
+                it[this.ttl] = ttl?.to64bitMicroseconds()
+                it[this.active] = active
+            }
+        }
     }
 
-    override fun getKeyValueString(id: UInt): Pair<String, Instant?>? =
+    override fun getKeyValueString(id: Long): Pair<String, Instant?>? =
         transaction(database) {
             KeyValueStrings.selectAll()
-                .where { KeyValueStrings.id eq id }
+                .where { KeyValueStrings.id eq id.toLong() }
                 .map {
                     it[KeyValueStrings.value] to it[KeyValueStrings.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
                 }.firstOrNull()
         }
 
-    override fun getKeyValueInt(id: UInt): Pair<Int, Instant?>? =
+    override fun getKeyValueInt(id: Long): Pair<Int, Instant?>? =
         transaction(database) {
             KeyValueInts.selectAll()
                 .where { KeyValueInts.id eq id }
@@ -283,7 +291,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 }.firstOrNull()
         }
 
-    override fun getKeyValueBlob(id: UInt): Triple<InputStream, Instant?, Boolean>? =
+    override fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>? =
         transaction(database) {
             KeyValueBlobs.selectAll()
                 .where { KeyValueBlobs.id eq id }
@@ -331,21 +339,21 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object KeyValueStrings : Table("\"klerk_strings\"") {
-        val id = uinteger("id")
+        val id = long("id")
         val value = varchar("value", length = 100000)
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueInts : Table("\"klerk_ints\"") {
-        val id = uinteger("id")
+        val id = long("id")
         val value = integer("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueBlobs : Table("\"klerk_blobs\"") {
-        val id = uinteger("id")
+        val id = long("id")
         val value = blob("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         val active = bool("active")  // blobs are first prepared, then activated in the second step
