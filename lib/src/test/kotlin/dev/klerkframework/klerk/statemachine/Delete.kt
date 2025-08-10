@@ -13,7 +13,6 @@ class Delete {
 
     @Test
     fun `Delete related models`() {
-        fail()
         runBlocking {
             val bc = BookCollections()
             val collections = MyCollections(bc, AuthorCollections(bc.all))

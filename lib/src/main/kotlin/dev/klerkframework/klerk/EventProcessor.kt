@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.actions.Job
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
@@ -417,7 +417,7 @@ public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     val deletedModels: List<ModelID<out Any>> = emptyList(),
     val unFinalizedTransition: Triple<String, Instant, Model<out Any>>? = null,
     val aggregatedModelState: Map<ModelID<out Any>, Model<out Any>> = emptyMap(),
-    val newJobs: List<Job<C, V>> = emptyList(),
+    val newJobs: List<RunnableJob<C, V>> = emptyList(),
     val remainingBlocks: List<Block<*, *, C, V>> = emptyList(),
     val currentBlock: Block<*, *, C, V>? = null,
     val processedBlocks: List<Block<*, *, C, V>> = emptyList(),

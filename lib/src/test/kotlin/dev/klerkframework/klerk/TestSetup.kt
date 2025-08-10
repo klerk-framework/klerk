@@ -7,10 +7,9 @@ import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
-import dev.klerkframework.klerk.actions.Job
-import dev.klerkframework.klerk.actions.JobContext
-import dev.klerkframework.klerk.actions.JobId
-import dev.klerkframework.klerk.actions.JobResult
+import dev.klerkframework.klerk.job.JobMetadata
+import dev.klerkframework.klerk.job.JobResult
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.AllModelCollection
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
@@ -36,6 +35,7 @@ import java.sql.Connection
 import java.sql.DriverManager
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
+import kotlin.test.assertEquals
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
@@ -346,8 +346,8 @@ fun later(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Instant
 fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = true
 fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): List<Job<Context, MyCollections>> {
-    return listOf(MyJob)
+fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
+    return listOf(MyJob())
 }
 
 
@@ -369,17 +369,31 @@ fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyCo
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): List<Job<Context, MyCollections>> {
-    class MyJob : Job<Context, MyCollections> {
-        override val id = 123L
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
 
-        override suspend fun run(jobContext: JobContext<Context, MyCollections>): JobResult {
+
+    return listOf(MyJob2())
+}
+
+class MyJob2 : RunnableJob<Context, MyCollections> {
+
+    companion object {
+        suspend fun run(
+            metadata: JobMetadata,
+            klerk: Klerk<Context, MyCollections>
+        ): JobResult {
             println("Job started")
-            return JobResult.Success
+            assertEquals("Hej", metadata.parameters)
+            return JobResult.Success()
         }
+
     }
 
-    return listOf(MyJob())
+
+    override val parameters: String
+        get() = "Hej"
+
+    override val runFunction = Companion::run
 }
 
 fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): Author {
@@ -759,14 +773,23 @@ data class User(val name: FirstName)
 
 object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, true)
 
-object MyJob : Job<Context, MyCollections> {
-    override val id: JobId
-        get() = 999
+class MyJob : RunnableJob<Context, MyCollections> {
 
-    override suspend fun run(jobContext: JobContext<Context, MyCollections>): JobResult {
-        println("Did MyJob")
-        return JobResult.Success
+    companion object {
+
+        suspend fun theMethodToRun(
+            metadata: JobMetadata,
+            klerk: Klerk<Context, MyCollections>
+        ): JobResult {
+            println("Did MyJob")
+            return JobResult.Success()
+        }
     }
+
+    override val parameters: String
+        get() = "pelle"
+
+    override val runFunction = Companion::theMethodToRun
 
 }
 

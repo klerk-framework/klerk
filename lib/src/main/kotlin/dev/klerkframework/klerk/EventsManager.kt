@@ -200,7 +200,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         "provided to Klerk."
             }
         }
-        delta.newJobs.forEach { jobs.scheduleAction(it) }
+        delta.newJobs.forEach { jobs.schedule(it) }
 
         timeTriggerManager.handle(delta)
     }

@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.actions.Job
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.statemachine.executables.*
@@ -74,7 +74,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         public fun job(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Job<C, V>>,
+            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventJob(function, onCondition))
@@ -157,7 +157,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         public fun job(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Job<C, V>>,
+            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceNonEventJob(function, onCondition))
@@ -209,7 +209,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
 
         public fun job(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Job<C, V>>,
+            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventJob(function, onCondition))

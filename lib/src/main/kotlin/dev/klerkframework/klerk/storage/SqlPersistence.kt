@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.job.JobMetadata
+import dev.klerkframework.klerk.job.JobStatus
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.MigrationStepV1toV1
@@ -26,6 +28,8 @@ import javax.sql.DataSource
 import kotlin.reflect.KClass
 import kotlin.system.measureTimeMillis
 
+private const val SEPARATOR = "\n"
+
 public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     private val database: Database
@@ -47,6 +51,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 SchemaUtils.create(KeyValueStrings)
                 SchemaUtils.create(KeyValueInts)
                 SchemaUtils.create(KeyValueBlobs)
+                SchemaUtils.create(Jobs)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
             } catch (e: Exception) {
@@ -304,6 +309,65 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 }.firstOrNull()
         }
 
+    override fun insertJob(meta: JobMetadata) {
+        transaction(database) {
+            Jobs.insert {
+                it[this.id] = meta.id
+                it[this.className] = meta.className
+                it[this.methodName] = meta.methodName
+                it[this.status] = getStatusCode(meta.status)
+                it[this.created] = meta.created.to64bitMicroseconds()
+                it[this.lastAttemptStarted] = meta.lastAttemptStarted?.to64bitMicroseconds()
+                it[this.lastAttemptFinished] = meta.lastAttemptFinished?.to64bitMicroseconds()
+                it[this.nextAttempt] = meta.nextAttempt?.to64bitMicroseconds()
+                it[this.maxRetries] = meta.maxRetries
+                it[this.failedAttempts] = meta.failedAttempts
+                it[this.parameters] = meta.parameters
+                it[this.state] = meta.state
+                it[this.log] = meta.log.joinToString(SEPARATOR)
+            }
+        }
+    }
+
+
+    override fun updateJob(updated: JobMetadata) {
+        transaction(database) {
+            Jobs.update({ Jobs.id eq updated.id }) {
+                it[this.className] = updated.className
+                it[this.methodName] = updated.methodName
+                it[this.status] = getStatusCode(updated.status)
+                it[this.created] = updated.created.to64bitMicroseconds()
+                it[this.lastAttemptStarted] = updated.lastAttemptStarted?.to64bitMicroseconds()
+                it[this.lastAttemptFinished] = updated.lastAttemptFinished?.to64bitMicroseconds()
+                it[this.nextAttempt] = updated.nextAttempt?.to64bitMicroseconds()
+                it[this.maxRetries] = updated.maxRetries
+                it[this.failedAttempts] = updated.failedAttempts
+                it[this.parameters] = updated.parameters
+                it[this.state] = updated.state
+                it[this.log] = updated.log.joinToString(SEPARATOR)
+            }
+        }
+    }
+
+    override fun getAllJobs(): Set<JobMetadata> =
+        transaction { Jobs.selectAll()
+            .map { row -> JobMetadata(
+                id = row[Jobs.id],
+                className = row[Jobs.className],
+                methodName = row[Jobs.methodName],
+                status = jobStatusFromCode(row[Jobs.status]),
+                maxRetries = row[Jobs.maxRetries],
+                created = decode64bitMicroseconds(row[Jobs.created]),
+                lastAttemptStarted = row[Jobs.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
+                lastAttemptFinished = row[Jobs.lastAttemptFinished]?.let { decode64bitMicroseconds(it) },
+                nextAttempt = row[Jobs.nextAttempt]?.let { decode64bitMicroseconds(it) },
+                failedAttempts = row[Jobs.failedAttempts],
+                parameters = row[Jobs.parameters],
+                state = row[Jobs.state],
+                log = row[Jobs.log].split(SEPARATOR)
+            )}.toSet()
+        }
+
     internal object AuditLog : Table("\"klerk_audit_log\"") {
         val timestamp = long("timestamp")   // microseconds since 1970
         val event = varchar("event_id", length = 100)
@@ -360,6 +424,23 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         override val primaryKey = PrimaryKey(id)
     }
 
+    internal object Jobs : Table("\"klerk_jobs\"") {
+        val id = long("id")
+        val className = varchar("class_name", length = 100)
+        val methodName = varchar("method_name", length = 100)
+        val status = byte("status")
+        val created = long("created")   // microseconds since 1970
+        val lastAttemptStarted = long("last_attempt_started").nullable()    // microseconds since 1970
+        val lastAttemptFinished = long("last_attempt_finished").nullable()  // microseconds since 1970
+        val nextAttempt = long("next_attempt").nullable()   // microseconds since 1970
+        val failedAttempts = integer("failed_attempts")
+        val maxRetries = integer("max_attempts")
+        val parameters = text("parameters")
+        val state = text("state")
+        val log = text("log")
+        override val primaryKey = PrimaryKey(id)
+    }
+
     private fun migrateV1toV1(migration: MigrationStepV1toV1, row: ResultRow) {
         val before = MigrationModelV1(
             type = row[Models.type],
@@ -388,6 +469,18 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[properties] = gson.toJson(after.props)
             }
         }
+    }
+
+    private fun getStatusCode(status: JobStatus): Byte = when (status) {
+        JobStatus.Scheduled -> 100
+        JobStatus.Running -> 101
+        JobStatus.Success -> 102
+        JobStatus.Failed -> 103
+        JobStatus.Backoff -> 104
+    }
+
+    private fun jobStatusFromCode(code: Byte): JobStatus {
+        return JobStatus.entries.first { getStatusCode(it) == code }
     }
 
 }

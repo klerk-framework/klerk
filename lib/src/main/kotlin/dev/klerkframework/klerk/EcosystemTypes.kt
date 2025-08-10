@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.actions.JobId
+import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.command.Command
 
 /*

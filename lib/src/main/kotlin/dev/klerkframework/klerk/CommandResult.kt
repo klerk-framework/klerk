@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.actions.Job
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
@@ -34,7 +34,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
         val deletedModels: List<ModelID<out Any>>,
         val transitionedModels: List<ModelID<out Any>>,
         val secondaryEvents: List<EventReference>,
-        val jobs: List<Job<C, V>>,
+        val jobs: List<RunnableJob<C, V>>,
         val unmanagedJobs: List<UnmanagedJob>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,

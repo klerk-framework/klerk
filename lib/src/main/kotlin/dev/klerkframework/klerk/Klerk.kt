@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.actions.*
+import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.log.KlerkLog
@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.Flow
 
 import kotlinx.datetime.Instant
 import java.io.InputStream
-import java.util.*
 import kotlin.time.Duration
 
 public interface Klerk<C : KlerkContext, D> {
@@ -157,18 +156,9 @@ public interface KlerkModels<C : KlerkContext, V> {
 
 public interface JobManager<C : KlerkContext, V> {
 
-    public fun scheduleAction(action: Job<C, V>): JobId
+    public fun schedule(job: RunnableJob<C, V>): JobId
     public fun getJob(id: JobId): JobMetadata
     public fun getAllJobs(): List<JobMetadata>
-
-    /**
-     * Waits for the job to complete.
-     *
-     * A job is considered completed when it has reached the states Completed, Stuck or Failed.
-     *
-     * @return the completed job or null if timeout was reached before job completed.
-     */
-    public suspend fun awaitCompletion(id: JobId, timeout: Duration): JobMetadata?
 }
 
 public interface KlerkKeyValueStore<C : KlerkContext> {

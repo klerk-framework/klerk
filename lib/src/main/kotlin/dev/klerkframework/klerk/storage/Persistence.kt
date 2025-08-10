@@ -2,6 +2,8 @@ package dev.klerkframework.klerk.storage
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.migration.MigrationStep
 import kotlinx.datetime.Instant
 import java.io.InputStream
@@ -45,6 +47,9 @@ public interface Persistence {
     public fun getKeyValueString(id: Long): Pair<String, Instant?>?
     public fun getKeyValueInt(id: Long): Pair<Int, Instant?>?
     public fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>?
+    public fun insertJob(meta: JobMetadata)
+    public fun updateJob(updated: JobMetadata)
+    public fun getAllJobs(): Set<JobMetadata>
 }
 
 /**
@@ -57,6 +62,7 @@ public class RamStorage : Persistence {
     private val keyValueStrings = mutableMapOf<Long, Pair<String, Instant?>>()
     private val keyValueInts = mutableMapOf<Long, Pair<Int, Instant?>>()
     private val keyValueBlobs = mutableMapOf<Long, Triple<ByteArray, Instant?, Boolean>>()
+    private val jobs = mutableMapOf<JobId, JobMetadata>()
 
     override fun <T : Any, P, C:KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
@@ -140,6 +146,16 @@ public class RamStorage : Persistence {
     override fun getKeyValueInt(id: Long): Pair<Int, Instant?>? = keyValueInts[id]
     override fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>? =
         keyValueBlobs[id]?.let { Triple(it.first.inputStream(), it.second, it.third) }
+
+    override fun insertJob(meta: JobMetadata) {
+        jobs[meta.id] = meta
+    }
+
+    override fun updateJob(meta: JobMetadata) {
+        jobs[meta.id] = meta
+    }
+
+    override fun getAllJobs(): Set<JobMetadata> = jobs.values.toSet()
 
     public fun <T : Any, P, C:KlerkContext, V> createAuditEntry(
         command: Command<T, P>,

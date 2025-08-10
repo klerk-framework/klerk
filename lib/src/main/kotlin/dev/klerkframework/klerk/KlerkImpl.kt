@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.actions.JobManagerImpl
+import dev.klerkframework.klerk.job.JobManagerImpl
 import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -98,7 +98,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
                             "function. It is considered bad practice to throw in any function provided to Klerk."
                 }
             }
-            result.jobs.forEach { jobs.scheduleAction(it) }
+            result.jobs.forEach { jobs.schedule(it) }
             log.add(LogCommandSucceeded(command, context, result))
         }
 
@@ -139,6 +139,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 }
 
                 klerk.eventsManager.start()
+                klerk.jobs.start()
                 klerk.config.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }
                     it.start(klerk)
@@ -159,7 +160,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
             return  // already stopped
         }
         klerk.eventsManager.stop()
-        //   JobManagerImpl.stop() // stopping jobs after events in case a job is created that must execute on this instance.
+        klerk.jobs.stop()    // stopping jobs after events in case a job is created that must execute on this instance.
         klerk.log.add(LogKlerkStopped())
     }
 
