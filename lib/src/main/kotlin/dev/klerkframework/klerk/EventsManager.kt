@@ -23,7 +23,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val klerk: KlerkImpl<C, V>,
     private val readWriteLock: ReadWriteLock,
     private val settings: KlerkSettings,
-    private val jobs: JobManager<C, V>
+    private val jobs: JobManagerInternal<C, V>
 ) : EventsManager<C, V> {
 
     private val mutex = Mutex()
@@ -200,7 +200,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         "provided to Klerk."
             }
         }
-        delta.newJobs.forEach { jobs.schedule(it) }
+        delta.newJobs.forEach { jobs.notifyJobWasAddedToDb(it) }
 
         timeTriggerManager.handle(delta)
     }

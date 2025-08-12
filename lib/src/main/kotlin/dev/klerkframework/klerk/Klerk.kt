@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.log.KlerkLog
+import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.AuditEntry
@@ -159,6 +160,18 @@ public interface JobManager<C : KlerkContext, V> {
     public fun schedule(job: RunnableJob<C, V>): JobId
     public fun getJob(id: JobId): JobMetadata
     public fun getAllJobs(): List<JobMetadata>
+
+}
+
+internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
+
+    /**
+     * Makes the JobManager aware of a new job. It is assumed that the job has already been persisted to the database.
+     */
+    fun notifyJobWasAddedToDb(job: RunnableJob<C, V>)
+
+
+    fun isJobIdAvailable(int: Int): Boolean
 }
 
 public interface KlerkKeyValueStore<C : KlerkContext> {

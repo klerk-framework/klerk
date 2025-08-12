@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized

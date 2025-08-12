@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.job.JobStatus
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.MigrationStepV1toV1
@@ -119,6 +120,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
             delta.deletedModels.forEach { modelId ->
                 Models.deleteWhere { id eq modelId.toInt() }
+            }
+
+            delta.newJobs.forEach { job ->
+                internalInsertJob(job.getMetadata())
             }
         }
     }
@@ -311,21 +316,25 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun insertJob(meta: JobMetadata) {
         transaction(database) {
-            Jobs.insert {
-                it[this.id] = meta.id
-                it[this.className] = meta.className
-                it[this.methodName] = meta.methodName
-                it[this.status] = getStatusCode(meta.status)
-                it[this.created] = meta.created.to64bitMicroseconds()
-                it[this.lastAttemptStarted] = meta.lastAttemptStarted?.to64bitMicroseconds()
-                it[this.lastAttemptFinished] = meta.lastAttemptFinished?.to64bitMicroseconds()
-                it[this.nextAttempt] = meta.nextAttempt?.to64bitMicroseconds()
-                it[this.maxRetries] = meta.maxRetries
-                it[this.failedAttempts] = meta.failedAttempts
-                it[this.parameters] = meta.parameters
-                it[this.state] = meta.state
-                it[this.log] = meta.log.joinToString(SEPARATOR)
-            }
+            internalInsertJob(meta)
+        }
+    }
+
+    private fun internalInsertJob(meta: JobMetadata) {
+        Jobs.insert {
+            it[this.id] = meta.id
+            it[this.className] = meta.className
+            it[this.methodName] = meta.methodName
+            it[this.status] = getStatusCode(meta.status)
+            it[this.created] = meta.created.to64bitMicroseconds()
+            it[this.lastAttemptStarted] = meta.lastAttemptStarted?.to64bitMicroseconds()
+            it[this.lastAttemptFinished] = meta.lastAttemptFinished?.to64bitMicroseconds()
+            it[this.nextAttempt] = meta.nextAttempt?.to64bitMicroseconds()
+            it[this.maxRetries] = meta.maxRetries
+            it[this.failedAttempts] = meta.failedAttempts
+            it[this.parameters] = meta.parameters
+            it[this.state] = meta.state
+            it[this.log] = meta.log.joinToString(SEPARATOR)
         }
     }
 
@@ -425,7 +434,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object Jobs : Table("\"klerk_jobs\"") {
-        val id = long("id")
+        val id = integer("id")
         val className = varchar("class_name", length = 100)
         val methodName = varchar("method_name", length = 100)
         val status = byte("status")

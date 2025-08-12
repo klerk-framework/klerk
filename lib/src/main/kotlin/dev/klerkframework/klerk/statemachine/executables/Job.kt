@@ -20,7 +20,9 @@ internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
-        return ProcessingData(newJobs = f.invoke(args),
+        val newJobs = f.invoke(args)
+        newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
+        return ProcessingData(newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }
@@ -39,7 +41,9 @@ internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
-        return ProcessingData(newJobs = f.invoke(args),
+        val newJobs = f.invoke(args)
+        newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
+        return ProcessingData(newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }
@@ -58,7 +62,9 @@ internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
-        return ProcessingData(newJobs = f.invoke(args),
+        val newJobs = f.invoke(args)
+        newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
+        return ProcessingData(newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }

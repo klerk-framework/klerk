@@ -58,7 +58,7 @@ class JobManagerImplTest {
         }
     }
 
-    class FutureJob : RunnableJob<Context, MyCollections> {
+    class FutureJob : RunnableJob<Context, MyCollections>() {
 
         override val parameters: String = ""
 
@@ -75,7 +75,7 @@ class JobManagerImplTest {
             }
         }
 
-        override val runFunction = Companion::myJobFunction
+        override fun getRunFunction() = Companion::myJobFunction
     }
 }
 

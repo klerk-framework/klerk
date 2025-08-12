@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.collection.ModelCollections
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.misc.IdFactory
 import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.misc.ReadWriteLock
@@ -287,7 +288,7 @@ internal class EventProcessor<C : KlerkContext, V>(
 
         val processingOptions = EventProcessingOptions(
             disregardPreventingRules = false,
-            idProvider = IdFactory,
+            idProvider = IdFactory(klerk.jobs::isJobIdAvailable),
             performActions = false,
             preventModelUpdates = false
         )

@@ -1,22 +1,25 @@
 package dev.klerkframework.klerk.misc
 
 
+import dev.klerkframework.klerk.JobManagerInternal
 import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.storage.ModelCache
 
 import mu.KotlinLogging
 import java.security.SecureRandom
 
 internal interface IdProvider {
-    fun <T : Any> getNext(): ModelID<T>
+    fun <T : Any> getNextModelID(): ModelID<T>
+    fun getNextJobID(): JobId
 }
 
-internal object IdFactory : IdProvider {
+internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {
 
     private val log = KotlinLogging.logger {}
     private val random = SecureRandom.getInstanceStrong()
 
-    override fun <T : Any> getNext(): ModelID<T> {
+    override fun <T : Any> getNextModelID(): ModelID<T> {
 
         // We should switch to UInt so we can use the full range. However, there is a problem: KT-69674 (I haven't tried
         // to work around that problem, it is likely possible). And we cannot use negative numbers as it will introduce
@@ -28,7 +31,15 @@ internal object IdFactory : IdProvider {
         if (ModelCache.isIdAvailable(randomInt)) {
             return ModelID(randomInt)
         }
-        return getNext()
+        return getNextModelID()
+    }
+
+    override fun getNextJobID(): JobId {
+        val randomInt = random.nextInt(0, Int.MAX_VALUE)
+        if (isJobIdAvailable(randomInt)) {
+            return randomInt
+        }
+        return getNextJobID()
     }
 
 }

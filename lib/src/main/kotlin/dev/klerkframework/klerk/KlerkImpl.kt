@@ -98,7 +98,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
                             "function. It is considered bad practice to throw in any function provided to Klerk."
                 }
             }
-            result.jobs.forEach { jobs.schedule(it) }
+            result.jobs.forEach { jobs.notifyJobWasAddedToDb(it) }
             log.add(LogCommandSucceeded(command, context, result))
         }
 

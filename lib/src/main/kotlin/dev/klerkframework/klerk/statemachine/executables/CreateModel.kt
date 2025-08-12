@@ -28,7 +28,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         }
 
         val created = Model(
-            id = processingOptions.idProvider.getNext(),
+            id = processingOptions.idProvider.getNextModelID(),
             createdAt = args.context.time,
             lastPropsUpdateAt = args.context.time,
             lastStateTransitionAt = Instant.DISTANT_PAST,

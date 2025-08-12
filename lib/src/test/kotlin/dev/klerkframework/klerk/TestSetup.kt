@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
 import dev.klerkframework.klerk.AuthorStates.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
@@ -375,7 +374,7 @@ fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context
     return listOf(MyJob2())
 }
 
-class MyJob2 : RunnableJob<Context, MyCollections> {
+class MyJob2 : RunnableJob<Context, MyCollections>() {
 
     companion object {
         suspend fun run(
@@ -393,7 +392,7 @@ class MyJob2 : RunnableJob<Context, MyCollections> {
     override val parameters: String
         get() = "Hej"
 
-    override val runFunction = Companion::run
+    override fun getRunFunction() = Companion::run
 }
 
 fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): Author {
@@ -773,7 +772,7 @@ data class User(val name: FirstName)
 
 object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, true)
 
-class MyJob : RunnableJob<Context, MyCollections> {
+class MyJob : RunnableJob<Context, MyCollections>() {
 
     companion object {
 
@@ -789,7 +788,7 @@ class MyJob : RunnableJob<Context, MyCollections> {
     override val parameters: String
         get() = "pelle"
 
-    override val runFunction = Companion::theMethodToRun
+    override fun getRunFunction() = Companion::theMethodToRun
 
 }
 
