@@ -27,7 +27,7 @@ class LibraryTest {
             val context = Context.system()
 
             val somethingNull: Model<Book>? = klerk.read(context) {
-                firstOrNull(data.books.all) { true }
+                firstOrNull(views.books.all) { true }
             }
 
             assertNull(somethingNull)
@@ -36,7 +36,7 @@ class LibraryTest {
             createBookHarryPotter1(klerk, rowling)
 
             val somethingNotNull: Model<Book>? = klerk.read(context) {
-                firstOrNull(data.books.all) { true }
+                firstOrNull(views.books.all) { true }
             }
             assertNotNull(somethingNotNull)
 
@@ -50,7 +50,7 @@ class LibraryTest {
             klerk.meta.start()
 
             val somethingNotNullAgain: Model<Book>? = klerk.read(context) {
-                firstOrNull(data.books.all) { true }
+                firstOrNull(views.books.all) { true }
             }
             assertNotNull(somethingNotNullAgain)
 

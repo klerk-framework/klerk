@@ -390,7 +390,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object Models : Table("\"klerk_models\"") {
-        val id = integer("id")
+        val id = integer("id").index()
         val type = varchar("type", length = 50)
         val createdAt = long("created")   // microseconds since 1970
         val lastPropsUpdateAt = long("last_props_update_at")   // microseconds since 1970
@@ -412,21 +412,21 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object KeyValueStrings : Table("\"klerk_strings\"") {
-        val id = long("id")
+        val id = long("id").index()
         val value = varchar("value", length = 100000)
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueInts : Table("\"klerk_ints\"") {
-        val id = long("id")
+        val id = long("id").index()
         val value = integer("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueBlobs : Table("\"klerk_blobs\"") {
-        val id = long("id")
+        val id = long("id").index()
         val value = blob("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         val active = bool("active")  // blobs are first prepared, then activated in the second step
@@ -434,7 +434,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object Jobs : Table("\"klerk_jobs\"") {
-        val id = integer("id")
+        val id = integer("id").index()
         val className = varchar("class_name", length = 100)
         val methodName = varchar("method_name", length = 100)
         val status = byte("status")

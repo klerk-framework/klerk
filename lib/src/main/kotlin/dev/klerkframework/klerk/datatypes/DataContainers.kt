@@ -340,3 +340,9 @@ internal val propertiesMustInheritFrom = setOf(
     FloatContainer::class,
     BooleanContainer::class
 )
+
+public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}

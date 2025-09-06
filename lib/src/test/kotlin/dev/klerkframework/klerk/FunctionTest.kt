@@ -33,7 +33,7 @@ class FunctionTest {
 
 object DummyReader : Reader<Context, MyCollections> {
     private val exception = UnsupportedOperationException("DummyReader is not meant to be used")
-    override val data: MyCollections
+    override val views: MyCollections
         get() = throw exception
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> {

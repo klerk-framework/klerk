@@ -461,7 +461,7 @@ fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, Cr
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
         }
-        val rowling = firstOrNull(data.authors.all) { it.props.firstName.value == "Rowling" }
+        val rowling = firstOrNull(views.authors.all) { it.props.firstName.value == "Rowling" }
         return if (rowling == null) Valid else Invalid()
     }
 }

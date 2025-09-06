@@ -16,7 +16,7 @@ import kotlin.reflect.KProperty1
  */
 internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
 
-    override val data = klerk.config.collections
+    override val views = klerk.config.collections
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
 

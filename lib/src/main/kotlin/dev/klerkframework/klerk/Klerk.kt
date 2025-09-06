@@ -4,7 +4,6 @@ import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.log.KlerkLog
-import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.AuditEntry
@@ -15,7 +14,7 @@ import kotlinx.datetime.Instant
 import java.io.InputStream
 import kotlin.time.Duration
 
-public interface Klerk<C : KlerkContext, D> {
+public interface Klerk<C : KlerkContext, V> {
 
     public companion object {
 
@@ -32,10 +31,10 @@ public interface Klerk<C : KlerkContext, D> {
         }
     }
 
-    public val config: Config<C, D>
-    public val events: EventsManager<C, D>
-    public val jobs: JobManager<C, D>
-    public val models: KlerkModels<C, D>
+    public val config: Config<C, V>
+    public val events: EventsManager<C, V>
+    public val jobs: JobManager<C, V>
+    public val models: KlerkModels<C, V>
 
     /**
      * Note that the keys are generated for you, i.e. you cannot give your own names to the keys.
@@ -57,7 +56,7 @@ public interface Klerk<C : KlerkContext, D> {
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions
-    ): CommandResult<T, C, D>
+    ): CommandResult<T, C, V>
 
     /**
      * Read stuff
@@ -71,7 +70,7 @@ public interface Klerk<C : KlerkContext, D> {
      * @return whatever the readFunction returns
      * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
      */
-    public suspend fun <T> read(context: C, readFunction: Reader<C, D>.() -> T): T
+    public suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T
 
     /**
      * Read stuff
@@ -90,7 +89,7 @@ public interface Klerk<C : KlerkContext, D> {
      * @return whatever the readFunction returns
      * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
      */
-    public suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, D>.() -> T): T
+    public suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T
 
 }
 

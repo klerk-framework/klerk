@@ -9,9 +9,9 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 
-public interface Reader<C:KlerkContext, D> {
+public interface Reader<C:KlerkContext, V> {
 
-    public val data: D
+    public val views: V
 
     /**
      * Get a model.
