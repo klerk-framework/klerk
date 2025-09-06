@@ -13,8 +13,8 @@ class ValidatorTest {
     private var klerk: Klerk<Context, MyCollections>
 
     init {
-        val bc = BookCollections()
-        val collections = MyCollections(bc, AuthorCollections(bc.all))
+        val bc = BookViews()
+        val collections = MyCollections(bc, AuthorViews(bc.all))
         val config = createConfig(collections, RamStorage())
         klerk = Klerk.create(config)
     }

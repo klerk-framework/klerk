@@ -19,8 +19,8 @@ class LibraryTest {
 
         runBlocking {
             val ramStorage = RamStorage()
-            val bc = BookCollections()
-            var views = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            var views = MyCollections(bc, AuthorViews(bc.all))
             var klerk = Klerk.create(createConfig(views, ramStorage))
             klerk.meta.start()
 
@@ -45,7 +45,7 @@ class LibraryTest {
             val modelsInCache = ModelCache.count
 
             // restart and now read from database
-            views = MyCollections(BookCollections(), AuthorCollections(bc.all))
+            views = MyCollections(BookViews(), AuthorViews(bc.all))
             klerk = Klerk.create(createConfig(views, ramStorage))
             klerk.meta.start()
 
@@ -62,8 +62,8 @@ class LibraryTest {
     @Test
     fun updateModel() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)

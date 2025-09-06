@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import kotlinx.datetime.Instant
@@ -14,7 +14,7 @@ internal class InstanceNonEventTransitionWhen<ModelStates : Enum<*>, T : Any, C 
     override fun <Primary : Any> process(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>
     ): ProcessingData<Primary, C, V> {
@@ -41,7 +41,7 @@ internal class InstanceEventTransitionWhen<ModelStates : Enum<*>, T : Any, P, C 
     override fun <Primary : Any> process(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>
     ): ProcessingData<Primary, C, V> {
@@ -65,7 +65,7 @@ private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V>
     model: Model<T>,
     time: Instant,
     config: Config<C, V>,
-    view: ModelCollections<T, C>,
+    view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     val exitBlock = config.getStateMachine(model).states.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = time)

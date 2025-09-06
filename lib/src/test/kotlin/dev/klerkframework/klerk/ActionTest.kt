@@ -15,8 +15,8 @@ class ActionTest {
     @Test
     fun actionTest() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
 
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
@@ -33,8 +33,8 @@ class ActionTest {
     @Test
     fun throwingAction() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
                     model(Book::class, throwingStateMachine(collections), collections.books)

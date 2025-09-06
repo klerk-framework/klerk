@@ -11,8 +11,8 @@ import kotlin.test.*
 
 class EventProcessorTest {
 
-    val bc = BookCollections()
-    var collections = MyCollections(bc, AuthorCollections(bc.all))
+    val bc = BookViews()
+    var collections = MyCollections(bc, AuthorViews(bc.all))
     val config = createConfig(collections)
 
     @Test

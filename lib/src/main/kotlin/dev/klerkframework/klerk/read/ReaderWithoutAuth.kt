@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
@@ -35,7 +35,7 @@ internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : R
     }
 
     override fun <T : Any> query(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
     ): QueryResponse<T> {
@@ -112,12 +112,12 @@ internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : R
     }
 
     override fun <T : Any> list(
-        modelCollection: ModelCollection<T, C>,
+        modelView: ModelView<T, C>,
         filter: ((Model<T>) -> Boolean)?
     ): List<Model<T>> =
-        modelCollection.filter(filter = filter).withReader(this, null).toList()
+        modelView.filter(filter = filter).withReader(this, null).toList()
 
-    override fun <T : Any> listIfAuthorized(collection: ModelCollection<T, C>): List<Model<T>> {
+    override fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>> {
         throw RuntimeException("Reader.listIfAuthorized was called but the reader doesn't enforce authorization")
     }
 
@@ -126,7 +126,7 @@ internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : R
     }
 
     override fun <T : Any> firstOrNull(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T>? {
         if (collection.isEmpty(this)) {
@@ -140,7 +140,7 @@ internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : R
     }
 
     override fun <T : Any> getFirstWhere(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T> =
         list(collection, filter).first()

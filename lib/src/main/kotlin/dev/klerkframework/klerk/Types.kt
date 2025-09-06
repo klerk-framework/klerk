@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelCollection
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.LongContainer
@@ -15,7 +15,6 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
-import kotlin.time.Duration
 
 public data class StateId(val modelName: String, val stateName: String) {
     override fun toString(): String = "s.$modelName.$stateName"
@@ -38,7 +37,7 @@ public data class CollectionId(val modelName: String, val shortId: String) {
 public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     val kClass: KClass<T>,
     val stateMachine: StateMachine<T, ModelStates, C, V>,
-    val collections: ModelCollections<T, C>,
+    val collections: ModelViews<T, C>,
 )
 
 public data class Model<T : Any>(
@@ -145,14 +144,14 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
 ) : VoidEvent<T, P>(forModel, isExternal) {
 
     internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
-    internal var validRefs: Map<String, ModelCollection<out Any, *>?> = mapOf()
+    internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
     @Suppress("UNCHECKED_CAST")
-    internal fun <C : KlerkContext> getValidRefs(name: String): ModelCollection<out Any, C>? =
-        validRefs[name] as ModelCollection<out Any, C>?
+    internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
+        validRefs[name] as ModelView<out Any, C>?
 
 
 }
@@ -167,14 +166,14 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
 ) : InstanceEvent<T, P>(forModel, isExternal) {
 
     internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
-    internal var validRefs: Map<String, ModelCollection<out Any, *>?> = mapOf()
+    internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
     @Suppress("UNCHECKED_CAST")
-    internal fun <C : KlerkContext> getValidRefs(name: String): ModelCollection<out Any, C>? =
-        validRefs[name] as ModelCollection<out Any, C>?
+    internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
+        validRefs[name] as ModelView<out Any, C>?
 
 }
 

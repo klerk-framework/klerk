@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import dev.klerkframework.klerk.storage.ModelCache
@@ -13,7 +13,7 @@ internal class InstanceNonEventDelete<T : Any, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
@@ -28,7 +28,7 @@ internal class InstanceEventDelete<T : Any, P, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
@@ -39,7 +39,7 @@ internal class InstanceEventDelete<T : Any, P, C : KlerkContext, V>(
 private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     model: Model<T>?,
     processingDataSoFar: ProcessingData<Primary, C, V>,
-    view: ModelCollections<T, C>,
+    view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     requireNotNull(model)
     val other = ModelCache.getAllRelated(model.id)

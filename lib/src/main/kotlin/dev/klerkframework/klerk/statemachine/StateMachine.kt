@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 
 import dev.klerkframework.klerk.storage.ModelCache
@@ -15,7 +15,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
 
     private val log = KotlinLogging.logger {}
 
-    internal lateinit var modelCollections: ModelCollections<T, C>
+    internal lateinit var modelViews: ModelViews<T, C>
     private lateinit var currentState: State<T, ModelStates, C, V>
     public val states: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
     public lateinit var voidState: VoidState<T, ModelStates, C, V>
@@ -26,9 +26,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
 
     // internal lateinit var externalEvents: ExternalEvents<V, T>
 
-    internal fun setView(view: ModelCollections<*, C>) {
+    internal fun setView(view: ModelViews<*, C>) {
         @Suppress("UNCHECKED_CAST")
-        modelCollections = view as ModelCollections<T, C>
+        modelViews = view as ModelViews<T, C>
     }
 
     internal fun getStateByName(name: String?): State<T, ModelStates, C, V> {

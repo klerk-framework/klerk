@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk
 
 import com.google.gson.Gson
-import dev.klerkframework.klerk.collection.ModelCollection
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.migration.MigrationStep
@@ -143,7 +143,7 @@ public data class Config<C : KlerkContext, V>(
 
     private fun checkRefParam(
         params: EventParameters<*>?,
-        validRefs: Map<String, ModelCollection<out Any, *>?>,
+        validRefs: Map<String, ModelView<out Any, *>?>,
         event: Event<*, *>
     ) {
         if (params == null) {
@@ -159,11 +159,11 @@ public data class Config<C : KlerkContext, V>(
         return managedModels.map { it.kClass }.toSet()
     }
 
-    public fun <T : Any> getView(clazz: KClass<*>): ModelCollections<T, C> {
+    public fun <T : Any> getView(clazz: KClass<*>): ModelViews<T, C> {
         val mm = managedModels.find { it.kClass == clazz }
             ?: throw NoSuchElementException("Cannot find view for ${clazz.qualifiedName}")
         @Suppress("UNCHECKED_CAST")
-        return mm.collections as ModelCollections<T, C>
+        return mm.collections as ModelViews<T, C>
     }
 
     /**
@@ -209,13 +209,13 @@ public data class Config<C : KlerkContext, V>(
         //   .filter { it.parameters.isEmpty() }
     }
 
-    public fun getCollections(): List<Pair<KClass<out Any>, ModelCollection<out Any, C>>> {
+    public fun getCollections(): List<Pair<KClass<out Any>, ModelView<out Any, C>>> {
         return managedModels.flatMap { managed ->
             managed.collections.getCollections().map { Pair(managed.kClass, it) }
         }
     }
 
-    public fun getCollection(id: CollectionId): ModelCollection<out Any, C> {
+    public fun getCollection(id: CollectionId): ModelView<out Any, C> {
         val managed = managedModels.single { it.kClass.simpleName == id.modelName }
         return managed.collections.getCollections().single { it.getFullId() == id }
     }
@@ -223,7 +223,7 @@ public data class Config<C : KlerkContext, V>(
     public fun getValidationCollectionFor(
         eventReference: EventReference,
         parameter: EventParameter
-    ): ModelCollection<out Any, C>? {
+    ): ModelView<out Any, C>? {
         val event = getEvent(eventReference)
         return when (event) {
             is InstanceEventNoParameters -> null
@@ -388,7 +388,7 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
         public fun <T : Any, ModelStates : Enum<*>> model(
             clazz: KClass<T>,
             stateMachine: StateMachine<T, ModelStates, C, V>,
-            view: ModelCollections<T, C>
+            view: ModelViews<T, C>
         ) {
             validateModelClass(clazz)
             require(!value.map { it.kClass.simpleName!! }

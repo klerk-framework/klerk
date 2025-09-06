@@ -13,8 +13,8 @@ class MutationTest {
 
         runBlocking {
 
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
                     model(Author::class, authorStateMachine(collections), collections.authors)

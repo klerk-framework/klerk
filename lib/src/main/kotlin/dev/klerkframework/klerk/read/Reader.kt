@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.datatypes.DataContainer
@@ -27,7 +27,7 @@ public interface Reader<C:KlerkContext, V> {
      * @throws NoSuchElementException if no model was found
      */
     public fun <T : Any> getFirstWhere(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T>
 
@@ -35,7 +35,7 @@ public interface Reader<C:KlerkContext, V> {
      * Finds the first model in the Collection and passes the provided filter.
      */
     public fun <T : Any> firstOrNull(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T>?
 
@@ -46,7 +46,7 @@ public interface Reader<C:KlerkContext, V> {
      *
      * @throws
      */
-    public fun <T : Any> listIfAuthorized(collection: ModelCollection<T, C>): List<Model<T>>
+    public fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>>
 
     /**
      * Get all models in the Collection that passes the provided filter.
@@ -54,11 +54,11 @@ public interface Reader<C:KlerkContext, V> {
      * @throws AuthorizationException if there is any model in the collection that the user is not allowed to read.
      */
     public fun <T : Any> list(
-        modelCollection: ModelCollection<T, C>,
+        modelView: ModelView<T, C>,
         filter: ((Model<T>) -> Boolean)? = null,
     ): List<Model<T>>
 
-    public fun <T : Any> query(collection: ModelCollection<T, C>, options: QueryOptions? = null, filter: ((Model<T>) -> Boolean)? = null): QueryResponse<T>
+    public fun <T : Any> query(collection: ModelView<T, C>, options: QueryOptions? = null, filter: ((Model<T>) -> Boolean)? = null): QueryResponse<T>
 
     /**
      * Finds all models that have a relation to the specified model.

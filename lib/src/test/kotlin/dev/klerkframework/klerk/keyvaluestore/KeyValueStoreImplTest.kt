@@ -1,16 +1,14 @@
 package dev.klerkframework.klerk.keyvaluestore
 
-import dev.klerkframework.klerk.AuthorCollections
+import dev.klerkframework.klerk.AuthorViews
 import dev.klerkframework.klerk.BinaryKeyValueID
-import dev.klerkframework.klerk.BookCollections
+import dev.klerkframework.klerk.BookViews
 import dev.klerkframework.klerk.Context
-import dev.klerkframework.klerk.KeyValueID
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.MyCollections
 import dev.klerkframework.klerk.createConfig
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
-import java.io.InputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.fail
@@ -20,8 +18,8 @@ class KeyValueStoreImplTest {
     @Test
     fun putAndGetString() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val key = klerk.keyValueStore.put("test")
@@ -33,8 +31,8 @@ class KeyValueStoreImplTest {
     @Test
     fun putAndGetInt() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val key = klerk.keyValueStore.put(1)
@@ -46,8 +44,8 @@ class KeyValueStoreImplTest {
     @Test
     fun putAndGetBlob() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val token = klerk.keyValueStore.prepareBlob("pelle".toByteArray().inputStream())

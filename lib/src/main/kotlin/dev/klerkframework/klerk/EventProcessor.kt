@@ -1,11 +1,10 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.job.RunnableJob
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.misc.IdFactory
 import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.misc.ReadWriteLock
@@ -300,7 +299,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             ?: klerk.config.getStateMachineForEvent(processingData.currentCommand!!.event)
 
         @Suppress("UNCHECKED_CAST")
-        val view = stateMachine.modelCollections as ModelCollections<T, C>
+        val view = stateMachine.modelViews as ModelViews<T, C>
         val result = when (currentBlock) {
 
             is Block.VoidNonEventBlock -> {

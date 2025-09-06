@@ -13,8 +13,8 @@ class ValidatableTest {
     @Test
     fun `Validates created model`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -45,8 +45,8 @@ class ValidatableTest {
     @Test
     fun `Validates updated model`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -76,8 +76,8 @@ class ValidatableTest {
     @Test
     fun `Validates parameters together`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 

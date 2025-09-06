@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.logger
 
-public open class ModelCollections<T : Any, C : KlerkContext> {
+public open class ModelViews<T : Any, C : KlerkContext> {
     public open fun didCreate(created: Model<T>) {}
     public open fun didUpdate(before: Model<T>, after: Model<T>) {}
     public open fun didDelete(deleted: Model<T>) {}
@@ -16,9 +16,9 @@ public open class ModelCollections<T : Any, C : KlerkContext> {
     /**
      * A collection of all models in this view (i.e. all models of type T).
      */
-    public val all: AllModelCollection<T, C> = AllModelCollection(this, _all)
+    public val all: AllModelView<T, C> = AllModelView(this, _all)
 
-    private val modelCollections = mutableListOf<ModelCollection<T, C>>(all)
+    private val modelViews = mutableListOf<ModelView<T, C>>(all)
 
     internal fun internalDidCreate(created: Model<T>) {
         logger.debug { "internalDidCreate ${created.id} ${all} " }
@@ -36,10 +36,10 @@ public open class ModelCollections<T : Any, C : KlerkContext> {
         didDelete(deleted)
     }
 
-    internal fun register(modelCollection: ModelCollection<T, C>) {
-        modelCollections.add(modelCollection)
+    internal fun register(modelView: ModelView<T, C>) {
+        modelViews.add(modelView)
     }
 
-    public fun getCollections(): List<ModelCollection<T, C>> = modelCollections
+    public fun getCollections(): List<ModelView<T, C>> = modelViews
 
 }

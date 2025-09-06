@@ -9,8 +9,8 @@ import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
 import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.job.JobResult
 import dev.klerkframework.klerk.job.RunnableJob
-import dev.klerkframework.klerk.collection.AllModelCollection
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.AllModelView
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -136,14 +136,14 @@ fun pelleCannotReadOnMornings(
     return Pass
 }
 
-class BookCollections : ModelCollections<Book, Context>() {
+class BookViews : ModelViews<Book, Context>() {
 
     fun childrensBooks(): List<ModelID<Book>> {
         return emptyList()
     }
 }
 
-class AuthorCollections<V>(val allBooks: AllModelCollection<Book, Context>) : ModelCollections<Author, Context>() {
+class AuthorViews<V>(val allBooks: AllModelView<Book, Context>) : ModelViews<Author, Context>() {
 
     private val greatAuthorNames = setOf("Linus", "Bertil")
 
@@ -491,8 +491,8 @@ enum class AuthorStates {
 }
 
 data class MyCollections(
-    val books: BookCollections,
-    val authors: AuthorCollections<MyCollections>
+    val books: BookViews,
+    val authors: AuthorViews<MyCollections>
 ) //, val shops: ModelView<Shop, Context>)
 
 suspend fun createAuthorJKRowling(klerk: Klerk<Context, MyCollections>): ModelID<Author> {

@@ -7,7 +7,6 @@ import dev.klerkframework.klerk.misc.ChannelNotificationPref.Nothing
 import dev.klerkframework.klerk.misc.ShowNotificationDecisions.*
 import dev.klerkframework.klerk.read.ReaderWithAuth
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,8 +19,8 @@ val algorithmParams = AlgorithmParams(
 
 class FlowChartAlgorithmTest {
 
-    private val bc = BookCollections()
-    private val collections = MyCollections(bc, AuthorCollections(bc.all))
+    private val bc = BookViews()
+    private val collections = MyCollections(bc, AuthorViews(bc.all))
     private val reader = ReaderWithAuth(Klerk.create(createConfig(collections)) as KlerkImpl, Context.system())
     private val model = Model(
         ModelID(10),

@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.job.JobManagerImpl
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.keyvaluestore.KeyValueStoreImpl
@@ -53,7 +53,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
     }
 
 
-    private fun modelViewProvider(modelType: String): ModelCollections<*, C> {
+    private fun modelViewProvider(modelType: String): ModelViews<*, C> {
         return config.managedModels.find { it.kClass.simpleName == modelType }?.collections
             ?: throw RuntimeException("Can't find model view for type '$modelType'")
     }

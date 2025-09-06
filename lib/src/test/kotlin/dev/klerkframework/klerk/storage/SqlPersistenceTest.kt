@@ -15,8 +15,8 @@ class SqlPersistenceTest {
 
     @Test
     fun `Store and read`() {
-        val bc = BookCollections()
-        val collections = MyCollections(bc, AuthorCollections(bc.all))
+        val bc = BookViews()
+        val collections = MyCollections(bc, AuthorViews(bc.all))
         val persistence = SQLiteInMemory.create()
         val config = createConfig(collections, persistence)
         var klerk = Klerk.create(config)

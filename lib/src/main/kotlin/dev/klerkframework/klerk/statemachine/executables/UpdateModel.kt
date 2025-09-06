@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
@@ -18,7 +18,7 @@ internal class InstanceNonEventUpdateModel<T : Any, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = process(f(args), args.model, args.time, args.reader, view,  extractNameFromFunction(f, false))
@@ -33,7 +33,7 @@ internal class InstanceEventUpdateModel<T : Any, P, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = process(f(args), args.model, args.context.time, args.reader, view, extractNameFromFunction(f, false))
@@ -45,7 +45,7 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     model: Model<T>,
     time: Instant,
     reader: Reader<C, V>,
-    view: ModelCollections<T, C>,
+    view: ModelViews<T, C>,
     functionName: String,
 ): ProcessingData<Primary, C, V> {
     val validationProblems = validateModelProps(newProperties)

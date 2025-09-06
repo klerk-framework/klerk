@@ -19,8 +19,8 @@ class JobManagerImplTest {
     @Test
     fun job() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
@@ -38,8 +38,8 @@ class JobManagerImplTest {
     @Ignore("This test takes a long time to run")
     fun `jobs can survive restart`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val ram = RamStorage()
             var klerk = Klerk.create(createConfig(collections, ram))
             klerk.meta.start()

@@ -16,8 +16,8 @@ class InstanceNonInstanceEventBlockTest {
 
         runBlocking {
 
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val persistence = RamStorage()
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
@@ -75,7 +75,7 @@ class InstanceNonInstanceEventBlockTest {
         }
     }
 
-    fun createStateMachine(authors: AuthorCollections<MyCollections>): StateMachine<Book, BookStates, Context, MyCollections> =
+    fun createStateMachine(authors: AuthorViews<MyCollections>): StateMachine<Book, BookStates, Context, MyCollections> =
 
         stateMachine {
             event(CreateBook) {

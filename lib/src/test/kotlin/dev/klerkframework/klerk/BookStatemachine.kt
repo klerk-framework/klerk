@@ -1,8 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.datatypes.FloatContainer
-import dev.klerkframework.klerk.collection.ModelCollection
-import dev.klerkframework.klerk.misc.ShouldSendNotificationAlgorithm
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
 
@@ -11,7 +9,7 @@ enum class BookStates {
     Published,
 }
 
-fun bookStateMachine(allAuthors: ModelCollection<Author, Context>, collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
     stateMachine {
 
         event(CreateBook) {

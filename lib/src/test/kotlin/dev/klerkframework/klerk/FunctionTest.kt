@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.command.Command
@@ -76,7 +76,7 @@ object DummyReader : Reader<Context, MyCollections> {
     }
 
     override fun <T : Any> query(
-        collection: ModelCollection<T, Context>,
+        collection: ModelView<T, Context>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
     ): QueryResponse<T> {
@@ -84,25 +84,25 @@ object DummyReader : Reader<Context, MyCollections> {
     }
 
     override fun <T : Any> list(
-        modelCollection: ModelCollection<T, Context>,
+        modelView: ModelView<T, Context>,
         filter: ((Model<T>) -> Boolean)?
     ): List<Model<T>> {
         throw exception
     }
 
-    override fun <T : Any> listIfAuthorized(collection: ModelCollection<T, Context>): List<Model<T>> {
+    override fun <T : Any> listIfAuthorized(collection: ModelView<T, Context>): List<Model<T>> {
         throw exception
     }
 
     override fun <T : Any> firstOrNull(
-        collection: ModelCollection<T, Context>,
+        collection: ModelView<T, Context>,
         filter: (Model<T>) -> Boolean
     ): Model<T>? {
         throw exception
     }
 
     override fun <T : Any> getFirstWhere(
-        collection: ModelCollection<T, Context>,
+        collection: ModelView<T, Context>,
         filter: (Model<T>) -> Boolean
     ): Model<T> {
         throw exception

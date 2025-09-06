@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
@@ -17,7 +17,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
     override fun <Primary : Any> process(
         args: ArgForVoidEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {

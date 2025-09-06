@@ -10,8 +10,8 @@ class MigrationStepTest {
 
     @Test
     fun migrate() {
-        val bc = BookCollections()
-        val collections = MyCollections(bc, AuthorCollections(bc.all))
+        val bc = BookViews()
+        val collections = MyCollections(bc, AuthorViews(bc.all))
         val persistence = SQLiteInMemory.create()
 
         runBlocking {

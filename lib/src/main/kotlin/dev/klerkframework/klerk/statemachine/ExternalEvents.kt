@@ -2,7 +2,7 @@ package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.EventParameter
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.ModelView
 
 import kotlin.reflect.KProperty1
 
@@ -23,16 +23,16 @@ public abstract class EventRulesWithParameters<P:Any, C:KlerkContext> : EventRul
 
 public class InstanceEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> : EventRulesWithParameters<P, C>() {
 
-    internal val validRefs: MutableMap<String, ModelCollection<*, C>> = mutableMapOf()
+    internal val validRefs: MutableMap<String, ModelView<*, C>> = mutableMapOf()
     internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
 
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>>, modelCollection: ModelCollection<T, C>?) {
-        if (modelCollection == null) {
+    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>>, modelView: ModelView<T, C>?) {
+        if (modelView == null) {
             referencesThatAllowsEverything.add(property.name)
         } else {
-            validRefs[property.name] = modelCollection
+            validRefs[property.name] = modelView
         }
     }
 
@@ -44,7 +44,7 @@ public class InstanceEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> :
         withParametersValidationRules.add(function)
     }
 
-    internal fun getValidationCollectionFor(parameter: EventParameter): ModelCollection<out Any, C>? {
+    internal fun getValidationCollectionFor(parameter: EventParameter): ModelView<out Any, C>? {
         if (referencesThatAllowsEverything.contains(parameter.name)) {
             return null
         }
@@ -55,16 +55,16 @@ public class InstanceEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> :
 
 public class VoidEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> : EventRulesWithParameters<P, C>() {
 
-    internal val validRefs: MutableMap<String, ModelCollection<*, C>?> = mutableMapOf()
+    internal val validRefs: MutableMap<String, ModelView<*, C>?> = mutableMapOf()
     internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
 
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelCollection: ModelCollection<T, C>?) {
+    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
         //if (collection == null) {
           //  referencesThatAllowsEverything.add(property.name)
         //} else {
-            validRefs[property.name] = modelCollection
+            validRefs[property.name] = modelView
         //}
     }
 
@@ -76,7 +76,7 @@ public class VoidEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> : Eve
         withParametersValidationRules.add(function)
     }
 
-    internal fun getValidationCollectionFor(parameter: EventParameter): ModelCollection<out Any, C>? {
+    internal fun getValidationCollectionFor(parameter: EventParameter): ModelView<out Any, C>? {
         if (referencesThatAllowsEverything.contains(parameter.name)) {
             return null
         }

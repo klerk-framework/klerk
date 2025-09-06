@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.read.Reader
 import kotlinx.datetime.Instant
 
-public abstract class ModelCollection<T : Any, C : KlerkContext>(private val parent: ModelCollection<T, C>?) {
+public abstract class ModelView<T : Any, C : KlerkContext>(private val parent: ModelView<T, C>?) {
 
     private var idBase: String? = null
     protected var _id: String? = null
@@ -24,21 +24,21 @@ public abstract class ModelCollection<T : Any, C : KlerkContext>(private val par
 
      */
 
-    public open fun filter(filter: ((Model<T>) -> Boolean)?): ModelCollection<T, C> {
+    public open fun filter(filter: ((Model<T>) -> Boolean)?): ModelView<T, C> {
         if (filter == null) {
             return this
         }
-        val new = FilteredModelCollection(this, filter)
+        val new = FilteredModelView(this, filter)
         return new
     }
 
-    public fun filterStates(included: Set<String>? = null, excluded: Set<String>? = null): ModelCollection<T, C> {
-        val new = IncludeStatesModelCollection(this, included, excluded)
+    public fun filterStates(included: Set<String>? = null, excluded: Set<String>? = null): ModelView<T, C> {
+        val new = IncludeStatesModelView(this, included, excluded)
         return new
     }
 
-    public fun <R : Comparable<R>> sorted(selector: (Model<T>) -> R, ascending: Boolean = true): ModelCollection<T, C> {
-        val new = SortedModelCollection(this, selector, ascending)
+    public fun <R : Comparable<R>> sorted(selector: (Model<T>) -> R, ascending: Boolean = true): ModelView<T, C> {
+        val new = SortedModelView(this, selector, ascending)
         return new
     }
 
@@ -57,7 +57,7 @@ public abstract class ModelCollection<T : Any, C : KlerkContext>(private val par
     }
 
     public open fun getId(): String = _id ?: error("Collection is missing ID")
-    public open fun getView(): ModelCollections<T, C> = parent?.getView() ?: throw IllegalStateException()
+    public open fun getView(): ModelViews<T, C> = parent?.getView() ?: throw IllegalStateException()
     public fun <V> count(reader: Reader<C, V>): Int = withReader(reader, null).count()
 
     public open fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean {
@@ -67,7 +67,7 @@ public abstract class ModelCollection<T : Any, C : KlerkContext>(private val par
     /**
      * Makes Klerk aware of this collection. It will be included in Config.getCollections()
      */
-    public fun register(id: String): ModelCollection<T, C> {
+    public fun register(id: String): ModelView<T, C> {
         require(!id.contains(".") && !id.contains(" ")) { "Illegal collection ID: $id" }
         this._id = id
         getView().register(this)
@@ -82,11 +82,11 @@ public abstract class ModelCollection<T : Any, C : KlerkContext>(private val par
 
 }
 
-public class SortedModelCollection<T : Any, R : Comparable<R>, C : KlerkContext>(
-    private val previous: ModelCollection<T, C>,
+public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
+    private val previous: ModelView<T, C>,
     private val selector: (Model<T>) -> R,
     private val ascending: Boolean
-) : ModelCollection<T, C>(previous) {
+) : ModelView<T, C>(previous) {
 
     override fun <V> withReader(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<Model<T>> {
         return if (ascending) previous.withReader(reader, cursor)
@@ -95,11 +95,11 @@ public class SortedModelCollection<T : Any, R : Comparable<R>, C : KlerkContext>
 
 }
 
-public class IncludeStatesModelCollection<T : Any, C : KlerkContext>(
-    private val previous: ModelCollection<T, C>,
+public class IncludeStatesModelView<T : Any, C : KlerkContext>(
+    private val previous: ModelView<T, C>,
     private val included: Set<String>?,
     private val excluded: Set<String>?
-) : ModelCollection<T, C>(previous) {
+) : ModelView<T, C>(previous) {
 
     override fun <V> withReader(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<Model<T>> {
         var s = previous.withReader(reader, cursor)
@@ -114,27 +114,27 @@ public class IncludeStatesModelCollection<T : Any, C : KlerkContext>(
 
 }
 
-public class FilteredModelCollection<T : Any, C : KlerkContext>(
-    private val previous: ModelCollection<T, C>,
+public class FilteredModelView<T : Any, C : KlerkContext>(
+    private val previous: ModelView<T, C>,
     private val predicate: (Model<T>) -> Boolean,
-) : ModelCollection<T, C>(previous) {
+) : ModelView<T, C>(previous) {
 
     override fun <V> withReader(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<Model<T>> =
         previous.withReader(reader, cursor).filter(predicate)
 
 }
 
-public class AllModelCollection<T : Any, C : KlerkContext>(
-    private val view: ModelCollections<T, C>,
+public class AllModelView<T : Any, C : KlerkContext>(
+    private val view: ModelViews<T, C>,
     private val all: List<Int>
-) : ModelCollection<T, C>(null) {
+) : ModelView<T, C>(null) {
 
     init {
         _id = "all"
         logger.info { "created ${this}" }
     }
 
-    override fun getView(): ModelCollections<T, C> = view
+    override fun getView(): ModelViews<T, C> = view
 
     override fun <V> withReader(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<Model<T>> {
         if (cursor == null) {

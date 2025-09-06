@@ -13,8 +13,8 @@ class ReaderTest {
     fun `Create, update, delete with force`() {
         runBlocking {
             val ramStorage = RamStorage()
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, ramStorage), settings = KlerkSettings(allowUnsafeOperations = true))
             klerk.meta.start()
 
@@ -52,8 +52,8 @@ class ReaderTest {
     @Test
     fun `Cannot bypass auth rules by reading a model as another type`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 

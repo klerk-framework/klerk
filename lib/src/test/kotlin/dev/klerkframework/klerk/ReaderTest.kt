@@ -7,7 +7,6 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlin.reflect.full.memberProperties
 import kotlin.test.*
 
@@ -20,8 +19,8 @@ class ReaderTest {
 
         runBlocking {
 
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
@@ -83,8 +82,8 @@ class ReaderTest {
     @Test
     fun actorCanBePassedIntoTheReader() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
@@ -111,8 +110,8 @@ class ReaderTest {
     @Test
     fun multiStep() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
@@ -144,8 +143,8 @@ class ReaderTest {
     @Test
     fun ergonomics() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)

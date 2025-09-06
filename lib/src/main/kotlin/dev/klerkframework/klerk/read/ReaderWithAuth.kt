@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import kotlin.reflect.KClass
@@ -36,27 +36,27 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
 
     override fun <T : Any> getFirstWhere(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T> = checkAuth(withoutAuth.getFirstWhere(collection, filter))
 
     override fun <T : Any> listIfAuthorized(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
     ): List<Model<T>> {
         return withoutAuth.list(collection).filter { isAuthorized(it, context, klerk.config, withoutAuth) }
     }
 
     override fun <T : Any> list(
-        modelCollection: ModelCollection<T, C>,
+        modelView: ModelView<T, C>,
         filter: ((Model<T>) -> Boolean)?
     ): List<Model<T>> {
-        val result = withoutAuth.list(modelCollection, filter).map { checkAuth(it) }
+        val result = withoutAuth.list(modelView, filter).map { checkAuth(it) }
         result.forEach { modelsRead.add(it) }
         return result
     }
 
     override fun <T : Any> query(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
     ): QueryResponse<T> {
@@ -68,7 +68,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         withoutAuth.getOrNull(id)?.let { checkAuth(it) }
 
     override fun <T : Any> firstOrNull(
-        collection: ModelCollection<T, C>,
+        collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T>? = withoutAuth.firstOrNull(collection, filter)?.let { checkAuth(it) }
 

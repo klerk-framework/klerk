@@ -2,7 +2,7 @@ package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.job.RunnableJob
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 
 import dev.klerkframework.klerk.statemachine.*
@@ -16,7 +16,7 @@ internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForVoidEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
@@ -37,7 +37,7 @@ internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
@@ -58,7 +58,7 @@ internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
     override fun <Primary : Any> process(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
-        view: ModelCollections<T, C>,
+        view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {

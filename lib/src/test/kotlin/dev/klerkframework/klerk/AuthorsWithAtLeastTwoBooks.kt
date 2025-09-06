@@ -1,18 +1,18 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.AllModelCollection
-import dev.klerkframework.klerk.collection.FilteredModelCollection
-import dev.klerkframework.klerk.collection.ModelCollection
+import dev.klerkframework.klerk.collection.AllModelView
+import dev.klerkframework.klerk.collection.FilteredModelView
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.read.Reader
 
 class AuthorsWithAtLeastTwoBooks<V>(
-    private val authors: ModelCollection<Author, Context>,
-    private val books: AllModelCollection<Book, Context>,
-) : ModelCollection<Author, Context>(authors) {
+    private val authors: ModelView<Author, Context>,
+    private val books: AllModelView<Book, Context>,
+) : ModelView<Author, Context>(authors) {
 
-    override fun filter(filter: ((Model<Author>) -> Boolean)?): ModelCollection<Author, Context> {
-        return if (filter == null) this else FilteredModelCollection(this, filter)
+    override fun filter(filter: ((Model<Author>) -> Boolean)?): ModelView<Author, Context> {
+        return if (filter == null) this else FilteredModelView(this, filter)
     }
 
     override fun <V> withReader(reader: Reader<Context, V>, cursor: QueryListCursor?): Sequence<Model<Author>> {

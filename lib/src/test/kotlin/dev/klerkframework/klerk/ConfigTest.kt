@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelCollections
+import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.RamStorage
@@ -12,8 +12,8 @@ class ConfigTest {
 
     @Test
     fun `Can combine configs`() {
-        val bc = BookCollections()
-        val collections = MyCollections(bc, AuthorCollections(bc.all))
+        val bc = BookViews()
+        val collections = MyCollections(bc, AuthorViews(bc.all))
         val config = createConfig(collections, RamStorage())
         val newManagedModels = config.managedModels.toMutableSet()
         newManagedModels.drop(1)
@@ -22,7 +22,7 @@ class ConfigTest {
 
     @Test
     fun `Model can not contain abstract properties`() {
-        val views = ViewWithIllegal(ModelCollections())
+        val views = ViewWithIllegal(ModelViews())
         try {
             ConfigBuilder<Context, ViewWithIllegal>(views).build {
                 managedModels {
@@ -40,7 +40,7 @@ class ConfigTest {
 
 data class IllegalModel(val v: BooleanContainer)
 
-data class ViewWithIllegal(val x: ModelCollections<IllegalModel, Context>)
+data class ViewWithIllegal(val x: ModelViews<IllegalModel, Context>)
 
 private enum class States {}
 

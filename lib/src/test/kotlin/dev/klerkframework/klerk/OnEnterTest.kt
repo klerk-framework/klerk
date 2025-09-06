@@ -24,8 +24,8 @@ class OnEnterTest {
         var amateurTriggered = false
 
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 

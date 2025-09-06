@@ -1,21 +1,20 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.AuthorCollections
-import dev.klerkframework.klerk.BookCollections
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.MyCollections
 import dev.klerkframework.klerk.createConfig
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
-import kotlin.test.fail
 
 class Delete {
 
     @Test
     fun `Delete related models`() {
         runBlocking {
-            val bc = BookCollections()
-            val collections = MyCollections(bc, AuthorCollections(bc.all))
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
