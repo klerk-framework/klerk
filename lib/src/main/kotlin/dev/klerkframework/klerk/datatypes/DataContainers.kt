@@ -23,7 +23,7 @@ private const val MASKED = "[••••••]"
  *    Personally Identifiable Information (PII)'.
  * 5. they make it impossible to confuse parameters, e.g. a Username and a Password even though they are both Strings
  * 6. you can use types that adds meaning to the data.
- *      E.g. let's say you have a DistanceMeters : DoubleContainer. Instead of hoping that all parts in the code that
+ *      E.g. let's say you have a DistanceMeters: DoubleContainer. Instead of hoping that all parts in the code that
  *      accesses its value treats it as meters, you can add a function like
  *          fun DistanceMeters.toMeasure(): Measure<Length> = Measure(value, meters)
  *      Code that uses this function cannot misinterpret the unit.
@@ -54,7 +54,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     public open val validators: Set<(translator: Translation) -> PropertyValidation> =
         emptySet()
 
-    public abstract fun validate(propertyName: String, context: Translation): InvalidPropertyProblem?
+    public abstract fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem?
 
     internal fun initAuthorization(isAuthorized: Boolean) {
         this.isAuthorizedToReadProperty = isAuthorized
@@ -290,6 +290,9 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Long>(val
     }
 }
 
+/**
+ * A container for Durations with microsecond resolution.
+ */
 public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {
     public val duration: Duration = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null

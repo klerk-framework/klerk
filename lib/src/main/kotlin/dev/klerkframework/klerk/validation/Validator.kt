@@ -195,7 +195,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                     )
                 ) == Allow
             }) {
-            logger.info("Event '${command.event}' was not created since no policy allowed the operation")
+            logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
             return AuthorizationProblem(context.translation.klerk.unauthorized, null)
         }
         return null
