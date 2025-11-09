@@ -105,15 +105,15 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         model: Model<*>,
         context: C
     ): Set<EventReference> {
-        return getStateByName(model.state).getEvents().filter { it.visibility == dev.klerkframework.klerk.EXTERNAL }.map { it.id }.toSet()
+        return getStateByName(model.state).getEvents().filter { it.visibility == EXTERNAL }.map { it.id }.toSet()
     }
 
     internal fun getExternalEventsForVoidState(context: C): Set<EventReference> {
-        return voidState.getEvents().filter { it.visibility == dev.klerkframework.klerk.EXTERNAL } .map { it.id }.toSet()
+        return voidState.getEvents().filter { it.visibility == EXTERNAL } .map { it.id }.toSet()
     }
 
     public fun getExternalEvents(): Set<EventReference> =
-        states.flatMap { state -> state.getEvents().filter { it.visibility == dev.klerkframework.klerk.EXTERNAL }.map { it.id } }.toSet()
+        states.flatMap { state -> state.getEvents().filter { it.visibility == EXTERNAL }.map { it.id } }.toSet()
 
     public fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 

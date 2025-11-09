@@ -705,21 +705,21 @@ object SQLiteInMemory {
 
 object CreateAuthor :
     VoidEventWithParameters<Author, CreateAuthorParams>(Author::class,
-        dev.klerkframework.klerk.EXTERNAL, CreateAuthorParams::class)
+        EXTERNAL, CreateAuthorParams::class)
 
 object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class,
-    dev.klerkframework.klerk.EXTERNAL, Author::class) {
+    EXTERNAL, Author::class) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
+object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
+object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
 
 object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class,
-    dev.klerkframework.klerk.EXTERNAL, ChangeNameParams::class)
+    EXTERNAL, ChangeNameParams::class)
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
@@ -774,7 +774,7 @@ data class Context(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, EXTERNAL)
 
 class MyJob : RunnableJob<Context, MyCollections>() {
 
@@ -859,11 +859,11 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
 
 
 object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class,
-    dev.klerkframework.klerk.EXTERNAL, CreateBookParams::class)
+    EXTERNAL, CreateBookParams::class)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, dev.klerkframework.klerk.EXTERNAL)
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, dev.klerkframework.klerk.EXTERNAL)
+object DeleteBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
 
 data class CreateBookParams(
     val title: BookTitle,
