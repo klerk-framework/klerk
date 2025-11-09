@@ -153,10 +153,10 @@ internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : R
         return getOrNull(id) ?: throw NoSuchElementException("Could not find model with id=$id")
     }
 
-    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>): Set<EventReference> =
+    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
         throw RuntimeException("Reader.getPossibleVoidEvents was called but the reader doesn't support this")
 
-    override fun <T : Any> getPossibleEvents(id: ModelID<T>): Set<EventReference> =
+    override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> =
         throw RuntimeException("Reader.getPossibleEvents was called but the reader doesn't support this")
 
 }

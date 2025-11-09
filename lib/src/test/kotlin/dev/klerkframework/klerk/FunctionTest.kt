@@ -67,11 +67,11 @@ object DummyReader : Reader<Context, MyCollections> {
         throw exception
     }
 
-    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>): Set<EventReference> {
+    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> {
         throw exception
     }
 
-    override fun <T : Any> getPossibleEvents(id: ModelID<T>): Set<EventReference> {
+    override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
         throw exception
     }
 

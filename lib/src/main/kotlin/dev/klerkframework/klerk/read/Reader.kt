@@ -79,21 +79,26 @@ public interface Reader<C:KlerkContext, V> {
     public fun <T : Any, U : Any> getRelatedInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
-
     ): Set<Model<T>>
 
     /**
      * Returns a set of external void events for the statemachine that are possible given the provided context
      * @see isVoidEventPossible
      */
-    public fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>): Set<EventReference>
+    public fun <T : Any> getPossibleVoidEvents(
+        clazz: KClass<T>,
+        visibility: EventVisibility = EventVisibility.EXTERNAL
+    ): Set<EventReference>
 
 
     /**
      * Returns a set of external events for the model that are possible given the current state and provided context
      * @see isInstanceEventPossible
      */
-    public fun <T : Any> getPossibleEvents(id: ModelID<T>): Set<EventReference>
+    public fun <T : Any> getPossibleEvents(
+        id: ModelID<T>,
+        visibility: EventVisibility = EventVisibility.EXTERNAL
+    ): Set<EventReference>
 
 }
 

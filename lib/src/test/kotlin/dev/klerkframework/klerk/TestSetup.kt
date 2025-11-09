@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
 import dev.klerkframework.klerk.AuthorStates.*
+import dev.klerkframework.klerk.EventVisibility.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
@@ -703,19 +704,22 @@ object SQLiteInMemory {
 }
 
 object CreateAuthor :
-    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class, true, CreateAuthorParams::class)
+    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class,
+        dev.klerkframework.klerk.EXTERNAL, CreateAuthorParams::class)
 
-object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class, true, Author::class) {
+object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class,
+    dev.klerkframework.klerk.EXTERNAL, Author::class) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, true)
+object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, true)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, true)
+object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class, true, ChangeNameParams::class)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class,
+    dev.klerkframework.klerk.EXTERNAL, ChangeNameParams::class)
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
@@ -770,7 +774,7 @@ data class Context(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, true)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, dev.klerkframework.klerk.EXTERNAL)
 
 class MyJob : RunnableJob<Context, MyCollections>() {
 
@@ -854,11 +858,12 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
 }
 
 
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class, true, CreateBookParams::class)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class,
+    dev.klerkframework.klerk.EXTERNAL, CreateBookParams::class)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, true)
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, dev.klerkframework.klerk.EXTERNAL)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, true)
+object DeleteBook : InstanceEventNoParameters<Book>(Book::class, dev.klerkframework.klerk.EXTERNAL)
 
 data class CreateBookParams(
     val title: BookTitle,

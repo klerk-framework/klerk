@@ -90,7 +90,36 @@ public data class EventReference(val modelName: String, val eventName: String) {
     }
 }
 
-public sealed class Event<T : Any, P>(private val forModel: KClass<T>, internal val isExternal: Boolean) {
+/**
+ * The visibility level of an event. The higher levels expand on the lower levels, e.g. INTER_STATEMACHINE can be
+ * created in all places where INTERNAL is allowed.
+ */
+public enum class EventVisibility {
+
+    /**
+     * Can only be created within the same statemachine.
+     */
+    STATEMACHINE_INTERNAL,
+
+    /**
+     * Can be created in any statemachine.
+     */
+    INTER_STATEMACHINE,
+
+    /**
+     * Can be created in any statemachine and in application code.
+     */
+    CODE,
+
+    /**
+     * Can be created in any statemachine and in application code. The event may originate from outside of
+     * the system. I.e. if the code exposes a UI and/or API, it should be possible to create the event via the UI
+     * and/or API.
+     */
+    EXTERNAL
+}
+
+public sealed class Event<T : Any, P>(private val forModel: KClass<T>, public val visibility: EventVisibility) {
 
     public val id: EventReference
         get() = EventReference(forModel.simpleName!!, name)
@@ -118,8 +147,8 @@ public sealed class Event<T : Any, P>(private val forModel: KClass<T>, internal 
 
 }
 
-public sealed class VoidEvent<T : Any, P>(forModel: KClass<T>, isExternal: Boolean) :
-    Event<T, P>(forModel, isExternal) {
+public sealed class VoidEvent<T : Any, P>(forModel: KClass<T>, visibility: EventVisibility) :
+    Event<T, P>(forModel, visibility) {
 
     internal var noParamRules: Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
 
@@ -128,8 +157,8 @@ public sealed class VoidEvent<T : Any, P>(forModel: KClass<T>, isExternal: Boole
 
 }
 
-public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, isExternal: Boolean) :
-    Event<T, P>(forModel, isExternal) {
+public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, visibility: EventVisibility) :
+    Event<T, P>(forModel, visibility) {
 
     internal var noParamRules: Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
 
@@ -139,9 +168,9 @@ public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, isExternal: B
 
 public abstract class VoidEventWithParameters<T : Any, P : Any>(
     forModel: KClass<T>,
-    isExternal: Boolean,
+    visibility: EventVisibility,
     public val parametersClass: KClass<P>
-) : VoidEvent<T, P>(forModel, isExternal) {
+) : VoidEvent<T, P>(forModel, visibility) {
 
     internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
     internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
@@ -156,14 +185,14 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
 
 }
 
-public abstract class VoidEventNoParameters<T : Any>(forModel: KClass<T>, isExternal: Boolean) :
-    VoidEvent<T, Nothing?>(forModel, isExternal)
+public abstract class VoidEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
+    VoidEvent<T, Nothing?>(forModel, visibility)
 
 public open class InstanceEventWithParameters<T : Any, P : Any>(
     forModel: KClass<T>,
-    isExternal: Boolean,
+    visibility: EventVisibility,
     public val parametersClass: KClass<P>
-) : InstanceEvent<T, P>(forModel, isExternal) {
+) : InstanceEvent<T, P>(forModel, visibility) {
 
     internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
     internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
@@ -177,8 +206,8 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
 
 }
 
-public abstract class InstanceEventNoParameters<T : Any>(forModel: KClass<T>, isExternal: Boolean) :
-    InstanceEvent<T, Nothing?>(forModel, isExternal)
+public abstract class InstanceEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
+    InstanceEvent<T, Nothing?>(forModel, visibility)
 
 
 public data class ArgContextReader<C : KlerkContext, V>(val context: C, val reader: Reader<C, V>)

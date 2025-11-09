@@ -17,14 +17,14 @@ val sqliteJdbcVersion = "3.44.1.0"
 val gsonVersion = "2.9.0"
 
 group = "dev.klerkframework"
-version = "1.0.0-beta.4"
+version = "1.0.0-beta.5"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
+    api("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")  // replace with stdlib when non-experimental
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")

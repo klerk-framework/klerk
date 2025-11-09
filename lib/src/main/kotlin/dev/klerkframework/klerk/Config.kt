@@ -267,7 +267,14 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    public fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, context: C): Set<EventReference> {
+    public fun <T : Any> getPossibleVoidEvents(
+        clazz: KClass<T>,
+        context: C,
+        visibility: EventVisibility
+    ): Set<EventReference> {
+        if (visibility != EventVisibility.EXTERNAL) {
+            throw NotImplementedError("Visibility filter not implemented yet")
+        }
         return getStateMachine(clazz).getExternalEventsForVoidState(context)
     }
 
