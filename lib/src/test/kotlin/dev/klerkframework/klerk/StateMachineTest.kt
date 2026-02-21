@@ -23,7 +23,7 @@ class StateMachineTest {
             klerk.meta.start()
 
             val voidEvents = klerk.config.managedModels.single { it.kClass == Book::class }.stateMachine
-                .getExternalEventsForVoidState(Context.unauthenticated())
+                .getEventsForVoidState(Context.unauthenticated(), EventVisibility.EXTERNAL)
 
             val parameters = klerk.config.getParameters(CreateBook.id)
             requireNotNull(parameters)

@@ -47,7 +47,7 @@ internal class InstanceNonEventCreateEvents<T : Any, C : KlerkContext, V>(
 
 internal class InstanceEventCreateEvents<T : Any, P, C : KlerkContext, V>(
     val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any>>,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)??
+    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(

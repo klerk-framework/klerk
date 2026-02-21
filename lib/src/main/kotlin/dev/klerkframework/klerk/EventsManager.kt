@@ -42,6 +42,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return Failure(listOf(it))
         }
 
+        if (command.event.visibility.level < EventVisibility.CODE.level) {
+            return Failure(listOf(BadRequestProblem("This event has visibility ${command.event.visibility} and therefore cannot be processed")))
+        }
+
         if (options.dryRun) {
             logger.log(misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)

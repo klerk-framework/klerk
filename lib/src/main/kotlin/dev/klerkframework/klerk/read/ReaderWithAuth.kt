@@ -94,11 +94,8 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             .toSet()
 
     override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
-        if (visibility != EventVisibility.EXTERNAL) {
-            throw NotImplementedError("Visibility filter not implemented yet")
-        }
         val model = get(id)
-        return klerk.config.getStateMachine(model).getAvailableExternalEventsForModel(model, context)
+        return klerk.config.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
             .filter { klerk.validator.validateWithoutParameters(it, context, model, withoutAuth) }
             .toSet()
     }

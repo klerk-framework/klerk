@@ -127,7 +127,6 @@ public data class Config<C : KlerkContext, V>(
                 when (state) {
                     is VoidState -> state.onEventBlocks.map { it.first }
                     is InstanceState -> state.onEventBlocks.map { it.first }
-                    else -> error("") // should use sealed class...
                 }
             }
                 .forEach { event ->
@@ -270,12 +269,12 @@ public data class Config<C : KlerkContext, V>(
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
         context: C,
-        visibility: EventVisibility
+        visibility: EventVisibility = EventVisibility.CODE
     ): Set<EventReference> {
-        if (visibility != EventVisibility.EXTERNAL) {
-            throw NotImplementedError("Visibility filter not implemented yet")
+        if (visibility != EventVisibility.CODE && visibility != EventVisibility.EXTERNAL) {
+            return emptySet()
         }
-        return getStateMachine(clazz).getExternalEventsForVoidState(context)
+        return getStateMachine(clazz).getEventsForVoidState(context, visibility)
     }
 
     @Suppress("UNCHECKED_CAST")

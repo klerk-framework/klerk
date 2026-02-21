@@ -145,7 +145,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
                 lambda(
                     Model(
-                        id = ModelID(row[Models.id]!!.toInt()),
+                        id = ModelID(row[Models.id]),
                         createdAt = decode64bitMicroseconds(row[Models.createdAt]),
                         lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
                         lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
@@ -245,7 +245,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override fun putKeyValue(id: Long, value: String, ttl: Instant?) {
         transaction(database) {
             KeyValueStrings.insert {
-                it[this.id] = id.toLong()
+                it[this.id] = id
                 it[this.value] = value
                 it[this.ttl] = ttl?.to64bitMicroseconds()
             }
@@ -286,7 +286,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override fun getKeyValueString(id: Long): Pair<String, Instant?>? =
         transaction(database) {
             KeyValueStrings.selectAll()
-                .where { KeyValueStrings.id eq id.toLong() }
+                .where { KeyValueStrings.id eq id }
                 .map {
                     it[KeyValueStrings.value] to it[KeyValueStrings.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
                 }.firstOrNull()

@@ -101,19 +101,22 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         return type == this.type
     }
 
-    internal fun getAvailableExternalEventsForModel(
+    internal fun getAvailableEventsForModel(
         model: Model<*>,
-        context: C
+        context: C,
+        visibility: EventVisibility,
     ): Set<EventReference> {
-        return getStateByName(model.state).getEvents().filter { it.visibility == EXTERNAL }.map { it.id }.toSet()
+        return getStateByName(model.state).getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }.toSet()
     }
 
-    internal fun getExternalEventsForVoidState(context: C): Set<EventReference> {
-        return voidState.getEvents().filter { it.visibility == EXTERNAL } .map { it.id }.toSet()
+    internal fun getEventsForVoidState(context: C, visibility: EventVisibility): Set<EventReference> {
+        return voidState.getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }.toSet()
     }
 
-    public fun getExternalEvents(): Set<EventReference> =
+/*    public fun getExternalEvents(): Set<EventReference> =
         states.flatMap { state -> state.getEvents().filter { it.visibility == EXTERNAL }.map { it.id } }.toSet()
+
+ */
 
     public fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 

@@ -92,32 +92,36 @@ public data class EventReference(val modelName: String, val eventName: String) {
 
 /**
  * The visibility level of an event. The higher levels expand on the lower levels, e.g. INTER_STATEMACHINE can be
- * created in all places where INTERNAL is allowed.
+ * created in all places where STATEMACHINE_INTERNAL is allowed.
  */
-public enum class EventVisibility {
+public enum class EventVisibility(internal val level: Int) {
 
     /**
      * Can only be created within the same statemachine.
      */
-    STATEMACHINE_INTERNAL,
+    STATEMACHINE_INTERNAL(1),
 
     /**
      * Can be created in any statemachine.
      */
-    INTER_STATEMACHINE,
+    INTER_STATEMACHINE(2),
 
     /**
-     * Can be created in any statemachine and in application code. This level should be used when the system itself
-     * determines that the event should be triggered, e.g. in a Job.
+     * Can be created in any statemachine and in application code. This level can be used for events that are triggered
+     * by the system, e.g. in a Job.
      */
-    CODE,
+    SYSTEM(3),
 
     /**
-     * Can be created in any statemachine and in application code. The event may originate from outside of
-     * the system. I.e. your code should make it possible for someone to create the event using a UI or API.
-     * and/or API.
+     * Can be created in any statemachine and in application code.
      */
-    EXTERNAL
+    CODE(4),
+
+    /**
+     * Can be created in any statemachine and in application code. Klerk doesn't differentiate this from CODE, but this
+     * level can be used as a signal to other code (e.g., auto-generated UI or API) that it should handle this event.
+     */
+    EXTERNAL(5)
 }
 
 public sealed class Event<T : Any, P>(private val forModel: KClass<T>, public val visibility: EventVisibility) {

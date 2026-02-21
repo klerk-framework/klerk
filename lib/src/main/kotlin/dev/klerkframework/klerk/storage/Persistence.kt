@@ -95,7 +95,7 @@ public class RamStorage : Persistence {
                 return@filter if (modelId == null) {
                     true
                 } else {
-                    modelId.toInt() == it.reference
+                    modelId == it.reference
                 }
             }
             .filter { it.time > from || it.time == from }
@@ -151,8 +151,8 @@ public class RamStorage : Persistence {
         jobs[meta.id] = meta
     }
 
-    override fun updateJob(meta: JobMetadata) {
-        jobs[meta.id] = meta
+    override fun updateJob(updated: JobMetadata) {
+        jobs[updated.id] = updated
     }
 
     override fun getAllJobs(): Set<JobMetadata> = jobs.values.toSet()

@@ -17,7 +17,7 @@ internal val dateFormatter = LocalDateTime.Format {
     char('-')
     monthNumber()
     char('-')
-    dayOfMonth()
+    day()
 }
 
 internal val dateTimeFormatter = LocalDateTime.Format {
@@ -25,7 +25,7 @@ internal val dateTimeFormatter = LocalDateTime.Format {
     char('-')
     monthNumber()
     char('-')
-    dayOfMonth()
+    day()
     char(' ')
     hour()
     char(':')
@@ -298,13 +298,13 @@ public data class EventParameter(val raw: KParameter) {
                 val s = ((raw.type.classifier as KClass<*>).constructors.single().call("") as StringContainer)
                 result["min length"] = s.minLength.toString()
                 result["max length"] = s.maxLength.toString()
-                s.regexPattern?.let { result["pattern"] = it.toString() }
+                s.regexPattern?.let { result["pattern"] = it }
                 result["validator"] = s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
             }
             PropertyType.Int -> {
                 val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0) as IntContainer)
-                s.min?.let { result["min"] = it.toString() }
-                s.max?.let { result["max"] = it.toString() }
+                s.min.let { result["min"] = it.toString() }
+                s.max.let { result["max"] = it.toString() }
                 result["validator"] = s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
             }
             else -> {

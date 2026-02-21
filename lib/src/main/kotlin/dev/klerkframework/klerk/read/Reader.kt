@@ -87,7 +87,7 @@ public interface Reader<C:KlerkContext, V> {
      */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
-        visibility: EventVisibility = EventVisibility.EXTERNAL
+        visibility: EventVisibility = EventVisibility.CODE
     ): Set<EventReference>
 
 
@@ -97,7 +97,7 @@ public interface Reader<C:KlerkContext, V> {
      */
     public fun <T : Any> getPossibleEvents(
         id: ModelID<T>,
-        visibility: EventVisibility = EventVisibility.EXTERNAL
+        visibility: EventVisibility = EventVisibility.CODE
     ): Set<EventReference>
 
 }
