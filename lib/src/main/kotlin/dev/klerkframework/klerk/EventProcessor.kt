@@ -164,7 +164,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         val processingData = ProcessingData<T, C, V>(remainingTimeTrigger = model, primaryModel = model.id)
         readWriteLock.acquireRead()
         val reader = ReaderWithoutAuth(klerk)
-        val context = klerk.config.contextProvider!!.invoke(SystemIdentity)
+        val context = klerk.config.systemContextProvider!!.invoke(SystemIdentity)
         val result = process(processingData, context, reader, isPrimary = true, options, time)
         readWriteLock.releaseRead()
         return result

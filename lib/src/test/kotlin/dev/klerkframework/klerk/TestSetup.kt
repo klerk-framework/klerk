@@ -84,7 +84,7 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                 negative {}
             }
         }
-        contextProvider(::myContextProvider)
+        systemContextProvider(::myContextProvider)
     }
 }
 
@@ -683,6 +683,7 @@ fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Context, M
                 negative {}
             }
         }
+        systemContextProvider { systemIdentity -> Context(systemIdentity) }
     }
 }
 

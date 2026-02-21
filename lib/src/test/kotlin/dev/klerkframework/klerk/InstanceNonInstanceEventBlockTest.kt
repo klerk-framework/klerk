@@ -41,6 +41,7 @@ class InstanceNonInstanceEventBlockTest {
                     }
                 }
                 persistence(persistence)
+                systemContextProvider { systemIdentity -> Context(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()

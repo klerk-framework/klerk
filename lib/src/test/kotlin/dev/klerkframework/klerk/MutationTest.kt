@@ -44,6 +44,7 @@ class MutationTest {
                     }
                 }
                 persistence(RamStorage())
+                systemContextProvider { systemIdentity -> Context(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()

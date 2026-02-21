@@ -24,6 +24,7 @@ class ActionTest {
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
+                systemContextProvider { systemIdentity -> Context(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()
@@ -42,6 +43,7 @@ class ActionTest {
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
+                systemContextProvider { systemIdentity -> Context(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()

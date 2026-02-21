@@ -31,7 +31,7 @@ public data class Config<C : KlerkContext, V>(
     val persistence: Persistence,
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
-    val contextProvider: ((ActorIdentity) -> C)?,
+    val systemContextProvider: ((SystemIdentity) -> C),
 ) {
     internal lateinit var gson: Gson
 
@@ -322,7 +322,10 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
      */
     public fun build(init: ConfigBuilder<C, D>.() -> Unit): Config<C, D> {
         this.init()
-
+        runCatching { systemContextProviderValue }.onFailure { throw IllegalConfigurationException("'systemContextProvider' is missing in the config") }
+        runCatching { persistenceValue }.onFailure { throw IllegalConfigurationException("'persistence' is missing in the config") }
+        runCatching { authorizationRulesBlock }.onFailure { throw IllegalConfigurationException("'authorization' is missing in the config") }
+        runCatching { managedModelsValue }.onFailure { throw IllegalConfigurationException("'managedModels' is missing in the config") }
 
         //val valueClasses = managedModelsValue.flatMap { managed -> managed.kClass.memberProperties.map { (it.returnType.classifier!! as KClass<*>) } }.toSet()
 
@@ -351,7 +354,7 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
             managedModels = managedModelsValue,
             persistence = persistenceValue,
             migrationSteps = migrationStepsValue,
-            contextProvider = contextProviderValue,
+            systemContextProvider = systemContextProviderValue,
         )
     }
 
@@ -359,9 +362,8 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
     private var registry: MeterRegistry = SimpleMeterRegistry()
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, D>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, D>>
-
     private lateinit var persistenceValue: Persistence
-    private var contextProviderValue: ((dev.klerkframework.klerk.ActorIdentity) -> C)? = null
+    private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
     public fun persistence(persistence: Persistence) {
         persistenceValue = persistence
@@ -372,8 +374,13 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
             sortedSetOf(Comparator.comparingInt(MigrationStep::migratesToVersion), *migrationSteps.toTypedArray())
     }
 
-    public fun contextProvider(provider: (dev.klerkframework.klerk.ActorIdentity) -> C) {
-        contextProviderValue = provider
+    /**
+     * Klerk may execute commands in the background (e.g. if you have a statemachine with after(5.minutes) {...}). And
+     * since a context is required when executing a command, Klerk needs a way to create such a context with the
+     * SystemIdentity.
+     */
+    public fun systemContextProvider(provider: (SystemIdentity) -> C) {
+        systemContextProviderValue = provider
     }
 
     public fun managedModels(init: ManagedModelsBlock<C, D>.() -> Unit) {
