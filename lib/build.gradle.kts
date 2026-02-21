@@ -1,14 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 
 plugins {
-    kotlin("jvm") version "2.0.21"
+    kotlin("jvm") version "2.3.10"
     `java-library`
     `maven-publish`
     id("org.jetbrains.dokka") version "1.9.20"
 }
 
 val coroutinesVersion = "1.4.2"
-val datetimeVersion = "0.6.0"
+val datetimeVersion = "0.7.1"
 val exposedVersion = "0.47.0"
 val micrometerVersion = "1.11.1"
 val kotlinLoggingVersion = "2.1.21"
@@ -24,7 +24,7 @@ repositories {
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")  // replace with stdlib when non-experimental
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")

@@ -9,12 +9,12 @@ import dev.klerkframework.klerk.misc.EventParameters
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
-import kotlinx.datetime.Instant
 import java.math.BigInteger
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
+import kotlin.time.Instant
 
 public data class StateId(val modelName: String, val stateName: String) {
     override fun toString(): String = "s.$modelName.$stateName"
@@ -107,13 +107,14 @@ public enum class EventVisibility {
     INTER_STATEMACHINE,
 
     /**
-     * Can be created in any statemachine and in application code.
+     * Can be created in any statemachine and in application code. This level should be used when the system itself
+     * determines that the event should be triggered, e.g. in a Job.
      */
     CODE,
 
     /**
      * Can be created in any statemachine and in application code. The event may originate from outside of
-     * the system. I.e. if the code exposes a UI and/or API, it should be possible to create the event via the UI
+     * the system. I.e. your code should make it possible for someone to create the event using a UI or API.
      * and/or API.
      */
     EXTERNAL

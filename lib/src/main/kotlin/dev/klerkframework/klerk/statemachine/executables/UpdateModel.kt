@@ -8,7 +8,7 @@ import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 internal class InstanceNonEventUpdateModel<T : Any, C : KlerkContext, V>(
     val f: (ArgForInstanceNonEvent<T, C, V>) -> T,

@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.read.Reader
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 public abstract class ModelView<T : Any, C : KlerkContext>(private val parent: ModelView<T, C>?) {
 

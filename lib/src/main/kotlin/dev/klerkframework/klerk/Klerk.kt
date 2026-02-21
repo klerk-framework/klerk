@@ -10,7 +10,7 @@ import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import java.io.InputStream
 import kotlin.time.Duration
 

@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk.migration
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 public data class MigrationModelV1(
     val type: String,

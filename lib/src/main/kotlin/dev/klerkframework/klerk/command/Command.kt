@@ -5,8 +5,8 @@ import dev.klerkframework.klerk.defaultDebugOptions
 import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import org.slf4j.event.Level
-import kotlinx.datetime.Instant
-import kotlinx.datetime.Clock
+import kotlin.time.Instant
+import kotlin.time.Clock
 
 /**
  * A class describing an event.

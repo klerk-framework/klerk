@@ -458,7 +458,7 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
             logger.warn { "The authorization rules allows everything. The application is insecure!" }
             readModels {
                 positive {
-                    rule(::everybodyCanReadModels)
+                    rule(this@AuthorizationRulesBlock::everybodyCanReadModels)
                 }
                 negative {
                 }
@@ -466,21 +466,21 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
 
             readProperties {
                 positive {
-                    rule(::everybodyCanReadAllProperties)
+                    rule(this@AuthorizationRulesBlock::everybodyCanReadAllProperties)
                 }
                 negative {
                 }
             }
             commands {
                 positive {
-                    rule(::everybodyCanDoEverything)
+                    rule(this@AuthorizationRulesBlock::everybodyCanDoEverything)
                 }
                 negative {
                 }
             }
             eventLog {
                 positive {
-                    rule(::everybodyCanReadEventLog)
+                    rule(this@AuthorizationRulesBlock::everybodyCanReadEventLog)
                 }
                 negative {}
             }

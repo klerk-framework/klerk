@@ -8,8 +8,8 @@ import dev.klerkframework.klerk.KeyValueID
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkKeyValueStore
 import dev.klerkframework.klerk.StringKeyValueID
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import java.io.InputStream
 import java.security.SecureRandom
 import kotlin.time.Duration

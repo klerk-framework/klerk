@@ -81,7 +81,7 @@ class LibraryTest {
 
 suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk: Klerk<Context, MyCollections>) {
 
-    val startTime = kotlinx.datetime.Clock.System.now()
+    val startTime = kotlin.time.Clock.System.now()
     val firstNames = setOf("Anna", "Bertil", "Janne", "Filip")
     val lastNames = setOf("Andersson", "Svensson", "Törnkrantz")
     val cities = setOf("Malmö, Göteborg, Falun", "Stockholm")
@@ -141,7 +141,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
             )
         }
     }
-    val seconds = startTime.minus(kotlinx.datetime.Clock.System.now()).inWholeSeconds
+    val seconds = startTime.minus(kotlin.time.Clock.System.now()).inWholeSeconds
     val eventsPerSecond = if (seconds > 0) (numberOfAuthors * (booksPerAuthor + 1)) / seconds else "?"
     logger.info { "Created $numberOfAuthors authors in $seconds s ($eventsPerSecond events/s)" }
 }

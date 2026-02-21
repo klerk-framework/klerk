@@ -15,9 +15,9 @@ import dev.klerkframework.klerk.statemachine.BlockType.*
 import dev.klerkframework.klerk.storage.ModelCache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.Timer
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import mu.KotlinLogging
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds

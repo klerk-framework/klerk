@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.misc.extractNameFromFunction
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
     val initialState: ModelStates,

@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.storage.ModelCache
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 

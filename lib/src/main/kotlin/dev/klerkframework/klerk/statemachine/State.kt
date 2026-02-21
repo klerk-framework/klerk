@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.Event
 import dev.klerkframework.klerk.statemachine.Block.*
 import dev.klerkframework.klerk.statemachine.BlockType.*
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.time.Duration
 
 @ConfigMarker

@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 internal class InstanceNonEventTransition<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val targetState: ModelStates,

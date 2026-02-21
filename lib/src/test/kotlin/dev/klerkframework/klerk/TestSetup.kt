@@ -26,8 +26,8 @@ import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
 import dev.klerkframework.klerk.validation.PropertyValidation
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.sqlite.SQLiteDataSource
@@ -113,11 +113,11 @@ fun `Everybody can do everything`(argCommandContextReader: ArgCommandContextRead
 }
 
 
-fun `Everybody can read event log`(args: ArgContextReader<Context, MyCollections>): dev.klerkframework.klerk.PositiveAuthorization {
+fun `Everybody can read event log`(args: ArgContextReader<Context, MyCollections>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
-fun `Everybody can read`(args: ArgModelContextReader<Context, MyCollections>): dev.klerkframework.klerk.PositiveAuthorization {
+fun `Everybody can read`(args: ArgModelContextReader<Context, MyCollections>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 

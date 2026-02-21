@@ -7,8 +7,8 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals

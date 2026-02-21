@@ -12,10 +12,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import mu.KotlinLogging
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import java.lang.reflect.Method
 import java.util.*
 import kotlin.concurrent.thread

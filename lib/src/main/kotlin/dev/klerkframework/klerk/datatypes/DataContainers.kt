@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.validation.PropertyValidation
 import dev.klerkframework.klerk.validation.PropertyValidation.*
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.reflect.KFunction
 import kotlin.time.Duration
 import kotlin.toString

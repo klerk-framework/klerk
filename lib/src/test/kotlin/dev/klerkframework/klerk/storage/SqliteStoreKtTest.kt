@@ -2,14 +2,14 @@ package dev.klerkframework.klerk.storage
 
 import dev.klerkframework.klerk.decode64bitMicroseconds
 import dev.klerkframework.klerk.to64bitMicroseconds
-import kotlinx.datetime.Instant
-import kotlinx.datetime.toKotlinInstant
+import kotlin.time.Instant
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toKotlinInstant
 
 
 class SqliteStoreKtTest {

@@ -3,7 +3,7 @@ package dev.klerkframework.klerk.read
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.*
 
 

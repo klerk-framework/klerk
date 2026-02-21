@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.migration.MigrationStep
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import java.io.InputStream
 import kotlin.collections.set
 

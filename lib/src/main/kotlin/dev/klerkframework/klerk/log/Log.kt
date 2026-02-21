@@ -6,8 +6,8 @@ import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.logger
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlin.time.Duration.Companion.days
 
 public interface KlerkLog {

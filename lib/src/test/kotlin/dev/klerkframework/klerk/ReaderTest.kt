@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.reflect.full.memberProperties
 import kotlin.test.*
 

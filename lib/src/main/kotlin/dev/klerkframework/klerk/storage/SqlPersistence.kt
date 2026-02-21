@@ -16,8 +16,8 @@ import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.actorIdentityTyp
 import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.event
 import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.timestamp
 import dev.klerkframework.klerk.storage.SqlPersistence.ModelSchemaMigrations.toVersion
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq

@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 internal class InstanceNonEventTransitionWhen<ModelStates : Enum<*>, T : Any, C : KlerkContext, V>(
     internal val branches: LinkedHashMap<(args: ArgForInstanceNonEvent<T, C, V>) -> Boolean, ModelStates>,

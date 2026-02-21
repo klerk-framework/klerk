@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.misc.ChannelNotificationPref.*
 import dev.klerkframework.klerk.misc.ChannelNotificationPref.Nothing
 import dev.klerkframework.klerk.misc.ShowNotificationDecisions.*
 import dev.klerkframework.klerk.read.ReaderWithAuth
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
