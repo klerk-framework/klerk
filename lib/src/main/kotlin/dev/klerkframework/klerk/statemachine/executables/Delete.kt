@@ -50,7 +50,8 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
                 currentReferencesToModel.joinToString(
                     ", "
                 ) { it.toString() }
-            }")))
+            }",
+                KlerkErrorCode.BrokenReference)))
         }
     }
     return ProcessingData(

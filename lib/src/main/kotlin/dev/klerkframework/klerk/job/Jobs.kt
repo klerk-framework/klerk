@@ -57,7 +57,7 @@ public enum class JobDelivery {
 }
 
 public abstract class RunnableJob<C : KlerkContext, V> : Job {
-    private var id: JobId? = null
+    public var id: JobId? = null
 
     //public suspend fun run(metadata: JobMetadata, klerk: Klerk<C, V>): JobResult
 

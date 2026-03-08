@@ -26,13 +26,13 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (currentCommand.model == null) {
             val smState = sm.voidState
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
-                return StateProblem("Event '${currentCommand.event}' is not possible in void state")
+                return StateProblem("Event '${currentCommand.event}' is not possible in void state", KlerkErrorCode.EventNotPossibleInVoidState)
             }
         } else {
             val model = reader.get(currentCommand.model)
             val smState = sm.instanceStates.single { it.name == model.state }
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
-                return StateProblem("Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'")
+                return StateProblem("Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'", KlerkErrorCode.EventNotPossibleInState)
             }
         }
         return null
@@ -184,7 +184,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 ) == Deny
             }
         if (negativeAuthProblem != null) {
-            return AuthorizationProblem(context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization))
+            return AuthorizationProblem(context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization),
+                KlerkErrorCode.CommandNegativeAuthorizationExist)
         }
         if (klerk.config.authorization.eventPositiveRules.none {
                 it(
@@ -196,7 +197,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 ) == Allow
             }) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
-            return AuthorizationProblem(context.translation.klerk.unauthorized, null)
+            return AuthorizationProblem(context.translation.klerk.unauthorized, null, KlerkErrorCode.CommandPositiveAuthorizationMissing)
         }
         return null
     }
@@ -227,7 +228,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (command.model != null) {
             val model = ModelCache.read(command.model).getOrThrow()
             if (model.props::class != stateMachine.type) {
-                return listOf(BadRequestProblem("The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'"))
+                return listOf(BadRequestProblem("The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'", KlerkErrorCode.ModelTypeMismatch))
             }
         }
 

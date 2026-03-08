@@ -12,59 +12,59 @@ public interface ActorIdentity {
     }
 
     public val type: Int
-    public val id: dev.klerkframework.klerk.ModelID<*>?
+    public val id: ModelID<*>?
     public val externalId: Long?
 }
 
-public object SystemIdentity : dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.systemType
-    override val id: dev.klerkframework.klerk.ModelID<*>? = null
+public object SystemIdentity : ActorIdentity {
+    override val type: Int = ActorIdentity.Companion.systemType
+    override val id: ModelID<*>? = null
     override val externalId: Long? = null
     override fun toString(): String = "[system]"
 }
 
-public object AuthenticationIdentity : dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.authentication
-    override val id: dev.klerkframework.klerk.ModelID<*>? = null
+public object AuthenticationIdentity : ActorIdentity {
+    override val type: Int = ActorIdentity.authentication
+    override val id: ModelID<*>? = null
     override val externalId: Long? = null
     override fun toString(): String = "[system authentication]"
 }
 
-public class ModelIdentity<T : Any>(public val model: dev.klerkframework.klerk.Model<T>) :
-    dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.modelType
-    override val id: dev.klerkframework.klerk.ModelID<T> = model.id
+public class ModelIdentity<T : Any>(public val model: Model<T>) :
+    ActorIdentity {
+    override val type: Int = ActorIdentity.modelType
+    override val id: ModelID<T> = model.id
     override val externalId: Long? = null
     override fun toString(): String = "modelId: ${model.id} (${model})"
 }
 
-public class ModelReferenceIdentity<T : Any>(private val modelId: dev.klerkframework.klerk.ModelID<T>) :
-    dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.modelReferenceType
-    override val id: dev.klerkframework.klerk.ModelID<T> = modelId
+public class ModelReferenceIdentity<T : Any>(private val modelId: ModelID<T>) :
+    ActorIdentity {
+    override val type: Int = ActorIdentity.modelReferenceType
+    override val id: ModelID<T> = modelId
     override val externalId: Long? = null
     override fun toString(): String = "model id: $modelId"
 }
 
 public class CustomIdentity(
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.customType,
-    override val id: dev.klerkframework.klerk.ModelID<Any>?,
+    override val type: Int = ActorIdentity.customType,
+    override val id: ModelID<Any>?,
     override val externalId: Long?
-) : dev.klerkframework.klerk.ActorIdentity {
+) : ActorIdentity {
     override fun toString(): String = "[custom]"
 }
 
-public object Unauthenticated : dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.unauthenticatedType
-    override val id: dev.klerkframework.klerk.ModelID<*>? = null
+public object Unauthenticated : ActorIdentity {
+    override val type: Int = ActorIdentity.unauthenticatedType
+    override val id: ModelID<*>? = null
     override val externalId: Long? = null
     override fun toString(): String = "[unauthenticated]"
 }
 
-public class PluginIdentity(public val plugin: dev.klerkframework.klerk.KlerkPlugin<*, *>) :
-    dev.klerkframework.klerk.ActorIdentity {
-    override val type: Int = dev.klerkframework.klerk.ActorIdentity.Companion.plugin
-    override val id: dev.klerkframework.klerk.ModelID<*>? = null
+public class PluginIdentity(public val plugin: KlerkPlugin<*, *>) :
+    ActorIdentity {
+    override val type: Int = ActorIdentity.plugin
+    override val id: ModelID<*>? = null
     override val externalId: Long? = null
     override fun toString(): String = "Plugin: ${plugin.name}"
 }

@@ -43,7 +43,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (command.event.visibility.level < EventVisibility.CODE.level) {
-            return Failure(listOf(BadRequestProblem("This event has visibility ${command.event.visibility} and therefore cannot be processed")))
+            return Failure(listOf(BadRequestProblem("This event has visibility ${command.event.visibility} and therefore cannot be processed",
+                KlerkErrorCode.EventVisibilityTooLow)))
         }
 
         if (options.dryRun) {
@@ -105,7 +106,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
     private suspend fun validateToken(token: CommandToken, context: C): Problem? {
         if (processedCommandTokens.contains(token)) {
-            return IdempotenceProblem("CommandToken has already been used")
+            return IdempotenceProblem("CommandToken has already been used", KlerkErrorCode.CommandTokenAlreadyUsed)
         }
         val anyModified = klerk.models.read(context) {
             token.models.any { modelId ->
@@ -113,7 +114,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             }
         }
         if (anyModified) {
-            return StateProblem("A model has been modified since the token was created")
+            return StateProblem("A model has been modified since the token was created", KlerkErrorCode.ModelModifiedSinceTokenCreation)
         }
         return null
     }
@@ -129,10 +130,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         try {
             val args = ArgContextReader(context, reader)
             if (config.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
-                throw AuthorizationException("Not allowed to read audit log")
+                throw AuthorizationException(KlerkErrorCode.AuditPositiveAuthorizationMissing, "Not allowed to read audit log")
             }
             if (config.authorization.eventLogNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
-                throw AuthorizationException("Not allowed to read audit log")
+                throw AuthorizationException(KlerkErrorCode.AuditNegativeAuthorizationExist, "Not allowed to read audit log")
             }
         } finally {
             readWriteLock.releaseRead()

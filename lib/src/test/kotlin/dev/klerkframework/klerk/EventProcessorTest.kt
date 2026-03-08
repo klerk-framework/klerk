@@ -57,7 +57,7 @@ class EventProcessorTest {
                 ProcessingOptions(CommandToken.simple())
             )
             when (willFail) {
-                is CommandResult.Failure -> assertTrue(willFail.problems.first().toString().contains("since these models have a reference to it"))
+                is CommandResult.Failure -> assertEquals(willFail.problems.first().code, KlerkErrorCode.BrokenReference)
                 is CommandResult.Success -> fail()
             }
 
@@ -69,7 +69,10 @@ class EventProcessorTest {
                 ),
                 context,
                 ProcessingOptions(CommandToken.simple())
-            ).orThrow()
+            ).getOrHandle {
+                println(it.problems.joinToString(", "))
+                throw it.problems.first().asException()
+            }
 
             assertEquals(3, willNotFail.deletedModels.size)
         }

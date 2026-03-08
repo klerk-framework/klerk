@@ -20,7 +20,7 @@ class EventModelIDWithParametersFlowChartAlgorithmParamsTest {
         try {
             EventParameters(MyInvalidEventParams::class)
             fail()
-        } catch (e: IllegalArgumentException) {
+        } catch (e: IllegalConfigurationException) {
             //
         }
     }

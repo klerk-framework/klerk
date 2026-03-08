@@ -115,7 +115,7 @@ public data class Config<C : KlerkContext, V>(
             }
                 .forEach {
                     if (!sm.declaredEvents.contains(it)) {
-                        throw IllegalConfigurationException("The event '${it.id}' must be declared before used in state")
+                        throw IllegalConfigurationException(KlerkErrorCode.EventNotDeclared, "The event '${it.id}' must be declared before used in state")
                     }
                 }
         }
@@ -150,7 +150,7 @@ public data class Config<C : KlerkContext, V>(
         }
         val refParameters = params.all.filter { it.type == PropertyType.Ref }
         refParameters.firstOrNull { refParam -> !validRefs.containsKey(refParam.name) }?.let {
-            throw IllegalConfigurationException("The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.")
+            throw IllegalConfigurationException(KlerkErrorCode.MissingValidReferences, "The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.")
         }
     }
 
@@ -321,10 +321,10 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
      */
     public fun build(init: ConfigBuilder<C, D>.() -> Unit): Config<C, D> {
         this.init()
-        runCatching { systemContextProviderValue }.onFailure { throw IllegalConfigurationException("'systemContextProvider' is missing in the config") }
-        runCatching { persistenceValue }.onFailure { throw IllegalConfigurationException("'persistence' is missing in the config") }
-        runCatching { authorizationRulesBlock }.onFailure { throw IllegalConfigurationException("'authorization' is missing in the config") }
-        runCatching { managedModelsValue }.onFailure { throw IllegalConfigurationException("'managedModels' is missing in the config") }
+        runCatching { systemContextProviderValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingSystemContextProvider, "'systemContextProvider' is missing in the config") }
+        runCatching { persistenceValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingPersistence, "'persistence' is missing in the config") }
+        runCatching { authorizationRulesBlock }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingAuthorization, "'authorization' is missing in the config") }
+        runCatching { managedModelsValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingManagedModels, "'managedModels' is missing in the config") }
 
         //val valueClasses = managedModelsValue.flatMap { managed -> managed.kClass.memberProperties.map { (it.returnType.classifier!! as KClass<*>) } }.toSet()
 
@@ -415,17 +415,17 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
     public class AuthorizationRulesBlock<C : KlerkContext, V> {
 
         internal val readModelPositiveRules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(ArgModelContextReader<C, V>) -> PositiveAuthorization>()
         internal val readModelNegativeRules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(ArgModelContextReader<C, V>) -> NegativeAuthorization>()
         internal val readPropertyPositiveRules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> PositiveAuthorization>()
         internal val readPropertyNegativeRules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> NegativeAuthorization>()
         internal val eventPositiveRules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> PositiveAuthorization>()
         internal val eventNegativeRules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> NegativeAuthorization>()
         internal val eventLogPositiveRules =
             mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
         internal val eventLogNegativeRules =

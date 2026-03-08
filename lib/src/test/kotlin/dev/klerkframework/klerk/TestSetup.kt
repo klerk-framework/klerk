@@ -49,7 +49,6 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
         managedModels {
             model(Book::class, bookStateMachine(collections.authors.all, collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
-            //model(Shop::class, cudStateMachine(Shop::class), views.shops)
         }
         authorization {
             readModels {
@@ -584,7 +583,7 @@ suspend fun createBookHarryPotter2(
 class PhoneNumber(value: String) : StringContainer(value) {
     override val minLength = 3
     override val maxLength = 10
-    override val maxLines: Int = 1
+    override val maxLines = 1
 }
 
 class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
@@ -872,7 +871,7 @@ data class CreateBookParams(
     val coAuthors: Set<ModelID<Author>> = emptySet(),
     val previousBooksInSameSeries: List<ModelID<Book>> = emptyList(),
     val tags: Set<BookTag> = emptySet(),
-    val averageScore: AverageScore
+    val averageScore: AverageScore,
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {

@@ -173,10 +173,10 @@ private fun <C:KlerkContext, V, T:Any> initAuth(
 }
 
 private fun <C:KlerkContext, V> isReadPropertyAuthorized(args: ArgsForPropertyAuth<C, V>, config: Config<C, V>): Boolean {
-    if (config.authorization.readPropertyPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
+    if (config.authorization.readPropertyPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
         return false
     }
-    if (config.authorization.readPropertyNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
+    if (config.authorization.readPropertyNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
         return false
     }
     return true

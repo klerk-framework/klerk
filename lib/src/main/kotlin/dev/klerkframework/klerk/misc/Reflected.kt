@@ -270,26 +270,36 @@ public data class EventParameter(val raw: KParameter) {
             return
         }
 
-        val errorMessagePartOne = "Invalid type '$ktype' for '$name'"
         if (ktype.isSubtypeOf(Collection::class.starProjectedType)) {
-            require(!ktype.toString().contains("MutableSet")) { "MutableSet is not allowed" }
-            require(!ktype.toString().contains("MutableList")) { "MutableList is not allowed" }
-            require(
-                !(!ktype.toString().contains("List") && !ktype.toString().contains("Set"))
-            ) { "$errorMessagePartOne. Only List and Set collections are allowed." }
+            if (ktype.toString().contains("MutableSet")) {
+                throwPropertyException(ktype, "MutableSet is not allowed.")
+            }
+            if(ktype.toString().contains("MutableList")) {
+                throwPropertyException(ktype, "MutableList is not allowed.")
+            }
+            if (!(ktype.toString().contains("List") || ktype.toString().contains("Set"))) {
+                throwPropertyException(ktype, "Only List and Set collections are allowed.")
+            }
             validate(ktype.arguments.single().type!!)
             return
         }
         val constructors = (ktype.classifier!! as KClass<*>).constructors
-        require(constructors.size == 1) { "It seems you are trying to use a non-DataContainer (found ${constructors.size} constructors)" }
+        if (constructors.size != 1) {
+            throwPropertyException(ktype, "Found ${constructors.size} constructors, expected only one.")
+        }
         val constructor = constructors.single()
-        require(constructor.parameters.isNotEmpty()) { "$errorMessagePartOne. The leaves must be DataContainer." }
+        if(constructor.parameters.isEmpty()) {
+            throwPropertyException(ktype, "Found constructor with no parameters.")
+        }
         constructor.parameters.forEach { kParameter: KParameter ->
             validate(kParameter.type)
         }
     }
 
-
+    private fun throwPropertyException(type: KType, message: String): Nothing {
+        val first = "Property '$name' has invalid type '$type'. "
+        throw IllegalConfigurationException(KlerkErrorCode.PropertyMustBeDataContainer, first + message)
+    }
 
     public fun validationRulesDescription(): Map<String, String> {
         val result = mutableMapOf<String, String>()

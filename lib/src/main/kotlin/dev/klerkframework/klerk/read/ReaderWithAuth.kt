@@ -119,13 +119,13 @@ internal fun <T : Any, C:KlerkContext, V> evaluateAuthorization(
 
     if (brokenRule != null) {
         return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized,
-            RuleDescription(brokenRule, RuleType.Authorization)))
+            RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist))
     }
 
     if (config.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
             .none { it == PositiveAuthorization.Allow }) {
         logger.info("No policy explicitly allowed the request")
-        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized, null))
+        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized, null, KlerkErrorCode.ReadPositiveAuthorizationMissing))
     }
     return ReadResult.Ok(model)
 }

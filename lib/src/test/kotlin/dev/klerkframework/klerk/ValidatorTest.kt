@@ -3,6 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
@@ -89,4 +90,37 @@ class ValidatorTest {
             assertTrue(result is CommandResult.Failure)
         }
     }
+
+    @Test
+    fun mittTest() {
+        val a = IntWithTwoOrFourOrThree(2)
+        a.initAuthorization(false)
+        println("Klar: ${a.valueOrNullIfNotAuthorized}")
+    }
+}
+
+
+open class EvenIntContainer(value: Int) : IntContainer(value) {
+
+    init {
+        require(value % 2 == 0) { "Value must be even" }
+        println("A")
+    }
+
+    override val min: Int = 0
+
+    override val max: Int = 100
+
+}
+
+class IntWithTwoOrFourOrThree(value: Int) : EvenIntContainer(value) {
+    init {
+        require(value == 2 || value == 3 || value == 4) { "Value must be 2 or 4" }
+        println("B")
+    }
+
+    override val min: Int = 0
+
+    override val max: Int = 100
+
 }

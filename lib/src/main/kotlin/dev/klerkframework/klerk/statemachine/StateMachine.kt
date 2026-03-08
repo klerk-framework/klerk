@@ -1,12 +1,10 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.EventVisibility.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 
 import dev.klerkframework.klerk.storage.ModelCache
-import mu.KotlinLogging
 import kotlin.reflect.KClass
 
 @ConfigMarker
@@ -14,10 +12,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
     internal val type: KClass<T>
 ) {
 
-    private val log = KotlinLogging.logger {}
-
     internal lateinit var modelViews: ModelViews<T, C>
-    private lateinit var currentState: State<T, ModelStates, C, V>
     public val states: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
     public lateinit var voidState: VoidState<T, ModelStates, C, V>
     public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
@@ -37,7 +32,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
             return voidState
         }
         return states.firstOrNull { it.name == name }
-            ?: throw InternalException("State $name doesn't exist in statemachine for ${this.type.simpleName}. Do you need to migrate the data?")
+            ?: throw InternalException(message = "State $name doesn't exist in statemachine for ${this.type.simpleName}. Do you need to migrate the data?")
     }
 
     internal fun knowsAboutEvent(eventReference: EventReference): Boolean {
@@ -49,19 +44,6 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         } catch (e: NoSuchElementException) {
             return false
         }
-    }
-
-    /**
-     * Checks if the state machine is currently in a state where it can handle the event.
-     */
-    internal fun <P> canHandle(command: Command<T, P>): Problem? {
-        val state = getState(command.model)
-        if (state.canHandle(command.event.id)) {
-            return null
-        }
-        return StateProblem(
-            "The statemachine for '${type.simpleName}' for modelId=${command.model} is in state '${state.name}' and cannot handle the event '${command.event}'."
-        )
     }
 
     /**

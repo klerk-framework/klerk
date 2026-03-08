@@ -37,7 +37,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
             if (!isAuthorizedToReadProperty) {
                 val message = "The actor is not allowed to access ${this::class.simpleName}"
                 logger.warn { message }
-                throw AuthorizationException(message)
+                throw AuthorizationException(KlerkErrorCode.UnauthorizedPropertyRead, message)
             }
             return field
         }
