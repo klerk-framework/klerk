@@ -14,7 +14,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     private val withoutAuth = ReaderWithoutAuth(klerk)
 
-    override val views = klerk.config.collections
+    override val views = klerk.config.views
 
     internal val modelsRead = mutableSetOf<Model<*>>()
 

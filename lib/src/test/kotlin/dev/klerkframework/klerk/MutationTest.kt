@@ -18,7 +18,7 @@ class MutationTest {
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
                     model(Author::class, authorStateMachine(collections), collections.authors)
-                    model(Book::class, bookStateMachine(collections.authors.all, collections), collections.books)
+                    model(Book::class, bookStateMachine(collections), collections.books)
                 }
                 authorization {
                     readModels {

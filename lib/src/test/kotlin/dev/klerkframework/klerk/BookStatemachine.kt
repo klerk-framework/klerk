@@ -9,7 +9,7 @@ enum class BookStates {
     Published,
 }
 
-fun bookStateMachine(allAuthors: ModelView<Author, Context>, collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
     stateMachine {
 
         event(CreateBook) {

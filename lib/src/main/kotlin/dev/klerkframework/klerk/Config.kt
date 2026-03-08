@@ -24,7 +24,7 @@ import kotlin.time.Duration
 internal val logger = KotlinLogging.logger {}
 
 public data class Config<C : KlerkContext, V>(
-    public val collections: V,
+    public val views: V,
     public val authorization: AuthorizationConfig<C, V>,
     public val meterRegistry: MeterRegistry,
     val managedModels: Set<ManagedModel<*, *, C, V>>,
@@ -157,7 +157,13 @@ public data class Config<C : KlerkContext, V>(
         }
         val refParameters = params.all.filter { it.type == PropertyType.Ref }
         refParameters.firstOrNull { refParam -> !validRefs.containsKey(refParam.name) }?.let {
-            throw IllegalConfigurationException(KlerkErrorCode.MissingValidReferences, "The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.")
+            throw IllegalConfigurationException(KlerkErrorCode.MissingValidReferences, """
+                The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.
+                E.g. to declare that all references are valid, add this to the state machine for ${params.raw.simpleName}:
+                event(${event.name}) {
+                    validReferences(${params.raw.simpleName}::${it.name}, views.the-view-of-the-referenced-model.all)
+                }
+                """.trimIndent())
         }
     }
 
@@ -321,12 +327,12 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
 internal annotation class ConfigMarker
 
 @ConfigMarker
-public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
+public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     /**
      * @throws IllegalConfigurationException
      */
-    public fun build(init: ConfigBuilder<C, D>.() -> Unit): Config<C, D> {
+    public fun build(init: ConfigBuilder<C, V>.() -> Unit): Config<C, V> {
         this.init()
         runCatching { systemContextProviderValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingSystemContextProvider, "'systemContextProvider' is missing in the config") }
         runCatching { persistenceValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingPersistence, "'persistence' is missing in the config") }
@@ -345,7 +351,7 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
          */
 
         return Config(
-            collections = dataValue,
+            views = views,
             authorization = AuthorizationConfig(
                 readModelPositiveRules = authorizationRulesBlock.readModelPositiveRules,
                 readModelNegativeRules = authorizationRulesBlock.readModelNegativeRules,
@@ -366,8 +372,8 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
 
     private var migrationStepsValue: SortedSet<MigrationStep> = sortedSetOf()
     private var registry: MeterRegistry = SimpleMeterRegistry()
-    private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, D>
-    private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, D>>
+    private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
+    private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
     private lateinit var persistenceValue: Persistence
     private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
@@ -389,14 +395,14 @@ public class ConfigBuilder<C : KlerkContext, D>(private val dataValue: D) {
         systemContextProviderValue = provider
     }
 
-    public fun managedModels(init: ManagedModelsBlock<C, D>.() -> Unit) {
-        val block = ManagedModelsBlock<C, D>()
+    public fun managedModels(init: ManagedModelsBlock<C, V>.() -> Unit) {
+        val block = ManagedModelsBlock<C, V>()
         block.init()
         managedModelsValue = block.value
     }
 
-    public fun authorization(init: AuthorizationRulesBlock<C, D>.() -> Unit) {
-        authorizationRulesBlock = AuthorizationRulesBlock<C, D>()
+    public fun authorization(init: AuthorizationRulesBlock<C, V>.() -> Unit) {
+        authorizationRulesBlock = AuthorizationRulesBlock<C, V>()
         authorizationRulesBlock.init()
     }
 

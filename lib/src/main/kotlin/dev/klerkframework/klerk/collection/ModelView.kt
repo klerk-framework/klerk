@@ -131,7 +131,6 @@ public class AllModelView<T : Any, C : KlerkContext>(
 
     init {
         _id = "all"
-        logger.info { "created ${this}" }
     }
 
     override fun getView(): ModelViews<T, C> = view

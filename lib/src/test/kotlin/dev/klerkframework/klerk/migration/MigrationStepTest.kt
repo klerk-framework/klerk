@@ -36,7 +36,7 @@ class MigrationStepTest {
             persistence(persistence)
             migrations(steps)
             managedModels {
-                model(Book::class, bookStateMachine(collections.authors.all, collections), collections.books)
+                model(Book::class, bookStateMachine(collections), collections.books)
                 model(Author::class, authorStateMachine(collections), collections.authors)
             }
             apply(addStandardTestConfiguration())

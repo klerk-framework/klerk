@@ -47,7 +47,7 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
     return ConfigBuilder<Context, MyCollections>(collections).build {
         persistence(storage)
         managedModels {
-            model(Book::class, bookStateMachine(collections.authors.all, collections), collections.books)
+            model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
         }
         authorization {

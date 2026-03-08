@@ -20,7 +20,7 @@ class ActionTest {
 
             val config = ConfigBuilder<Context, MyCollections>(collections).build {
                 managedModels {
-                    model(Book::class, bookStateMachine(collections.authors.all, collections), collections.books)
+                    model(Book::class, bookStateMachine(collections), collections.books)
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
