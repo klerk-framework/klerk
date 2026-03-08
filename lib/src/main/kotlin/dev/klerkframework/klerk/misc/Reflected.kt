@@ -297,8 +297,9 @@ public data class EventParameter(val raw: KParameter) {
     }
 
     private fun throwPropertyException(type: KType, message: String): Nothing {
-        val first = "Property '$name' has invalid type '$type'. "
-        throw IllegalConfigurationException(KlerkErrorCode.PropertyMustBeDataContainer, first + message)
+        val first = "Property '$name' has invalid type '$type'."
+        val propertyDocumentation = "Properties must be subtypes of DataContainer or List/Set thereof."
+        throw IllegalConfigurationException(KlerkErrorCode.PropertyMustBeDataContainer, "$first $message $propertyDocumentation")
     }
 
     public fun validationRulesDescription(): Map<String, String> {
@@ -375,6 +376,7 @@ public enum class PropertyType {
     Ref,
     KeyValueRef,
     Enum,
+    GeoPosition,
 }
 
 /**
@@ -415,6 +417,9 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
         return PropertyType.Enum
     }
  */
+    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
+        return PropertyType.GeoPosition
+    }
 
     if (ktype.isSubtypeOf(DataContainer::class.starProjectedType)) {
         throw NotImplementedError(ktype.toString())
@@ -462,4 +467,9 @@ internal fun extractValueClasses(kClass: KClass<*>): Set<KClass<*>> {
         }
     }
     return result
+}
+
+internal fun checkDataContainerProperties(kClass: KClass<*>) {
+    EventParameters(kClass)
+    // it didn't throw, so it's fine
 }

@@ -54,11 +54,18 @@ public data class Config<C : KlerkContext, V>(
     }
 
     private fun validate() {
+        modelsMustHavePropertiesOfDataContainer()
         parametersWithReferencesMustHaveCollectionValidation()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
+    }
+
+    private fun modelsMustHavePropertiesOfDataContainer() {
+        managedModels.forEach { managed ->
+            checkDataContainerProperties(managed.kClass)
+        }
     }
 
     private fun checkContextProviderExistIfConfigContainsTimeTriggers() {
