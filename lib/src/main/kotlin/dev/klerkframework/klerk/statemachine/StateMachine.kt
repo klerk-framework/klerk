@@ -2,13 +2,11 @@ package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
-import dev.klerkframework.klerk.command.Command
-
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlin.reflect.KClass
 
 @ConfigMarker
-public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
+public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val type: KClass<T>
 ) {
 
@@ -88,17 +86,18 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         context: C,
         visibility: EventVisibility,
     ): Set<EventReference> {
-        return getStateByName(model.state).getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }.toSet()
+        return getStateByName(model.state).getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }
+            .toSet()
     }
 
     internal fun getEventsForVoidState(context: C, visibility: EventVisibility): Set<EventReference> {
         return voidState.getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }.toSet()
     }
 
-/*    public fun getExternalEvents(): Set<EventReference> =
-        states.flatMap { state -> state.getEvents().filter { it.visibility == EXTERNAL }.map { it.id } }.toSet()
+    /*    public fun getExternalEvents(): Set<EventReference> =
+            states.flatMap { state -> state.getEvents().filter { it.visibility == EXTERNAL }.map { it.id } }.toSet()
 
- */
+     */
 
     public fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 
@@ -115,7 +114,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
     public fun state(modelState: ModelStates, init: InstanceState<T, ModelStates, C, V>.() -> Unit) {
         val state = InstanceState<T, ModelStates, C, V>(modelState.name, type.simpleName!!)
         state.init()
-       // state.verifyAllUsedEventsAreDeclared(externalEvents.getEvents(), AnyType)
+        // state.verifyAllUsedEventsAreDeclared(externalEvents.getEvents(), AnyType)
         states.add(state)
     }
 
@@ -129,18 +128,24 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        event.noParamRules =
+            (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
-    public fun <P:Any> event(event: VoidEventWithParameters<T, P>, init: VoidEventRulesWithParameters<T, P, C, V>.() -> Unit) {
+    public fun <P : Any> event(
+        event: VoidEventWithParameters<T, P>,
+        init: VoidEventRulesWithParameters<T, P, C, V>.() -> Unit
+    ) {
         declaredEvents.add(event)
         val rules = VoidEventRulesWithParameters<T, P, C, V>()
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        event.noParamRules =
+            (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
         @Suppress("UNCHECKED_CAST")
-        event.paramRulesForVoidEvent = (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity>)
+        event.paramRulesForVoidEvent =
+            (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity>)
         event.validRefs = rules.validRefs
     }
 
@@ -150,23 +155,30 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C:KlerkContext, V>(
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        event.noParamRules =
+            (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
-    public fun <P:Any> event(event: InstanceEventWithParameters<T, P>, init: InstanceEventRulesWithParameters<T, P, C, V>.() -> Unit) {
+    public fun <P : Any> event(
+        event: InstanceEventWithParameters<T, P>,
+        init: InstanceEventRulesWithParameters<T, P, C, V>.() -> Unit
+    ) {
         declaredEvents.add(event)
         val rules = InstanceEventRulesWithParameters<T, P, C, V>()
         rules.init()
         event.setContextRules(rules.contextValidations)
         @Suppress("UNCHECKED_CAST")
-        event.noParamRules = (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        event.noParamRules =
+            (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
         @Suppress("UNCHECKED_CAST")
-        event.paramRulesForInstanceEvent = (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity>)
-        event.validRefs = rules.validRefs    }
+        event.paramRulesForInstanceEvent =
+            (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity>)
+        event.validRefs = rules.validRefs
+    }
 
 }
 
-public inline fun <reified T : Any, reified ModelStates : Enum<*>, C:KlerkContext, V> stateMachine(init: StateMachine<T, ModelStates, C, V>.() -> Unit): StateMachine<T, ModelStates, C, V> {
+public inline fun <reified T : Any, reified ModelStates : Enum<*>, C : KlerkContext, V> stateMachine(init: StateMachine<T, ModelStates, C, V>.() -> Unit): StateMachine<T, ModelStates, C, V> {
     val stateMachine = StateMachine<T, ModelStates, C, V>(T::class)
     stateMachine.init()
     return stateMachine

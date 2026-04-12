@@ -5,9 +5,8 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.migration.MigrationStep
-import kotlin.time.Instant
 import java.io.InputStream
-import kotlin.collections.set
+import kotlin.time.Instant
 
 public data class AuditEntry(
     val time: Instant,
@@ -23,7 +22,7 @@ public data class AuditEntry(
 public interface Persistence {
     public val currentModelSchemaVersion: Int
 
-    public fun <T : Any, P, C:KlerkContext, V> store(
+    public fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?
@@ -64,7 +63,7 @@ public class RamStorage : Persistence {
     private val keyValueBlobs = mutableMapOf<Long, Triple<ByteArray, Instant?, Boolean>>()
     private val jobs = mutableMapOf<JobId, JobMetadata>()
 
-    override fun <T : Any, P, C:KlerkContext, V> store(
+    override fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?
@@ -75,9 +74,10 @@ public class RamStorage : Persistence {
         delta.createdModels
             .union(delta.aggregatedModelState.keys)
             .union(delta.transitions).forEach { modelId ->
-            val model = requireNotNull(delta.aggregatedModelState[modelId]) { "Could not find $modelId in modifiedModels" }
-            models[model.id.toInt()] = model as Model<Any>
-        }
+                val model =
+                    requireNotNull(delta.aggregatedModelState[modelId]) { "Could not find $modelId in modifiedModels" }
+                models[model.id.toInt()] = model as Model<Any>
+            }
 
         delta.deletedModels.forEach { models.remove(it.toInt()) }
         delta.newJobs.forEach {
@@ -157,7 +157,7 @@ public class RamStorage : Persistence {
 
     override fun getAllJobs(): Set<JobMetadata> = jobs.values.toSet()
 
-    public fun <T : Any, P, C:KlerkContext, V> createAuditEntry(
+    public fun <T : Any, P, C : KlerkContext, V> createAuditEntry(
         command: Command<T, P>,
         result: ProcessingData<out T, C, V>,
         context: C

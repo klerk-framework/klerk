@@ -5,12 +5,15 @@ package dev.klerkframework.klerk
 
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 
 class BlockTriggeringInstanceNonInstanceEventBlockTest {

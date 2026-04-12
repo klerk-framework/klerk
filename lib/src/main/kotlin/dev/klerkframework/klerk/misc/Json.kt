@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk.misc
 
 import com.google.gson.*
-import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Config
+import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.decode64bitMicroseconds
 import java.lang.reflect.Type
@@ -10,7 +10,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.full.primaryConstructor
 import kotlin.time.Duration.Companion.microseconds
 
-internal fun <V, C: KlerkContext> createGson(config: Config<C, V>): Gson {
+internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
 
     val valueClasses = config.managedModels
         .flatMap { it.stateMachine.getAllEvents() }
@@ -51,7 +51,8 @@ internal class StringValueSerializer(private val valueClasses: Set<KClass<*>>) :
     ): StringContainer {
         requireNotNull(json)
         requireNotNull(typeOfT)
-        val paramClass = valueClasses.firstOrNull { it.qualifiedName == typeOfT.typeName } ?: throw IllegalStateException("Could not find string container for $typeOfT")
+        val paramClass = valueClasses.firstOrNull { it.qualifiedName == typeOfT.typeName }
+            ?: throw IllegalStateException("Could not find string container for $typeOfT")
         return paramClass.primaryConstructor!!.call(json.asString) as StringContainer
     }
 }

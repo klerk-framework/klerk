@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
@@ -42,9 +42,11 @@ class ValidatorTest {
                 age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
-            val command = Command(CreateAuthor,
+            val command = Command(
+                CreateAuthor,
                 null,
-                params)
+                params
+            )
             val options = ProcessingOptions(CommandToken.simple())
             when (val result = klerk.handle(command, Context.system(), options)) {
                 is CommandResult.Failure -> assertTrue(result.problems.first().violatedRule == null)
@@ -63,9 +65,11 @@ class ValidatorTest {
                 age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
-            val command = Command(CreateAuthor,
+            val command = Command(
+                CreateAuthor,
                 null,
-                params)
+                params
+            )
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Context.unauthenticated(), options)
             assertTrue(result is CommandResult.Failure, result.toString())
@@ -82,9 +86,11 @@ class ValidatorTest {
                 age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
-            val command = Command(CreateAuthor,
+            val command = Command(
+                CreateAuthor,
                 null,
-                params)
+                params
+            )
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Context.system(), options)
             assertTrue(result is CommandResult.Failure)

@@ -48,54 +48,70 @@ public enum class RuleType {
     Authorization
 }
 
-public class AuthorizationProblem(endUserTranslatedMessage: String, override val violatedRule: RuleDescription?, code: KlerkErrorCode) : Problem(endUserTranslatedMessage, code) {
+public class AuthorizationProblem(
+    endUserTranslatedMessage: String,
+    override val violatedRule: RuleDescription?,
+    code: KlerkErrorCode
+) : Problem(endUserTranslatedMessage, code) {
     public override fun asException(): AuthorizationException = AuthorizationException(code, endUserTranslatedMessage)
     public override val recommendedHttpCode: Int = 403
 }
 
-public class InternalProblem(endUserTranslatedMessage: String) : Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
+public class InternalProblem(endUserTranslatedMessage: String) :
+    Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
     public override fun asException(): InternalException = InternalException(code, endUserTranslatedMessage)
     public override val recommendedHttpCode: Int = 500
     public override val violatedRule: RuleDescription? = null
 }
 
-public class StateProblem(endUserTranslatedMessage: String, code: KlerkErrorCode, override val violatedRule: RuleDescription? = null) : Problem(endUserTranslatedMessage, code) {
+public class StateProblem(
+    endUserTranslatedMessage: String,
+    code: KlerkErrorCode,
+    override val violatedRule: RuleDescription? = null
+) : Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalStateException = IllegalStateException(toString())
     public override val recommendedHttpCode: Int = 409
 }
 
-public class ServerStateProblem(endUserTranslatedMessage: String) : Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
+public class ServerStateProblem(endUserTranslatedMessage: String) :
+    Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
     public override fun asException(): IllegalStateException = IllegalStateException(toString())
     public override val recommendedHttpCode: Int = 503
     public override val violatedRule: RuleDescription? = null
 }
 
-public class NotFoundProblem(endUserTranslatedMessage: String) : Problem(endUserTranslatedMessage, KlerkErrorCode.NotFound) {
+public class NotFoundProblem(endUserTranslatedMessage: String) :
+    Problem(endUserTranslatedMessage, KlerkErrorCode.NotFound) {
     public override fun asException(): NoSuchElementException = NoSuchElementException(toString())
     public override val recommendedHttpCode: Int = 404
     public override val violatedRule: RuleDescription? = null
 }
 
-public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) : Problem(endUserTranslatedMessage, code) {
+public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
+    Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     public override val recommendedHttpCode: Int = 400
     public override val violatedRule: RuleDescription? = null
 }
 
-public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) : Problem(endUserTranslatedMessage, code) {
+public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
+    Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     public override val recommendedHttpCode: Int = 400
     public override val violatedRule: RuleDescription? = null
 }
 
-public class AuthorizationException(code: KlerkErrorCode, message: String? = null) : RuntimeException("[$code] $message")
+public class AuthorizationException(code: KlerkErrorCode, message: String? = null) :
+    RuntimeException("[$code] $message")
 
 /**
  * Indicates a bug in Klerk.
  */
-public class InternalException(public val code: KlerkErrorCode = KlerkErrorCode.Internal, message: String? = null) : RuntimeException("[$code] $message")
+public class InternalException(public val code: KlerkErrorCode = KlerkErrorCode.Internal, message: String? = null) :
+    RuntimeException("[$code] $message")
 
-public class IllegalConfigurationException(public val code: KlerkErrorCode, message: String) : RuntimeException("[$code] $message")
+public class IllegalConfigurationException(public val code: KlerkErrorCode, message: String) :
+    RuntimeException("[$code] $message")
 
 /**
  * Error codes for Klerk configuration errors. The error codes should never change, so if a code is

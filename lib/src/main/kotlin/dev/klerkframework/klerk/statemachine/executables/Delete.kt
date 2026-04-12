@@ -46,18 +46,21 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     if (other.isNotEmpty()) {
         val currentReferencesToModel = other.filter { !processingDataSoFar.deletedModels.contains(it) }
         if (currentReferencesToModel.isNotEmpty()) {
-            return ProcessingData(problems = listOf(StateProblem("Cannot delete model ${model.id} since these models have a reference to it: ${
-                currentReferencesToModel.joinToString(
-                    ", "
-                ) { it.toString() }
-            }",
-                KlerkErrorCode.BrokenReference)))
+            return ProcessingData(
+                problems = listOf(
+                    StateProblem(
+                        "Cannot delete model ${model.id} since these models have a reference to it: ${
+                            currentReferencesToModel.joinToString(
+                                ", "
+                            ) { it.toString() }
+                        }",
+                        KlerkErrorCode.BrokenReference)))
         }
     }
     return ProcessingData(
         deletedModels = listOf(model.id),
         functionsToUpdateViews = listOf { view.internalDidDelete(model) },
         log = listOf("Deleting model ${model.id}")
-        )
+    )
 }
 

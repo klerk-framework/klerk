@@ -2,20 +2,20 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
 import dev.klerkframework.klerk.AuthorStates.*
-import dev.klerkframework.klerk.EventVisibility.*
+import dev.klerkframework.klerk.EventVisibility.EXTERNAL
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
-import dev.klerkframework.klerk.job.JobMetadata
-import dev.klerkframework.klerk.job.JobResult
-import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.AllModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.job.JobMetadata
+import dev.klerkframework.klerk.job.JobResult
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
@@ -26,8 +26,6 @@ import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
 import dev.klerkframework.klerk.validation.PropertyValidation
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.sqlite.SQLiteDataSource
@@ -36,9 +34,11 @@ import java.sql.DriverManager
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.test.assertEquals
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
@@ -212,7 +212,8 @@ data class CreateAuthorParams(
     val favouriteColleague: ModelID<Author>? = null
 ) : Validatable {
 
-    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
+    override fun validators(): Set<() -> PropertyCollectionValidity> =
+        setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
 
     private fun augustStrindbergCannotHaveCertainPhoneNumber(): PropertyCollectionValidity {
         return if (firstName.value == "August" && lastName.value == "Strindberg" && phone.value == "123456") Invalid() else Valid
@@ -704,11 +705,15 @@ object SQLiteInMemory {
 }
 
 object CreateAuthor :
-    VoidEventWithParameters<Author, CreateAuthorParams>(Author::class,
-        EXTERNAL, CreateAuthorParams::class)
+    VoidEventWithParameters<Author, CreateAuthorParams>(
+        Author::class,
+        EXTERNAL, CreateAuthorParams::class
+    )
 
-object UpdateAuthor : InstanceEventWithParameters<Author, Author>(Author::class,
-    EXTERNAL, Author::class) {
+object UpdateAuthor : InstanceEventWithParameters<Author, Author>(
+    Author::class,
+    EXTERNAL, Author::class
+) {
 
 }
 
@@ -718,8 +723,10 @@ object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, E
 
 object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Author::class,
-    EXTERNAL, ChangeNameParams::class)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
+    Author::class,
+    EXTERNAL, ChangeNameParams::class
+)
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
@@ -858,8 +865,10 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
 }
 
 
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(Book::class,
-    EXTERNAL, CreateBookParams::class)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
+    Book::class,
+    EXTERNAL, CreateBookParams::class
+)
 
 object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
 

@@ -44,5 +44,5 @@ data class ViewWithIllegal(val x: ModelViews<IllegalModel, Context>)
 
 private enum class States {}
 
-private val illegalStateMachine = stateMachine<IllegalModel, States, Context, ViewWithIllegal> {  }
+private val illegalStateMachine = stateMachine<IllegalModel, States, Context, ViewWithIllegal> { }
 

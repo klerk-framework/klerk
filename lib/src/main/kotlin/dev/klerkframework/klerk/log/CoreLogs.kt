@@ -1,14 +1,13 @@
 package dev.klerkframework.klerk.log
 
-import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.CommandResult
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.log.LogSourceMinor.*
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 internal abstract class CoreLogEntry(minor: LogSourceMinor, val context: KlerkContext?) : LogEntry {
     override val time: Instant = context?.time ?: Clock.System.now()

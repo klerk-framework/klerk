@@ -31,8 +31,10 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
                 val next = nodes.single { it.id == execution.decision.toString() }
                 executeNode(next, params, newLogs)
             }
+
             is NodeExecutionResult.Termination -> {
-                val newLogs = logs.plus("${node.id}=${execution.functionResult} -> Result: ${execution.terminationResult}")
+                val newLogs =
+                    logs.plus("${node.id}=${execution.functionResult} -> Result: ${execution.terminationResult}")
                 Pair(execution.terminationResult, newLogs)
             }
         }
@@ -49,13 +51,19 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
         startNodeId = decision
     }
 
-    public fun booleanNode(decision: Decision<Boolean, P>, init: BooleanNodeBuilder<Decision<Boolean, P>, P, R>.() -> Unit) {
+    public fun booleanNode(
+        decision: Decision<Boolean, P>,
+        init: BooleanNodeBuilder<Decision<Boolean, P>, P, R>.() -> Unit
+    ) {
         val builder = BooleanNodeBuilder<Decision<Boolean, P>, P, R>()
         builder.init()
         nodes.add(builder.build(decision))
     }
 
-    public fun <E:Enum<*>> enumNode(decision: Decision<E, P>, init: EnumNodeBuilder<E, Decision<E, P>, P, R>.() -> Unit) {
+    public fun <E : Enum<*>> enumNode(
+        decision: Decision<E, P>,
+        init: EnumNodeBuilder<E, Decision<E, P>, P, R>.() -> Unit
+    ) {
         val builder = EnumNodeBuilder<E, Decision<E, P>, P, R>()
         builder.init()
         nodes.add(builder.build(decision))
@@ -96,7 +104,7 @@ public sealed class Node<P, R> {
         override val humanReadable: String = decision.name
     }
 
-    internal data class EnumNode<E:Enum<*>, P, R>(
+    internal data class EnumNode<E : Enum<*>, P, R>(
         val decision: Decision<E, P>,
         override val goTos: Map<E, Decision<out Any, P>>,
         override val terminations: Map<E, R>
@@ -115,7 +123,7 @@ public sealed class Node<P, R> {
         override val humanReadable: String = decision.name
     }
 
-    internal data class FacadeNode<P, R:Any>(val f: KFunction1<P, R>) : Node<P, R>() {
+    internal data class FacadeNode<P, R : Any>(val f: KFunction1<P, R>) : Node<P, R>() {
         override fun execute(params: P): NodeExecutionResult<P, R> {
             val result = f.invoke(params)
             return NodeExecutionResult.Termination(result, result.toString())
@@ -133,8 +141,11 @@ public sealed class Node<P, R> {
 }
 
 public sealed class NodeExecutionResult<P, R> {
-    public data class Termination<P, R>(val terminationResult: R, val functionResult: String) : NodeExecutionResult<P, R>()
-    public data class Next<P, R>(val decision: Decision<out Any, P>, val functionResult: String) : NodeExecutionResult<P, R>()
+    public data class Termination<P, R>(val terminationResult: R, val functionResult: String) :
+        NodeExecutionResult<P, R>()
+
+    public data class Next<P, R>(val decision: Decision<out Any, P>, val functionResult: String) :
+        NodeExecutionResult<P, R>()
 }
 
 public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
@@ -159,7 +170,7 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
 
 }
 
-public class EnumNodeBuilder<E:Enum<*>, D : Decision<E, P>, P, R> {
+public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
     private val goTos = mutableMapOf<E, Decision<out Any, P>>()
     private val terminations = mutableMapOf<E, R>()
 
@@ -181,7 +192,7 @@ public class EnumNodeBuilder<E:Enum<*>, D : Decision<E, P>, P, R> {
 
 }
 
-public  interface Decision<T, P> {
+public interface Decision<T, P> {
     public val name: String
     public val function: (P) -> T
 }

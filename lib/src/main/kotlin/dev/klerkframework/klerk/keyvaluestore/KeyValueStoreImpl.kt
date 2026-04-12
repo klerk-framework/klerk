@@ -1,21 +1,14 @@
 package dev.klerkframework.klerk.keyvaluestore
 
-import dev.klerkframework.klerk.BinaryKeyValueID
-import dev.klerkframework.klerk.BlobToken
-import dev.klerkframework.klerk.Config
-import dev.klerkframework.klerk.IntKeyValueID
-import dev.klerkframework.klerk.KeyValueID
-import dev.klerkframework.klerk.KlerkContext
-import dev.klerkframework.klerk.KlerkKeyValueStore
-import dev.klerkframework.klerk.StringKeyValueID
-import kotlin.time.Clock
-import kotlin.time.Instant
+import dev.klerkframework.klerk.*
 import java.io.InputStream
 import java.security.SecureRandom
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
-internal class KeyValueStoreImpl<C: KlerkContext, V>(private val config: Config<C, V>) : KlerkKeyValueStore<C> {
+internal class KeyValueStoreImpl<C : KlerkContext, V>(private val config: Config<C, V>) : KlerkKeyValueStore<C> {
 
     private val random = SecureRandom.getInstanceStrong()
 
@@ -56,7 +49,7 @@ internal class KeyValueStoreImpl<C: KlerkContext, V>(private val config: Config<
         token: BlobToken,
         ttl: Duration?
     ): BinaryKeyValueID {
-        config.persistence.updateBlob(token.id, ttl?.let { Clock.System.now().plus(it)}, true)
+        config.persistence.updateBlob(token.id, ttl?.let { Clock.System.now().plus(it) }, true)
         return BinaryKeyValueID(token.id)
     }
 
@@ -67,11 +60,16 @@ internal class KeyValueStoreImpl<C: KlerkContext, V>(private val config: Config<
         )
 
     override suspend fun get(id: IntKeyValueID, context: C): Int =
-        checkTTL(config.persistence.getKeyValueInt(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}"), context, id)
+        checkTTL(
+            config.persistence.getKeyValueInt(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}"),
+            context,
+            id
+        )
 
 
     override suspend fun get(id: BinaryKeyValueID, context: C): InputStream {
-        val data = config.persistence.getKeyValueBlob(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}")
+        val data =
+            config.persistence.getKeyValueBlob(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}")
         val active = data.third
         if (!active) {
             throw NoSuchElementException("No value found for id ${id.id}")

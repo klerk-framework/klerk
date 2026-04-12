@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.job.JobId
 
 /*
 These classes and interfaces are not used by core Klerk. The purpose of them is to form a foundation for plugins so

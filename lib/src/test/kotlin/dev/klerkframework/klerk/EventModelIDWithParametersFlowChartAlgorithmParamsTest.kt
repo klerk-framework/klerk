@@ -2,8 +2,6 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.misc.EventParameters
-import dev.klerkframework.klerk.read.Reader
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.fail
 

@@ -1,12 +1,14 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ReaderWithAuth
 import kotlinx.coroutines.runBlocking
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.fail
 
 
 class EventProcessorTest {
@@ -52,7 +54,7 @@ class EventProcessorTest {
                     event = DeleteAuthor,
                     model = rowling,
                     params = null
-                    ),
+                ),
                 context,
                 ProcessingOptions(CommandToken.simple())
             )

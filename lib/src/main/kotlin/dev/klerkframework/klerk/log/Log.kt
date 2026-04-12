@@ -1,14 +1,13 @@
 package dev.klerkframework.klerk.log
 
-import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.logger
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 public interface KlerkLog {
 
@@ -89,7 +88,12 @@ public class LogSource(internal val major: MajorSource, internal val minor: Stri
 /**
  *
  */
-public class Fact(public val type: FactType, public val name: String, public val value: String, public val verb: FactVerb? = null)
+public class Fact(
+    public val type: FactType,
+    public val name: String,
+    public val value: String,
+    public val verb: FactVerb? = null
+)
 
 public enum class FactType {
     Custom, // for Application and Plugins

@@ -1,8 +1,6 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.Book
 import dev.klerkframework.klerk.Quantity
-import kotlin.reflect.full.starProjectedType
 import kotlin.test.Test
 
 class ReflectedKtTest {

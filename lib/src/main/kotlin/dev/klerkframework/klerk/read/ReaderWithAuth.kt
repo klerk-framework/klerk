@@ -20,7 +20,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.getAllRelatedIds(id)
 
-    override fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>,): Set<Model<T>> =
+    override fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
         withoutAuth.getRelated(clazz, id).map { checkAuth(it) }.toSet()
 
     override fun <T : Any, U : Any> getRelated(
@@ -64,7 +64,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         return result.copy(items = result.items.map { checkAuth(it) })
     }
 
-    override fun <T : Any> getOrNull(id: ModelID<T>, ): Model<T>? =
+    override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? =
         withoutAuth.getOrNull(id)?.let { checkAuth(it) }
 
     override fun <T : Any> firstOrNull(
@@ -74,7 +74,6 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? =
         withoutAuth.get(id).let { if (isAuthorized(it, context, klerk.config, withoutAuth)) it else null }
-
 
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
@@ -102,10 +101,15 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
 }
 
-internal fun <T:Any, C:KlerkContext, V> isAuthorized(model: Model<T>, context: C, config: Config<C, V>, reader: ReaderWithoutAuth<C, V>): Boolean =
+internal fun <T : Any, C : KlerkContext, V> isAuthorized(
+    model: Model<T>,
+    context: C,
+    config: Config<C, V>,
+    reader: ReaderWithoutAuth<C, V>
+): Boolean =
     evaluateAuthorization(context, model, config, reader) is ReadResult.Ok
 
-internal fun <T : Any, C:KlerkContext, V> evaluateAuthorization(
+internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
     context: C,
     model: Model<T>,
     config: Config<C, V>,
@@ -118,14 +122,24 @@ internal fun <T : Any, C:KlerkContext, V> evaluateAuthorization(
         .firstOrNull { it(ArgModelContextReader(model, context, reader)) == NegativeAuthorization.Deny }
 
     if (brokenRule != null) {
-        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized,
-            RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist))
+        return ReadResult.Fail(
+            AuthorizationProblem(
+                context.translation.klerk.unauthorized,
+                RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist
+            )
+        )
     }
 
     if (config.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
             .none { it == PositiveAuthorization.Allow }) {
         logger.info("No policy explicitly allowed the request")
-        return ReadResult.Fail(AuthorizationProblem(context.translation.klerk.unauthorized, null, KlerkErrorCode.ReadPositiveAuthorizationMissing))
+        return ReadResult.Fail(
+            AuthorizationProblem(
+                context.translation.klerk.unauthorized,
+                null,
+                KlerkErrorCode.ReadPositiveAuthorizationMissing
+            )
+        )
     }
     return ReadResult.Ok(model)
 }

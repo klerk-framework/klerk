@@ -6,12 +6,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlin.time.Clock
-import kotlin.time.Instant
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.thread
 import kotlin.math.max
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 internal interface TriggerTimeManager {
 

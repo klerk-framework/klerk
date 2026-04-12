@@ -3,10 +3,9 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
-
-import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
 internal class VoidEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(

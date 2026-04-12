@@ -3,12 +3,11 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.misc.ChannelNotificationPref.*
-import dev.klerkframework.klerk.misc.ChannelNotificationPref.Nothing
 import dev.klerkframework.klerk.misc.ShowNotificationDecisions.*
 import dev.klerkframework.klerk.read.ReaderWithAuth
-import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
 
 val algorithmParams = AlgorithmParams(
     State(threadMessage = true, userSubscribed = true, userDnd = true, dndOverride = true),
@@ -142,7 +141,8 @@ fun isChannelMuted(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context,
 fun threadMessageAndUserSubscribed(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>) =
     threadMessage(params) && userSubscribed(params)
 
-fun userInDnD(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>) = algorithmParams.state.userDnd
+fun userInDnD(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>) =
+    algorithmParams.state.userDnd
 
 fun dnDOverride(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>) =
     algorithmParams.state.dndOverride
@@ -160,7 +160,8 @@ fun channelMentionsSuppressed(params: ArgForInstanceEvent<Author, kotlin.Nothing
 fun threadsEverythingPrefOn(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>): Boolean =
     algorithmParams.preferences.threadsEverything
 
-object MyAlgoWhichReturnsInt : FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Int>("Just testing") {
+object MyAlgoWhichReturnsInt :
+    FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Int>("Just testing") {
 
     override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Int>.() -> Unit =
         {
@@ -198,9 +199,11 @@ object MyAlgoWhichReturnsInt : FlowChartAlgorithm<ArgForInstanceEvent<Author, ko
 
 // Note that the functions in this algorithm are not pure since they use algorithmParams rather than the BlockParams.
 // The reason of this is that we want to test with a complicated algorithm (inspired by https://d34u8crftukxnk.cloudfront.net/slackpress/prod/sites/7/0_PV_09olld6K1l8jQ.png)
-object ShouldSendNotificationAlgorithm : FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Boolean>("Should we send a notification?")  {
+object ShouldSendNotificationAlgorithm :
+    FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Boolean>("Should we send a notification?") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Boolean>.() -> Unit = {
+    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, kotlin.Nothing?, Context, MyCollections>, Boolean>.() -> Unit =
+        {
             start(ChannelMuted)
 
             booleanNode(ChannelMuted) {

@@ -14,9 +14,9 @@ import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Instant
 import mu.KLogger
 import org.slf4j.event.Level
+import kotlin.time.Instant
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
     private val config: Config<C, V>,
@@ -43,8 +43,14 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (command.event.visibility.level < EventVisibility.CODE.level) {
-            return Failure(listOf(BadRequestProblem("This event has visibility ${command.event.visibility} and therefore cannot be processed",
-                KlerkErrorCode.EventVisibilityTooLow)))
+            return Failure(
+                listOf(
+                    BadRequestProblem(
+                        "This event has visibility ${command.event.visibility} and therefore cannot be processed",
+                        KlerkErrorCode.EventVisibilityTooLow
+                    )
+                )
+            )
         }
 
         if (options.dryRun) {
@@ -64,7 +70,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
             when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
                 is Failure -> {
-                    logger.log(result, options) { "Command ${command.event} failed: ${commandResult.problems.joinToString(", ") { it.toString() }}" }
+                    logger.log(
+                        result,
+                        options
+                    ) { "Command ${command.event} failed: ${commandResult.problems.joinToString(", ") { it.toString() }}" }
                     commandResult
                 }
 
@@ -114,7 +123,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             }
         }
         if (anyModified) {
-            return StateProblem("A model has been modified since the token was created", KlerkErrorCode.ModelModifiedSinceTokenCreation)
+            return StateProblem(
+                "A model has been modified since the token was created",
+                KlerkErrorCode.ModelModifiedSinceTokenCreation
+            )
         }
         return null
     }
@@ -130,10 +142,16 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         try {
             val args = ArgContextReader(context, reader)
             if (config.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
-                throw AuthorizationException(KlerkErrorCode.AuditPositiveAuthorizationMissing, "Not allowed to read audit log")
+                throw AuthorizationException(
+                    KlerkErrorCode.AuditPositiveAuthorizationMissing,
+                    "Not allowed to read audit log"
+                )
             }
             if (config.authorization.eventLogNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
-                throw AuthorizationException(KlerkErrorCode.AuditNegativeAuthorizationExist, "Not allowed to read audit log")
+                throw AuthorizationException(
+                    KlerkErrorCode.AuditNegativeAuthorizationExist,
+                    "Not allowed to read audit log"
+                )
             }
         } finally {
             readWriteLock.releaseRead()
@@ -188,7 +206,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 ProcessingData(
                     updatedModels = listOf(model.id),
                     aggregatedModelState = mapOf(model.id to model.copy(timeTrigger = null)),
-                    ),
+                ),
                 null,
                 null,
             )

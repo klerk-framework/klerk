@@ -3,9 +3,9 @@ package dev.klerkframework.klerk.storage
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.GeoPosition
-import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
 
@@ -48,12 +48,15 @@ class StorageTest {
         val command2 = Command(
             event = CreateBook,
             model = null,
-            params = CreateBookParams(title = BookTitle("The Hobbit"),
+            params = CreateBookParams(
+                title = BookTitle("The Hobbit"),
                 author = author.id,
                 averageScore = AverageScore(0f),
-                readingTime = ReadingTime(3.minutes))
+                readingTime = ReadingTime(3.minutes)
+            )
         )
-        val bookProps = Book(title = BookTitle("The Hobbit"),
+        val bookProps = Book(
+            title = BookTitle("The Hobbit"),
             author = author.id,
             coAuthors = emptySet(),
             previousBooksInSameSeries = emptyList(),
@@ -64,7 +67,7 @@ class StorageTest {
             readingTime = ReadingTime(3.minutes),
             publishedAt = null,
             releasePartyPosition = ReleasePartyPosition(GeoPosition(0.0, 0.0)),
-            )
+        )
         val book = Model(
             id = ModelID(123),
             createdAt = now,
@@ -72,7 +75,8 @@ class StorageTest {
             state = BookStates.Draft.name,
             timeTrigger = null,
             props = bookProps,
-            lastStateTransitionAt = now)
+            lastStateTransitionAt = now
+        )
 
         val result2 = ProcessingData<Book, Context, MyCollections>(
             createdModels = listOf(ModelID(123)),

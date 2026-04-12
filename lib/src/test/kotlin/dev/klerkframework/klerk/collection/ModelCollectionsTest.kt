@@ -2,8 +2,8 @@ package dev.klerkframework.klerk.collection
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -25,7 +25,11 @@ class ModelCollectionsTest {
                 assertTrue { collections.authors.all.contains(astrid, this) }
             }
 
-            klerk.handle(Command(DeleteAuthor, astrid, null), Context.system(), ProcessingOptions(CommandToken.simple()))
+            klerk.handle(
+                Command(DeleteAuthor, astrid, null),
+                Context.system(),
+                ProcessingOptions(CommandToken.simple())
+            )
             klerk.read(Context.system()) {
                 assertFalse { collections.authors.all.contains(astrid, this) }
             }

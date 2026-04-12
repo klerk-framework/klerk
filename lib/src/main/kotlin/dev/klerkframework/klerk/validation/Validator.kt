@@ -26,13 +26,19 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (currentCommand.model == null) {
             val smState = sm.voidState
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
-                return StateProblem("Event '${currentCommand.event}' is not possible in void state", KlerkErrorCode.EventNotPossibleInVoidState)
+                return StateProblem(
+                    "Event '${currentCommand.event}' is not possible in void state",
+                    KlerkErrorCode.EventNotPossibleInVoidState
+                )
             }
         } else {
             val model = reader.get(currentCommand.model)
             val smState = sm.instanceStates.single { it.name == model.state }
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
-                return StateProblem("Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'", KlerkErrorCode.EventNotPossibleInState)
+                return StateProblem(
+                    "Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'",
+                    KlerkErrorCode.EventNotPossibleInState
+                )
             }
         }
         return null
@@ -61,6 +67,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
                 val command = Command(event as Event<T, P>, null, params)
                 val argsWithParams = ArgForVoidEvent(command, context, reader)
+
                 @Suppress("UNCHECKED_CAST")
                 val withParams =
                     (event as VoidEventWithParameters).getParamRules<C, V>().map { it.invoke(argsWithParams) }
@@ -84,6 +91,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
                 val command = Command(event as Event<T, P>, id, requireNotNull(params))
                 val argsWithParams = ArgForInstanceEvent(model, command, context, reader)
+
                 @Suppress("UNCHECKED_CAST")
                 val withParams =
                     (event as InstanceEventWithParameters).getParamRules<C, V>().map { it.invoke(argsWithParams) }
@@ -91,7 +99,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             }
 
         }
-        return propertyCollectionValidityList.filterIsInstance<PropertyCollectionValidity.Invalid>().map { it.toProblem() }
+        return propertyCollectionValidityList.filterIsInstance<PropertyCollectionValidity.Invalid>()
+            .map { it.toProblem() }
     }
 
     private fun validateContext(context: C, eventReference: EventReference): Collection<Problem> {
@@ -134,7 +143,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val problems = mutableSetOf<InvalidPropertyProblem>()
         instance::class.memberProperties.forEach { property ->
             if (property.returnType.isSubtypeOf(DataContainer::class.starProjectedType)) {
-                val problem = (property.getter.call(instance) as DataContainer<*>).validate(property.name, context.translation)
+                val problem =
+                    (property.getter.call(instance) as DataContainer<*>).validate(property.name, context.translation)
                 if (problem != null) {
                     problems.add(problem)
                 }
@@ -184,8 +194,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 ) == Deny
             }
         if (negativeAuthProblem != null) {
-            return AuthorizationProblem(context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization),
-                KlerkErrorCode.CommandNegativeAuthorizationExist)
+            return AuthorizationProblem(
+                context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization),
+                KlerkErrorCode.CommandNegativeAuthorizationExist
+            )
         }
         if (klerk.config.authorization.eventPositiveRules.none {
                 it(
@@ -197,7 +209,11 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 ) == Allow
             }) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
-            return AuthorizationProblem(context.translation.klerk.unauthorized, null, KlerkErrorCode.CommandPositiveAuthorizationMissing)
+            return AuthorizationProblem(
+                context.translation.klerk.unauthorized,
+                null,
+                KlerkErrorCode.CommandPositiveAuthorizationMissing
+            )
         }
         return null
     }
@@ -228,7 +244,12 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (command.model != null) {
             val model = ModelCache.read(command.model).getOrThrow()
             if (model.props::class != stateMachine.type) {
-                return listOf(BadRequestProblem("The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'", KlerkErrorCode.ModelTypeMismatch))
+                return listOf(
+                    BadRequestProblem(
+                        "The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'",
+                        KlerkErrorCode.ModelTypeMismatch
+                    )
+                )
             }
         }
 
@@ -268,7 +289,12 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
 
         @Suppress("UNCHECKED_CAST")
-        return validateEventRulesWithoutParams(klerk.config.getEvent(eventRef) as Event<T, Any?>, context, model, readerWithoutAuth)
+        return validateEventRulesWithoutParams(
+            klerk.config.getEvent(eventRef) as Event<T, Any?>,
+            context,
+            model,
+            readerWithoutAuth
+        )
             .filterIsInstance<PropertyCollectionValidity.Invalid>()
             .isEmpty()
     }

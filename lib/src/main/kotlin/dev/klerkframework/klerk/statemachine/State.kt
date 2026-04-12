@@ -1,11 +1,10 @@
 package dev.klerkframework.klerk.statemachine;
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.Event
 import dev.klerkframework.klerk.statemachine.Block.*
 import dev.klerkframework.klerk.statemachine.BlockType.*
-import kotlin.time.Instant
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 @ConfigMarker
 public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(

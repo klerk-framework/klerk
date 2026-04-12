@@ -1,26 +1,26 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.misc.IdFactory
 import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.statemachine.*
-import dev.klerkframework.klerk.statemachine.BlockType.*
+import dev.klerkframework.klerk.statemachine.BlockType.Exit
 import dev.klerkframework.klerk.storage.ModelCache
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.Timer
-import kotlin.time.Clock
 import mu.KotlinLogging
-import kotlin.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import kotlin.time.measureTime
 
 /**
@@ -113,7 +113,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             (it.first.timeTrigger == null && it.second.timeTrigger != null) // there was no trigger but now it should be
                     || (it.first.timeTrigger != null && it.second.timeTrigger == null) // there was a trigger but it shouldn't anymore
                     || (it.first.timeTrigger != null && it.second.timeTrigger != null && it.first.timeTrigger!! > it.second.timeTrigger!!      // there was a trigger, and still is. However, the new config says that it should trigger earlier than the stored value. (note that we cannot say anything about the opposite situation)
-            )
+                    )
         }.forEach {
             ModelCache.store(it.second)
         }
@@ -257,7 +257,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             currentCommand = currentCommand,
             currentBlock = block,
             currentModel = model?.id,
-            )
+        )
     }
 
 
@@ -367,7 +367,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 .map { model ->
                     @Suppress("UNCHECKED_CAST")
                     Pair(model.id, findTimeTrigger(model as Model<T>, ArgForInstanceNonEvent(model, time, reader)))
-            }
+                }
 
         return processingData.copy(timeTriggers = newTimeTriggers.associate { it })/*        return processingData.copy(modifiedModels = processingData.modifiedModels
                     .filter { processingData.transitions.keys.contains(it.key) || processingData.createdModels.keys.contains(it.key) }
@@ -499,7 +499,8 @@ public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
             val (newState, time) = requireNotNull(unFinalizedTransition)
 
             // we first look in subsequent (updates in exit-block).
-            val inModified = subsequent.aggregatedModelState[currentModel] ?: modified[currentModel] ?: unFinalizedTransition.third
+            val inModified =
+                subsequent.aggregatedModelState[currentModel] ?: modified[currentModel] ?: unFinalizedTransition.third
 
             modified[id] = inModified.copy(
                 state = newState,

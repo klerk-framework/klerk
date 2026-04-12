@@ -1,7 +1,8 @@
 package dev.klerkframework.klerk.command
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.CommandResult.*
+import dev.klerkframework.klerk.CommandResult.Failure
+import dev.klerkframework.klerk.CommandResult.Success
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -103,6 +104,7 @@ class ValidatableTest {
                     assertIs<InvalidPropertyCollectionProblem>(result.problems.first())
                     result.problems.first().violatedRule?.let { println("Violated rule: $it") }
                 }
+
                 is Success -> fail()
             }
         }

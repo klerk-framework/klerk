@@ -6,15 +6,15 @@ import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.storage.ModelCache
-import kotlin.time.Instant
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
+import kotlin.time.Instant
 
 /**
  * Used internally, e.g. when executing the functions provided in a statemachine.
  * Note that no logging to KlerkLog is triggered here.
  */
-internal class ReaderWithoutAuth<C: KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
+internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
 
     override val views = klerk.config.views
 

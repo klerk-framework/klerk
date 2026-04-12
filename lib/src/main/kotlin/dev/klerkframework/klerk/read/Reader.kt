@@ -9,7 +9,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.memberProperties
 
-public interface Reader<C:KlerkContext, V> {
+public interface Reader<C : KlerkContext, V> {
 
     /**
      * This is the collection of views that was provided to Klerk when you created the configuration.
@@ -61,7 +61,11 @@ public interface Reader<C:KlerkContext, V> {
         filter: ((Model<T>) -> Boolean)? = null,
     ): List<Model<T>>
 
-    public fun <T : Any> query(collection: ModelView<T, C>, options: QueryOptions? = null, filter: ((Model<T>) -> Boolean)? = null): QueryResponse<T>
+    public fun <T : Any> query(
+        collection: ModelView<T, C>,
+        options: QueryOptions? = null,
+        filter: ((Model<T>) -> Boolean)? = null
+    ): QueryResponse<T>
 
     /**
      * Finds all models that have a relation to the specified model.
@@ -77,7 +81,7 @@ public interface Reader<C:KlerkContext, V> {
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
 
-    ): Set<Model<T>>
+        ): Set<Model<T>>
 
     public fun <T : Any, U : Any> getRelatedInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
@@ -144,7 +148,7 @@ internal sealed class ReadListResult<T : Any> {
 }
 
 
-internal fun <T : Any, C:KlerkContext, V> initPropertyAuthorization(
+internal fun <T : Any, C : KlerkContext, V> initPropertyAuthorization(
     model: Model<T>,
     ctx: C,
     reader: ReaderWithoutAuth<C, V>,
@@ -156,7 +160,7 @@ internal fun <T : Any, C:KlerkContext, V> initPropertyAuthorization(
     }
 }
 
-private fun <C:KlerkContext, V, T:Any> initAuth(
+private fun <C : KlerkContext, V, T : Any> initAuth(
     prop: Any?,
     model: Model<T>,
     ctx: C,
@@ -165,7 +169,17 @@ private fun <C:KlerkContext, V, T:Any> initAuth(
 ) {
     when (prop) {
         null -> return
-        is DataContainer<*> -> prop.initAuthorization(isReadPropertyAuthorized(ArgsForPropertyAuth(prop, model, ctx, reader), config))
+        is DataContainer<*> -> prop.initAuthorization(
+            isReadPropertyAuthorized(
+                ArgsForPropertyAuth(
+                    prop,
+                    model,
+                    ctx,
+                    reader
+                ), config
+            )
+        )
+
         is Set<*> -> prop.forEach { initAuth(it, model, ctx, reader, config) }
         is List<*> -> prop.forEach { initAuth(it, model, ctx, reader, config) }
         is ModelID<*> -> {}
@@ -175,7 +189,10 @@ private fun <C:KlerkContext, V, T:Any> initAuth(
     }
 }
 
-private fun <C:KlerkContext, V> isReadPropertyAuthorized(args: ArgsForPropertyAuth<C, V>, config: Config<C, V>): Boolean {
+private fun <C : KlerkContext, V> isReadPropertyAuthorized(
+    args: ArgsForPropertyAuth<C, V>,
+    config: Config<C, V>
+): Boolean {
     if (config.authorization.readPropertyPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
         return false
     }

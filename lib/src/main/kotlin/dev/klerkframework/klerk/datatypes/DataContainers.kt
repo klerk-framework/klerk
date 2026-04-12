@@ -1,13 +1,11 @@
 package dev.klerkframework.klerk.datatypes
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.validation.PropertyValidation
-import dev.klerkframework.klerk.validation.PropertyValidation.*
-import kotlin.time.Instant
+import dev.klerkframework.klerk.validation.PropertyValidation.Invalid
 import kotlin.reflect.KFunction
 import kotlin.time.Duration
-import kotlin.toString
+import kotlin.time.Instant
 
 private const val MASKED = "[••••••]"
 
@@ -103,7 +101,11 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
         if (valueWithoutAuthorization.length < minLength) {
-            return InvalidPropertyProblem(if (valueWithoutAuthorization.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(minLength), propertyName)
+            return InvalidPropertyProblem(
+                if (valueWithoutAuthorization.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(
+                    minLength
+                ), propertyName
+            )
         }
 
         if (valueWithoutAuthorization.length > maxLength) {
@@ -119,15 +121,15 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid}
+            .filter { it.second is Invalid }
             .map { functionAndResult ->
-                    InvalidPropertyProblem(
-                        endUserTranslatedMessage = translation.klerk.invalidProperty(
-                            propertyName,
-                            (functionAndResult.first as KFunction<*>).name,
-                            (functionAndResult.second as Invalid).translationInfo
-                        ), propertyName = propertyName
-                    )
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
             }
             .firstOrNull()
     }
@@ -155,7 +157,7 @@ public abstract class IntContainer(value: Int) :
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid}
+            .filter { it.second is Invalid }
             .map { functionAndResult ->
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
@@ -186,7 +188,7 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid}
+            .filter { it.second is Invalid }
             .map { functionAndResult ->
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
@@ -216,7 +218,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid}
+            .filter { it.second is Invalid }
             .map { functionAndResult ->
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
@@ -246,7 +248,7 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
         }
         return validators
             .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid}
+            .filter { it.second is Invalid }
             .map { functionAndResult ->
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(

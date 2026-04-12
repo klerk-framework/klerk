@@ -22,7 +22,9 @@ class FunctionTest {
                 lastName = LastName("Litoris"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)))
+                secretToken = SecretPasscode(234)
+            )
+        )
         val args = ArgForVoidEvent(command, Context.system(), DummyReader)
 
         val result = onlyAuthenticationIdentityCanCreateDaniel(args)

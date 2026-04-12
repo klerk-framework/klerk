@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.statemachine.StateMachine
 import java.util.*
 import kotlin.reflect.KFunction
 
-internal fun <T : Any, P, C:KlerkContext, V> getStateMachine(
+internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
     command: Command<T, P>,
     managedModels: Set<ManagedModel<out Any, *, C, V>>
 ): StateMachine<T, *, C, V> {
@@ -38,7 +38,7 @@ public fun camelCaseToPretty(s: String): String {
 }
 
 
-internal fun <C:KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: Reader<C, V>): Problem? {
+internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: Reader<C, V>): Problem? {
     val reflected = ReflectedModel(model)
     try {
         reader.apply(reflected.populateRelations())

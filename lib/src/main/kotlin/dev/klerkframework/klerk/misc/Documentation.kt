@@ -1,21 +1,8 @@
 import dev.klerkframework.klerk.KlerkTranslation
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.misc.Node
-
-import dev.klerkframework.klerk.statemachine.Block
-import dev.klerkframework.klerk.statemachine.InstanceState
-import dev.klerkframework.klerk.statemachine.State
-import dev.klerkframework.klerk.statemachine.StateMachine
-import dev.klerkframework.klerk.statemachine.VoidState
-import dev.klerkframework.klerk.statemachine.executables.InstanceEventDelete
-import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransition
-import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransitionWhen
-import dev.klerkframework.klerk.statemachine.executables.InstanceEventUpdateModel
-import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransition
-import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransitionWhen
-import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventUpdateModel
-import dev.klerkframework.klerk.statemachine.executables.VoidEventCreateModel
-import kotlin.collections.forEach
+import dev.klerkframework.klerk.statemachine.*
+import dev.klerkframework.klerk.statemachine.executables.*
 
 public fun <V> generateStateDiagram(
     stateMachine: StateMachine<out Any, out Enum<*>, *, V>,
@@ -49,7 +36,10 @@ private fun <V> generateVoidTransitions(initialState: VoidState<out Any, out Enu
     return result
 }
 
-private fun <V> generateTransitions(states: List<InstanceState<out Any, out Enum<*>, *, V>>, translation: KlerkTranslation): String {
+private fun <V> generateTransitions(
+    states: List<InstanceState<out Any, out Enum<*>, *, V>>,
+    translation: KlerkTranslation
+): String {
     var result = ""
     states.forEach { state ->
 

@@ -4,9 +4,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.PhoneNumber
 import dev.klerkframework.klerk.datatypes.StringContainer
-import dev.klerkframework.klerk.read.Reader
 import java.lang.reflect.Type
 
 

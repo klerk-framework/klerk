@@ -7,7 +7,10 @@ import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
-import dev.klerkframework.klerk.statemachine.*
+import dev.klerkframework.klerk.statemachine.Block
+import dev.klerkframework.klerk.statemachine.InstanceState
+import dev.klerkframework.klerk.statemachine.StateMachine
+import dev.klerkframework.klerk.statemachine.VoidState
 import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransitionWhen
 import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransition
@@ -18,7 +21,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import mu.KotlinLogging
 import java.util.*
 import kotlin.reflect.*
-import kotlin.reflect.full.*
+import kotlin.reflect.full.createType
+import kotlin.reflect.full.memberProperties
+import kotlin.reflect.full.withNullability
 import kotlin.time.Duration
 
 internal val logger = KotlinLogging.logger {}
@@ -122,7 +127,10 @@ public data class Config<C : KlerkContext, V>(
             }
                 .forEach {
                     if (!sm.declaredEvents.contains(it)) {
-                        throw IllegalConfigurationException(KlerkErrorCode.EventNotDeclared, "The event '${it.id}' must be declared before used in state")
+                        throw IllegalConfigurationException(
+                            KlerkErrorCode.EventNotDeclared,
+                            "The event '${it.id}' must be declared before used in state"
+                        )
                     }
                 }
         }
@@ -157,13 +165,15 @@ public data class Config<C : KlerkContext, V>(
         }
         val refParameters = params.all.filter { it.type == PropertyType.Ref }
         refParameters.firstOrNull { refParam -> !validRefs.containsKey(refParam.name) }?.let {
-            throw IllegalConfigurationException(KlerkErrorCode.MissingValidReferences, """
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingValidReferences, """
                 The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.
                 E.g. to declare that all references are valid, add this to the state machine for ${params.raw.simpleName}:
                 event(${event.name}) {
                     validReferences(${params.raw.simpleName}::${it.name}, views.the-view-of-the-referenced-model.all)
                 }
-                """.trimIndent())
+                """.trimIndent()
+            )
         }
     }
 
@@ -334,10 +344,30 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
      */
     public fun build(init: ConfigBuilder<C, V>.() -> Unit): Config<C, V> {
         this.init()
-        runCatching { systemContextProviderValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingSystemContextProvider, "'systemContextProvider' is missing in the config") }
-        runCatching { persistenceValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingPersistence, "'persistence' is missing in the config") }
-        runCatching { authorizationRulesBlock }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingAuthorization, "'authorization' is missing in the config") }
-        runCatching { managedModelsValue }.onFailure { throw IllegalConfigurationException(KlerkErrorCode.MissingManagedModels, "'managedModels' is missing in the config") }
+        runCatching { systemContextProviderValue }.onFailure {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingSystemContextProvider,
+                "'systemContextProvider' is missing in the config"
+            )
+        }
+        runCatching { persistenceValue }.onFailure {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingPersistence,
+                "'persistence' is missing in the config"
+            )
+        }
+        runCatching { authorizationRulesBlock }.onFailure {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingAuthorization,
+                "'authorization' is missing in the config"
+            )
+        }
+        runCatching { managedModelsValue }.onFailure {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingManagedModels,
+                "'managedModels' is missing in the config"
+            )
+        }
 
         //val valueClasses = managedModelsValue.flatMap { managed -> managed.kClass.memberProperties.map { (it.returnType.classifier!! as KClass<*>) } }.toSet()
 
@@ -576,6 +606,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
     }
+
     @ConfigMarker
     public class AuthorizationReadPropertyPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =

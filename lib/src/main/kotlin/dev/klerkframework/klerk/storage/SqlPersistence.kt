@@ -6,7 +6,6 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobMetadata
 import dev.klerkframework.klerk.job.JobStatus
-import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.MigrationStepV1toV1
@@ -16,8 +15,6 @@ import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.actorIdentityTyp
 import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.event
 import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.timestamp
 import dev.klerkframework.klerk.storage.SqlPersistence.ModelSchemaMigrations.toVersion
-import kotlin.time.Clock
-import kotlin.time.Instant
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -28,6 +25,8 @@ import java.io.InputStream
 import javax.sql.DataSource
 import kotlin.reflect.KClass
 import kotlin.system.measureTimeMillis
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 private const val SEPARATOR = "\n"
 
@@ -359,22 +358,25 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     override fun getAllJobs(): Set<JobMetadata> =
-        transaction { Jobs.selectAll()
-            .map { row -> JobMetadata(
-                id = row[Jobs.id],
-                className = row[Jobs.className],
-                methodName = row[Jobs.methodName],
-                status = jobStatusFromCode(row[Jobs.status]),
-                maxRetries = row[Jobs.maxRetries],
-                created = decode64bitMicroseconds(row[Jobs.created]),
-                lastAttemptStarted = row[Jobs.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
-                lastAttemptFinished = row[Jobs.lastAttemptFinished]?.let { decode64bitMicroseconds(it) },
-                nextAttempt = row[Jobs.nextAttempt]?.let { decode64bitMicroseconds(it) },
-                failedAttempts = row[Jobs.failedAttempts],
-                parameters = row[Jobs.parameters],
-                state = row[Jobs.state],
-                log = row[Jobs.log].split(SEPARATOR)
-            )}.toSet()
+        transaction {
+            Jobs.selectAll()
+                .map { row ->
+                    JobMetadata(
+                        id = row[Jobs.id],
+                        className = row[Jobs.className],
+                        methodName = row[Jobs.methodName],
+                        status = jobStatusFromCode(row[Jobs.status]),
+                        maxRetries = row[Jobs.maxRetries],
+                        created = decode64bitMicroseconds(row[Jobs.created]),
+                        lastAttemptStarted = row[Jobs.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
+                        lastAttemptFinished = row[Jobs.lastAttemptFinished]?.let { decode64bitMicroseconds(it) },
+                        nextAttempt = row[Jobs.nextAttempt]?.let { decode64bitMicroseconds(it) },
+                        failedAttempts = row[Jobs.failedAttempts],
+                        parameters = row[Jobs.parameters],
+                        state = row[Jobs.state],
+                        log = row[Jobs.log].split(SEPARATOR)
+                    )
+                }.toSet()
         }
 
     internal object AuditLog : Table("\"klerk_audit_log\"") {

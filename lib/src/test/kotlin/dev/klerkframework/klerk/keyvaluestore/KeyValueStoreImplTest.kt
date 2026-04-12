@@ -1,12 +1,6 @@
 package dev.klerkframework.klerk.keyvaluestore
 
-import dev.klerkframework.klerk.AuthorViews
-import dev.klerkframework.klerk.BinaryKeyValueID
-import dev.klerkframework.klerk.BookViews
-import dev.klerkframework.klerk.Context
-import dev.klerkframework.klerk.Klerk
-import dev.klerkframework.klerk.MyCollections
-import dev.klerkframework.klerk.createConfig
+import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test

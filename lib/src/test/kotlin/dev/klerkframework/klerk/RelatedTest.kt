@@ -2,8 +2,8 @@ package dev.klerkframework.klerk
 
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.fail
@@ -38,7 +38,10 @@ class RelatedTest {
                 Context.system(),
                 ProcessingOptions(CommandToken.simple()),
             )) {
-                is CommandResult.Failure -> assert(result.problems.first().asException().message!!.contains("Did not find"))
+                is CommandResult.Failure -> assert(
+                    result.problems.first().asException().message!!.contains("Did not find")
+                )
+
                 is CommandResult.Success -> fail("Should not succeed")
             }
 

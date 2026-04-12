@@ -21,7 +21,8 @@ internal class InstanceNonEventUpdateModel<T : Any, C : KlerkContext, V>(
         view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = process(f(args), args.model, args.time, args.reader, view,  extractNameFromFunction(f, false))
+    ): ProcessingData<Primary, C, V> =
+        process(f(args), args.model, args.time, args.reader, view, extractNameFromFunction(f, false))
 
 }
 
@@ -36,7 +37,8 @@ internal class InstanceEventUpdateModel<T : Any, P, C : KlerkContext, V>(
         view: ModelViews<T, C>,
         config: Config<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = process(f(args), args.model, args.context.time, args.reader, view, extractNameFromFunction(f, false))
+    ): ProcessingData<Primary, C, V> =
+        process(f(args), args.model, args.context.time, args.reader, view, extractNameFromFunction(f, false))
 
 }
 
@@ -62,5 +64,6 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
         updatedModels = listOf(updatedModel.id),
         aggregatedModelState = mapOf(updatedModel.id to updatedModel),
         functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
-        log = listOf("Updating properties using $functionName"))
+        log = listOf("Updating properties using $functionName")
+    )
 }

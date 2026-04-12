@@ -199,7 +199,8 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
     public val parametersClass: KClass<P>
 ) : InstanceEvent<T, P>(forModel, visibility) {
 
-    internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
+    internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> =
+        setOf()
     internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
@@ -296,8 +297,10 @@ public abstract class KeyValueID(public val id: Long) {
     override fun equals(other: Any?): Boolean {
         return other != null && id == (other as? KeyValueID)?.id
     }
+
     override fun hashCode(): Int = id.hashCode()
 }
+
 public class StringKeyValueID(id: Long) : KeyValueID(id)
 public class IntKeyValueID(id: Long) : KeyValueID(id)
 public class BinaryKeyValueID(id: Long) : KeyValueID(id)

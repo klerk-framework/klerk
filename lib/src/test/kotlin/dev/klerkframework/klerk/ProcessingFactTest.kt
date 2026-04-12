@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk
 
-import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Instant
 
 class ProcessingFactTest {
 
@@ -34,7 +34,12 @@ class ProcessingFactTest {
 
         val withUpdate = ProcessingData<Author, Context, MyCollections>(
             updatedModels = listOf(authorId),
-            aggregatedModelState = mapOf(authorId to authorModel.copy(lastPropsUpdateAt = updateTime, props = author.copy(firstName = FirstName("Another"))))
+            aggregatedModelState = mapOf(
+                authorId to authorModel.copy(
+                    lastPropsUpdateAt = updateTime,
+                    props = author.copy(firstName = FirstName("Another"))
+                )
+            )
         )
 
         @Suppress("UNCHECKED_CAST")

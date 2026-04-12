@@ -16,7 +16,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
     override fun subscribe(
         context: C,
         id: ModelID<out Any>?
-    ) : Flow<ModelModification> {
+    ): Flow<ModelModification> {
         // Do we need a separate authorization for subscriptions?
         return modelsFlow
     }

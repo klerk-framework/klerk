@@ -1,14 +1,14 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.statemachine.executables.*
 
 internal interface VoidEventExecutable<T : Any, P, C : KlerkContext, V> {
 
-    fun <Primary:Any> process(
+    fun <Primary : Any> process(
         args: ArgForVoidEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
@@ -21,7 +21,7 @@ internal interface VoidEventExecutable<T : Any, P, C : KlerkContext, V> {
 
 internal interface InstanceNonEventExecutable<T : Any, C : KlerkContext, V> {
 
-    fun <Primary:Any> process(
+    fun <Primary : Any> process(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
@@ -34,7 +34,7 @@ internal interface InstanceNonEventExecutable<T : Any, C : KlerkContext, V> {
 
 internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
 
-    fun <Primary:Any> process(
+    fun <Primary : Any> process(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
@@ -48,9 +48,15 @@ internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
 public data class UnmanagedJob(public val f: () -> Unit, public val description: String)
 
 @ConfigMarker
-public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(internal val name: String, internal val type: BlockType) {
+public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
+    internal val name: String,
+    internal val type: BlockType
+) {
 
-    internal class VoidNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(name: String, type: BlockType) :
+    internal class VoidNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
+        name: String,
+        type: BlockType
+    ) :
         Block<T, ModelStates, C, V>(name, type) {
     }
 
@@ -101,7 +107,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
         }
     }
 
-    public class InstanceNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(name: String, type: BlockType) :
+    public class InstanceNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
+        name: String,
+        type: BlockType
+    ) :
         Block<T, ModelStates, C, V>(name, type) {
 
         internal val executables = mutableListOf<InstanceNonEventExecutable<T, C, V>>()
@@ -169,7 +178,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
 
     }
 
-    public class InstanceEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V>(name: String, type: BlockType) :
+    public class InstanceEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V>(
+        name: String,
+        type: BlockType
+    ) :
         Block<T, ModelStates, C, V>(name, type) {
         internal val executables = mutableListOf<InstanceEventExecutable<T, P, C, V>>()
 

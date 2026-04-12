@@ -3,8 +3,8 @@ package dev.klerkframework.klerk.read
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
-import kotlin.time.Clock
 import kotlin.test.*
+import kotlin.time.Clock
 
 
 class ReaderTest {
@@ -15,7 +15,10 @@ class ReaderTest {
             val ramStorage = RamStorage()
             val bc = BookViews()
             val collections = MyCollections(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections, ramStorage), settings = KlerkSettings(allowUnsafeOperations = true))
+            val klerk = Klerk.create(
+                createConfig(collections, ramStorage),
+                settings = KlerkSettings(allowUnsafeOperations = true)
+            )
             klerk.meta.start()
 
             val ref = ModelID<Author>(12)

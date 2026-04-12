@@ -1,18 +1,19 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobMetadata
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
-
-import kotlin.time.Instant
 import java.io.InputStream
 import kotlin.time.Duration
+import kotlin.time.Instant
 
 public interface Klerk<C : KlerkContext, V> {
 
@@ -178,13 +179,13 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
     /**
      * Put a String value in the key-value store.
      */
-    public suspend fun put(value: String, ttl: Duration? = null) : StringKeyValueID
+    public suspend fun put(value: String, ttl: Duration? = null): StringKeyValueID
 
     /**
      * Put an Int value in the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(value: Int, ttl: Duration? = null) : IntKeyValueID
+    public suspend fun put(value: Int, ttl: Duration? = null): IntKeyValueID
 
     /**
      * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
@@ -194,34 +195,34 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
      *
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public fun prepareBlob(value: InputStream) : BlobToken
+    public fun prepareBlob(value: InputStream): BlobToken
 
     /**
      * Put a blob in the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(token: BlobToken, ttl: Duration? = null) : BinaryKeyValueID
+    public suspend fun put(token: BlobToken, ttl: Duration? = null): BinaryKeyValueID
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: StringKeyValueID, context: C) : String
+    public suspend fun get(id: StringKeyValueID, context: C): String
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: IntKeyValueID, context: C) : Int
+    public suspend fun get(id: IntKeyValueID, context: C): Int
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: BinaryKeyValueID, context: C) : InputStream
+    public suspend fun get(id: BinaryKeyValueID, context: C): InputStream
 
 }
 

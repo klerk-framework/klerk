@@ -2,15 +2,14 @@ package dev.klerkframework.klerk.misc
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.*
-import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.read.Reader
-import kotlin.time.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlin.reflect.*
 import kotlin.reflect.full.*
+import kotlin.time.Instant
 
 internal val dateFormatter = LocalDateTime.Format {
     year()
@@ -66,7 +65,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
     /**
      * If this is called, some functions will be able to return more detailed information.
      */
-    public fun <V, C:KlerkContext> populateRelations(): Reader<C, V>.() -> Unit = {
+    public fun <V, C : KlerkContext> populateRelations(): Reader<C, V>.() -> Unit = {
         original.props::class.memberProperties.forEach { property ->
             val value = property.getter.call(original.props)
             if (value is ModelID<*>) {
@@ -75,6 +74,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
             }
             if (isCollectionOfModelId(property.returnType)) {
                 val collection = property.getter.call(original.props) ?: return@forEach
+
                 @Suppress("UNCHECKED_CAST")
                 val relatedIds = (collection as Collection<ModelID<Any>>).toList()
                 relatedIds.forEach {
@@ -139,6 +139,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
         original.props::class.memberProperties.forEach { property ->
             if (isCollectionOfModelId(property.returnType)) {
                 val collection = property.getter.call(original.props) ?: return@forEach
+
                 @Suppress("UNCHECKED_CAST")
                 val relatedIds = (collection as Collection<ModelID<Any>>).toList()
                 relatedIds.map {
@@ -199,7 +200,7 @@ public class ReflectedProperty(
 
 }
 
-public data class EventParameters<T:Any>(val raw: KClass<out T>) {
+public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
     init {
         all.forEach { it.validate() }
@@ -274,7 +275,7 @@ public data class EventParameter(val raw: KParameter) {
             if (ktype.toString().contains("MutableSet")) {
                 throwPropertyException(ktype, "MutableSet is not allowed.")
             }
-            if(ktype.toString().contains("MutableList")) {
+            if (ktype.toString().contains("MutableList")) {
                 throwPropertyException(ktype, "MutableList is not allowed.")
             }
             if (!(ktype.toString().contains("List") || ktype.toString().contains("Set"))) {
@@ -288,7 +289,7 @@ public data class EventParameter(val raw: KParameter) {
             throwPropertyException(ktype, "Found ${constructors.size} constructors, expected only one.")
         }
         val constructor = constructors.single()
-        if(constructor.parameters.isEmpty()) {
+        if (constructor.parameters.isEmpty()) {
             throwPropertyException(ktype, "Found constructor with no parameters.")
         }
         constructor.parameters.forEach { kParameter: KParameter ->
@@ -299,7 +300,10 @@ public data class EventParameter(val raw: KParameter) {
     private fun throwPropertyException(type: KType, message: String): Nothing {
         val first = "Property '$name' has invalid type '$type'."
         val propertyDocumentation = "Properties must be subtypes of DataContainer or List/Set thereof."
-        throw IllegalConfigurationException(KlerkErrorCode.PropertyMustBeDataContainer, "$first $message $propertyDocumentation")
+        throw IllegalConfigurationException(
+            KlerkErrorCode.PropertyMustBeDataContainer,
+            "$first $message $propertyDocumentation"
+        )
     }
 
     public fun validationRulesDescription(): Map<String, String> {
@@ -310,14 +314,18 @@ public data class EventParameter(val raw: KParameter) {
                 result["min length"] = s.minLength.toString()
                 result["max length"] = s.maxLength.toString()
                 s.regexPattern?.let { result["pattern"] = it }
-                result["validator"] = s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
+                result["validator"] =
+                    s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
             }
+
             PropertyType.Int -> {
                 val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0) as IntContainer)
                 s.min.let { result["min"] = it.toString() }
                 s.max.let { result["max"] = it.toString() }
-                result["validator"] = s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
+                result["validator"] =
+                    s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
             }
+
             else -> {
                 logger.warn { "validationRulesDescription not implemented for type $type" }
             }
@@ -412,10 +420,10 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
         return PropertyType.Long
     }
 
-/*    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
-        return PropertyType.Enum
-    }
- */
+    /*    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
+            return PropertyType.Enum
+        }
+     */
     if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
         return PropertyType.Long
     }

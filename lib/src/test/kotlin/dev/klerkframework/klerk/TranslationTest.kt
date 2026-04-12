@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -1,7 +1,6 @@
 package dev.klerkframework.klerk
 
 import kotlin.random.Random
-import kotlin.random.nextUInt
 import kotlin.reflect.KParameter
 import kotlin.test.Test
 import kotlin.test.assertEquals

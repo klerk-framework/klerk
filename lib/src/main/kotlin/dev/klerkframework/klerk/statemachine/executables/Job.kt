@@ -1,11 +1,11 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.job.RunnableJob
 import dev.klerkframework.klerk.misc.extractNameFromFunction
-
-import dev.klerkframework.klerk.statemachine.*
+import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
+import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
 internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
@@ -22,7 +22,8 @@ internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
     ): ProcessingData<Primary, C, V> {
         val newJobs = f.invoke(args)
         newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
-        return ProcessingData(newJobs = newJobs,
+        return ProcessingData(
+            newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }
@@ -43,7 +44,8 @@ internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
     ): ProcessingData<Primary, C, V> {
         val newJobs = f.invoke(args)
         newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
-        return ProcessingData(newJobs = newJobs,
+        return ProcessingData(
+            newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }
@@ -64,7 +66,8 @@ internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
     ): ProcessingData<Primary, C, V> {
         val newJobs = f.invoke(args)
         newJobs.forEach { it.setId(processingOptions.idProvider.getNextJobID()) }
-        return ProcessingData(newJobs = newJobs,
+        return ProcessingData(
+            newJobs = newJobs,
             log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
         )
     }
