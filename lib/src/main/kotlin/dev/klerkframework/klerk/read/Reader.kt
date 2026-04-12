@@ -11,6 +11,9 @@ import kotlin.reflect.full.memberProperties
 
 public interface Reader<C:KlerkContext, V> {
 
+    /**
+     * This is the collection of views that was provided to Klerk when you created the configuration.
+     */
     public val views: V
 
     /**

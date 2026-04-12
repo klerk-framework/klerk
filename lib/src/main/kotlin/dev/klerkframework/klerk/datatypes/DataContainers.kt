@@ -24,7 +24,7 @@ private const val MASKED = "[••••••]"
  * 5. they make it impossible to confuse parameters, e.g. a Username and a Password even though they are both Strings
  * 6. you can use types that adds meaning to the data.
  *      E.g. let's say you have a DistanceMeters: DoubleContainer. Instead of hoping that all parts in the code that
- *      accesses its value treats it as meters, you can add a function like
+ *      accesses its value will treat it as meters, you can add a function like
  *          fun DistanceMeters.toMeasure(): Measure<Length> = Measure(value, meters)
  *      Code that uses this function cannot misinterpret the unit.
  */
@@ -204,7 +204,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     public abstract val min: ULong
     public abstract val max: ULong
 
-    public val long: ULong = value
+    public val uLong: ULong = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }

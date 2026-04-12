@@ -8,6 +8,8 @@ import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 class ActionTest {
 
@@ -62,7 +64,8 @@ class ActionTest {
                         coAuthors = emptySet(),
                         previousBooksInSameSeries = emptyList(),
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
-                        averageScore = AverageScore(0f)
+                        averageScore = AverageScore(0f),
+                        readingTime = ReadingTime(200.minutes)
                     ),
                 ),
                 Context.system(),

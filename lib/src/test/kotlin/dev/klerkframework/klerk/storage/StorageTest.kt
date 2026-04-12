@@ -50,7 +50,8 @@ class StorageTest {
             model = null,
             params = CreateBookParams(title = BookTitle("The Hobbit"),
                 author = author.id,
-                averageScore = AverageScore(0f),)
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(3.minutes))
         )
         val bookProps = Book(title = BookTitle("The Hobbit"),
             author = author.id,

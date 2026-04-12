@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
 

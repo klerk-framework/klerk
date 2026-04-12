@@ -8,6 +8,8 @@ import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import kotlin.test.*
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 
 class LibraryTest {
@@ -133,7 +135,8 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                         coAuthors = emptySet(),
                         previousBooksInSameSeries = emptyList(),
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
-                        averageScore = AverageScore(0f)
+                        averageScore = AverageScore(0f),
+                        readingTime = ReadingTime(1.days)
                     ),
                 ),
                 Context.system(),

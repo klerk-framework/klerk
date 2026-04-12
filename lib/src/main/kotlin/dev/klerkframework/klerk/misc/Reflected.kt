@@ -376,7 +376,6 @@ public enum class PropertyType {
     Ref,
     KeyValueRef,
     Enum,
-    GeoPosition,
 }
 
 /**
@@ -418,7 +417,7 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
     }
  */
     if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
-        return PropertyType.GeoPosition
+        return PropertyType.Long
     }
 
     if (ktype.isSubtypeOf(DataContainer::class.starProjectedType)) {

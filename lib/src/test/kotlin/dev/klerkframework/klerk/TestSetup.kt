@@ -477,7 +477,7 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections
         salesPerYear = setOf(Quantity(43), Quantity(67)),
         averageScore = params.averageScore,
         writtenAt = BookWrittenAt(Instant.fromEpochSeconds(100000)),
-        readingTime = ReadingTime(23.hours),
+        readingTime = params.readingTime,
         publishedAt = null,
         releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456))
     )
@@ -546,7 +546,8 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Context, MyCollections>, author:
                 coAuthors = emptySet(),
                 previousBooksInSameSeries = emptyList(),
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
-                averageScore = AverageScore(0f)
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(2.hours)
             ),
         ),
         Context.system(),
@@ -571,7 +572,8 @@ suspend fun createBookHarryPotter2(
                 coAuthors = coAuthors,
                 previousBooksInSameSeries = previousBooksInSameSeries,
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
-                averageScore = AverageScore(0f)
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(2.hours)
             ),
         ),
         Context.system(),
@@ -643,9 +645,7 @@ class Quantity(value: Int) : IntContainer(value) {
     override val max: Int = Int.MAX_VALUE
 }
 
-class BookWrittenAt(value: Instant) : InstantContainer(value) {
-
-}
+class BookWrittenAt(value: Instant) : InstantContainer(value)
 
 class ReadingTime(value: Duration) : DurationContainer(value)
 
@@ -872,6 +872,7 @@ data class CreateBookParams(
     val previousBooksInSameSeries: List<ModelID<Book>> = emptyList(),
     val tags: Set<BookTag> = emptySet(),
     val averageScore: AverageScore,
+    val readingTime: ReadingTime,
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {

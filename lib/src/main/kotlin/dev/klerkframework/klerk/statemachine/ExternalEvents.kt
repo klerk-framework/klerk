@@ -28,7 +28,7 @@ public class InstanceEventRulesWithParameters<T:Any, P:Any, C:KlerkContext, V> :
     internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity> = mutableSetOf()
 
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>>, modelView: ModelView<T, C>?) {
+    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>?>, modelView: ModelView<T, C>?) {
         if (modelView == null) {
             referencesThatAllowsEverything.add(property.name)
         } else {

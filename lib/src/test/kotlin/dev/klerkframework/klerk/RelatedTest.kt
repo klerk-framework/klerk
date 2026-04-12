@@ -7,6 +7,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.fail
+import kotlin.time.Duration.Companion.days
 
 class RelatedTest {
 
@@ -27,7 +28,8 @@ class RelatedTest {
                     coAuthors = emptySet(),
                     previousBooksInSameSeries = emptyList(),
                     tags = emptySet(),
-                    averageScore = AverageScore(0f)
+                    averageScore = AverageScore(0f),
+                    readingTime = ReadingTime(1.days)
                 ),
             )
 

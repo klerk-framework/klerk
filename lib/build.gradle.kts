@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm") version "2.3.10"
     `java-library`
     `maven-publish`
-    id("org.jetbrains.dokka") version "1.9.20"
+    id("org.jetbrains.dokka") version "2.1.0"
 }
 
 val coroutinesVersion = "1.4.2"
