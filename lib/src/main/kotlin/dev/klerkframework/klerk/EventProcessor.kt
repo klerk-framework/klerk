@@ -76,7 +76,11 @@ internal class EventProcessor<C : KlerkContext, V>(
         val durationSeconds = readModelsMilliS.toFloat() / 1000
         val modelsPerSecondString =
             if (durationSeconds == 0F) "" else "(${(ModelCache.count / durationSeconds).roundToInt()} models/s)"
-        logger.info { "Read ${ModelCache.count} models in $readModelsMilliS ms $modelsPerSecondString" }
+        if (readModelsMilliS < 1000) {
+            logger.info { "Read ${ModelCache.count} models" }
+        } else {
+            logger.info { "Read ${ModelCache.count} models in ${readModelsMilliS / 1000} s $modelsPerSecondString" }
+        }
 
         val relationsTime = measureTime {
             ModelCache.initRelations()

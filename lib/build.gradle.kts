@@ -17,7 +17,7 @@ val sqliteJdbcVersion = "3.44.1.0"
 val gsonVersion = "2.9.0"
 
 group = "dev.klerkframework"
-version = "1.0.0-beta.5"
+version = "1.0.0-beta.7-SNAPSHOT"
 
 repositories {
     mavenCentral()
