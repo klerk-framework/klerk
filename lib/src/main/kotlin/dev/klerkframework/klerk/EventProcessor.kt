@@ -70,7 +70,7 @@ internal class EventProcessor<C : KlerkContext, V>(
 
             ModelCache.storeFromPersistence(model)
             (allLists[model.props::class.simpleName!!]
-                ?: throw NullPointerException()).add(model.id.toInt())  // the 'all' list-source
+                ?: throw NullPointerException()).add(model.id.value)  // the 'all' list-source
         }
         val readModelsMilliS = clock.now().toEpochMilliseconds() - start.toEpochMilliseconds()
         val durationSeconds = readModelsMilliS.toFloat() / 1000

@@ -49,7 +49,8 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
             return ProcessingData(
                 problems = listOf(
                     StateProblem(
-                        "Cannot delete model ${model.id} since these models have a reference to it: ${
+                        endUserTranslatedMessage = "Cannot delete since it is used elsewhere.",
+                        internalDescription = "Cannot delete model ${model.id} since these models have a reference to it: ${
                             currentReferencesToModel.joinToString(
                                 ", "
                             ) { it.toString() }
@@ -63,4 +64,3 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
         log = listOf("Deleting model ${model.id}")
     )
 }
-

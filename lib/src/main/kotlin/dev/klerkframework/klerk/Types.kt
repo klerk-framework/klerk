@@ -282,14 +282,11 @@ public typealias EventId = String
  * you use IntelliJ's database tool, double check that you actually see the difference, you may have to delete/refresh)
  */
 @JvmInline
-public value class ModelID<T : Any>(private val value: Int) {
+public value class ModelID<T : Any>(public val value: Int) {
 
-    override fun toString(): String = value.toString(36)
-
-    public fun toInt(): Int = value
+    override fun toString(): String = value.toString()
 
     public companion object {
-        public fun <T : Any> from(value: String): ModelID<T> = ModelID(value.toInt(36))
     }
 }
 

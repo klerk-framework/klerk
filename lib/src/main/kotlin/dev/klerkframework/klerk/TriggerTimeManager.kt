@@ -35,19 +35,19 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
         val modelsWithTriggers = models.filter { it.timeTrigger != null }
         timeTriggers = PriorityBlockingQueue<TimeTriggerModel>(max(modelsWithTriggers.size, 1000))
         modelsWithTriggers.forEach {
-            timeTriggers.add(TimeTriggerModel(it.timeTrigger!!, it.id.toInt()))
+            timeTriggers.add(TimeTriggerModel(it.timeTrigger!!, it.id.value))
         }
     }
 
     fun handle(delta: ProcessingData<out Any, C, V>) {
-        val deleted = delta.deletedModels.map { it.toInt() }
+        val deleted = delta.deletedModels.map { it.value }
         timeTriggers.removeIf { deleted.contains(it.id) }
 
         val newTriggers = delta.createdModels
             .union(delta.transitions)
             .map { requireNotNull(delta.aggregatedModelState[it]) }
             .filter { it.timeTrigger != null }
-            .map { TimeTriggerModel(it.timeTrigger!!, it.id.toInt()) }
+            .map { TimeTriggerModel(it.timeTrigger!!, it.id.value) }
         timeTriggers.addAll(newTriggers)
     }
 

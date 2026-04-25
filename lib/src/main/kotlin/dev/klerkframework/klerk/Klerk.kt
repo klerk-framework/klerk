@@ -79,6 +79,20 @@ public interface Klerk<C : KlerkContext, V> {
      * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
      * is executed.
      *
+     * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
+     * readFunction (see [Reader]).
+     * @param readFunction a function literal with a Reader receiver
+     * @return whatever the readFunction returns
+     * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
+     */
+    public suspend fun <T> read(contextProvider: suspend (Klerk<C, V>) -> C, readFunction: Reader<C, V>.() -> T): T
+
+    /**
+     * Read stuff
+     *
+     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
+     * is executed.
+     *
      * This function differs from the normal read function in that the readFunction can suspend, e.g. it is possible to
      * do network calls within the readFunction. This may cause performance issues for the rest of the system, so it
      * should be used with care. Also, don't try to submit an event while in the readFunction as this will cause a
@@ -91,6 +105,28 @@ public interface Klerk<C : KlerkContext, V> {
      * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
      */
     public suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T
+
+    /**
+     * Read stuff
+     *
+     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
+     * is executed.
+     *
+     * This function differs from the normal read function in that the readFunction can suspend, e.g. it is possible to
+     * do network calls within the readFunction. This may cause performance issues for the rest of the system, so it
+     * should be used with care. Also, don't try to submit an event while in the readFunction as this will cause a
+     * deadlock bringing the application to a halt. If possible, use the normal read function instead of this.
+     *
+     * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
+     *      * readFunction (see [Reader]).
+     * @param readFunction a function literal with a Reader receiver
+     * @return whatever the readFunction returns
+     * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
+     */
+    public suspend fun <T> readSuspend(
+        contextProvider: suspend (Klerk<C, V>) -> C,
+        readFunction: suspend Reader<C, V>.() -> T
+    ): T
 
 }
 

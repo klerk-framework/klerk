@@ -32,7 +32,7 @@ class EventProcessorTest {
 
         @Suppress("UNCHECKED_CAST")
         assertEquals("Astrid", (result.aggregatedModelState[primaryId] as Model<Author>).props.firstName.value)
-        assertEquals(primaryId.toInt(), result.createdModels.singleOrNull()?.toInt())
+        assertEquals(primaryId.value, result.createdModels.singleOrNull()?.value)
     }
 
     @Test

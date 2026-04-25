@@ -66,10 +66,11 @@ public class InternalProblem(endUserTranslatedMessage: String) :
 
 public class StateProblem(
     endUserTranslatedMessage: String,
+    public val internalDescription: String,
     code: KlerkErrorCode,
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, code) {
-    public override fun asException(): IllegalStateException = IllegalStateException(toString())
+    public override fun asException(): IllegalStateException = IllegalStateException(internalDescription)
     public override val recommendedHttpCode: Int = 409
 }
 

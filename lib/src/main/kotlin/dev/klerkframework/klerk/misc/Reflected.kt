@@ -181,7 +181,7 @@ public class ReflectedProperty(
     public fun description(): String? {
         if (value is ModelID<*>) {
             val referencedModelName = (relatedModels[value] ?: "").toString()
-            return "$referencedModelName (id: ${value.toInt()})"
+            return "$referencedModelName (id: ${value.value})"
         }
         if (value is Instant) {
             return dateTimeFormatter.format(value.toLocalDateTime(TimeZone.currentSystemDefault()))
@@ -315,7 +315,7 @@ public data class EventParameter(val raw: KParameter) {
                 result["max length"] = s.maxLength.toString()
                 s.regexPattern?.let { result["pattern"] = it }
                 result["validator"] =
-                    s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
 
             PropertyType.Int -> {
@@ -323,8 +323,24 @@ public data class EventParameter(val raw: KParameter) {
                 s.min.let { result["min"] = it.toString() }
                 s.max.let { result["max"] = it.toString() }
                 result["validator"] =
-                    s.validators.map { extractNameFromFunctionString(it.toString()) }.joinToString(", ")
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
+
+            PropertyType.Long -> {
+                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0L) as LongContainer)
+                s.min.let { result["min"] = it.toString() }
+                s.max.let { result["max"] = it.toString() }
+                result["validator"] =
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+            }
+
+            PropertyType.Boolean -> {
+                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(false) as BooleanContainer)
+                result["validator"] =
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+            }
+
+            PropertyType.Ref -> Unit
 
             else -> {
                 logger.warn { "validationRulesDescription not implemented for type $type" }

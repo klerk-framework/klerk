@@ -76,10 +76,10 @@ public class RamStorage : Persistence {
             .union(delta.transitions).forEach { modelId ->
                 val model =
                     requireNotNull(delta.aggregatedModelState[modelId]) { "Could not find $modelId in modifiedModels" }
-                models[model.id.toInt()] = model as Model<Any>
+                models[model.id.value] = model as Model<Any>
             }
 
-        delta.deletedModels.forEach { models.remove(it.toInt()) }
+        delta.deletedModels.forEach { models.remove(it.value) }
         delta.newJobs.forEach {
             // TODO
         }
@@ -162,14 +162,14 @@ public class RamStorage : Persistence {
         result: ProcessingData<out T, C, V>,
         context: C
     ): AuditEntry {
-        val reference = command.model?.toInt()
-            ?: result.createdModels.single { true }.toInt()
+        val reference = command.model?.value
+            ?: result.createdModels.single { true }.value
         return AuditEntry(
             context.time,
             command.event.id,
             reference,
             context.actor.type.toByte(),
-            context.actor.id?.toInt(),
+            context.actor.id?.value,
             context.actor.externalId,
             "some JSON", // TODO
             extra = context.auditExtra

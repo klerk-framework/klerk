@@ -126,7 +126,7 @@ public class FilteredModelView<T : Any, C : KlerkContext>(
 
 public class AllModelView<T : Any, C : KlerkContext>(
     private val view: ModelViews<T, C>,
-    private val all: List<Int>
+    private val all: List<Int>  // sorted by createdAt
 ) : ModelView<T, C>(null) {
 
     init {
@@ -206,7 +206,7 @@ public class AllModelView<T : Any, C : KlerkContext>(
         return all.subList(0, startIndex).asReversed().asSequence().map { reader.get(ModelID(it)) }
     }
 
-    override fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean = all.contains(value.toInt())
+    override fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean = all.contains(value.value)
 }
 
 public data class QueryOptions(

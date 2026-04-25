@@ -70,7 +70,7 @@ class ReaderTest {
                 }
 
                 try {
-                    val badId = ModelID<Book>(astrid.toInt())
+                    val badId = ModelID<Book>(astrid.value)
                     get(badId)
                     fail()
                 } catch (e: Exception) {

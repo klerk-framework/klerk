@@ -76,14 +76,14 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         transaction(database) {
             if (command != null) {
                 requireNotNull(context)
-                val reference = command.model?.toInt() ?: delta.primaryModel?.toInt() ?: 0
+                val reference = command.model?.value ?: delta.primaryModel?.value ?: 0
                 AuditLog.insert {
                     it[timestamp] = context.time.to64bitMicroseconds()
                     it[event] = command.event.id.toString()
                     it[modelId] = reference
                     it[params] = gson.toJson(command.params)
                     it[actorIdentityType] = context.actor.type.toByte()
-                    it[actorIdentityReference] = context.actor.id?.toInt()
+                    it[actorIdentityReference] = context.actor.id?.value
                     it[actorIdentityExternalId] = context.actor.externalId
                     it[extra] = context.auditExtra
                 }
@@ -92,7 +92,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             delta.createdModels.forEach { modelId ->
                 val model = requireNotNull(delta.aggregatedModelState[modelId])
                 Models.insert {
-                    it[id] = model.id.toInt()
+                    it[id] = model.id.value
                     it[type] = model.props::class.simpleName!!
                     it[createdAt] = model.createdAt.to64bitMicroseconds()
                     it[lastPropsUpdateAt] = model.lastPropsUpdateAt.to64bitMicroseconds()
@@ -108,7 +108,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 .minus(delta.createdModels.toSet()) //  We have already stored these above
                 .forEach { modelId ->
                     val model = requireNotNull(delta.aggregatedModelState[modelId])
-                    Models.update({ Models.id eq modelId.toInt() }) {
+                    Models.update({ Models.id eq modelId.value }) {
                         it[lastPropsUpdateAt] = model.lastPropsUpdateAt.to64bitMicroseconds()
                         it[lastTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
                         it[state] = model.state
@@ -118,7 +118,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 }
 
             delta.deletedModels.forEach { modelId ->
-                Models.deleteWhere { id eq modelId.toInt() }
+                Models.deleteWhere { id eq modelId.value }
             }
 
             delta.newJobs.forEach { job ->

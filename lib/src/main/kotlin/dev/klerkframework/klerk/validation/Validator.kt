@@ -28,6 +28,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
                 return StateProblem(
                     "Event '${currentCommand.event}' is not possible in void state",
+                    "Event '${currentCommand.event}' is not possible in void state",
                     KlerkErrorCode.EventNotPossibleInVoidState
                 )
             }
@@ -36,6 +37,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             val smState = sm.instanceStates.single { it.name == model.state }
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
                 return StateProblem(
+                    "Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'",
                     "Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'",
                     KlerkErrorCode.EventNotPossibleInState
                 )

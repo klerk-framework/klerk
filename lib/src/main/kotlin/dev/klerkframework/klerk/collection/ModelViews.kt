@@ -22,8 +22,8 @@ public open class ModelViews<T : Any, C : KlerkContext> {
 
     internal fun internalDidCreate(created: Model<T>) {
         logger.debug { "internalDidCreate ${created.id} ${all} " }
-        require(!_all.contains(created.id.toInt()))
-        _all.add(created.id.toInt())
+        require(!_all.contains(created.id.value))
+        _all.add(created.id.value)
         didCreate(created)
     }
 
@@ -32,7 +32,7 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     }
 
     internal fun internalDidDelete(deleted: Model<T>) {
-        _all.remove(deleted.id.toInt())
+        _all.remove(deleted.id.value)
         didDelete(deleted)
     }
 

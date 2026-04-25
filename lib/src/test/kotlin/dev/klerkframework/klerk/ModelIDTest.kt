@@ -12,7 +12,7 @@ class ModelIDTest {
 
         fun testInt(l: Int) {
             val original = ModelID<Any>(l)
-            assertEquals(original.toInt(), ModelID.from<Any>(original.toString()).toInt())
+            assertEquals(original.value, ModelID<Any>(original.toString().toInt()).value)
         }
 
         listOf(
@@ -31,14 +31,13 @@ class ModelIDTest {
      */
     @Test
     fun `@JvmInline and value class problem`() {
-        val raw = "3f"  // 123u
-        val param = ModelID.from<Any>(raw)
+        val param = ModelID<Any>(123)
         val parameters = mutableMapOf<KParameter, Any?>()
         val constructor = MyClassWithModelID::class.constructors.first()
         val idParam = constructor.parameters.first()
         parameters[idParam] = param
         val instance = constructor.callBy(parameters)
-        assertEquals(instance.id?.toInt(), 123)
+        assertEquals(instance.id?.value, 123)
     }
 
 }

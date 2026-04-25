@@ -105,11 +105,20 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
         return result
     }
 
+    override suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T =
+        models.read(context, readFunction)
+
+    override suspend fun <T> read(contextProvider: suspend (Klerk<C, V>) -> C, readFunction: Reader<C, V>.() -> T): T =
+        models.read(contextProvider(this), readFunction)
+
     override suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T =
         models.readSuspend(context, readFunction)
 
-    override suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T =
-        models.read(context, readFunction)
+    override suspend fun <T> readSuspend(
+        contextProvider: suspend (Klerk<C, V>) -> C,
+        readFunction: suspend Reader<C, V>.() -> T
+    ): T =
+        models.readSuspend(contextProvider(this), readFunction)
 
 }
 

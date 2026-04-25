@@ -62,7 +62,7 @@ public data class CommandToken(
                     }
                     if (key == "m") {
                         models = if (value.isEmpty()) emptySet() else
-                            value.split(",").map { ModelID.from<Any>(it) }.toSet()
+                            value.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
                     }
                 }
             return CommandToken(time = requireNotNull(time), models = requireNotNull(models))

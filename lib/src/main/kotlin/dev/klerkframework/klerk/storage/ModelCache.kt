@@ -35,9 +35,9 @@ internal object ModelCache {
     }
 
     internal fun <T : Any> read(id: ModelID<T>): ReadResult<T> {
-        val model = models[id.toInt()]
+        val model = models[id.value]
         return if (model == null) {
-            ReadResult.Fail(NotFoundProblem("Could not find item with id=${id.toInt()}"))
+            ReadResult.Fail(NotFoundProblem("Could not find item with id=${id.value}"))
         } else {
             @Suppress("UNCHECKED_CAST")
             ReadResult.Ok(model.copy() as Model<T>)
@@ -46,38 +46,38 @@ internal object ModelCache {
 
     internal fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
         @Suppress("UNCHECKED_CAST")
-        return models[id.toInt()]?.copy() as? Model<T>
+        return models[id.value]?.copy() as? Model<T>
     }
 
     internal fun <T : Any> store(model: Model<T>): Unit {
         updateRelations(model, relationsTo, true)
-        models[model.id.toInt()] = model.copy()
+        models[model.id.value] = model.copy()
     }
 
     /**
      * This is used at startup when reading all models. Note that relations are not calculated here.
      */
     internal fun storeFromPersistence(model: Model<out Any>) {
-        models[model.id.toInt()] = model
+        models[model.id.value] = model
     }
 
     internal fun <T : Any> delete(modelId: ModelID<T>): Unit {
-        relationsTo.forEach { (_, relationSet) -> relationSet.remove(modelId.toInt()) }
-        relationsTo.remove(modelId.toInt())
-        models.remove(modelId.toInt())
+        relationsTo.forEach { (_, relationSet) -> relationSet.remove(modelId.value) }
+        relationsTo.remove(modelId.value)
+        models.remove(modelId.value)
     }
 
     /**
      * Finds all models that have a relation to the specified model.
      */
     internal fun getAllRelated(id: ModelID<*>): Set<ModelID<*>> {
-        val relations = relationsTo[id.toInt()] ?: emptySet()
+        val relations = relationsTo[id.value] ?: emptySet()
         return relations.map { ModelID<Any>(it) }.toSet()
     }
 
     internal fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
         return getAllRelated(id).map {
-            val model = models[it.toInt()]
+            val model = models[it.value]
             if (model!!.props::class.qualifiedName!! == clazz.qualifiedName) {
                 @Suppress("UNCHECKED_CAST")
                 return@map model.copy() as Model<T>
@@ -91,11 +91,11 @@ internal object ModelCache {
         id: ModelID<*>
     ): Set<Model<T>> {
         val result = mutableSetOf<Model<T>>()
-        if (models[id.toInt()] == null) throw NoSuchElementException("Could not find model with id $id")
+        if (models[id.value] == null) throw NoSuchElementException("Could not find model with id $id")
         getAllRelated(id).forEach { relatedId ->
             try {
                 val related =
-                    models[relatedId.toInt()]?.copy()
+                    models[relatedId.value]?.copy()
                         ?: throw NoSuchElementException("Could not find model with id $relatedId")
                 val relatedProperty =
                     related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
@@ -123,7 +123,7 @@ internal object ModelCache {
         getAllRelated(id).forEach { relatedId ->
             try {
                 val related =
-                    models[relatedId.toInt()]?.copy()
+                    models[relatedId.value]?.copy()
                         ?: throw NoSuchElementException("Could not find model with id $relatedId")
                 val relatedProperty =
                     related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
@@ -163,9 +163,9 @@ internal object ModelCache {
         klerkHasStarted: Boolean
     ) {
         // optimization: do this before write lock
-        val fromId = model.id.toInt()
+        val fromId = model.id.value
 
-        if (klerkHasStarted && models[model.id.toInt()] != null) {   // we don't have to do this for new models
+        if (klerkHasStarted && models[model.id.value] != null) {   // we don't have to do this for new models
             // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations for this model
             relationsMap.forEach { (_, relationSet) -> relationSet.remove(fromId) }
         }
@@ -173,7 +173,7 @@ internal object ModelCache {
         model.props::class.memberProperties.forEach { property ->
             if (property.returnType.toString().startsWith(ModelID::class.qualifiedName!!, false)) {
                 val propValue = property.getter.call(model.props) ?: return@forEach
-                val id = (propValue as ModelID<*>).toInt()
+                val id = (propValue as ModelID<*>).value
                 createReference(fromId, id, relationsMap)
             } else {
                 // is there a reference in a collection?
@@ -187,7 +187,7 @@ internal object ModelCache {
                         val collection = property.getter.call(model.props) ?: return@forEach
                         @Suppress("UNCHECKED_CAST")
                         (collection as Collection<ModelID<out Any>>).forEach {
-                            createReference(fromId, it.toInt(), relationsMap)
+                            createReference(fromId, it.value, relationsMap)
                         }
                     }
                 } catch (e: Exception) {

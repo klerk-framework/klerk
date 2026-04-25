@@ -125,6 +125,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         if (anyModified) {
             return StateProblem(
                 "A model has been modified since the token was created",
+                "A model has been modified since the token was created",
                 KlerkErrorCode.ModelModifiedSinceTokenCreation
             )
         }
@@ -157,7 +158,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             readWriteLock.releaseRead()
         }
 
-        return config.persistence.readAuditLog(modelId = id?.toInt(), after, before)
+        return config.persistence.readAuditLog(modelId = id?.value, after, before)
     }
 
     internal suspend fun start() {
@@ -189,7 +190,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return
         }
         deletedModels.forEach {
-            config.persistence.modifyEventsInAuditLog(it.toInt()) { null }
+            config.persistence.modifyEventsInAuditLog(it.value) { null }
         }
     }
 

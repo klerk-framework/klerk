@@ -63,6 +63,7 @@ internal fun validateModelProps(Any: Any): List<Problem> {
     return Any.validators().filter { it.invoke() is PropertyCollectionValidity.Invalid }.map {
         StateProblem(
             "The command would result in an invalid model",
+            "The command would result in an invalid model",
             violatedRule = RuleDescription(it, RuleType.ModelValidation),
             code = KlerkErrorCode.CommandModelValidation
         )
