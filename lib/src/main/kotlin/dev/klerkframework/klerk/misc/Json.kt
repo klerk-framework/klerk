@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.Config
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.decode64bitMicroseconds
+import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import kotlin.reflect.KClass
 import kotlin.reflect.full.primaryConstructor
@@ -28,7 +29,7 @@ internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
         .registerTypeHierarchyAdapter(LongContainer::class.java, LongValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(FloatContainer::class.java, FloatValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(BooleanContainer::class.java, BooleanValueSerializer(valueClasses))
-        //.registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
+        .registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(InstantContainer::class.java, InstantValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(DurationContainer::class.java, DurationValueSerializer(valueClasses))
         .create()
@@ -174,6 +175,39 @@ internal class InstantValueSerializer(private val valueClasses: Set<KClass<*>>) 
         requireNotNull(typeOfT)
         val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
         return paramClass.primaryConstructor!!.call(decode64bitMicroseconds(json.asLong)) as InstantContainer
+    }
+}
+
+internal class EnumValueSerializer(private val valueClasses: Set<KClass<*>>) : JsonSerializer<EnumContainer<*>>,
+    JsonDeserializer<EnumContainer<*>> {
+    override fun serialize(
+        src: EnumContainer<*>?,
+        typeOfSrc: Type?,
+        context: JsonSerializationContext?
+    ): JsonElement {
+        return JsonPrimitive(src?.valueWithoutAuthorization)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): EnumContainer<*> {
+        requireNotNull(json)
+        requireNotNull(typeOfT)
+        val containerClass: KClass<*>
+        val enumClass: Class<out Enum<*>>
+        if (typeOfT is ParameterizedType) {
+            containerClass = valueClasses.first { it.qualifiedName == typeOfT.rawType.typeName }
+            enumClass = typeOfT.actualTypeArguments[0] as Class<out Enum<*>>
+        } else {
+            containerClass = valueClasses.first { it.qualifiedName == (typeOfT as Class<*>).name }
+            val superType = containerClass.java.genericSuperclass as ParameterizedType
+            enumClass = superType.actualTypeArguments[0] as Class<out Enum<*>>
+        }
+        val enumValue = java.lang.Enum.valueOf(enumClass, json.asString)
+        return containerClass.primaryConstructor!!.call(enumValue) as EnumContainer<*>
     }
 }
 

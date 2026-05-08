@@ -13,13 +13,12 @@ fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates,
 
         event(CreateBook) {
             validReferences(CreateBookParams::author, collections.authors.all)
+            validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
         }
 
         event(PublishBook) {}
 
         event(DeleteBook) {}
-
-
 
         voidState {
             onEvent(CreateBook) {

@@ -1,12 +1,10 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.misc.createGson
 import kotlin.math.absoluteValue
 import kotlin.random.Random
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
-import kotlin.test.fail
+import kotlin.test.*
 
 class DataContainersTest {
 
@@ -69,4 +67,27 @@ class DataContainersTest {
         }
 
     }
+
+    @Test
+    fun enumContainerValidation() {
+        val container = BookGenreContainer(BookGenre.Fiction)
+        assertNull(container.validate("genre", DefaultTranslation))
+        assertEquals(BookGenre.Fiction, container.enum)
+        assertEquals("Fiction", container.valueWithoutAuthorization)
+    }
+
+    @Test
+    fun enumContainerSerialization() {
+        val bc = BookViews()
+        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val config = createConfig(collections)
+        val gson = createGson(config)
+
+        val original = BookGenreContainer(BookGenre.Mystery)
+        val json = gson.toJson(original, BookGenreContainer::class.java)
+        val deserialized = gson.fromJson(json, BookGenreContainer::class.java)
+        assertEquals(original, deserialized)
+        assertEquals(BookGenre.Mystery, deserialized.enum)
+    }
+
 }

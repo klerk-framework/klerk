@@ -262,18 +262,15 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     }
 }
 
+public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<String>(value.name) {
+    public val enum: E = value
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+}
+
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
     public val boolean: Boolean = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
-
-/* Not supported yet. We attempted an implementation but got stuck on how auto-UI should behave. Current guess is that
-we should have a validator like validReferences, i.e. validEnums(CreateAuthorParams::Popularity, PopularityEnum.entries)
-so that we know what to render.
-abstract class EnumContainer<T : Enum<T>>(value: Enum<T>) : DataContainer<Enum<T>>(value) {
-    override fun validate(fieldName: String): InvalidParametersProblem? = null
-}
- */
 
 /**
  * A container for Instants with microsecond resolution.
@@ -343,7 +340,8 @@ internal val propertiesMustInheritFrom = setOf(
     IntContainer::class,
     LongContainer::class,
     FloatContainer::class,
-    BooleanContainer::class
+    BooleanContainer::class,
+    EnumContainer::class
 )
 
 public class KlerkExampleDataContainer(value: String) : StringContainer(value) {

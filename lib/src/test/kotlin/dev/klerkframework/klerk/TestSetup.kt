@@ -178,6 +178,7 @@ data class Book(
     val readingTime: ReadingTime,
     val publishedAt: BookWrittenAt?,
     val releasePartyPosition: ReleasePartyPosition,
+    val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
 ) {
     override fun toString() = title.value
 }
@@ -480,7 +481,8 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections
         writtenAt = BookWrittenAt(Instant.fromEpochSeconds(100000)),
         readingTime = params.readingTime,
         publishedAt = null,
-        releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456))
+        releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456)),
+        genre = BookGenreContainer(BookGenre.Fiction)
     )
 }
 
@@ -649,6 +651,10 @@ class Quantity(value: Int) : IntContainer(value) {
 class BookWrittenAt(value: Instant) : InstantContainer(value)
 
 class ReadingTime(value: Duration) : DurationContainer(value)
+
+enum class BookGenre { Fiction, Mystery, Fantasy }
+
+class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value)
 
 data class Address(val street: Street)
 
@@ -882,6 +888,7 @@ data class CreateBookParams(
     val tags: Set<BookTag> = emptySet(),
     val averageScore: AverageScore,
     val readingTime: ReadingTime,
+    val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {

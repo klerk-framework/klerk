@@ -375,6 +375,8 @@ public data class EventParameter(val raw: KParameter) {
 
             PropertyType.KeyValueRef -> logger.warn { "validationRulesDescription not implemented for type $type" }
 
+            PropertyType.Enum -> logger.warn { "validationRulesDescription not implemented for type $type" }
+
             null -> logger.warn { "PropertyType is null for $name" }
         }
         return result
@@ -431,7 +433,7 @@ public enum class PropertyType {
     Ref,
     KeyValueRef,
 
-    //Enum,
+    Enum,
     Instant,
     Duration,
 }
@@ -470,10 +472,9 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
         return PropertyType.Long
     }
 
-    /*    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
-            return PropertyType.Enum
-        }
-     */
+    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
+        return PropertyType.Enum
+    }
     if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
         return PropertyType.Long
     }

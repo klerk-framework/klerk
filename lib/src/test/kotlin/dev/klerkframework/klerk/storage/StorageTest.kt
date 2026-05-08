@@ -67,6 +67,7 @@ class StorageTest {
             readingTime = ReadingTime(3.minutes),
             publishedAt = null,
             releasePartyPosition = ReleasePartyPosition(GeoPosition(0.0, 0.0)),
+            genre = BookGenreContainer(BookGenre.Fiction),
         )
         val book = Model(
             id = ModelID(123),
