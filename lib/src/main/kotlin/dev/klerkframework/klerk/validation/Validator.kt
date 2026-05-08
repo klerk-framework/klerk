@@ -16,6 +16,24 @@ import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.full.starProjectedType
 
+/*
+Before a command is accepted, a lot of rules must be evaluated.
+
+Using event parameters:
+* DataContainers used in event parameters
+* Validation functions on the parameters class (if is Validatable)
+
+Using parameters and context:
+* Validate the context
+
+Using parameters, context and state:
+* Do all parameter references (ModelID) point on an existing model?
+* Is the event possible given the current state of the model?
+* Rules specified in the state machine when declaring the event
+* Authorization rules
+
+ */
+
 internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) {
 
     fun isEventPossibleGivenModelState(
@@ -109,7 +127,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return klerk.config.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
             if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = result.endUserTranslatedMessage ?: "? context",
+                endUserTranslatedMessage = result.endUserTranslatedMessage ?: it::class.simpleName
+                ?: "Prevented by a context rule",
                 violatedRule = RuleDescription(
                     it,
                     RuleType.ContextValidation
@@ -141,12 +160,12 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return null
     }
 
-    fun validateDataContainers(instance: Any, context: C): Set<InvalidPropertyProblem> {
+    fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> {
         val problems = mutableSetOf<InvalidPropertyProblem>()
         instance::class.memberProperties.forEach { property ->
             if (property.returnType.isSubtypeOf(DataContainer::class.starProjectedType)) {
                 val problem =
-                    (property.getter.call(instance) as DataContainer<*>).validate(property.name, context.translation)
+                    (property.getter.call(instance) as DataContainer<*>).validate(property.name, translation)
                 if (problem != null) {
                     problems.add(problem)
                 }
@@ -230,7 +249,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     ): Boolean {
         if (validateContext(context, eventReference).any()) return false
         parameters?.let {
-            if (validateDataContainers(it, context).any()) return false
+            if (validateDataContainers(it, context.translation).any()) return false
             if (validateReferences(eventReference, parameters, context) != null) return false
         }
         return true
@@ -256,7 +275,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
 
         command.params?.let { p ->
-            problems.addAll(validateDataContainers(p, context))
+            problems.addAll(validateDataContainers(p, context.translation))
             problems.addAll(validatePropertyCollection(p, context.translation))
         }
 

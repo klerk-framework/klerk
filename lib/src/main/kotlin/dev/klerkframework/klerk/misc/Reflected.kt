@@ -9,6 +9,7 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlin.reflect.*
 import kotlin.reflect.full.*
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 internal val dateFormatter = LocalDateTime.Format {
@@ -334,17 +335,47 @@ public data class EventParameter(val raw: KParameter) {
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
 
+            PropertyType.Float -> {
+                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0f) as FloatContainer)
+                s.min.let { result["min"] = it.toString() }
+                s.max.let { result["max"] = it.toString() }
+                result["validator"] =
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+            }
+
             PropertyType.Boolean -> {
                 val s = ((raw.type.classifier as KClass<*>).constructors.single().call(false) as BooleanContainer)
                 result["validator"] =
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
 
+            PropertyType.Instant -> {
+                val s = ((raw.type.classifier as KClass<*>).constructors.single()
+                    .call(Instant.fromEpochSeconds(0)) as InstantContainer)
+                result["validator"] =
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+            }
+
+            PropertyType.Duration -> {
+                val s =
+                    ((raw.type.classifier as KClass<*>).constructors.single().call(Duration.ZERO) as InstantContainer)
+                result["validator"] =
+                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+            }
+
             PropertyType.Ref -> Unit
 
-            else -> {
-                logger.warn { "validationRulesDescription not implemented for type $type" }
-            }
+            /*            else -> {
+                            logger.warn { "validationRulesDescription not implemented for type $type" }
+
+                        }
+
+
+             */
+
+            PropertyType.KeyValueRef -> logger.warn { "validationRulesDescription not implemented for type $type" }
+
+            null -> logger.warn { "PropertyType is null for $name" }
         }
         return result
     }
@@ -399,7 +430,10 @@ public enum class PropertyType {
     Boolean,
     Ref,
     KeyValueRef,
-    Enum,
+
+    //Enum,
+    Instant,
+    Duration,
 }
 
 /**
