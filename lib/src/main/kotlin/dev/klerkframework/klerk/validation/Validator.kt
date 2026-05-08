@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.PositiveAuthorization.Allow
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.EventParameter
 
 import dev.klerkframework.klerk.misc.getStateMachine
@@ -135,6 +136,30 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 )
             ) else null
         }
+    }
+
+    private fun validateEnums(eventReference: EventReference, parameters: Any?): Problem? {
+        if (parameters == null) {
+            return null
+        }
+        parameters::class.primaryConstructor!!.parameters.forEach { parameter ->
+            if (parameter.type.isSubtypeOf(EnumContainer::class.starProjectedType)) {
+                val p = EventParameter(parameter)
+                val validValues = klerk.config.getValidEnumsFor(eventReference, p)
+                if (validValues != null) {
+                    val prop = parameters::class.memberProperties.single { it.name == parameter.name }
+                    val container = prop.getter.call(parameters) as EnumContainer<*>
+                    val enumValue = container.enum
+                    if (!validValues.contains(enumValue)) {
+                        return InvalidPropertyProblem(
+                            "'${enumValue}' is not a valid value for parameter ${parameter.name}",
+                            propertyName = parameter.name ?: "?"
+                        )
+                    }
+                }
+            }
+        }
+        return null
     }
 
     private fun validateReferences(eventReference: EventReference, parameters: Any?, context: C): Problem? {
@@ -281,6 +306,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
         problems.addAll(validateContext(context, command.event.id))
         validateReferences(command.event.id, command.params, context)?.let { problems.add(it) }
+        validateEnums(command.event.id, command.params)?.let { problems.add(it) }
 
         if (problems.isNotEmpty()) {
             return problems

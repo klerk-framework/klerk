@@ -4,6 +4,8 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.statemachine.StateMachine
+import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
@@ -94,6 +96,84 @@ class ValidatorTest {
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Context.system(), options)
             assertTrue(result is CommandResult.Failure)
+        }
+    }
+
+    @Test
+    fun `Validates enum parameter against validEnums`() {
+        runBlocking {
+            val author = createAuthorJKRowling(klerk)
+            val params = CreateBookParams(
+                title = BookTitle("Harry Potter"),
+                author = author,
+                coAuthors = emptySet(),
+                previousBooksInSameSeries = emptyList(),
+                tags = emptySet(),
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(kotlin.time.Duration.ZERO),
+                genre = BookGenreContainer(BookGenre.Mystery)
+            )
+            val command = Command(CreateBook, null, params)
+            val options = ProcessingOptions(CommandToken.simple())
+            // BookStatemachine declares validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
+            // so Mystery should be valid (all entries allowed)
+            val result = klerk.handle(command, Context.system(), options)
+            assertTrue(result is CommandResult.Success, "Expected success but got: $result")
+        }
+    }
+
+    @Test
+    fun `Rejects enum parameter not in validEnums`() {
+        runBlocking {
+            val bc = BookViews()
+            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val restrictedSm: StateMachine<Book, BookStates, Context, MyCollections> = stateMachine {
+                event(CreateBook) {
+                    validReferences(CreateBookParams::author, collections.authors.all)
+                    // Only Fiction is valid, not Mystery or Fantasy
+                    validEnums(CreateBookParams::genre, setOf(BookGenre.Fiction))
+                }
+                event(PublishBook) {}
+                event(DeleteBook) {}
+                voidState {
+                    onEvent(CreateBook) { createModel(BookStates.Draft, ::newBook) }
+                }
+                state(BookStates.Draft) {
+                    onEvent(PublishBook) { transitionTo(BookStates.Published) }
+                    onEvent(DeleteBook) { delete() }
+                }
+                state(BookStates.Published) {
+                    onEvent(DeleteBook) { delete() }
+                }
+            }
+            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+                managedModels {
+                    model(Book::class, restrictedSm, collections.books)
+                    model(Author::class, authorStateMachine(collections), collections.authors)
+                }
+                apply(generousAuthRules())
+                persistence(RamStorage())
+                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+            }
+            val restrictedKlerk = Klerk.create(config)
+            restrictedKlerk.meta.start()
+            val author = createAuthorJKRowling(restrictedKlerk)
+
+            val params = CreateBookParams(
+                title = BookTitle("Harry Potter"),
+                author = author,
+                coAuthors = emptySet(),
+                previousBooksInSameSeries = emptyList(),
+                tags = emptySet(),
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(kotlin.time.Duration.ZERO),
+                genre = BookGenreContainer(BookGenre.Mystery)  // not in validEnums
+            )
+            val command = Command(CreateBook, null, params)
+            val options = ProcessingOptions(CommandToken.simple())
+            val result = restrictedKlerk.handle(command, Context.system(), options)
+            assertTrue(result is CommandResult.Failure, "Expected failure but got: $result")
+            restrictedKlerk.meta.stop()
         }
     }
 

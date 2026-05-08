@@ -147,6 +147,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         event.paramRulesForVoidEvent =
             (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity>)
         event.validRefs = rules.validRefs
+        event.validEnums = rules.validEnumsMap
     }
 
     public fun event(event: InstanceEventNoParameters<T>, init: InstanceEventRulesNoParameters<T, C, V>.() -> Unit) {
@@ -174,6 +175,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         event.paramRulesForInstanceEvent =
             (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity>)
         event.validRefs = rules.validRefs
+        event.validEnums = rules.validEnumsMap
     }
 
 }

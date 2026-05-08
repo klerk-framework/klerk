@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.EventParameter
 import kotlin.reflect.KProperty1
 
@@ -25,10 +26,16 @@ public class InstanceEventRulesWithParameters<T : Any, P : Any, C : KlerkContext
 
     internal val validRefs: MutableMap<String, ModelView<*, C>> = mutableMapOf()
     internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
+    internal val validEnumsMap: MutableMap<String, Set<Enum<*>>> = mutableMapOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
+
+    public fun <E : Enum<E>> validEnums(property: KProperty1<*, EnumContainer<E>?>, validValues: Set<E>) {
+        @Suppress("UNCHECKED_CAST")
+        validEnumsMap[property.name] = validValues as Set<Enum<*>>
+    }
 
     public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>?>, modelView: ModelView<T, C>?) {
         if (modelView == null) {
@@ -59,10 +66,16 @@ public class VoidEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V>
 
     internal val validRefs: MutableMap<String, ModelView<*, C>?> = mutableMapOf()
     internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
+    internal val validEnumsMap: MutableMap<String, Set<Enum<*>>> = mutableMapOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
+
+    public fun <E : Enum<E>> validEnums(property: KProperty1<*, EnumContainer<E>?>, validValues: Set<E>) {
+        @Suppress("UNCHECKED_CAST")
+        validEnumsMap[property.name] = validValues as Set<Enum<*>>
+    }
 
     public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
         //if (collection == null) {

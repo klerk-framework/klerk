@@ -255,6 +255,19 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
+    public fun getValidEnumsFor(
+        eventReference: EventReference,
+        parameter: EventParameter
+    ): Set<Enum<*>>? {
+        val event = getEvent(eventReference)
+        return when (event) {
+            is InstanceEventNoParameters -> null
+            is InstanceEventWithParameters<*, *> -> event.getValidEnums(parameter.name)
+            is VoidEventNoParameters -> null
+            is VoidEventWithParameters<*, *> -> event.getValidEnums(parameter.name)
+        }
+    }
+
     public fun getEvent(eventId: EventReference): Event<Any, Any?> {
         @Suppress("UNCHECKED_CAST")
         return getStateMachine(eventId).states.flatMap { it.getEvents() }

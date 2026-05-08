@@ -179,6 +179,7 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
 
     internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
     internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
+    internal var validEnums: Map<String, Set<Enum<*>>> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity>
@@ -186,6 +187,8 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
     @Suppress("UNCHECKED_CAST")
     internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
         validRefs[name] as ModelView<out Any, C>?
+
+    internal fun getValidEnums(name: String): Set<Enum<*>>? = validEnums[name]
 
 
 }
@@ -202,6 +205,7 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
     internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> =
         setOf()
     internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
+    internal var validEnums: Map<String, Set<Enum<*>>> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity>
@@ -209,6 +213,8 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
     @Suppress("UNCHECKED_CAST")
     internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
         validRefs[name] as ModelView<out Any, C>?
+
+    internal fun getValidEnums(name: String): Set<Enum<*>>? = validEnums[name]
 
 }
 
