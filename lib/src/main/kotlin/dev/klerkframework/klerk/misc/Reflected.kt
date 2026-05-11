@@ -262,6 +262,15 @@ public data class EventParameter(val raw: KParameter) {
             return raw.type.withNullability(false).arguments.single().type.toString()
         }
 
+    /**
+     * Returns the value of the no-params constructor of the container (if it exists). This value indicates a good
+     * default value for the property. Note that the application developer can choose to ignore this value and provide
+     * a different default value e.g. when rendering a form.
+     */
+    val recommendedDefaultValue: String?
+        get() = (raw.type.classifier as KClass<*>).constructors.singleOrNull { it.parameters.isEmpty() }?.call()
+            ?.toString()
+
     public fun validate() {
         val ktype = raw.type.withNullability(false)
         validate(ktype)
@@ -364,7 +373,7 @@ public data class EventParameter(val raw: KParameter) {
             PropertyType.Duration -> {
                 val s =
                     ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(Duration.ZERO) as InstantContainer)
+                        .call(Duration.ZERO) as DurationContainer)
                 result["validator"] =
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
@@ -472,18 +481,18 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
         return PropertyType.Float
     }
     if (ktype.isSubtypeOf(InstantContainer::class.starProjectedType)) {
-        return PropertyType.Long
+        return PropertyType.Instant
     }
     if (ktype.isSubtypeOf(DurationContainer::class.starProjectedType)) {
-        return PropertyType.Long
+        return PropertyType.Duration
     }
 
     if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
         return PropertyType.Enum
     }
-    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
-        return PropertyType.Long
-    }
+//    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
+    //      return PropertyType.Long
+    //  }
 
     if (ktype.isSubtypeOf(DataContainer::class.starProjectedType)) {
         throw NotImplementedError(ktype.toString())
