@@ -61,6 +61,12 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
 
     public open val tags: Set<String> = emptySet()
 
+    /**
+     * This value indicates a good default value for the property. Note that the application developer can choose to ignore this value and provide
+     * a different default value (e.g. when rendering a form).
+     */
+    public open val recommendedDefault: T? = null
+
     override fun toString(): String {
         return try {
             value.toString()

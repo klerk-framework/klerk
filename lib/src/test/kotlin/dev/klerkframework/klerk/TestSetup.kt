@@ -610,6 +610,7 @@ class FirstName(value: String) : StringContainer(value) {
     override val minLength = 1
     override val maxLength = 50
     override val maxLines: Int = 1
+    override val recommendedDefault = "Astrid"
 }
 
 class LastName(value: String) : StringContainer(value) {
@@ -813,6 +814,7 @@ val english = EnglishKlerkTranslation(DefaultKlerkTranslation)
 
 object SwedishTranslation : Translation {
     override val klerk: KlerkTranslation = SwedishKlerkTranslation(english)
+
 }
 
 class SwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation by default {

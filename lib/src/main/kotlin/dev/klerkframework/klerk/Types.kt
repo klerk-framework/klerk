@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.misc.EventParameter
 import dev.klerkframework.klerk.misc.EventParameters
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
@@ -352,6 +353,7 @@ public interface Translation {
 
 public interface KlerkTranslation {
     public fun property(property: KProperty1<*, *>): String
+    public fun propertyDescription(property: EventParameter): String?
     public fun event(event: EventReference): String
     public fun function(f: Function<Any>): String
     public fun mustBeAtLeast(value: Number): String
@@ -379,6 +381,8 @@ public object DefaultKlerkTranslation : KlerkTranslation {
     override fun property(property: KProperty1<*, *>): String {
         return camelCaseToPretty(property.name)
     }
+
+    override fun propertyDescription(property: EventParameter): String? = null
 
     override fun event(event: EventReference): String {
         return camelCaseToPretty(event.eventName)

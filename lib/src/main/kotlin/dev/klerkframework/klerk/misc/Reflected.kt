@@ -9,6 +9,7 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlin.reflect.*
 import kotlin.reflect.full.*
+import kotlin.reflect.jvm.javaConstructor
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -218,62 +219,152 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
 }
 
-public data class EventParameter(val raw: KParameter) {
+public data class EventParameter(public val raw: KParameter) {
+    val name: String = raw.name!!
+    val prettyName: String = camelCaseToPretty(name)
+    val isRequired: Boolean = !raw.isOptional
+    val type: PropertyType? = basicTypeEnumFromKType(raw.type.withNullability(false))
+    val isNullable: Boolean = raw.type.isMarkedNullable
+    val modelIDType: String? = findModelIDType()
+    val validationRulesDescriptions: Map<String, String>
+    val recommendedDefaultValue: String?
 
     init {
-        requireNotNull(raw.name)
+        val validationRulesDescriptionsTemp = mutableMapOf<String, String>()
+        if ((raw.type.classifier as KClass<*>).visibility == KVisibility.PRIVATE) {
+            logger.warn { "Property $name is private. This means that some info will be missing" } // or should we just force the modifier?
+            validationRulesDescriptionsTemp["required"] = "false"
+            validationRulesDescriptionsTemp["validator"] = "none"
+            recommendedDefaultValue = null
+            validationRulesDescriptions = emptyMap()
+        } else {
+            when (type) {
+                PropertyType.String -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call("") as StringContainer)
+                    validationRulesDescriptionsTemp["min length"] = s.minLength.toString()
+                    validationRulesDescriptionsTemp["max length"] = s.maxLength.toString()
+                    s.regexPattern?.let { validationRulesDescriptionsTemp["pattern"] = it }
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault
+                }
+
+                PropertyType.Int -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .apply { javaConstructor?.isAccessible = true }
+                        .call(0) as IntContainer)
+                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
+                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Long -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(0L) as LongContainer)
+                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
+                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Float -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(0f) as FloatContainer)
+                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
+                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Boolean -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(false) as BooleanContainer)
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Instant -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(Instant.fromEpochSeconds(0)) as InstantContainer)
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Duration -> {
+                    val s =
+                        ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                            .call(Duration.ZERO) as DurationContainer)
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault.toString()
+                }
+
+                PropertyType.Ref -> {
+                    recommendedDefaultValue = null
+                }   // TODO
+
+                /*            else -> {
+                            logger.warn { "validationRulesDescription not implemented for type $type" }
+
+                        }
+
+
+             */
+
+                PropertyType.KeyValueRef -> {
+                    recommendedDefaultValue = null
+                    logger.warn { "validationRulesDescription not implemented for type $type" }
+                } // TODO
+
+                PropertyType.Enum -> {
+                    recommendedDefaultValue = null
+                    logger.warn { "validationRulesDescription not implemented for type $type" }
+                } // TODO
+
+                PropertyType.Geo -> {
+                    recommendedDefaultValue = null
+                    logger.warn { "validationRulesDescription not implemented for type $type" }
+                } // TODO
+
+                null -> {
+                    recommendedDefaultValue = null
+                    logger.warn { "PropertyType is null for $name" }
+                }
+            }
+            validationRulesDescriptions = validationRulesDescriptionsTemp
+        }
     }
 
-    val valueClass: KClass<*>
-        get() {
-            if (raw.type.isSubtypeOf(Set::class.starProjectedType)) {
-                return raw.type.arguments.single().type!!.classifier!! as KClass<*>
-            }
-            if (raw.type.isSubtypeOf(List::class.starProjectedType)) {
-                return raw.type.arguments.single().type!!.classifier!! as KClass<*>
-            }
-            return raw.type.classifier!! as KClass<*>
-        }
-
-    val name: String
-        get() = raw.name!!
-
-    val prettyName: String
-        get() = camelCaseToPretty(name)
-
-    val isRequired: Boolean
-        get() = !raw.isOptional
-
-    val isNullable: Boolean
-        get() = raw.type.isMarkedNullable
-
-    val type: PropertyType?
-        get() {
-            val ktype = raw.type.withNullability(false)
-            return basicTypeEnumFromKType(ktype)
-        }
-
-    val modelIDType: String?
-        get() {
-            val ktype = raw.type.withNullability(false)
-            if (!ktype.isSubtypeOf(ModelID::class.starProjectedType)) {
-                return null
-            }
-            return raw.type.withNullability(false).arguments.single().type.toString()
-        }
-
-    /**
-     * Returns the value of the no-params constructor of the container (if it exists). This value indicates a good
-     * default value for the property. Note that the application developer can choose to ignore this value and provide
-     * a different default value e.g. when rendering a form.
-     */
-    val recommendedDefaultValue: String?
-        get() = (raw.type.classifier as KClass<*>).constructors.singleOrNull { it.parameters.isEmpty() }?.call()
-            ?.toString()
+    internal val valueClass: KClass<*> = getValueClass()
 
     public fun validate() {
         val ktype = raw.type.withNullability(false)
         validate(ktype)
+    }
+
+    private fun getValueClass(): KClass<*> {
+        if (raw.type.isSubtypeOf(Set::class.starProjectedType)) {
+            return raw.type.arguments.single().type!!.classifier!! as KClass<*>
+        }
+        if (raw.type.isSubtypeOf(List::class.starProjectedType)) {
+            return raw.type.arguments.single().type!!.classifier!! as KClass<*>
+        }
+        return raw.type.classifier!! as KClass<*>
+    }
+
+    private fun findModelIDType(): String? {
+        val ktype = raw.type.withNullability(false)
+        if (!ktype.isSubtypeOf(ModelID::class.starProjectedType)) {
+            return null
+        }
+        return raw.type.withNullability(false).arguments.single().type.toString()
     }
 
     private fun validate(ktype: KType) {
@@ -316,86 +407,6 @@ public data class EventParameter(val raw: KParameter) {
         )
     }
 
-    public fun validationRulesDescription(): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        when (type) {
-            PropertyType.String -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call("") as StringContainer)
-                result["min length"] = s.minLength.toString()
-                result["max length"] = s.maxLength.toString()
-                s.regexPattern?.let { result["pattern"] = it }
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Int -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call(0) as IntContainer)
-                s.min.let { result["min"] = it.toString() }
-                s.max.let { result["max"] = it.toString() }
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Long -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call(0L) as LongContainer)
-                s.min.let { result["min"] = it.toString() }
-                s.max.let { result["max"] = it.toString() }
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Float -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call(0f) as FloatContainer)
-                s.min.let { result["min"] = it.toString() }
-                s.max.let { result["max"] = it.toString() }
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Boolean -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call(false) as BooleanContainer)
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Instant -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                    .call(Instant.fromEpochSeconds(0)) as InstantContainer)
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Duration -> {
-                val s =
-                    ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(Duration.ZERO) as DurationContainer)
-                result["validator"] =
-                    s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-            }
-
-            PropertyType.Ref -> Unit
-
-            /*            else -> {
-                            logger.warn { "validationRulesDescription not implemented for type $type" }
-
-                        }
-
-
-             */
-
-            PropertyType.KeyValueRef -> logger.warn { "validationRulesDescription not implemented for type $type" }
-
-            PropertyType.Enum -> logger.warn { "validationRulesDescription not implemented for type $type" }
-
-            null -> logger.warn { "PropertyType is null for $name" }
-        }
-        return result
-    }
 
 }
 
@@ -451,6 +462,7 @@ public enum class PropertyType {
     Enum,
     Instant,
     Duration,
+    Geo,
 }
 
 /**
@@ -490,9 +502,9 @@ private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
     if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
         return PropertyType.Enum
     }
-//    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
-    //      return PropertyType.Long
-    //  }
+    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
+        return PropertyType.Geo
+    }
 
     if (ktype.isSubtypeOf(DataContainer::class.starProjectedType)) {
         throw NotImplementedError(ktype.toString())

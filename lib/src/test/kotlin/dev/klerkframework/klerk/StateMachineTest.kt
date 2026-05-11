@@ -32,6 +32,7 @@ class StateMachineTest {
             println(p.isNullable)
             println(p.type)
             println(p.modelIDType)
+            println(p.recommendedDefaultValue)
             assertTrue(parameters.raw == CreateBookParams::class)
 
         }
