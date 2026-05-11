@@ -25,6 +25,7 @@ private const val MASKED = "[••••••]"
  *      accesses its value will treat it as meters, you can add a function like
  *          fun DistanceMeters.toMeasure(): Measure<Length> = Measure(value, meters)
  *      Code that uses this function cannot misinterpret the unit.
+ * 7. you can express default values by providing a no-params constructor.
  */
 public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) {
     private var isAuthorizedToReadProperty: Boolean =

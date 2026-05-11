@@ -311,7 +311,8 @@ public data class EventParameter(val raw: KParameter) {
         val result = mutableMapOf<String, String>()
         when (type) {
             PropertyType.String -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single().call("") as StringContainer)
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                    .call("") as StringContainer)
                 result["min length"] = s.minLength.toString()
                 result["max length"] = s.maxLength.toString()
                 s.regexPattern?.let { result["pattern"] = it }
@@ -320,7 +321,8 @@ public data class EventParameter(val raw: KParameter) {
             }
 
             PropertyType.Int -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0) as IntContainer)
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                    .call(0) as IntContainer)
                 s.min.let { result["min"] = it.toString() }
                 s.max.let { result["max"] = it.toString() }
                 result["validator"] =
@@ -328,7 +330,8 @@ public data class EventParameter(val raw: KParameter) {
             }
 
             PropertyType.Long -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0L) as LongContainer)
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                    .call(0L) as LongContainer)
                 s.min.let { result["min"] = it.toString() }
                 s.max.let { result["max"] = it.toString() }
                 result["validator"] =
@@ -336,7 +339,8 @@ public data class EventParameter(val raw: KParameter) {
             }
 
             PropertyType.Float -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(0f) as FloatContainer)
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                    .call(0f) as FloatContainer)
                 s.min.let { result["min"] = it.toString() }
                 s.max.let { result["max"] = it.toString() }
                 result["validator"] =
@@ -344,13 +348,14 @@ public data class EventParameter(val raw: KParameter) {
             }
 
             PropertyType.Boolean -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single().call(false) as BooleanContainer)
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                    .call(false) as BooleanContainer)
                 result["validator"] =
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
 
             PropertyType.Instant -> {
-                val s = ((raw.type.classifier as KClass<*>).constructors.single()
+                val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
                     .call(Instant.fromEpochSeconds(0)) as InstantContainer)
                 result["validator"] =
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
@@ -358,7 +363,8 @@ public data class EventParameter(val raw: KParameter) {
 
             PropertyType.Duration -> {
                 val s =
-                    ((raw.type.classifier as KClass<*>).constructors.single().call(Duration.ZERO) as InstantContainer)
+                    ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(Duration.ZERO) as InstantContainer)
                 result["validator"] =
                     s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
             }
