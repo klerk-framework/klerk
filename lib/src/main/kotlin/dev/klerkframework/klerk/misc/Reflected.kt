@@ -7,11 +7,14 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
+import mu.KotlinLogging
 import kotlin.reflect.*
 import kotlin.reflect.full.*
 import kotlin.reflect.jvm.javaConstructor
 import kotlin.time.Duration
 import kotlin.time.Instant
+
+private val log = KotlinLogging.logger {}
 
 internal val dateFormatter = LocalDateTime.Format {
     year()
@@ -220,14 +223,17 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 }
 
 public data class EventParameter(public val raw: KParameter) {
-    val name: String = raw.name!!
+    val name: String =
+        requireNotNull(raw.name) { "No qualified name. Model and parameter classes must be concrete classes" }
+    val qualifiedName: String =
+        requireNotNull(findValueClass().qualifiedName) { "No qualified name for $name. Model and parameter classes must be concrete classes" }
     val prettyName: String = camelCaseToPretty(name)
     val isRequired: Boolean = !raw.isOptional
     val type: PropertyType? = basicTypeEnumFromKType(raw.type.withNullability(false))
     val isNullable: Boolean = raw.type.isMarkedNullable
     val modelIDType: String? = findModelIDType()
     val validationRulesDescriptions: Map<String, String>
-    val recommendedDefaultValue: String?
+    val recommendedDefaultValue: Any?
 
     init {
         val validationRulesDescriptionsTemp = mutableMapOf<String, String>()
@@ -258,7 +264,7 @@ public data class EventParameter(public val raw: KParameter) {
                     s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Long -> {
@@ -268,7 +274,7 @@ public data class EventParameter(public val raw: KParameter) {
                     s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Float -> {
@@ -278,7 +284,7 @@ public data class EventParameter(public val raw: KParameter) {
                     s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Boolean -> {
@@ -286,7 +292,7 @@ public data class EventParameter(public val raw: KParameter) {
                         .call(false) as BooleanContainer)
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Instant -> {
@@ -294,7 +300,7 @@ public data class EventParameter(public val raw: KParameter) {
                         .call(Instant.fromEpochSeconds(0)) as InstantContainer)
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Duration -> {
@@ -303,7 +309,7 @@ public data class EventParameter(public val raw: KParameter) {
                             .call(Duration.ZERO) as DurationContainer)
                     validationRulesDescriptionsTemp["validator"] =
                         s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault.toString()
+                    recommendedDefaultValue = s.recommendedDefault
                 }
 
                 PropertyType.Ref -> {
@@ -342,14 +348,14 @@ public data class EventParameter(public val raw: KParameter) {
         }
     }
 
-    internal val valueClass: KClass<*> = getValueClass()
+    public val valueClass: KClass<*> = findValueClass()      // TODO: internal?
 
     public fun validate() {
         val ktype = raw.type.withNullability(false)
         validate(ktype)
     }
 
-    private fun getValueClass(): KClass<*> {
+    private fun findValueClass(): KClass<*> {
         if (raw.type.isSubtypeOf(Set::class.starProjectedType)) {
             return raw.type.arguments.single().type!!.classifier!! as KClass<*>
         }
@@ -557,4 +563,43 @@ internal fun extractValueClasses(kClass: KClass<*>): Set<KClass<*>> {
 internal fun checkDataContainerProperties(kClass: KClass<*>) {
     EventParameters(kClass)
     // it didn't throw, so it's fine
+}
+
+/**
+ * Returns an instance of the given property type.
+ * @param value the value to be used for the instance. If null, a dummy instance is returned.
+ */
+public fun getDataContainerInstance(eventParameter: EventParameter, value: Any?): DataContainer<*> {
+    val clazz = eventParameter.raw.type.withNullability(false).classifier as KClass<*>
+    try {
+        if (clazz.isSubclassOf(StringContainer::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: "") as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(IntContainer::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0) as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(LongContainer::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0L) as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(FloatContainer::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0f) as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(BooleanContainer::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(Enum::class)) {
+            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
+        }
+        if (clazz.isSubclassOf(ModelID::class)) {
+            val idValue = (value as? Int) ?: 0
+            return clazz.constructors.single { it.parameters.size == 1 }.call(ModelID<Any>(idValue)) as DataContainer<*>
+        }
+        TODO("cannot handle $clazz")
+    } catch (e: InstantiationException) {
+        log.error(
+            "Double check that your parameter class only consists of Datatypes and ModelIds (or set, list thereof). Note that it cannot be abstract!",
+            e
+        )
+        throw e
+    }
 }
