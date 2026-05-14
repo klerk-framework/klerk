@@ -413,6 +413,58 @@ public data class EventParameter(public val raw: KParameter) {
         )
     }
 
+    /**
+     * Turns the provided value into a DataContainer.
+     * @param value must be of the correct type.
+     */
+    public fun getInstance(value: Any): DataContainer<*> = getAnInstance(value)
+
+    /**
+     * Returns a dummy instance of the property type.
+     * Use this if you want to access validation rules etc, but the value should not be used.
+     */
+    public fun getDummyInstance(): DataContainer<*> = getAnInstance(null)
+
+    /**
+     * Returns an instance of the given property type.
+     * @param value the value to be used for the instance. If null, a dummy instance is returned.
+     */
+    private fun getAnInstance(value: Any?): DataContainer<*> {
+        val clazz = raw.type.withNullability(false).classifier as KClass<*>
+        try {
+            if (clazz.isSubclassOf(StringContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: "") as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(IntContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(LongContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0L) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(FloatContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0f) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(BooleanContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(Enum::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(ModelID::class)) {
+                val idValue = (value as? Int) ?: 0
+                return clazz.constructors.single { it.parameters.size == 1 }
+                    .call(ModelID<Any>(idValue)) as DataContainer<*>
+            }
+            TODO("cannot handle $clazz")
+        } catch (e: InstantiationException) {
+            log.error(
+                "Double check that your parameter class only consists of Datatypes and ModelIds (or set, list thereof). Note that it cannot be abstract!",
+                e
+            )
+            throw e
+        }
+    }
+
 
 }
 
@@ -563,43 +615,4 @@ internal fun extractValueClasses(kClass: KClass<*>): Set<KClass<*>> {
 internal fun checkDataContainerProperties(kClass: KClass<*>) {
     EventParameters(kClass)
     // it didn't throw, so it's fine
-}
-
-/**
- * Returns an instance of the given property type.
- * @param value the value to be used for the instance. If null, a dummy instance is returned.
- */
-public fun getDataContainerInstance(eventParameter: EventParameter, value: Any?): DataContainer<*> {
-    val clazz = eventParameter.raw.type.withNullability(false).classifier as KClass<*>
-    try {
-        if (clazz.isSubclassOf(StringContainer::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: "") as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(IntContainer::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0) as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(LongContainer::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0L) as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(FloatContainer::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0f) as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(BooleanContainer::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(Enum::class)) {
-            return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
-        }
-        if (clazz.isSubclassOf(ModelID::class)) {
-            val idValue = (value as? Int) ?: 0
-            return clazz.constructors.single { it.parameters.size == 1 }.call(ModelID<Any>(idValue)) as DataContainer<*>
-        }
-        TODO("cannot handle $clazz")
-    } catch (e: InstantiationException) {
-        log.error(
-            "Double check that your parameter class only consists of Datatypes and ModelIds (or set, list thereof). Note that it cannot be abstract!",
-            e
-        )
-        throw e
-    }
 }
