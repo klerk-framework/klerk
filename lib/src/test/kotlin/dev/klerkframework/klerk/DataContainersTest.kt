@@ -69,6 +69,32 @@ class DataContainersTest {
     }
 
     @Test
+    fun geoPositionISO6709() {
+        val positions = listOf(
+            GeoPosition(latitude = 48.8577, longitude = 2.295),
+            GeoPosition(latitude = 0.0, longitude = 0.0),
+            GeoPosition(latitude = -90.0, longitude = -180.0),
+            GeoPosition(latitude = 90.0, longitude = 180.0),
+            GeoPosition(latitude = -1.1234567, longitude = -0.9876543),
+            GeoPosition(latitude = 40.6894, longitude = -74.0447),
+        )
+
+        positions.forEach { original ->
+            val iso = original.toISO6709()
+            assertTrue(iso.endsWith("/"), "ISO 6709 string should end with /")
+            val decoded = GeoPosition.fromISO6709(iso)
+            assertEquals(original.latitude, decoded.latitude, 0.000001)
+            assertEquals(original.longitude, decoded.longitude, 0.000001)
+        }
+
+        // Check format: +DD.DDDDDD+DDD.DDDDDD/
+        assertEquals("+48.857700+002.295000/", GeoPosition(48.8577, 2.295).toISO6709())
+        assertEquals("+00.000000+000.000000/", GeoPosition(0.0, 0.0).toISO6709())
+        assertEquals("-90.000000-180.000000/", GeoPosition(-90.0, -180.0).toISO6709())
+        assertEquals("+40.689400-074.044700/", GeoPosition(40.6894, -74.0447).toISO6709())
+    }
+
+    @Test
     fun enumContainerValidation() {
         val container = BookGenreContainer(BookGenre.Fiction)
         assertNull(container.validate("genre", DefaultTranslation))

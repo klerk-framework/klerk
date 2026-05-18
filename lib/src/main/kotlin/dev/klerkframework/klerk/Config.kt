@@ -99,7 +99,7 @@ public data class Config<C : KlerkContext, V>(
             check(!problem) { "State ${state.withoutPrefix()} has a transition to itself" }
         }
         managedModels.forEach { managed ->
-            managed.stateMachine.states.forEach { state ->
+            managed.stateMachine.mutableStates.forEach { state ->
                 checkBlock(state.enterBlock, state.id)
                 checkBlock(state.exitBlock, state.id)
                 when (state) {
@@ -119,7 +119,7 @@ public data class Config<C : KlerkContext, V>(
      */
     private fun allEventsMustBeDeclared() {
         managedModels.map { it.stateMachine }.forEach { sm ->
-            sm.states.flatMap { state ->
+            sm.mutableStates.flatMap { state ->
                 when (state) {
                     is VoidState -> state.onEventBlocks.map { it.first }
                     is InstanceState -> state.onEventBlocks.map { it.first }
@@ -138,7 +138,7 @@ public data class Config<C : KlerkContext, V>(
 
     private fun parametersWithReferencesMustHaveCollectionValidation() {
         managedModels.map { it.stateMachine }.forEach { sm ->
-            sm.states.flatMap { state ->
+            sm.mutableStates.flatMap { state ->
                 when (state) {
                     is VoidState -> state.onEventBlocks.map { it.first }
                     is InstanceState -> state.onEventBlocks.map { it.first }
@@ -270,7 +270,7 @@ public data class Config<C : KlerkContext, V>(
 
     public fun getEvent(eventId: EventReference): Event<Any, Any?> {
         @Suppress("UNCHECKED_CAST")
-        return getStateMachine(eventId).states.flatMap { it.getEvents() }
+        return getStateMachine(eventId).mutableStates.flatMap { it.getEvents() }
             .first { it.id == eventId } as Event<Any, Any?>
     }
 

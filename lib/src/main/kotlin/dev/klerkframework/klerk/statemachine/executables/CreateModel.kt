@@ -42,7 +42,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         }
         val sm = config.getStateMachine(created)
         val voidExitBlock = sm.voidState.exitBlock
-        val enterBlock = sm.states.single { it.name == initialState.name }.enterBlock
+        val enterBlock = sm.mutableStates.single { it.name == initialState.name }.enterBlock
         return ProcessingData(
             createdModels = listOf(created.id),
             unFinalizedTransition = Triple(initialState.name, args.context.time, created),

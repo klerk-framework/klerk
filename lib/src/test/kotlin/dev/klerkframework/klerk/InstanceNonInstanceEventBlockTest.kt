@@ -104,4 +104,3 @@ class InstanceNonInstanceEventBlockTest {
 fun updateModelFunction(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
     return args.model.props.copy(title = BookTitle("something else"))
 }
-

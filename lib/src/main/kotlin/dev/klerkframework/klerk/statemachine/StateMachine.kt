@@ -11,10 +11,11 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 ) {
 
     internal lateinit var modelViews: ModelViews<T, C>
-    public val states: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
+    internal val mutableStates: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
+    public val states: List<State<T, ModelStates, C, V>> get() = mutableStates
     public lateinit var voidState: VoidState<T, ModelStates, C, V>
     public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
-        get() = states.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
+        get() = mutableStates.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
 
     internal val declaredEvents = mutableListOf<Event<T, *>>()
 
@@ -29,7 +30,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         if (name == null) {
             return voidState
         }
-        return states.firstOrNull { it.name == name }
+        return mutableStates.firstOrNull { it.name == name }
             ?: throw InternalException(message = "State $name doesn't exist in statemachine for ${this.type.simpleName}. Do you need to migrate the data?")
     }
 
@@ -60,10 +61,10 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         if (model == null) {
             return voidState
         }
-        return states.find { it.name == model.state }
+        return mutableStates.find { it.name == model.state }
             ?: throw IllegalStateException(
                 "The statemachine has not defined the state '${model.state}'. The defined available are: ${
-                    states.joinToString(
+                    mutableStates.joinToString(
                         ","
                     ) { it.name }
                 }"
@@ -72,7 +73,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
     private fun getAllStates(): Set<State<T, ModelStates, C, V>> {
         val allStates = HashSet<State<T, ModelStates, C, V>>()
-        allStates.addAll(states)
+        allStates.addAll(mutableStates)
         allStates.add(voidState)
         return allStates
     }
@@ -99,7 +100,8 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
      */
 
-    public fun getAllEvents(): Set<EventReference> = states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
+    public fun getAllEvents(): Set<EventReference> =
+        mutableStates.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 
 
     // -------- Builder ---------------------
@@ -108,18 +110,18 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         val state = VoidState<T, ModelStates, C, V>("void", type.simpleName!!)
         state.init()
         voidState = state
-        states.add(state)
+        mutableStates.add(state)
     }
 
     public fun state(modelState: ModelStates, init: InstanceState<T, ModelStates, C, V>.() -> Unit) {
         val state = InstanceState<T, ModelStates, C, V>(modelState.name, type.simpleName!!)
         state.init()
         // state.verifyAllUsedEventsAreDeclared(externalEvents.getEvents(), AnyType)
-        states.add(state)
+        mutableStates.add(state)
     }
 
     internal fun onKlerkStart(config: Config<C, V>) {
-        states.forEach { it.onKlerkStart(config) }
+        mutableStates.forEach { it.onKlerkStart(config) }
     }
 
     public fun event(event: VoidEventNoParameters<T>, init: VoidEventRulesNoParameters<T, C, V>.() -> Unit) {

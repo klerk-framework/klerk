@@ -25,11 +25,12 @@ internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {
         // If we ever switch to Long or ULong, think about:
         // * Perhaps use Long.MAX_VALUE since ULong.MAX_VALUE can't be stored in sqlite. (fixed now according to exposed changelog)
         // * We may want to switch to Long in the future if we need @JvmInline (see KT-69674).
-        val randomInt = random.nextInt(0, Int.MAX_VALUE)
-        if (ModelCache.isIdAvailable(randomInt)) {
-            return ModelID(randomInt)
+        while (true) {
+            val randomInt = random.nextInt(0, Int.MAX_VALUE)
+            if (ModelCache.isIdAvailable(randomInt)) {
+                return ModelID(randomInt)
+            }
         }
-        return getNextModelID()
     }
 
     override fun getNextJobID(): JobId {

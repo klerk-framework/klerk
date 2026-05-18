@@ -67,9 +67,10 @@ private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V>
     config: Config<C, V>,
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
-    val exitBlock = config.getStateMachine(model).states.single { it.name == model.state }.exitBlock
+    val exitBlock = config.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = time)
-    val enterBlock = config.getStateMachine(updatedModel).states.single { it.name == updatedModel.state }.enterBlock
+    val enterBlock =
+        config.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 
     // note that we will not update modifiedModel now since we must first execute any exit block using the model as it
     // currently is.

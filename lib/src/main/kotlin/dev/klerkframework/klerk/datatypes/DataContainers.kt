@@ -305,7 +305,7 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Long>(v
 }
 
 /**
- * A container for geo positions (latitude and longitude).
+ * A container for latitude and longitude.
  *
  * The precision is at least 6 decimals, which translates to sub-meter precision.
  */
@@ -320,6 +320,8 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
         require(longitude in -180.0..180.0) { "longitude must be between -180.0 and +180.0" }
     }
 
+    override fun toString(): String = toISO6709()
+
     internal constructor(uLong: ULong) : this(decodeLatitude(uLong), decodeLongitude(uLong))
 
     internal val uLongEncoded: ULong
@@ -329,7 +331,22 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
             return (latitudeULong shl 32 or longitudeULong)
         }
 
-    internal companion object {
+    /**
+     * Serializes this position to an ISO 6709 string, e.g. "+48.8577+002.2950/". Altitude is omitted.
+     */
+    public fun toISO6709(): String {
+        val lat = if (latitude >= 0) "+%09.6f".format(
+            java.util.Locale.US,
+            latitude
+        ) else "%010.6f".format(java.util.Locale.US, latitude)
+        val lon = if (longitude >= 0) "+%010.6f".format(
+            java.util.Locale.US,
+            longitude
+        ) else "%011.6f".format(java.util.Locale.US, longitude)
+        return "$lat$lon/"
+    }
+
+    public companion object {
         private const val DOUBLE_TO_LONG_FACTOR = 10000000
 
         private fun decodeLatitude(uLong: ULong): Double {
@@ -338,6 +355,24 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
 
         private fun decodeLongitude(uLong: ULong): Double {
             return (uLong and UInt.MAX_VALUE.toULong()).toInt().toDouble() / DOUBLE_TO_LONG_FACTOR
+        }
+
+        /**
+         * Deserializes a GeoPosition from an ISO 6709 string, e.g. "+48.8577+002.2950/".
+         */
+        public fun fromISO6709(iso6709: String): GeoPosition {
+            val s = iso6709.trimEnd('/')
+            // Find the second sign character (+ or -) which starts the longitude
+            val lonStart = s.indexOfFirst { it == '+' || it == '-' }.let { first ->
+                require(first == 0) { "Invalid ISO 6709 string: $iso6709" }
+                s.drop(1).indexOfFirst { it == '+' || it == '-' }.let { rel ->
+                    require(rel >= 0) { "Invalid ISO 6709 string: $iso6709" }
+                    rel + 1
+                }
+            }
+            val latitude = s.substring(0, lonStart).toDouble()
+            val longitude = s.substring(lonStart).toDouble()
+            return GeoPosition(latitude, longitude)
         }
     }
 }

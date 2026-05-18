@@ -109,8 +109,8 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
         return result
     }
 
-    private fun getMetaAndProperties(): List<ReflectedProperty> {
-        val result = getMeta().toMutableList()
+    public fun getProperties(): List<ReflectedProperty> {
+        val result = mutableListOf<ReflectedProperty>()
         original.props::class.memberProperties.forEach { property ->
             result.add(
                 @Suppress("UNCHECKED_CAST")

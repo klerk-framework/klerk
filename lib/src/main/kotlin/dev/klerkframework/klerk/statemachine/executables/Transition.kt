@@ -47,9 +47,10 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     requireNotNull(model)
-    val exitBlock = config.getStateMachine(model).states.single { it.name == model.state }.exitBlock
+    val exitBlock = config.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState, lastStateTransitionAt = time)
-    val enterBlock = config.getStateMachine(updatedModel).states.single { it.name == updatedModel.state }.enterBlock
+    val enterBlock =
+        config.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 
     // note that we will not update modifiedModel now since we must first execute any exit block using the model as it
     // currently is.

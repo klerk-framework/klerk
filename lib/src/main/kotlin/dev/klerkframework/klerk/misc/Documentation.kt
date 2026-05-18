@@ -10,13 +10,13 @@ public fun <V> generateStateDiagram(
     translation: KlerkTranslation
 ): String {
     var result = "stateDiagram-v2\n"
-    stateMachine.states.filterNot { it.name == "void" }.forEach { result += generateStateVariable(it) }
+    stateMachine.mutableStates.filterNot { it.name == "void" }.forEach { result += generateStateVariable(it) }
     result += generateVoidTransitions(stateMachine.voidState)
     result += generateTransitions(stateMachine.instanceStates, translation)
     if (showUpdateNotes) {
         result += generateUpdateNotes(stateMachine.instanceStates)
     }
-    result += generateDeleteTransitions(stateMachine.states)
+    result += generateDeleteTransitions(stateMachine.mutableStates)
     return result
 }
 
