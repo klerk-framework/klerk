@@ -68,11 +68,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     public open val recommendedDefault: T? = null
 
     override fun toString(): String {
-        return try {
-            value.toString()
-        } catch (e: Exception) {
-            MASKED
-        }
+        return if (isAuthorizedToReadProperty) value.toString() else MASKED
     }
 
     override fun equals(other: Any?): Boolean {
