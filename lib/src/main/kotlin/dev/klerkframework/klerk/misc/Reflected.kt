@@ -203,6 +203,14 @@ public class ReflectedProperty(
         return relatedModels[value]
     }
 
+    public fun getRelatedModelPropsClass(): KClass<*>? {
+        val model = relatedModels[value] ?: return null
+        return model.props::class
+    }
+
+    public fun describe(translation: KlerkTranslation): String? =
+        translation.propertyDescription(original.name)
+
 }
 
 public data class EventParameters<T : Any>(val raw: KClass<out T>) {
