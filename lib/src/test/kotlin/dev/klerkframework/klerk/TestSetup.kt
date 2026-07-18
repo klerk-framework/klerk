@@ -228,7 +228,7 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
     stateMachine {
 
         event(CreateAuthor) {
-            validateContext(::preventUnauthenticated)
+            validateWithContext(::preventUnauthenticated)
             validateWithParameters(::cannotHaveAnAwfulName)
             validateWithParameters(::secretTokenShouldBeZeroIfNameStartsWithM)
             validateWithParameters(::onlyAuthenticationIdentityCanCreateDaniel)

@@ -73,7 +73,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         public fun createCommands(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any>>,
+            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventCreateEvents(function, onCondition))
@@ -143,7 +143,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         public fun createCommands(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any>>,
+            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceNonEventCreateEvents(function, onCondition))
@@ -214,7 +214,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         public fun createCommands(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any>>,
+            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventCreateEvents(function, onCondition))

@@ -10,7 +10,7 @@ import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
 internal class VoidEventCreateEvents<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any>>,
+    val f: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
     override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
@@ -28,7 +28,7 @@ internal class VoidEventCreateEvents<T : Any, P, C : KlerkContext, V>(
 }
 
 internal class InstanceNonEventCreateEvents<T : Any, C : KlerkContext, V>(
-    val f: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any>>,
+    val f: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any?>>,
     override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
 ) : InstanceNonEventExecutable<T, C, V> {
 
@@ -46,7 +46,7 @@ internal class InstanceNonEventCreateEvents<T : Any, C : KlerkContext, V>(
 }
 
 internal class InstanceEventCreateEvents<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any>>,
+    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
     override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 

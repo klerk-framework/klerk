@@ -124,7 +124,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             .map { it.toProblem() }
     }
 
-    private fun validateContext(context: C, eventReference: EventReference): Collection<Problem> {
+    private fun validateWithContext(context: C, eventReference: EventReference): Collection<Problem> {
         return klerk.config.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
             if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
@@ -272,7 +272,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         parameters: Any?,
         context: C
     ): Boolean {
-        if (validateContext(context, eventReference).any()) return false
+        if (validateWithContext(context, eventReference).any()) return false
         parameters?.let {
             if (validateDataContainers(it, context.translation).any()) return false
             if (validateReferences(eventReference, parameters, context) != null) return false
@@ -304,7 +304,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             problems.addAll(validatePropertyCollection(p, context.translation))
         }
 
-        problems.addAll(validateContext(context, command.event.id))
+        problems.addAll(validateWithContext(context, command.event.id))
         validateReferences(command.event.id, command.params, context)?.let { problems.add(it) }
         validateEnums(command.event.id, command.params)?.let { problems.add(it) }
 
@@ -331,7 +331,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         model: Model<T>?,
         readerWithoutAuth: ReaderWithoutAuth<C, V>
     ): Boolean {
-        if (validateContext(context, eventRef).isNotEmpty()) {
+        if (validateWithContext(context, eventRef).isNotEmpty()) {
             return false
         }
 

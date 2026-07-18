@@ -1,10 +1,12 @@
+import org.jetbrains.dokka.gradle.formats.DokkaFormatPlugin
+import org.jetbrains.dokka.gradle.internal.InternalDokkaGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 
 plugins {
     kotlin("jvm") version "2.3.10"
     `java-library`
     `maven-publish`
-    id("org.jetbrains.dokka") version "2.1.0"
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 val coroutinesVersion = "1.4.2"
@@ -55,3 +57,21 @@ kotlin {
     jvmToolchain(17)
     explicitApi = ExplicitApiMode.Strict
 }
+
+// Declares Markdown Gradle plugin
+@OptIn(InternalDokkaGradlePluginApi::class)
+abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {
+    override fun DokkaFormatPlugin.DokkaFormatPluginContext.configure() {
+        project.dependencies {
+            // Sets up current project generation
+            dokkaPlugin(dokka("gfm-plugin"))
+
+            // Sets up multi-project generation
+            formatDependencies.dokkaPublicationPluginClasspathApiOnly.dependencies.addLater(
+                dokka("gfm-template-processing-plugin")
+            )
+        }
+    }
+}
+// Applies the plugin
+apply<DokkaMarkdownPlugin>()

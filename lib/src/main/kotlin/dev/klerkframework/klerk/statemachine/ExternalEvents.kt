@@ -9,7 +9,7 @@ import kotlin.reflect.KProperty1
 @ConfigMarker
 public abstract class EventRules<C : KlerkContext> {
     internal val contextValidations: MutableSet<((C) -> PropertyCollectionValidity)> = mutableSetOf()
-    public fun validateContext(function: (C) -> PropertyCollectionValidity) {
+    public fun validateWithContext(function: (C) -> PropertyCollectionValidity) {   // TODO: not PropertyCollectionValidity
         contextValidations.add(function)
     }
 }
