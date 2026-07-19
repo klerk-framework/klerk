@@ -189,6 +189,25 @@ val entries = klerk.events.getEventsInAuditLog(
 This is subject to its own authorization rules (`eventLog` in [authorization.md](authorization.md)) — reading it
 throws `AuthorizationException` if the context isn't allowed to see the audit log.
 
+## Declaring the DSL before writing the functions
+
+Every function referenced from the DSL — `event(...)`'s validation rules, `createModel`, `update`, `transitionTo`'s
+`onCondition`, and so on (see [state-machines.md](state-machines.md#the-function-arguments) and
+[validation.md](validation.md)) — is passed in by reference (`::functionName`). Nothing requires the function body
+to be finished for the DSL itself to compile and for `Klerk.create(config)` to build successfully; a stub that
+throws `TODO()` is enough. This makes it practical to design top-down: sketch the full shape of a state machine
+(states, events, validation rules) first, get it reviewed, and only then fill in each function body — including
+letting an IDE generate the stub's signature from the `::functionName` reference before you've written anything.
+
+Function bodies passed to the DSL should be pure — the same input always produces the same output, with no side
+effects. This isn't just a style preference: `ProcessingOptions.dryRun` computes a result by calling the exact same
+functions as a real command, without persisting anything. If a function performing a side effect (e.g. calling an
+external API) is used to compute `update`/`createModel`'s return value, a dry run triggers that side effect for
+real. `require()`/`check()` assertions are fine to keep in these functions — in a correctly configured system they
+should never actually throw, since anything they'd catch should already have been rejected by
+[validation](validation.md) or [authorization](authorization.md) first; if one does throw, it's a bug in an earlier
+layer rather than an expected outcome.
+
 ## Putting it together
 
 ```kotlin

@@ -72,5 +72,8 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Key-value store](docs/key-value-store.md) — simple storage outside the model system
 * [Translation](docs/translation.md) — localizing validation and UI text
 * [Testing](docs/testing.md) — testing a Klerk configuration
+* [Concurrency](docs/concurrency.md) — how commands and reads are serialized, and what that means for your code
+* [Security](docs/security.md) — how authorization, concurrency, and the audit log combine into Klerk's security model
+* [Performance](docs/performance.md) — what's fast by default, and what to do if it isn't enough
 
 Read more on [klerkframework.dev](https://klerkframework.dev)

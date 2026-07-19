@@ -1,0 +1,42 @@
+# Security
+
+This page ties together the pieces elsewhere in these docs that make up Klerk's security posture. Klerk is secure by
+design, i.e. none of it is optional or something you have to remember to turn on — it's evaluated automatically by the
+framework, so a correctly configured application gets these properties without individual code paths having to enforce
+them.
+
+## Deny by default
+
+[Authorization](authorization.md) rules are attribute-based (they can key off anything on the actor, the model, or the
+context) and default-deny: a rule category with no rules denies everything in it, and even with rules present, an
+operation is only allowed if at least one positive rule explicitly says so — there is no implicit allow. This applies
+independently to reading a model, reading a single property of a model, submitting a command, and reading the audit log.
+`insecureAllowEverything()` exists to bypass all of this for prototyping and logs a warning when used — never ship it.
+
+## No time-of-check-to-time-of-use gap
+
+Because commands are processed one at a time and a read never observes a half-committed command (see
+[concurrency.md](concurrency.md)), authorization and validation rules are evaluated against data that is guaranteed
+still current the instant before the command is committed. There's no window between "checked" and "used" for another
+command to sneak in and invalidate the check — the usual TOCTOU class of bug isn't something you can accidentally
+introduce by racing two commands against each other.
+
+## Idempotent, tamper-evident commands
+
+Every command carries a `CommandToken` (see [events-and-commands.md](events-and-commands.md#commandtoken)), which
+guarantees it is only ever applied once, and can optionally require that the model (s) it targets haven't changed since
+the token was created. This is what makes it safe to retry a submission (e.g. after a dropped connection)
+without risking a duplicate effect.
+
+## Audit log
+
+Every successfully processed command is durably recorded and can be read back via `klerk.events` (see
+[events-and-commands.md](events-and-commands.md#the-audit-log)), gated by its own `eventLog` authorization rules. This
+is what you reach for during an incident or a compliance review — "what happened, and who did it" is answered by the
+framework itself rather than by whatever ad hoc logging individual code paths happened to include.
+
+## Property-level access control
+
+Authorization isn't just "can this actor see this model" — `readProperties` rules gate individual properties on a model
+the actor can otherwise read (see [authorization.md](authorization.md#readproperties)), e.g. so that any actor can read
+an `Author`'s name while only some can read a sensitive field on the same model.
