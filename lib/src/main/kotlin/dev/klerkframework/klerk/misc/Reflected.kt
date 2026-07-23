@@ -534,7 +534,8 @@ public enum class PropertyType {
 /**
  * @return a PropertyType if this is a "basic" type, otherwise null
  */
-private fun basicTypeEnumFromKType(ktype: KType): PropertyType? {
+private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
+    val ktype = ktypeMaybeNullable.withNullability(false)
     if (ktype.isSubtypeOf(ModelID::class.starProjectedType)) {
         return PropertyType.Ref
     }

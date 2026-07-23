@@ -225,7 +225,9 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
 
     /**
      * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
-     * doesn't make it available in the key-value store. The reason for this extra step is that large blobs may
+     * doesn't make it available in the key-value store. To actually put it in the store, use  [KlerkKeyValueStore.put]
+     * with the token returned by this function.
+     * The reason for this extra step is that large blobs may
      * take a long time to upload and store in the database, and we don't want to block other operations during this
      * time. Therefore, this step happens without acquiring any lock.
      *
@@ -235,6 +237,7 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
 
     /**
      * Put a blob in the key-value store.
+     * @param token the token returned by [KlerkKeyValueStore.prepareBlob]
      * @throws AuthorizationException if the actor isn't authorized
      */
     public suspend fun put(token: BlobToken, ttl: Duration? = null): BinaryKeyValueID

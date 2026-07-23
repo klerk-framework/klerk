@@ -52,5 +52,3 @@ httpClient.post(book.props.title.value)
 
 This matters most for [jobs](jobs.md), which routinely call out to external systems — don't wrap the network call itself
 in a read lock.
-
-`readSuspend` may be acceptable in some cases, e.g. when responding to a request with `call.respondHtml()` in Ktor.
