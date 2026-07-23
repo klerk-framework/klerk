@@ -20,7 +20,6 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
-import org.jetbrains.exposed.sql.transactions.experimental.suspendedTransactionAsync
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.InputStream
 import javax.sql.DataSource
@@ -242,7 +241,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         logger.info { "Migration done (version is now $currentModelSchemaVersion)" }
     }
 
-    override fun putKeyValue(id: Long, value: String, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: String, ttl: Instant?) {
         transaction(database) {
             KeyValueStrings.insert {
                 it[this.id] = id
@@ -252,7 +251,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun putKeyValue(id: Long, value: Int, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: Int, ttl: Instant?) {
         transaction(database) {
             KeyValueInts.insert {
                 it[this.id] = id
@@ -262,7 +261,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun putKeyValue(id: Long, value: InputStream, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: InputStream, ttl: Instant?) {
         transaction(database) {
             KeyValueBlobs.upsert {
                 it[this.id] = id
@@ -273,7 +272,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun updateBlob(id: Long, ttl: Instant?, active: Boolean) {
+    override fun updateBlob(id: Int, ttl: Instant?, active: Boolean) {
         transaction(database) {
             KeyValueBlobs.update(where = { KeyValueBlobs.id eq id }) {
                 it[this.id] = id
@@ -283,7 +282,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun getKeyValueString(id: Long): Pair<String, Instant?>? =
+    override fun getKeyValueString(id: Int): Pair<String, Instant?>? =
         transaction(database) {
             KeyValueStrings.selectAll()
                 .where { KeyValueStrings.id eq id }
@@ -292,7 +291,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 }.firstOrNull()
         }
 
-    override fun getKeyValueInt(id: Long): Pair<Int, Instant?>? =
+    override fun getKeyValueInt(id: Int): Pair<Int, Instant?>? =
         transaction(database) {
             KeyValueInts.selectAll()
                 .where { KeyValueInts.id eq id }
@@ -301,7 +300,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 }.firstOrNull()
         }
 
-    override fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>? =
+    override fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>? =
         transaction(database) {
             KeyValueBlobs.selectAll()
                 .where { KeyValueBlobs.id eq id }
@@ -415,21 +414,21 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object KeyValueStrings : Table("\"klerk_strings\"") {
-        val id = long("id").index()
+        val id = integer("id").index()
         val value = varchar("value", length = 100000)
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueInts : Table("\"klerk_ints\"") {
-        val id = long("id").index()
+        val id = integer("id").index()
         val value = integer("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         override val primaryKey = PrimaryKey(id)
     }
 
     internal object KeyValueBlobs : Table("\"klerk_blobs\"") {
-        val id = long("id").index()
+        val id = integer("id").index()
         val value = blob("value")
         val ttl = long("ttl").nullable() // microseconds since 1970
         val active = bool("active")  // blobs are first prepared, then activated in the second step

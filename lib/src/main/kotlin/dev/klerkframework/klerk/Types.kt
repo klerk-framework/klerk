@@ -296,7 +296,7 @@ public value class ModelID<T : Any>(public val value: Int) {
     }
 }
 
-public abstract class KeyValueID(public val id: Long) {
+public abstract class KeyValueID(public val id: Int) {
     override fun equals(other: Any?): Boolean {
         return other != null && id == (other as? KeyValueID)?.id
     }
@@ -304,11 +304,11 @@ public abstract class KeyValueID(public val id: Long) {
     override fun hashCode(): Int = id.hashCode()
 }
 
-public class StringKeyValueID(id: Long) : KeyValueID(id)
-public class IntKeyValueID(id: Long) : KeyValueID(id)
-public class BinaryKeyValueID(id: Long) : KeyValueID(id)
+public class StringKeyValueID(id: Int) : KeyValueID(id)
+public class IntKeyValueID(id: Int) : KeyValueID(id)
+public class BinaryKeyValueID(id: Int) : KeyValueID(id)
 
-public class BlobToken(public val id: Long)
+public class BlobToken(public val id: Int)
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous

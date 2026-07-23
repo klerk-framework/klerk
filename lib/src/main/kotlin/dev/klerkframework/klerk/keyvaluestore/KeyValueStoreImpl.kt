@@ -16,9 +16,9 @@ internal class KeyValueStoreImpl<C : KlerkContext, V>(private val config: Config
         value: String,
         ttl: Duration?
     ): StringKeyValueID {
-        var id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+        var id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         while (config.persistence.getKeyValueString(id) != null) {
-            id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+            id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         }
         config.persistence.putKeyValue(id, value, ttl?.let { Clock.System.now().plus(it) })
         return StringKeyValueID(id)
@@ -28,18 +28,18 @@ internal class KeyValueStoreImpl<C : KlerkContext, V>(private val config: Config
         value: Int,
         ttl: Duration?
     ): IntKeyValueID {
-        var id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+        var id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         while (config.persistence.getKeyValueInt(id) != null) {
-            id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+            id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         }
         config.persistence.putKeyValue(id, value, ttl?.let { Clock.System.now().plus(it) })
         return IntKeyValueID(id)
     }
 
     override fun prepareBlob(value: InputStream): BlobToken {
-        var id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+        var id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         while (config.persistence.getKeyValueBlob(id) != null) {
-            id = random.nextLong(0, UInt.MAX_VALUE.toLong())
+            id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         }
         config.persistence.putKeyValue(id, value, Clock.System.now().plus(5.minutes))
         return BlobToken(id)

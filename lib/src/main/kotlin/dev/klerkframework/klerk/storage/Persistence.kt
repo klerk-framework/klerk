@@ -39,13 +39,13 @@ public interface Persistence {
     public fun setConfig(config: Config<*, *>): Unit
     public fun migrate(migrations: List<MigrationStep>): Unit
 
-    public fun putKeyValue(id: Long, value: String, ttl: Instant?): Unit
-    public fun putKeyValue(id: Long, value: Int, ttl: Instant?): Unit
-    public fun putKeyValue(id: Long, value: InputStream, ttl: Instant?): Unit
-    public fun updateBlob(id: Long, ttl: Instant?, active: Boolean): Unit
-    public fun getKeyValueString(id: Long): Pair<String, Instant?>?
-    public fun getKeyValueInt(id: Long): Pair<Int, Instant?>?
-    public fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>?
+    public fun putKeyValue(id: Int, value: String, ttl: Instant?): Unit
+    public fun putKeyValue(id: Int, value: Int, ttl: Instant?): Unit
+    public fun putKeyValue(id: Int, value: InputStream, ttl: Instant?): Unit
+    public fun updateBlob(id: Int, ttl: Instant?, active: Boolean): Unit
+    public fun getKeyValueString(id: Int): Pair<String, Instant?>?
+    public fun getKeyValueInt(id: Int): Pair<Int, Instant?>?
+    public fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>?
     public fun insertJob(meta: JobMetadata)
     public fun updateJob(updated: JobMetadata)
     public fun getAllJobs(): Set<JobMetadata>
@@ -58,9 +58,9 @@ public class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
-    private val keyValueStrings = mutableMapOf<Long, Pair<String, Instant?>>()
-    private val keyValueInts = mutableMapOf<Long, Pair<Int, Instant?>>()
-    private val keyValueBlobs = mutableMapOf<Long, Triple<ByteArray, Instant?, Boolean>>()
+    private val keyValueStrings = mutableMapOf<Int, Pair<String, Instant?>>()
+    private val keyValueInts = mutableMapOf<Int, Pair<Int, Instant?>>()
+    private val keyValueBlobs = mutableMapOf<Int, Triple<ByteArray, Instant?, Boolean>>()
     private val jobs = mutableMapOf<JobId, JobMetadata>()
 
     override fun <T : Any, P, C : KlerkContext, V> store(
@@ -121,19 +121,19 @@ public class RamStorage : Persistence {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
     }
 
-    override fun putKeyValue(id: Long, value: String, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: String, ttl: Instant?) {
         keyValueStrings[id] = Pair(value, ttl)
     }
 
-    override fun putKeyValue(id: Long, value: Int, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: Int, ttl: Instant?) {
         keyValueInts[id] = Pair(value, ttl)
     }
 
-    override fun putKeyValue(id: Long, value: InputStream, ttl: Instant?) {
+    override fun putKeyValue(id: Int, value: InputStream, ttl: Instant?) {
         keyValueBlobs[id] = Triple(value.readAllBytes(), ttl, false)
     }
 
-    override fun updateBlob(id: Long, ttl: Instant?, active: Boolean) {
+    override fun updateBlob(id: Int, ttl: Instant?, active: Boolean) {
         val old = keyValueBlobs[id]
         if (old == null) {
             logger.warn { "Could not find blob with id $id" }
@@ -142,9 +142,9 @@ public class RamStorage : Persistence {
         keyValueBlobs[id] = Triple(old.first, ttl, active)
     }
 
-    override fun getKeyValueString(id: Long): Pair<String, Instant?>? = keyValueStrings[id]
-    override fun getKeyValueInt(id: Long): Pair<Int, Instant?>? = keyValueInts[id]
-    override fun getKeyValueBlob(id: Long): Triple<InputStream, Instant?, Boolean>? =
+    override fun getKeyValueString(id: Int): Pair<String, Instant?>? = keyValueStrings[id]
+    override fun getKeyValueInt(id: Int): Pair<Int, Instant?>? = keyValueInts[id]
+    override fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>? =
         keyValueBlobs[id]?.let { Triple(it.first.inputStream(), it.second, it.third) }
 
     override fun insertJob(meta: JobMetadata) {
