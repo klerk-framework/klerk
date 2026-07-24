@@ -215,13 +215,13 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
     /**
      * Put a String value in the key-value store.
      */
-    public suspend fun put(value: String, ttl: Duration? = null): StringKeyValueID
+    public suspend fun put(value: String, ttl: Duration? = null): StringKey
 
     /**
      * Put an Int value in the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(value: Int, ttl: Duration? = null): IntKeyValueID
+    public suspend fun put(value: Int, ttl: Duration? = null): IntKey
 
     /**
      * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
@@ -240,28 +240,28 @@ public interface KlerkKeyValueStore<C : KlerkContext> {
      * @param token the token returned by [KlerkKeyValueStore.prepareBlob]
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(token: BlobToken, ttl: Duration? = null): BinaryKeyValueID
+    public suspend fun put(token: BlobToken, ttl: Duration? = null): BlobKey
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: StringKeyValueID, context: C): String
+    public suspend fun get(id: StringKey, context: C): String
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: IntKeyValueID, context: C): Int
+    public suspend fun get(id: IntKey, context: C): Int
 
     /**
      * Retrieve a value from the key-value store.
      * @throws AuthorizationException if the actor isn't authorized
      * @throws kotlin.NoSuchElementException if there exists no value for the provided key
      */
-    public suspend fun get(id: BinaryKeyValueID, context: C): InputStream
+    public suspend fun get(id: BlobKey, context: C): InputStream
 
 }
 

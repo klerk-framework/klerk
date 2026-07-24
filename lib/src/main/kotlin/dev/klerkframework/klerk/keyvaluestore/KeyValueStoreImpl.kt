@@ -15,25 +15,25 @@ internal class KeyValueStoreImpl<C : KlerkContext, V>(private val config: Config
     override suspend fun put(
         value: String,
         ttl: Duration?
-    ): StringKeyValueID {
+    ): StringKey {
         var id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         while (config.persistence.getKeyValueString(id) != null) {
             id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         }
         config.persistence.putKeyValue(id, value, ttl?.let { Clock.System.now().plus(it) })
-        return StringKeyValueID(id)
+        return StringKey(id)
     }
 
     override suspend fun put(
         value: Int,
         ttl: Duration?
-    ): IntKeyValueID {
+    ): IntKey {
         var id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         while (config.persistence.getKeyValueInt(id) != null) {
             id = random.nextLong(0, Int.MAX_VALUE.toLong()).toInt()
         }
         config.persistence.putKeyValue(id, value, ttl?.let { Clock.System.now().plus(it) })
-        return IntKeyValueID(id)
+        return IntKey(id)
     }
 
     override fun prepareBlob(value: InputStream): BlobToken {
@@ -48,38 +48,38 @@ internal class KeyValueStoreImpl<C : KlerkContext, V>(private val config: Config
     override suspend fun put(
         token: BlobToken,
         ttl: Duration?
-    ): BinaryKeyValueID {
+    ): BlobKey {
         config.persistence.updateBlob(token.id, ttl?.let { Clock.System.now().plus(it) }, true)
-        return BinaryKeyValueID(token.id)
+        return BlobKey(token.id)
     }
 
-    override suspend fun get(id: StringKeyValueID, context: C): String =
+    override suspend fun get(id: StringKey, context: C): String =
         checkTTL(
             config.persistence.getKeyValueString(id.id)
-                ?: throw NoSuchElementException("No value found for id ${id.id}"), context, id
+                ?: throw NoSuchElementException("No value found for id $id"), context, id.id
         )
 
-    override suspend fun get(id: IntKeyValueID, context: C): Int =
+    override suspend fun get(id: IntKey, context: C): Int =
         checkTTL(
-            config.persistence.getKeyValueInt(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}"),
+            config.persistence.getKeyValueInt(id.id) ?: throw NoSuchElementException("No value found for id $id"),
             context,
-            id
+            id.id
         )
 
 
-    override suspend fun get(id: BinaryKeyValueID, context: C): InputStream {
+    override suspend fun get(id: BlobKey, context: C): InputStream {
         val data =
-            config.persistence.getKeyValueBlob(id.id) ?: throw NoSuchElementException("No value found for id ${id.id}")
+            config.persistence.getKeyValueBlob(id.id) ?: throw NoSuchElementException("No value found for id $id")
         val active = data.third
         if (!active) {
             throw NoSuchElementException("No value found for id ${id.id}")
         }
-        return checkTTL(data.first to data.second, context, id)
+        return checkTTL(data.first to data.second, context, id.id)
     }
 
-    private fun <T> checkTTL(pair: Pair<T, Instant?>, context: C, id: KeyValueID): T {
+    private fun <T> checkTTL(pair: Pair<T, Instant?>, context: C, id: Int): T {
         if (pair.second != null && pair.second!! < context.time) {
-            throw NoSuchElementException("No value found for id ${id.id}")
+            throw NoSuchElementException("No value found for id $id")
         }
         return pair.first
     }

@@ -296,19 +296,17 @@ public value class ModelID<T : Any>(public val value: Int) {
     }
 }
 
-public abstract class KeyValueID(public val id: Int) {
-    override fun equals(other: Any?): Boolean {
-        return other != null && id == (other as? KeyValueID)?.id
-    }
+@JvmInline
+public value class StringKey(internal val id: Int)
 
-    override fun hashCode(): Int = id.hashCode()
-}
+@JvmInline
+public value class IntKey(internal val id: Int)
 
-public class StringKeyValueID(id: Int) : KeyValueID(id)
-public class IntKeyValueID(id: Int) : KeyValueID(id)
-public class BinaryKeyValueID(id: Int) : KeyValueID(id)
+@JvmInline
+public value class BlobKey(internal val id: Int)
 
-public class BlobToken(public val id: Int)
+@JvmInline
+public value class BlobToken(public val id: Int)
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous

@@ -60,7 +60,8 @@ class ValidatableTest {
                     params = Author(
                         FirstName("James"),
                         LastName("Clavell"),
-                        Address(Street("Some street"))
+                        Address(Street("Some street")),
+                        picture = BlobKey(1)
                     )
                 ),
                 context = Context.system(),

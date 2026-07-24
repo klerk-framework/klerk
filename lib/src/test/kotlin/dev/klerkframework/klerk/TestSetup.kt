@@ -183,7 +183,12 @@ data class Book(
     override fun toString() = title.value
 }
 
-data class Author(val firstName: FirstName, val lastName: LastName, val address: Address) : Validatable {
+data class Author(
+    val firstName: FirstName,
+    val lastName: LastName,
+    val address: Address,
+    val picture: BlobKey
+) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
     private fun noAuthorCanBeNamedJamesClavell(): PropertyCollectionValidity {
@@ -428,12 +433,13 @@ fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyColle
     return Author(
         firstName = params.firstName,
         lastName = params.lastName,
-        address = Address(Street("kjh"))
+        address = Address(Street("kjh")),
+        picture = BlobKey(1)
     )
 }
 
 fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Context, MyCollections>): Author {
-    return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")))
+    return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")), picture = BlobKey(1))
 }
 
 

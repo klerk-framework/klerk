@@ -135,24 +135,34 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
         transaction(database) {
             Models.selectAll().forEach { row ->
-                val type = row[Models.type]
-                val props = gson.fromJson(
-                    row[Models.properties], modelClasses[type]?.javaObjectType ?: throw NoSuchElementException(
-                        "Type is $type in database but the code only has these types: ${modelClasses.keys.joinToString(", ")}"
+                val modelId = row[Models.id]
+                try {
+                    val type = row[Models.type]
+                    val props = gson.fromJson(
+                        row[Models.properties], modelClasses[type]?.javaObjectType ?: throw NoSuchElementException(
+                            "Type is $type in database but the code only has these types: ${
+                                modelClasses.keys.joinToString(
+                                    ", "
+                                )
+                            }"
+                        )
                     )
-                )
 
-                lambda(
-                    Model(
-                        id = ModelID(row[Models.id]),
-                        createdAt = decode64bitMicroseconds(row[Models.createdAt]),
-                        lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
-                        lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
-                        state = row[Models.state],
-                        timeTrigger = row[Models.timeTrigger]?.let { decode64bitMicroseconds(it) },
-                        props = props
+                    lambda(
+                        Model(
+                            id = ModelID(modelId),
+                            createdAt = decode64bitMicroseconds(row[Models.createdAt]),
+                            lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
+                            lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
+                            state = row[Models.state],
+                            timeTrigger = row[Models.timeTrigger]?.let { decode64bitMicroseconds(it) },
+                            props = props
+                        )
                     )
-                )
+                } catch (e: Exception) {
+                    logger.error { "Error while reading model $modelId from database" }
+                    throw e
+                }
             }
         }
     }

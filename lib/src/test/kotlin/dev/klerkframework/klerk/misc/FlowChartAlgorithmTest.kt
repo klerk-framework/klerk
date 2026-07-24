@@ -31,7 +31,8 @@ class FlowChartAlgorithmTest {
         Author(
             firstName = FirstName("Astrid"),
             lastName = LastName("Lindgren"),
-            address = Address(Street("Storgatan 12"))
+            address = Address(Street("Storgatan 12")),
+            picture = BlobKey(1)
         )
     )
 

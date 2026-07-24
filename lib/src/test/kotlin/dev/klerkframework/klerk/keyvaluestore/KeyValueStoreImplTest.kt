@@ -43,7 +43,7 @@ class KeyValueStoreImplTest {
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val token = klerk.keyValueStore.prepareBlob("pelle".toByteArray().inputStream())
-            val badKey = BinaryKeyValueID(token.id)
+            val badKey = BlobKey(token.id)
             try {
                 klerk.keyValueStore.get(badKey, Context.system())
                 fail("Expected exception")  // the key cannot be used until we have used put(token)

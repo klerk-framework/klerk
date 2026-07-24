@@ -19,7 +19,8 @@ class StorageTest {
         val authorProps = Author(
             firstName = FirstName("Pelle"),
             lastName = LastName("Andersson"),
-            address = Address(Street("Storgatan 12"))
+            address = Address(Street("Storgatan 12")),
+            picture = BlobKey(1)
         )
 
         val now = Clock.System.now()

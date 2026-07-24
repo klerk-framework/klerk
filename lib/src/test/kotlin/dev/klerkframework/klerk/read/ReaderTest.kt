@@ -23,7 +23,12 @@ class ReaderTest {
 
             val ref = ModelID<Author>(12)
 
-            val originalAuthorProps = Author(FirstName("Anakin"), LastName("Skywalker"), Address(Street("Tatooine")))
+            val originalAuthorProps = Author(
+                FirstName("Anakin"),
+                LastName("Skywalker"),
+                Address(Street("Tatooine")),
+                picture = BlobKey(1)
+            )
             val originalAuthor = Model(
                 id = ref,
                 createdAt = Clock.System.now(),

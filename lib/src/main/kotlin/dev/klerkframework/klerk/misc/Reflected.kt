@@ -540,7 +540,10 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
         return PropertyType.Ref
     }
 
-    if (ktype.isSubtypeOf(KeyValueID::class.starProjectedType)) {
+    if (ktype.isSubtypeOf(StringKey::class.starProjectedType) ||
+        ktype.isSubtypeOf(IntKey::class.starProjectedType) ||
+        ktype.isSubtypeOf(BlobKey::class.starProjectedType)
+    ) {
         return PropertyType.KeyValueRef
     }
 
