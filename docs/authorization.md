@@ -1,11 +1,10 @@
 # Authorization
 
-Klerk enforces authorization itself — you don't sprinkle `if (!user.canRead(...))` checks through your code. Instead you
-declare rules once, in the config, and Klerk applies them everywhere: on every model read, every individual property
-read, every command, and the event log.
+Klerk enforces authorization. You declare rules once, in the config, and Klerk applies them everywhere: on every model
+read, every individual property read, every command, and the event log.
 
 ```kotlin
-ConfigBuilder<Context, MyCollections>(collections).build {
+ConfigBuilder<Ctx, Views>(views).build {
     authorization {
         readModels {
             positive { rule(::everybodyCanRead) }
@@ -24,6 +23,7 @@ ConfigBuilder<Context, MyCollections>(collections).build {
             negative { }
         }
     }
+    // other config
 }
 ```
 
@@ -33,6 +33,19 @@ that category, since there is no rule to explicitly allow it.
 
 For prototyping, `insecureAllowEverything()` fills in all four categories with "allow everybody" and logs a warning —
 never use it in production.
+
+## What the rules guarantee
+
+The rules run before a model is handed to you — by `get`, `list` and friends. You can therefore safely pass the
+retrieved model to the user.
+
+Note that the rules are not run internally, so you must be careful so that an attacker cannot infer a value. Say, for
+example, that you have a property `secretKey` that is on a Customer model. You have a rule that allows the user to read
+`createdAt` on the model and another rule that denys access to `secretKey`. If you build a UI that allows the user to
+search among the Customer models and it is possible to filter on `secretKey`, the attacker could pass a guess in the
+filter and repeat until a model is found. The attacker will not be able to see `secretKey` but can infer that the guess
+was correct. To prevent this, you may want to have a rate limit or moving `secretKey` to a different model type that is
+not exposed to the user.
 
 ## How positive and negative rules combine
 
@@ -52,9 +65,6 @@ For a given operation, Klerk evaluates both sets the same way, in this order:
 
 In other words: deny always wins, and you need at least one rule to actively opt in — there is no implicit allow.
 
-`SystemIdentity` (see [context](context.md)) bypasses authorization entirely for model/property reads — code running as
-the system always sees everything.
-
 ## Rule categories
 
 ### readModels
@@ -63,7 +73,7 @@ Gates whether an actor can read a `Model<T>` at all — via `Reader.get`, `list`
 receive an `ArgModelContextReader<C, V>` (`model`, `context`, `reader`):
 
 ```kotlin
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is Unauthenticated)
         Deny else Pass
@@ -79,16 +89,14 @@ Gates whether an actor can read one specific property *value* of a model that it
 Rules receive an `ArgsForPropertyAuth<C, V>` (`property`, `model`, `context`, `reader`):
 
 ```kotlin
-fun cannotReadAstridsFirstName(args: ArgsForPropertyAuth<Context, MyCollections>): NegativeAuthorization {
-    return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
-}
+fun cannotReadAstridsFirstName(args: ArgsForPropertyAuth<Ctx, Views>): NegativeAuthorization =
+    if (args.property is FirstName && args.property.value == "Astrid") Deny else Pass
 ```
 
-This is evaluated once per [`DataContainer`](models.md) property on the model (recursively, including containers nested
-in plain data classes, `Set`s and `List`s) the moment the model is read — not lazily when you call
-`.value`. If unauthorized, `DataContainer.value` throws `AuthorizationException` when later accessed;
-`valueOrNullIfNotAuthorized` returns `null` instead, and `toString()` prints the masked placeholder. See
-[models](models.md) for details on `DataContainer`'s authorization-aware accessors.
+This is evaluated at most once per [`DataContainer`](models.md) property on the model (recursively, including containers
+nested in plain data classes, `Set`s and `List`s). If unauthorized, `DataContainer.value` throws
+`AuthorizationException` when accessed; `valueOrNullIfNotAuthorized` returns `null` instead, and `toString()` prints the
+masked placeholder. See [models](models.md) for details on `DataContainer`'s authorization-aware accessors.
 
 ### commands
 
@@ -96,7 +104,7 @@ Gates whether an actor can submit a given `Command` (see [events and commands](e
 an `ArgCommandContextReader<*, C, V>` (`command`, `context`, `reader`):
 
 ```kotlin
-fun everybodyCanDoEverything(args: ArgCommandContextReader<*, Context, MyCollections>): PositiveAuthorization =
+fun everybodyCanDoEverything(args: ArgCommandContextReader<*, Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 ```
 
@@ -114,3 +122,5 @@ there's no per-entry model here, so this is an all-or-nothing gate rather than s
 All of the above key off `context.actor`. See [context](context.md) for the full list of `ActorIdentity`
 implementations (`Unauthenticated`, `SystemIdentity`, `ModelIdentity`, ...) and how to check the concrete type of the
 actor inside a rule.
+
+`SystemIdentity` bypasses authorization entirely.

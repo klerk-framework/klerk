@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkImpl
 import dev.klerkframework.klerk.job.JobResult.*
 import dev.klerkframework.klerk.misc.IdFactory
+import dev.klerkframework.klerk.misc.getCurrentInstant
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import mu.KotlinLogging
@@ -68,15 +69,16 @@ public abstract class RunnableJob<C : KlerkContext, V> : Job {
     public fun getMetadata(): JobMetadata {
         val functionName = (getRunFunction() as KFunction<*>).name
         require(functionName.isNotBlank()) { "runFunction must be a function with a name" }
+        val now = getCurrentInstant()
         return JobMetadata(
             id = id ?: throw IllegalStateException("Job must be initialized before creating metadata"),
             className = javaClass.name,
             methodName = functionName,
             status = JobStatus.Scheduled,
-            created = Clock.System.now(),
+            created = now,
             lastAttemptStarted = null,
             lastAttemptFinished = null,
-            nextAttempt = scheduleAt ?: Clock.System.now(),
+            nextAttempt = scheduleAt ?: now,
             state = "",
             failedAttempts = 0,
             maxRetries = maxRetries,

@@ -1,0 +1,201 @@
+package dev.klerkframework.klerk
+
+import dev.klerkframework.klerk.NegativeAuthorization.Deny
+import dev.klerkframework.klerk.NegativeAuthorization.Pass
+import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.storage.Persistence
+import dev.klerkframework.klerk.storage.RamStorage
+import kotlinx.coroutines.runBlocking
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * The read authorization of a property must belong to the read that produced the model, not to the container
+ * instance — the containers in `model.props` are shared with the model cache and with every other reader.
+ */
+class PropertyAuthorizationTest {
+
+    @Test
+    fun `a snapshot is not affected by reads made afterwards by somebody else`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            val readByAnonymous = klerk.read(Context.unauthenticated()) { get(rowling) }
+            assertNull(readByAnonymous.props.lastName.valueOrNullIfNotAuthorized)
+
+            val readByAuthenticated = klerk.read(Context.authenticationIdentity()) { get(rowling) }
+            assertEquals("Rowling", readByAuthenticated.props.lastName.value)
+
+            // the snapshot the anonymous actor got must not have been unmasked by the read above
+            assertNull(readByAnonymous.props.lastName.valueOrNullIfNotAuthorized)
+            assertFailsWith<AuthorizationException> { readByAnonymous.props.lastName.value }
+            assertFalse(readByAnonymous.props.lastName.toString().contains("Rowling"), "toString must stay masked")
+
+            // ...and the authenticated actor's snapshot must not become masked by a later anonymous read
+            klerk.read(Context.unauthenticated()) { get(rowling) }
+            assertEquals("Rowling", readByAuthenticated.props.lastName.value)
+        }
+    }
+
+    @Test
+    fun `the containers in the model cache are never mutated by a read`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            klerk.read(Context.unauthenticated()) { get(rowling) }
+
+            // the system (and everything else that reads without authorization, such as view filters) must not
+            // inherit the decision that was made for the anonymous actor above
+            val readBySystem = klerk.read(Context.system()) { get(rowling) }
+            assertEquals("Rowling", readBySystem.props.lastName.value)
+            assertEquals("Rowling", klerk.read(Context.system()) { get(rowling) }.props.lastName.value)
+        }
+    }
+
+    @Test
+    fun `containers nested in data classes and in collections are authorized too`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+            val book = createBookHarryPotter1(klerk, rowling)
+
+            val author = klerk.read(Context.unauthenticated()) { get(rowling) }
+            assertNull(author.props.address.street.valueOrNullIfNotAuthorized)
+            assertEquals("J.K", author.props.firstName.value)
+
+            val anonymousBook = klerk.read(Context.unauthenticated()) { get(book) }
+            assertEquals(2, anonymousBook.props.tags.size)
+            assertTrue(anonymousBook.props.tags.all { it.valueOrNullIfNotAuthorized == null })
+            assertEquals("Harry Potter and the Philosopher's Stone", anonymousBook.props.title.value)
+
+            val bookAsSystem = klerk.read(Context.system()) { get(book) }
+            assertTrue(bookAsSystem.props.tags.all { it.valueOrNullIfNotAuthorized != null })
+        }
+    }
+
+    @Test
+    fun `the rules are evaluated when the model is handed out, and only once per read`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            propertyRuleEvaluations = 0
+            klerk.read(Context.unauthenticated()) {
+                val author = get(rowling)
+                val afterFirstGet = propertyRuleEvaluations
+                assertTrue(afterFirstGet > 0, "the decisions should be made when the model is handed out")
+
+                author.props.firstName.value
+                author.props.firstName.value
+                assertEquals(afterFirstGet, propertyRuleEvaluations, "reading a property must not evaluate any rule")
+
+                get(rowling)
+                assertEquals(afterFirstGet, propertyRuleEvaluations, "the decisions should be remembered by the read")
+            }
+        }
+    }
+
+    @Test
+    fun `listIfAuthorized and getIfAuthorizedOrNull apply property authorization`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            val listed = klerk.read(Context.unauthenticated()) { listIfAuthorized(views.authors.all) }
+            assertTrue(listed.isNotEmpty())
+            assertTrue(listed.all { it.props.lastName.valueOrNullIfNotAuthorized == null })
+
+            val fetched = klerk.read(Context.unauthenticated()) { getIfAuthorizedOrNull(rowling) }
+            assertNotNull(fetched)
+            assertNull(fetched.props.lastName.valueOrNullIfNotAuthorized)
+        }
+    }
+
+    @Test
+    fun `the models in a command result are property authorized`() {
+        runBlocking {
+            val klerk = startKlerk()
+
+            val result = klerk.handle(
+                Command(event = AnEventWithoutParameters, model = null, params = null),
+                Context.unauthenticated(),
+                ProcessingOptions(CommandToken.simple()),
+            ).orThrow()
+
+            val created = result.createdModels.single()
+            val author = assertNotNull(result.authorizedModels[created]).props as Author
+            assertEquals("Auto", author.firstName.value)
+            assertNull(author.lastName.valueOrNullIfNotAuthorized)
+        }
+    }
+
+    private suspend fun startKlerk(storage: Persistence = RamStorage()): Klerk<Context, MyCollections> {
+        val bookViews = BookViews()
+        val collections = MyCollections(bookViews, AuthorViews(bookViews.all))
+        val klerk = Klerk.create(createPropertyAuthConfig(collections, storage))
+        klerk.meta.start()
+        return klerk
+    }
+}
+
+/**
+ * Counts every evaluation of the property rule below, so that the tests can tell when a decision is actually made.
+ */
+internal var propertyRuleEvaluations: Int = 0
+
+fun createPropertyAuthConfig(
+    collections: MyCollections,
+    storage: Persistence = RamStorage()
+): Config<Context, MyCollections> {
+    return ConfigBuilder<Context, MyCollections>(collections).build {
+        persistence(storage)
+        managedModels {
+            model(Book::class, bookStateMachine(collections), collections.books)
+            model(Author::class, authorStateMachine(collections), collections.authors)
+        }
+        authorization {
+            readModels {
+                positive {
+                    rule(::`Everybody can read`)
+                }
+                negative {}
+            }
+            readProperties {
+                positive {
+                    rule(::canReadAllProperties)
+                }
+                negative {
+                    rule(::anonymousCannotReadSensitiveProperties)
+                }
+            }
+            commands {
+                positive {
+                    rule(::`Everybody can do everything`)
+                }
+                negative {}
+            }
+            eventLog {
+                positive {
+                    rule(::`Everybody can read event log`)
+                }
+                negative {}
+            }
+        }
+        systemContextProvider(::myContextProvider)
+    }
+}
+
+fun anonymousCannotReadSensitiveProperties(args: ArgsForPropertyAuth<Context, MyCollections>): NegativeAuthorization {
+    propertyRuleEvaluations++
+    val sensitive = args.property is LastName || args.property is Street || args.property is BookTag
+    return if (sensitive && args.context.actor == Unauthenticated) Deny else Pass
+}

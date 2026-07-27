@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import kotlin.time.Instant
@@ -68,7 +69,7 @@ private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V>
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     val exitBlock = config.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
-    val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = time)
+    val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = makeExactSerializable(time))
     val enterBlock =
         config.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 

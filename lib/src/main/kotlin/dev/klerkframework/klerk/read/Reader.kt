@@ -4,10 +4,8 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
-import dev.klerkframework.klerk.datatypes.DataContainer
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
-import kotlin.reflect.full.memberProperties
 
 public interface Reader<C : KlerkContext, V> {
 
@@ -148,48 +146,7 @@ internal sealed class ReadListResult<T : Any> {
 }
 
 
-internal fun <T : Any, C : KlerkContext, V> initPropertyAuthorization(
-    model: Model<T>,
-    ctx: C,
-    reader: ReaderWithoutAuth<C, V>,
-    config: Config<C, V>,
-) {
-    model.props::class.memberProperties.forEach { kprop ->
-        val prop = kprop.getter.call(model.props)
-        initAuth(prop, model, ctx, reader, config)
-    }
-}
-
-private fun <C : KlerkContext, V, T : Any> initAuth(
-    prop: Any?,
-    model: Model<T>,
-    ctx: C,
-    reader: ReaderWithoutAuth<C, V>,
-    config: Config<C, V>
-) {
-    when (prop) {
-        null -> return
-        is DataContainer<*> -> prop.initAuthorization(
-            isReadPropertyAuthorized(
-                ArgsForPropertyAuth(
-                    prop,
-                    model,
-                    ctx,
-                    reader
-                ), config
-            )
-        )
-
-        is Set<*> -> prop.forEach { initAuth(it, model, ctx, reader, config) }
-        is List<*> -> prop.forEach { initAuth(it, model, ctx, reader, config) }
-        is ModelID<*> -> {}
-        else -> {
-            prop::class.memberProperties.forEach { initAuth(it.getter.call(prop), model, ctx, reader, config) }
-        }
-    }
-}
-
-private fun <C : KlerkContext, V> isReadPropertyAuthorized(
+internal fun <C : KlerkContext, V> isReadPropertyAuthorized(
     args: ArgsForPropertyAuth<C, V>,
     config: Config<C, V>
 ): Boolean {

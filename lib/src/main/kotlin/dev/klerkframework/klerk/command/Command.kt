@@ -3,8 +3,8 @@ package dev.klerkframework.klerk.command
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
+import dev.klerkframework.klerk.misc.getCurrentInstant
 import org.slf4j.event.Level
-import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -36,7 +36,7 @@ public enum class DebugOptions {
 }
 
 public data class CommandToken(
-    internal val time: Instant = Clock.System.now(),
+    internal val time: Instant = getCurrentInstant(),
     internal val models: Set<ModelID<out Any>> = emptySet(),
 ) {
 

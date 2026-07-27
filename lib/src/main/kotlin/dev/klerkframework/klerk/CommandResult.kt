@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.read.PropertyAuthScope
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
@@ -50,27 +51,29 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
             context: C,
             config: Config<C, V>
         ): CommandResult<T, C, V> {
-            return if (delta.problems.isEmpty()) {
-                Success(
-                    primaryModel = delta.primaryModel as ModelID<T>,
-                    createdModels = delta.createdModels,
-                    modelsWithUpdatedProps = delta.updatedModels,
-                    deletedModels = delta.deletedModels,
-                    transitionedModels = delta.transitions,
-                    jobs = delta.newJobs,
-                    secondaryEvents = emptyList(),
-                    unmanagedJobs = delta.unmanagedJobs,
-                    authorizedModels = delta.aggregatedModelState.filter {
-                        isAuthorized(
-                            it.value,
-                            context,
-                            config,
-                            reader
-                        )
-                    },
-                    log = delta.log
-                )
-            } else Failure(delta.problems)
+            if (delta.problems.isNotEmpty()) {
+                return Failure(delta.problems)
+            }
+
+            // The models handed to the caller must have the property authorization applied, just like the models that
+            // come out of a Reader.
+            val propertyAuth = PropertyAuthScope(context, config, reader)
+            val authorized = delta.aggregatedModelState
+                .mapValues { (_, model) -> propertyAuth.secure(model) }
+                .filter { isAuthorized(it.value, context, config, reader) }
+
+            return Success(
+                primaryModel = delta.primaryModel as ModelID<T>,
+                createdModels = delta.createdModels,
+                modelsWithUpdatedProps = delta.updatedModels,
+                deletedModels = delta.deletedModels,
+                transitionedModels = delta.transitions,
+                jobs = delta.newJobs,
+                secondaryEvents = emptyList(),
+                unmanagedJobs = delta.unmanagedJobs,
+                authorizedModels = authorized,
+                log = delta.log
+            )
         }
     }
 }

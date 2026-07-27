@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
 import java.util.*
 import kotlin.reflect.KFunction
+import kotlin.time.Instant
 
 internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
     command: Command<T, P>,
@@ -76,3 +77,15 @@ public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): St
 // why does Ktor have its own implementation of these?
 internal fun String.encodeBase64(): String = Base64.getEncoder().encodeToString(this.toByteArray())
 internal fun String.decodeBase64String(): String = String(Base64.getDecoder().decode(this))
+
+/**
+ * Klerk uses 64bit microseconds for timestamps, but Instant has higher precision than that. When serializing and
+ * deserializing, the result can differ from the original. This function removes precision to make the two equal.
+ */
+internal fun makeExactSerializable(instant: Instant): Instant =
+    decode64bitMicroseconds(instant.to64bitMicroseconds())
+
+/**
+ * Get an Instant which is guaranteed to be the same after serialization and deserialization.
+ */
+internal fun getCurrentInstant(): Instant = makeExactSerializable(kotlin.time.Clock.System.now())

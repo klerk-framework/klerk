@@ -23,8 +23,8 @@ managedModels {
 }
 ```
 
-Klerk wraps every instance in a `Model<T>` that adds bookkeeping Klerk itself is responsible for — you never
-construct this yourself:
+Klerk wraps every instance in a `Model<T>` that adds bookkeeping Klerk itself is responsible for — you never construct
+this yourself:
 
 ```kotlin
 data class Model<T : Any>(
@@ -84,18 +84,18 @@ class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value)
 
 Built-in containers:
 
-| Container | Wraps | Built-in constraints |
-|---|---|---|
-| `StringContainer` | `String` | `minLength`, `maxLength`, `maxLines`, optional `regexPattern` |
-| `IntContainer` | `Int` | `min`, `max` |
-| `LongContainer` | `Long` | `min`, `max` |
-| `ULongContainer` | `ULong` | `min`, `max` |
-| `FloatContainer` | `Float` | `min`, `max` |
-| `BooleanContainer` | `Boolean` | none |
-| `EnumContainer<E>` | an `Enum` | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
-| `InstantContainer` | `kotlin.time.Instant` | none (microsecond resolution) |
-| `DurationContainer` | `kotlin.time.Duration` | none (microsecond resolution) |
-| `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709 |
+| Container              | Wraps                   | Built-in constraints                                                                                                 |
+|------------------------|-------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `StringContainer`      | `String`                | `minLength`, `maxLength`, `maxLines`, optional `regexPattern`                                                        |
+| `IntContainer`         | `Int`                   | `min`, `max`                                                                                                         |
+| `LongContainer`        | `Long`                  | `min`, `max`                                                                                                         |
+| `ULongContainer`       | `ULong`                 | `min`, `max`                                                                                                         |
+| `FloatContainer`       | `Float`                 | `min`, `max`                                                                                                         |
+| `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
+| `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
+| `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
+| `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
+| `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 
 On top of the built-in constraints, add custom rules via `validators`:
 
@@ -111,8 +111,8 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 }
 ```
 
-See [validation](validation.md) for how all of this fits into the full validation pipeline, and how to add
-model-wide validation that spans several properties (`Validatable`).
+See [validation](validation.md) for how all of this fits into the full validation pipeline, and how to add model-wide
+validation that spans several properties (`Validatable`).
 
 ### Reading a container's value
 
@@ -120,14 +120,17 @@ Two ways to read the wrapped value:
 
 * `value` — throws `AuthorizationException` if the current actor is not authorized to read this property (per your
   [authorization](authorization.md) rules).
-* `valueWithoutAuthorization` — always available, bypassing authorization. Business logic inside the framework (e.g.
-  a container's own validators, which run before authorization is even relevant) uses this. Application code
-  normally should not.
+* `valueWithoutAuthorization` — always available, bypassing authorization. Business logic inside the framework (e.g. a
+  container's own validators, which run before authorization is even relevant) uses this. Application code normally
+  should not.
 * `valueOrNullIfNotAuthorized` — like `value`, but returns `null` instead of throwing when unauthorized.
 
-`toString()` on a container prints the masked placeholder `[••••••]` instead of the value if the actor isn't
-authorized to read it — so logging a model or printing it for debugging never leaks data your authorization rules
-say it shouldn't.
+`toString()` on a container prints the masked placeholder `[••••••]` instead of the value if the actor isn't authorized
+to read it.
+
+Containers that never went through an authorizing read — the ones you construct yourself, and the ones the framework
+uses internally — always allow reading, which is why validators and view filters can use `.value` without thinking about
+actors.
 
 ## ModelID
 
@@ -137,8 +140,8 @@ value class ModelID<T : Any>(val value: Int)
 ```
 
 A lightweight, type-safe pointer to a model. Use it as a property type whenever one model refers to another (e.g.
-`Book.author: ModelID<Author>`), and as the identifier you pass to `Reader.get(id)` (see [reading](reading.md)) or
-into a `Command` (see [events and commands](events-and-commands.md)).
+`Book.author: ModelID<Author>`), and as the identifier you pass to `Reader.get(id)` (see [reading](reading.md)) or into
+a `Command` (see [events and commands](events-and-commands.md)).
 
 ## Validatable
 

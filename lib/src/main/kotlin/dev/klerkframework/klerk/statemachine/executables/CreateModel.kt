@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
+import dev.klerkframework.klerk.misc.makeExactSerializable
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
@@ -27,10 +28,11 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
             return ProcessingData(problems = validationProblems)
         }
 
+        val time = makeExactSerializable(args.context.time)
         val created = Model(
             id = processingOptions.idProvider.getNextModelID(),
-            createdAt = args.context.time,
-            lastPropsUpdateAt = args.context.time,
+            createdAt = time,
+            lastPropsUpdateAt = time,
             lastStateTransitionAt = Instant.DISTANT_PAST,
             state = "void",
             timeTrigger = null,
@@ -45,7 +47,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         val enterBlock = sm.mutableStates.single { it.name == initialState.name }.enterBlock
         return ProcessingData(
             createdModels = listOf(created.id),
-            unFinalizedTransition = Triple(initialState.name, args.context.time, created),
+            unFinalizedTransition = Triple(initialState.name, time, created),
             aggregatedModelState = mapOf(created.id to created),
             currentModel = created.id,
             remainingBlocks = listOf(voidExitBlock, enterBlock),

@@ -14,6 +14,8 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     private val withoutAuth = ReaderWithoutAuth(klerk)
 
+    private val propertyAuth = PropertyAuthScope(context, klerk.config, withoutAuth)
+
     override val views = klerk.config.views
 
     internal val modelsRead = mutableSetOf<Model<*>>()
@@ -43,7 +45,9 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     override fun <T : Any> listIfAuthorized(
         collection: ModelView<T, C>,
     ): List<Model<T>> {
-        return withoutAuth.list(collection).filter { isAuthorized(it, context, klerk.config, withoutAuth) }
+        return withoutAuth.list(collection)
+            .map { propertyAuth.secure(it) }
+            .filter { isAuthorized(it, context, klerk.config, withoutAuth) }
     }
 
     override fun <T : Any> list(
@@ -73,18 +77,28 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     ): Model<T>? = withoutAuth.firstOrNull(collection, filter)?.let { checkAuth(it) }
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? =
-        withoutAuth.get(id).let { if (isAuthorized(it, context, klerk.config, withoutAuth)) it else null }
+        propertyAuth.secure(withoutAuth.get(id))
+            .let { if (isAuthorized(it, context, klerk.config, withoutAuth)) it else null }
 
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
         if (context.actor == SystemIdentity) {
             return model
         }
-        initPropertyAuthorization(model, context, withoutAuth, klerk.config)
-        when (val result = evaluateAuthorization(context, model, klerk.config, withoutAuth)) {
+        val secured = propertyAuth.secure(model)
+        when (val result = evaluateAuthorization(context, secured, klerk.config, withoutAuth)) {
             is ReadResult.Fail -> throw result.problem.asException()
-            is ReadResult.Ok -> return model
+            is ReadResult.Ok -> return secured
         }
+    }
+
+    /**
+     * Marks this reader as spent, so that using it after its read block (i.e. without the read lock) fails loudly
+     * rather than reading a cache that may have changed. The models the reader has handed out are unaffected — their
+     * property authorization was decided when they were handed out.
+     */
+    internal fun finishRead() {
+        propertyAuth.finish()
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =

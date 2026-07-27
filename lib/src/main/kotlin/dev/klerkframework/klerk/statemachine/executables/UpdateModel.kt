@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
+import dev.klerkframework.klerk.misc.makeExactSerializable
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.read.Reader
@@ -55,7 +56,7 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
         return ProcessingData(problems = validationProblems)
     }
 
-    val updatedModel = model.copy(props = newProperties, lastPropsUpdateAt = time)
+    val updatedModel = model.copy(props = newProperties, lastPropsUpdateAt = makeExactSerializable(time))
     val referenceProblem = verifyReferencesExist(updatedModel, reader)
     if (referenceProblem != null) {
         throw referenceProblem.asException()

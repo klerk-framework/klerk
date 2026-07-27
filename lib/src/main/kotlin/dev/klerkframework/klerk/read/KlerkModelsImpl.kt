@@ -63,6 +63,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
             klerk.log.addReads(reader.modelsRead.distinctBy { it.id }, context)
             return result
         } finally {
+            reader.finishRead()
             readWriteLock.releaseRead()
         }
     }
@@ -73,6 +74,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         try {
             return reader.readFunction()
         } finally {
+            reader.finishRead()
             readWriteLock.releaseRead()
         }
     }

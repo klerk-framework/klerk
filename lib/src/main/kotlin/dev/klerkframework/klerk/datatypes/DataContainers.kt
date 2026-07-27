@@ -27,37 +27,68 @@ private const val MASKED = "[••••••]"
  *      Code that uses this function cannot misinterpret the unit.
  * 7. you can express default values by providing a no-params constructor.
  */
-public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) {
-    private var isAuthorizedToReadProperty: Boolean =
-        true    // true until it is set by the framework, this makes unit testing simpler.
+public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) : Cloneable {
 
-    public val value: T = valueWithoutAuthorization
+    /**
+     * The read authorization of *this particular instance*.
+     *
+     * Containers created by application code, and the containers that live in the model cache, are readable — Klerk
+     * never mutates them. A reader that enforces authorization instead hands out clones (see [copyWithAuthorization])
+     * that carry the decision of that one read. This is what makes a model returned from `klerk.read { }` a stable
+     * snapshot: its answers cannot be changed afterwards by somebody else reading the same model.
+     *
+     * The field is only written on a fresh clone, before the instance is visible to the caller, and is therefore
+     * effectively final by the time anything outside Klerk can observe it.
+     */
+    private var authorizedToRead: Boolean = true
+
+    /**
+     * The value in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val value: T
         get() {
-            if (!isAuthorizedToReadProperty) {
+            if (!authorizedToRead) {
                 val message = "The actor is not allowed to access ${this::class.simpleName}"
                 logger.warn { message }
                 throw AuthorizationException(KlerkErrorCode.UnauthorizedPropertyRead, message)
             }
-            return field
+            return valueWithoutAuthorization
         }
 
-    public val valueOrNullIfNotAuthorized: T? =
-        valueWithoutAuthorization
-        get() {
-            if (!isAuthorizedToReadProperty) {
-                return null
-            }
-            return field
-        }
+    /**
+     * Like [value], but returns null instead of throwing if the actor is not allowed to read this property.
+     */
+    public val valueOrNullIfNotAuthorized: T?
+        get() = if (authorizedToRead) valueWithoutAuthorization else null
 
     public open val validators: Set<(translator: Translation) -> PropertyValidation> =
         emptySet()
 
     public abstract fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem?
 
-    internal fun initAuthorization(isAuthorized: Boolean) {
-        this.isAuthorizedToReadProperty = isAuthorized
+    /**
+     * Returns a copy of this container that carries the provided authorization. The copy is made with [clone] rather
+     * than by calling a constructor, so no validation or `init` block is re-executed and containers that store the
+     * value in a different representation than they were constructed from (e.g. [InstantContainer]) are handled too.
+     */
+    internal fun copyWithAuthorization(isAuthorized: Boolean): DataContainer<T> {
+        @Suppress("UNCHECKED_CAST")
+        val copy = clone() as DataContainer<T>
+        copy.authorizedToRead = isAuthorized
+        return copy
     }
+
+    /**
+     * Sets the authorization directly. Intended for tests — Klerk itself uses [copyWithAuthorization] since it must not
+     * mutate containers it doesn't own.
+     */
+    internal fun initAuthorization(isAuthorized: Boolean) {
+        this.authorizedToRead = isAuthorized
+    }
+
+    protected override fun clone(): Any = super.clone()
 
     public open val tags: Set<String> = emptySet()
 
@@ -68,7 +99,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     public open val recommendedDefault: T? = null
 
     override fun toString(): String {
-        return if (isAuthorizedToReadProperty) value.toString() else MASKED
+        return if (authorizedToRead) valueWithoutAuthorization.toString() else MASKED
     }
 
     override fun equals(other: Any?): Boolean {
@@ -98,7 +129,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
      */
     public open val regexPattern: String? = null
 
-    public val string: String = value
+    public val string: String get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
@@ -147,7 +178,7 @@ public abstract class IntContainer(value: Int) :
     public abstract val min: Int
     public abstract val max: Int
 
-    public val int: Int = value
+    public val int: Int get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
 
@@ -179,7 +210,7 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     public abstract val min: Long
     public abstract val max: Long
 
-    public val long: Long = value
+    public val long: Long get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -209,7 +240,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     public abstract val min: ULong
     public abstract val max: ULong
 
-    public val uLong: ULong = value
+    public val uLong: ULong get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -239,7 +270,7 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     public abstract val min: Float
     public abstract val max: Float
 
-    public val float: Float = value
+    public val float: Float get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -271,7 +302,7 @@ public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<Strin
 }
 
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
-    public val boolean: Boolean = value
+    public val boolean: Boolean get() = valueWithoutAuthorization
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 

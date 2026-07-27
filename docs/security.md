@@ -5,13 +5,21 @@ design, i.e. none of it is optional or something you have to remember to turn on
 framework, so a correctly configured application gets these properties without individual code paths having to enforce
 them.
 
+## Secure by design
+
+All data interactions go through Klerk, ensuring that all authorization rules are enforced. This applies independently
+to reading a model, reading a single property of a model, submitting a command, and reading the audit log. This design
+prevents developers from accidentally bypassing security checks. If a developer needs to override a rule, they must
+explicitly state it, making such exceptions stand out in the code.
+
+However, it is the developer's responsibility to ensure that the system cannot be abused to infer information
+(see [Authorization](authorization.md)).
+
 ## Deny by default
 
 [Authorization](authorization.md) rules are attribute-based (they can key off anything on the actor, the model, or the
 context) and default-deny: a rule category with no rules denies everything in it, and even with rules present, an
-operation is only allowed if at least one positive rule explicitly says so — there is no implicit allow. This applies
-independently to reading a model, reading a single property of a model, submitting a command, and reading the audit log.
-`insecureAllowEverything()` exists to bypass all of this for prototyping and logs a warning when used — never ship it.
+operation is only allowed if at least one positive rule explicitly says so — there is no implicit allow.
 
 ## No time-of-check-to-time-of-use gap
 

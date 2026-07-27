@@ -5,9 +5,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.RunnableJob
-import dev.klerkframework.klerk.misc.IdFactory
-import dev.klerkframework.klerk.misc.IdProvider
-import dev.klerkframework.klerk.misc.ReadWriteLock
+import dev.klerkframework.klerk.misc.*
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.statemachine.*
@@ -108,7 +106,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     }
 
     private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: Reader<C, V>) {
-        val time = Clock.System.now()
+        val time = getCurrentInstant()
         val calculated = models.map { it to calculateTriggerTime(it, time, reader) }
 
         timeTriggerManager.init(calculated.map { it.second })
@@ -140,6 +138,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         if (instant == null && state.afterDuration != null) {
             instant = time.plus(state.afterDuration!!)
         }
+        instant = instant?.let { makeExactSerializable(instant) }
         return model.copy(timeTrigger = instant)
     }
 
@@ -389,7 +388,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         if (instant == null && state.afterDuration != null) {
             instant = transformedArgs.time.plus(state.afterDuration!!)
         }
-        return instant
+        return instant?.let { makeExactSerializable(it) }
     }
 
 
