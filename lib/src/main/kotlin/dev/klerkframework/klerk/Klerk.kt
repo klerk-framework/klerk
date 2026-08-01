@@ -48,8 +48,6 @@ public interface Klerk<C : KlerkContext, V> {
      *
      * @param command the event
      * @param context including the actorIdentity on whose behalf the read happens
-     * @param dryRun when true, no models will be updated and no effects will be triggered
-     * @param following if provided, fails if there has been another event after the instant
      * @return either a Success or a Failure describing the processing result
      */
     public suspend fun <T : Any, P> handle(
@@ -59,9 +57,9 @@ public interface Klerk<C : KlerkContext, V> {
     ): CommandResult<T, C, V>
 
     /**
-     * Read stuff
+     * Acquires a read lock, runs [readFunction] with a [Reader] receiver, and returns its result.
      *
-     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
+     * The function suspends until the read lock has been acquired. No event is processed while [readFunction]
      * is executed.
      *
      * @param context including the actorIdentity on whose behalf the read happens. This actor can be overridden inside
@@ -73,10 +71,9 @@ public interface Klerk<C : KlerkContext, V> {
     public suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T
 
     /**
-     * Read stuff
-     *
-     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
-     * is executed.
+     * Like [read], but the context is produced by [contextProvider] instead of being passed directly. Useful when
+     * obtaining the context has its own suspending cost (e.g. resolving an actor from a token) and should only be
+     * paid once the read lock is about to be acquired.
      *
      * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
      * readFunction (see [Reader]).
@@ -87,15 +84,12 @@ public interface Klerk<C : KlerkContext, V> {
     public suspend fun <T> read(contextProvider: suspend (Klerk<C, V>) -> C, readFunction: Reader<C, V>.() -> T): T
 
     /**
-     * Read stuff
+     * Like [read], but [readFunction] is itself `suspend`, so it may perform other suspending work (e.g. network
+     * calls) while the read lock is held.
      *
-     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
-     * is executed.
-     *
-     * This function differs from the normal read function in that the readFunction can suspend, e.g. it is possible to
-     * do network calls within the readFunction. This may cause performance issues for the rest of the system, so it
-     * should be used with care. Also, don't try to submit an event while in the readFunction as this will cause a
-     * deadlock bringing the application to a halt. If possible, use the normal read function instead of this.
+     * Doing so blocks every other command and read in the system for the duration, so use with care. In particular,
+     * never submit a command from within [readFunction] — that deadlocks the application. Prefer [read] unless you
+     * specifically need to suspend inside the read.
      *
      * @param context including the actorIdentity on whose behalf the read happens. This actor can be overridden inside
      * readFunction (see [Reader]).
@@ -106,18 +100,11 @@ public interface Klerk<C : KlerkContext, V> {
     public suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T
 
     /**
-     * Read stuff
-     *
-     * The function will suspend until a read lock has been acquired. No event will be processed while the readFunction
-     * is executed.
-     *
-     * This function differs from the normal read function in that the readFunction can suspend, e.g. it is possible to
-     * do network calls within the readFunction. This may cause performance issues for the rest of the system, so it
-     * should be used with care. Also, don't try to submit an event while in the readFunction as this will cause a
-     * deadlock bringing the application to a halt. If possible, use the normal read function instead of this.
+     * Combines [readSuspend] and the contextProvider variant of [read]: the context comes from [contextProvider],
+     * and [readFunction] may itself suspend while the read lock is held. See both for the caveats that apply.
      *
      * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
-     *      * readFunction (see [Reader]).
+     * readFunction (see [Reader]).
      * @param readFunction a function literal with a Reader receiver
      * @return whatever the readFunction returns
      * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
@@ -132,12 +119,14 @@ public interface Klerk<C : KlerkContext, V> {
 public interface EventsManager<C : KlerkContext, V> {
 
     /**
-     * Gets all possible events that are not tied to any specific model instance for a certain actor.
+     * Queries the audit log of previously processed commands.
      *
-     * @param actor the actor on whose behalf this operation occurs
-     * @param clazz if provided, only void events for state machines that corresponds to that class is returned.
-     * @param assumeWriteMode will return events even if the system is currently in read-only mode (e.g. during snapshot)
-     * @return a list of events
+     * @param context the actor must satisfy the configured event-log authorization rules, or this throws
+     * @param id if provided, restricts the result to entries for this model. If null, entries for all models are returned.
+     * @param after only entries at or after this instant are returned
+     * @param before only entries at or before this instant are returned
+     * @return the matching audit entries
+     * @throws AuthorizationException if the actor is not allowed to read the audit log
      */
     public suspend fun getEventsInAuditLog(
         context: C,
@@ -192,8 +181,20 @@ public interface KlerkModels<C : KlerkContext, V> {
 
 public interface JobManager<C : KlerkContext, V> {
 
+    /**
+     * Schedules a job for background execution. This is for manually-created [RunnableJob]s; jobs created by a
+     * state machine's [dev.klerkframework.klerk.statemachine.executables.UnmanagedJob] executable are scheduled
+     * automatically.
+     *
+     * @return an ID that can be used with [getJob] to check on progress/result
+     */
     public fun schedule(job: RunnableJob<C, V>): JobId
+
+    /**
+     * @throws kotlin.NoSuchElementException if no job with this id exists
+     */
     public fun getJob(id: JobId): JobMetadata
+
     public fun getAllJobs(): List<JobMetadata>
 
 }

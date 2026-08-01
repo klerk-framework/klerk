@@ -6,8 +6,17 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
 
+/**
+ * Outcome of `Klerk.handle`: either [Success] or [Failure]. Use a `when` on the sealed type, or [orThrow]/
+ * [getOrHandle] for a terser call site.
+ */
 public sealed class CommandResult<T : Any, C : KlerkContext, V> {
 
+    /**
+     * @return this as [Success].
+     * @throws Exception the first [Problem]'s [Problem.asException] (e.g. [AuthorizationException],
+     * [IllegalStateException], [IllegalArgumentException]) if this is a [Failure].
+     */
     public fun orThrow(): Success<T, C, V> {
         return when (this) {
             is Failure -> throw this.problems.firstOrNull()?.asException() ?: RuntimeException("Unknown problem")
@@ -15,6 +24,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
         }
     }
 
+    /** Returns this as [Success], or the [Success] produced by [default] from this [Failure] otherwise. */
     public fun getOrHandle(default: (Failure<T, C, V>) -> Success<T, C, V>): Success<T, C, V> {
         return when (this) {
             is Failure -> default(this)
@@ -23,10 +33,27 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
     }
 
     /**
-     * Note that the reason this doesn't return the whole models is because it is easy to make a mistake and show the result to the user by mistake when the user does not have permission to see the models.
-     * @property primaryModel the model that was created or updated directly by the command in contrast to by secondary events.
-     * @property authorizedModels contains the models as they are after the command. Note that if the context doesn't
-     * allow reading any of the models, that model will not be present.
+     * The result of a successfully processed command.
+     *
+     * Only [ModelID]s are exposed here rather than full [Model]s (except via [authorizedModels]) so that it isn't
+     * easy to accidentally leak a model's data to a caller who isn't authorized to read it; fetch data instead via
+     * a [dev.klerkframework.klerk.read.Reader] using the same context, or from [authorizedModels].
+     *
+     * @property primaryModel the model that was created or updated directly by the command, as opposed to by
+     * secondary events triggered as a consequence. Null if the command's event doesn't target/produce a model
+     * that the caller can be told about (e.g. a dry run, or a void event with no created model).
+     * @property createdModels all models created as part of processing this command (including secondary events).
+     * @property modelsWithUpdatedProps all models whose properties were changed.
+     * @property deletedModels all models deleted as part of processing this command.
+     * @property transitionedModels all models that changed state machine state.
+     * @property secondaryEvents events that were triggered as a consequence of this command (e.g. by `onEnter`/time
+     * triggers), in addition to the command's own event.
+     * @property jobs managed jobs that were scheduled as a result of this command.
+     * @property unmanagedJobs unmanaged jobs that were scheduled as a result of this command.
+     * @property authorizedModels the affected models as they are after the command, keyed by ID. A model is present
+     * only if [context][C] is authorized to read it — absence does not mean the model wasn't affected.
+     * @property log human-readable trace of processing steps, populated when requested via
+     * [dev.klerkframework.klerk.command.DebugOptions].
      */
     public data class Success<T : Any, C : KlerkContext, V>(
         val primaryModel: ModelID<T>?,

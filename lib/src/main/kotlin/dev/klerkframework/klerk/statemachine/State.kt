@@ -34,6 +34,11 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(name
     public val onEventBlocks: MutableList<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
 
+    /**
+     * Declares what happens when [event] is received while the model doesn't exist yet. [event] must already be
+     * declared with `StateMachine.event(...)`. [init] should call `createModel` — that's the only executable that
+     * makes sense here, since there is no model to `update`, `delete`, or `transitionTo` yet.
+     */
     public fun <P : Any?> onEvent(event: VoidEvent<T, P>, init: VoidEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
         require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
         val onEventBlock =
@@ -65,18 +70,32 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal var afterDuration: Duration? = null
     internal var atTimeFunction: ((args: ArgForInstanceNonEvent<T, C, V>) -> Instant)? = null
 
+    /**
+     * Runs [init] whenever a model enters this state, whether via `createModel` (if this is the initial state) or
+     * via `transitionTo`/`transitionWhen` from another state. At most one `onEnter` per state — calling this again
+     * replaces the previous block rather than adding to it.
+     */
     public fun onEnter(init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit) {
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("Enter block for state '$name'", Enter)
         b.init()
         enterBlock = b
     }
 
+    /**
+     * Runs [init] whenever a model leaves this state, right before the transition takes effect. At most one
+     * `onExit` per state — calling this again replaces the previous block rather than adding to it.
+     */
     public fun onExit(init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit) {
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("Exit block for state '$name'", Exit)
         b.init()
         exitBlock = b
     }
 
+    /**
+     * Declares what happens when [event] is received while the model is in this state. [event] must already be
+     * declared with `StateMachine.event(...)`; an event not declared here for the model's current state is
+     * rejected with a `StateProblem` when submitted.
+     */
     public fun <P> onEvent(event: InstanceEvent<T, P>, init: InstanceEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
         require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
         val onEventBlock = InstanceEventBlock<T, P, ModelStates, C, V>(

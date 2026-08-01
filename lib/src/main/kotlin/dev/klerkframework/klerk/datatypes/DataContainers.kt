@@ -63,9 +63,20 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     public val valueOrNullIfNotAuthorized: T?
         get() = if (authorizedToRead) valueWithoutAuthorization else null
 
+    /**
+     * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
+     * Override to add rules like "must be even". Each function is called with the current [Translation] and returns
+     * [PropertyValidation.Valid] or [PropertyValidation.Invalid].
+     */
     public open val validators: Set<(translator: Translation) -> PropertyValidation> =
         emptySet()
 
+    /**
+     * Checks the built-in constraints and [validators] against [valueWithoutAuthorization].
+     *
+     * @param propertyName used to build the returned problem's message
+     * @return null if valid, otherwise the first failing rule as an [InvalidPropertyProblem]
+     */
     public abstract fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem?
 
     /**
@@ -90,6 +101,10 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
 
     protected override fun clone(): Any = super.clone()
 
+    /**
+     * Labels usable by authorization rules and queries, e.g. to allow "read everything except properties tagged PII".
+     * Not enforced by Klerk itself.
+     */
     public open val tags: Set<String> = emptySet()
 
     /**
@@ -112,6 +127,10 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     override fun hashCode(): Int = valueWithoutAuthorization.hashCode()
 }
 
+/**
+ * A [DataContainer] wrapping a [String], constrained by [minLength], [maxLength], [maxLines] and optionally
+ * [regexPattern].
+ */
 public abstract class StringContainer(value: String) : DataContainer<String>(value) {
     public abstract val minLength: Int
     public abstract val maxLength: Int
@@ -173,6 +192,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
 // So we don't have to build a Regex every time we validate
 private val regexPatterns: MutableMap<String, Regex> = mutableMapOf()
 
+/** A [DataContainer] wrapping an [Int], constrained to the inclusive range [min]..[max]. */
 public abstract class IntContainer(value: Int) :
     DataContainer<Int>(value) {       // can we support Int stuff (e.g. newScore = score + Score(3)
     public abstract val min: Int
@@ -206,6 +226,7 @@ public abstract class IntContainer(value: Int) :
 
 }
 
+/** A [DataContainer] wrapping a [Long], constrained to the inclusive range [min]..[max]. */
 public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     public abstract val min: Long
     public abstract val max: Long
@@ -236,6 +257,7 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     }
 }
 
+/** A [DataContainer] wrapping a [ULong], constrained to the inclusive range [min]..[max]. */
 public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value) {
     public abstract val min: ULong
     public abstract val max: ULong
@@ -266,6 +288,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     }
 }
 
+/** A [DataContainer] wrapping a [Float], constrained to the inclusive range [min]..[max]. */
 public abstract class FloatContainer(value: Float) : DataContainer<Float>(value) {
     public abstract val min: Float
     public abstract val max: Float
@@ -296,11 +319,17 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     }
 }
 
+/**
+ * A [DataContainer] wrapping an [Enum] `E`, stored as its name. Not restricted to a subset of `E`'s values by
+ * default — use `validEnums` in the state machine's `event { }` block to restrict which values a given event
+ * parameter accepts.
+ */
 public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<String>(value.name) {
     public val enum: E = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
+/** A [DataContainer] wrapping a [Boolean]. No built-in constraints. */
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
     public val boolean: Boolean get() = valueWithoutAuthorization
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
@@ -341,6 +370,11 @@ public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<U
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
+/**
+ * A latitude/longitude pair. Wrapped by [GeoPositionContainer] for use on a model or event parameters.
+ *
+ * @throws IllegalArgumentException if latitude is outside -90.0..90.0 or longitude is outside -180.0..180.0
+ */
 public data class GeoPosition(val latitude: Double, val longitude: Double) {
     init {
         require(latitude in -90.0..90.0) { "latitude must be between -90.0 and +90.0" }
@@ -413,6 +447,7 @@ internal val propertiesMustInheritFrom = setOf(
     EnumContainer::class
 )
 
+/** A ready-to-use [StringContainer] for examples/tests where a real domain-specific container isn't the point. */
 public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
     override val minLength: Int = 1
     override val maxLength: Int = 100

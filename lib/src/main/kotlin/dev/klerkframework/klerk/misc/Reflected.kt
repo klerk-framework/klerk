@@ -92,6 +92,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
             getAllRelatedIds(id).map { ReflectedModel(get(it as ModelID<Any>)) }
     }
 
+    /** Reflects over [Model]'s own fields (id, timestamps, state — everything except [Model.props]). */
     public fun getMeta(): List<ReflectedProperty> {
         val result = mutableListOf<ReflectedProperty>()
         original::class.memberProperties.forEach { property ->
@@ -109,6 +110,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
         return result
     }
 
+    /** Reflects over the properties of [Model.props]. */
     public fun getProperties(): List<ReflectedProperty> {
         val result = mutableListOf<ReflectedProperty>()
         original.props::class.memberProperties.forEach { property ->
@@ -139,6 +141,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
         return result
     }
 
+    /** Requires [populateRelations] to have been called first, otherwise related models are unresolved. */
     public fun referencesPretty(): Map<String, List<Model<Any>>> {
         val result = mutableMapOf<String, List<Model<Any>>>()
         original.props::class.memberProperties.forEach { property ->
@@ -169,6 +172,7 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
     }
 }
 
+/** A single reflected property of a [Model] or its props, paired with its value for display purposes. */
 public class ReflectedProperty(
     private val original: KProperty1<out Model<Any>, *>,
     public val value: Any?,
@@ -183,6 +187,7 @@ public class ReflectedProperty(
         }
     }
 
+    /** @return a human-readable rendering of the value if it's a [ModelID] or [Instant], else `null`. */
     public fun description(): String? {
         if (value is ModelID<*>) {
             val referencedModelName = (relatedModels[value] ?: "").toString()
@@ -203,6 +208,7 @@ public class ReflectedProperty(
         return relatedModels[value]
     }
 
+    /** @return the props class of the related model if [value] is a [ModelID] that has been resolved (see [ReflectedModel.populateRelations]), else `null`. */
     public fun getRelatedModelPropsClass(): KClass<*>? {
         val model = relatedModels[value] ?: return null
         return model.props::class
@@ -213,6 +219,13 @@ public class ReflectedProperty(
 
 }
 
+/**
+ * Reflects over an event's parameters class [raw] (the `P` in e.g. [VoidEventWithParameters]) to describe each
+ * constructor parameter as an [EventParameter]. Used by generic tooling (e.g. auto-generated forms/UI) that needs
+ * to render or validate an event's parameters without knowing the concrete type at compile time.
+ *
+ * @throws IllegalConfigurationException if any parameter fails [EventParameter.validate] (see there for the rules)
+ */
 public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
     init {
@@ -230,6 +243,10 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
 }
 
+/**
+ * Reflects a single constructor parameter of an event's parameters class. The parameter's type must be a
+ * [DataContainer] subtype (or a List/Set thereof) or a [ModelID]; validated in [validate].
+ */
 public data class EventParameter(public val raw: KParameter) {
     val name: String =
         requireNotNull(raw.name) { "No qualified name. Model and parameter classes must be concrete classes" }
@@ -358,6 +375,10 @@ public data class EventParameter(public val raw: KParameter) {
 
     public val valueClass: KClass<*> = findValueClass()      // TODO: internal?
 
+    /**
+     * @throws IllegalConfigurationException if this parameter's type is not a [DataContainer] (or List/Set thereof),
+     * or is a mutable collection type
+     */
     public fun validate() {
         val ktype = raw.type.withNullability(false)
         validate(ktype)
@@ -516,6 +537,7 @@ private fun stringify(value: Any?): String {
     }
 }
 
+/** The reflected "kind" of a [DataContainer] property, as determined by [basicTypeEnumFromKType]. */
 public enum class PropertyType {
     String,
     Int,

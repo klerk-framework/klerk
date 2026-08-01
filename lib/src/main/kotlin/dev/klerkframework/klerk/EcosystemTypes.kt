@@ -30,6 +30,12 @@ interface here. So if a hypothetical BroadcasterPlugin would require sending to 
 explicit dependency to PostmarkEmailService.
 */
 
+/**
+ * A plain-data email description, independent of any specific email provider. Used by [EmailSender] so plugins can
+ * depend on "something that sends email" without depending on a specific provider plugin.
+ *
+ * @throws IllegalArgumentException if neither [htmlBody] nor [textBody] is set, or if [to]/[cc]/[bcc] exceed 50 recipients
+ */
 public data class BasicEmail(
     val from: EmailAndName,
     val to: List<EmailAndName>,
@@ -60,6 +66,10 @@ public data class BasicEmail(
         }
 
         public companion object {
+            /**
+             * Parses `"email"` or `"email name"` (space-separated) into an [EmailAndName].
+             * @throws IllegalArgumentException if [str] has more than two space-separated parts
+             */
             public fun fromEmailAndNameString(str: String): EmailAndName {
                 val parts = str.split(" ")
                 return when (parts.size) {
@@ -72,9 +82,17 @@ public data class BasicEmail(
     }
 }
 
+/**
+ * Implemented by an email-sending plugin so other plugins (e.g. one implementing magic-link login) can depend on
+ * "send an email" without depending on a specific provider. See the file-level comment on this file for the
+ * rationale behind these ecosystem interfaces.
+ */
 public interface EmailSender<C : KlerkContext, V> {
     public val defaultFromAddress: BasicEmail.EmailAndName
 
+    /** @return a [JobId] if sending was scheduled as a background job, or a failed [Result] describing why sending failed. */
     public suspend fun sendEmail(email: BasicEmail, context: C): Result<JobId?>
+
+    /** @return the command that would send [email], if this sender can express sending as a command, else `null`. */
     public fun getSendEmailCommand(email: BasicEmail): Command<out Any, out Any>?
 }

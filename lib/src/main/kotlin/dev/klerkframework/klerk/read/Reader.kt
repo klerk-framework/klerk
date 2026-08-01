@@ -7,6 +7,15 @@ import dev.klerkframework.klerk.collection.QueryResponse
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
+/**
+ * Read-only access to models and views, always used as the receiver inside a [dev.klerkframework.klerk.Klerk.read]
+ * (or `readSuspend`) block.
+ *
+ * The `getIfAuthorizedOrNull`, `listIfAuthorized`, `getPossibleVoidEvents`, and `getPossibleEvents` functions are
+ * only meaningful when authorization is enforced (i.e. inside a `Klerk.read` block). If called from within a state
+ * machine's executable functions (create/update/validation blocks etc.), where the reader in scope does not enforce
+ * authorization, they throw `RuntimeException` — use `get`/`list`/`filter` there instead.
+ */
 public interface Reader<C : KlerkContext, V> {
 
     /**
@@ -15,17 +24,18 @@ public interface Reader<C : KlerkContext, V> {
     public val views: V
 
     /**
-     * Get a model.
-     *
      * @throws AuthorizationException if the model is not found or the actor is not allowed to read it.
      */
     public fun <T : Any> get(id: ModelID<T>): Model<T>
 
+    /**
+     * Like [get], but returns null instead of throwing if the model doesn't exist or isn't authorized.
+     */
     public fun <T : Any> getOrNull(id: ModelID<T>): Model<T>?
 
     /**
-     * Gets the first model from the Collection and passes the provided filter.
-     * @throws NoSuchElementException if no model was found
+     * @throws NoSuchElementException if no model in [collection] matches [filter]
+     * @throws AuthorizationException if the actor is not allowed to read the matching model
      */
     public fun <T : Any> getFirstWhere(
         collection: ModelView<T, C>,
@@ -33,32 +43,43 @@ public interface Reader<C : KlerkContext, V> {
     ): Model<T>
 
     /**
-     * Finds the first model in the Collection and passes the provided filter.
+     * Like [getFirstWhere], but returns null instead of throwing if no model matches [filter].
+     *
+     * @throws AuthorizationException if the actor is not allowed to read the matching model
      */
     public fun <T : Any> firstOrNull(
         collection: ModelView<T, C>,
         filter: (Model<T>) -> Boolean
     ): Model<T>?
 
+    /**
+     * Like [get], but returns null instead of throwing an [AuthorizationException] when the actor isn't allowed to
+     * read the model (a missing model still yields null, same as an unauthorized one — the two cases are
+     * indistinguishable). Only usable where authorization is enforced; see the interface-level doc.
+     */
     public fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>?
 
     /**
-     * List all models that are specified in a Collection. Unauthorized models are removed from the result.
-     *
-     * @throws
+     * Lists all models in [collection], silently dropping any the actor is not authorized to read (as opposed to
+     * [list], which throws). Only usable where authorization is enforced; see the interface-level doc.
      */
     public fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>>
 
     /**
-     * Get all models in the Collection that passes the provided filter.
-     *
-     * @throws AuthorizationException if there is any model in the collection that the user is not allowed to read.
+     * @throws AuthorizationException if there is any model in [modelView] (after [filter] is applied) that the actor
+     * is not allowed to read.
      */
     public fun <T : Any> list(
         modelView: ModelView<T, C>,
         filter: ((Model<T>) -> Boolean)? = null,
     ): List<Model<T>>
 
+    /**
+     * Cursor-paginated variant of [list]. See [QueryOptions] for paging/cursor parameters and [QueryResponse] for
+     * the returned page metadata.
+     *
+     * @throws AuthorizationException if there is any matching model the actor is not allowed to read.
+     */
     public fun <T : Any> query(
         collection: ModelView<T, C>,
         options: QueryOptions? = null,
@@ -66,29 +87,37 @@ public interface Reader<C : KlerkContext, V> {
     ): QueryResponse<T>
 
     /**
-     * Finds all models that have a relation to the specified model.
+     * Finds the IDs of all models that reference [id] through any relation property (regardless of model type).
      */
     public fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>>
 
     /**
-     * Finds all models of a specified type that has a relation to the specified model.
+     * Finds all models of type [clazz] that reference [id] through any relation property.
      */
     public fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>>
 
+    /**
+     * Finds all models whose [property] equals [id].
+     */
     public fun <T : Any, U : Any> getRelated(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
 
         ): Set<Model<T>>
 
+    /**
+     * Finds all models whose [property] (a collection of IDs) contains [id].
+     */
     public fun <T : Any, U : Any> getRelatedInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
     ): Set<Model<T>>
 
     /**
-     * Returns a set of external void events for the statemachine that are possible given the provided context
-     * @see isVoidEventPossible
+     * Returns the void events (i.e. events that create a new model of type [clazz]) that the actor could
+     * successfully submit right now: authorization and validation rules are both evaluated, but nothing is executed.
+     *
+     * Only usable where authorization is enforced; see the interface-level doc.
      */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
@@ -97,8 +126,12 @@ public interface Reader<C : KlerkContext, V> {
 
 
     /**
-     * Returns a set of external events for the model that are possible given the current state and provided context
-     * @see isInstanceEventPossible
+     * Returns the instance events that the actor could successfully submit right now against the model with [id],
+     * given its current state: authorization and validation rules are both evaluated, but nothing is executed.
+     *
+     * Only usable where authorization is enforced; see the interface-level doc.
+     *
+     * @throws AuthorizationException if the actor is not allowed to read the model itself
      */
     public fun <T : Any> getPossibleEvents(
         id: ModelID<T>,

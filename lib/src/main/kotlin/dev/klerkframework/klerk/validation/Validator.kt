@@ -386,7 +386,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
 }
 
+/** The result of a single [DataContainer] validator function (see `DataContainer.validators`). */
 public sealed class PropertyValidation {
     public data object Valid : PropertyValidation()
+
+    /** @param translationInfo optional detail passed to [Translation] when building the end-user error message */
     public class Invalid(public val translationInfo: String? = null) : PropertyValidation()
 }

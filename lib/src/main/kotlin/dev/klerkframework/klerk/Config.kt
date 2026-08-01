@@ -29,6 +29,14 @@ import kotlin.time.Duration.Companion.minutes
 
 internal val logger = KotlinLogging.logger {}
 
+/**
+ * The fully-built, immutable configuration of a Klerk instance. Built via [ConfigBuilder.build] (typically through
+ * `ConfigBuilder(views).build { ... }`), then passed to [Klerk.Companion.create].
+ *
+ * Most of the functions on this class are introspection helpers used internally by the framework (validation,
+ * the JSON serializer, `klerk-web`/`klerk-graphql`) to look up state machines, events and views by reference.
+ * Application code normally doesn't need to call them directly.
+ */
 public data class Config<C : KlerkContext, V>(
     public val views: V,
     public val authorization: AuthorizationConfig<C, V>,
@@ -178,10 +186,18 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
+    /**
+     * The model classes registered via `managedModels { model(...) }` when the config was built.
+     */
     public fun getManagedClasses(): Set<KClass<out Any>> {
         return managedModels.map { it.kClass }.toSet()
     }
 
+    /**
+     * The [ModelViews] registered for the model class [clazz] (i.e. the same instance exposed as a property on [V]).
+     *
+     * @throws NoSuchElementException if [clazz] is not a managed model
+     */
     public fun <T : Any> getView(clazz: KClass<*>): ModelViews<T, C> {
         val mm = managedModels.find { it.kClass == clazz }
             ?: throw NoSuchElementException("Cannot find view for ${clazz.qualifiedName}")
@@ -232,17 +248,31 @@ public data class Config<C : KlerkContext, V>(
         //   .filter { it.parameters.isEmpty() }
     }
 
+    /**
+     * Every [ModelView] declared on any managed model's [ModelViews], paired with the model class it belongs to.
+     */
     public fun getCollections(): List<Pair<KClass<out Any>, ModelView<out Any, C>>> {
         return managedModels.flatMap { managed ->
             managed.collections.getCollections().map { Pair(managed.kClass, it) }
         }
     }
 
+    /**
+     * Looks up a single [ModelView] by its [CollectionId].
+     *
+     * @throws NoSuchElementException if no view, or no managed model, matches [id]
+     */
     public fun getCollection(id: CollectionId): ModelView<out Any, C> {
         val managed = managedModels.single { it.kClass.simpleName == id.modelName }
         return managed.collections.getCollections().single { it.getFullId() == id }
     }
 
+    /**
+     * The [ModelView] declared with `validReferences(...)` for [parameter] of the event [eventReference], or null if
+     * the event has no parameters, or none was declared for that parameter (see `validReferences` in
+     * [dev.klerkframework.klerk.statemachine.InstanceEventRulesWithParameters] /
+     * [dev.klerkframework.klerk.statemachine.VoidEventRulesWithParameters]).
+     */
     public fun getValidationCollectionFor(
         eventReference: EventReference,
         parameter: EventParameter
@@ -256,6 +286,10 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
+    /**
+     * The set of allowed values declared with `validEnums(...)` for [parameter] of the event [eventReference], or
+     * null if none was declared (in which case all enum values are allowed).
+     */
     public fun getValidEnumsFor(
         eventReference: EventReference,
         parameter: EventParameter
@@ -269,6 +303,11 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
+    /**
+     * Looks up the declared [Event] for [eventId].
+     *
+     * @throws NoSuchElementException if no managed model declares an event with this reference
+     */
     public fun getEvent(eventId: EventReference): Event<Any, Any?> {
         @Suppress("UNCHECKED_CAST")
         return getStateMachine(eventId).mutableStates.flatMap { it.getEvents() }
@@ -293,6 +332,10 @@ public data class Config<C : KlerkContext, V>(
         return sm
     }
 
+    /**
+     * The declared parameter class of the event [eventReference], reflectively wrapped as [EventParameters], or null
+     * if the event takes no parameters.
+     */
     public fun getParameters(eventReference: EventReference): EventParameters<*>? {
         @Suppress("UNCHECKED_CAST")
         return when (val event = getEvent(eventReference)) {
@@ -303,6 +346,13 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
+    /**
+     * The void events (i.e. events that create a new instance of [clazz]) that [context]'s actor is currently
+     * allowed to trigger, restricted to [visibility]. Used by [dev.klerkframework.klerk.read.Reader.getPossibleVoidEvents].
+     *
+     * @param visibility only [EventVisibility.CODE] and [EventVisibility.EXTERNAL] return results; anything else
+     * yields an empty set.
+     */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
         context: C,
@@ -318,6 +368,11 @@ public data class Config<C : KlerkContext, V>(
     internal fun <T : Any, P> getStateMachineForEvent(event: Event<T, P>): StateMachine<T, out Enum<*>, C, V> =
         getStateMachine(event.id) as StateMachine<T, out Enum<*>, C, V>
 
+    /**
+     * Returns a copy of this config with [plugin] applied, i.e. `plugin.mergeConfig(this)` plus [plugin] itself
+     * appended to [plugins]. Used to install plugins after `ConfigBuilder.build`, e.g.
+     * `Klerk.create(baseConfig.withPlugin(myPlugin))`.
+     */
     public fun withPlugin(plugin: KlerkPlugin<C, V>): Config<C, V> {
         val updatedPlugins = plugins.toMutableList()
         updatedPlugins.add(plugin)
@@ -336,6 +391,10 @@ public data class Config<C : KlerkContext, V>(
 
 }
 
+/**
+ * The assembled authorization rule sets, one property per category. Built by [ConfigBuilder.authorization]; not
+ * meant to be constructed directly by application code.
+ */
 public data class AuthorizationConfig<C : KlerkContext, V>(
     val readModelPositiveRules: Set<(ArgModelContextReader<C, V>) -> PositiveAuthorization>,
     val readModelNegativeRules: Set<(ArgModelContextReader<C, V>) -> NegativeAuthorization>,
@@ -354,11 +413,27 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
 @DslMarker
 internal annotation class ConfigMarker
 
+/**
+ * DSL entry point for building a [Config]. Typical usage:
+ * ```
+ * val config = ConfigBuilder<MyContext, MyViews>(views).build {
+ *     persistence(...)
+ *     systemContextProvider { SystemIdentity -> ... }
+ *     managedModels { model(MyModel::class, myModelStateMachine, myModelViews) }
+ *     authorization { ... }
+ * }
+ * ```
+ * [persistence], [systemContextProvider], [managedModels] and [authorization] are all required; [build] throws
+ * [IllegalConfigurationException] if any is missing. [migrations] and [micrometerRegistry] are optional.
+ */
 @ConfigMarker
 public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     /**
-     * @throws IllegalConfigurationException
+     * Runs [init] against this builder and assembles the resulting [Config].
+     *
+     * @throws IllegalConfigurationException if [persistence], [systemContextProvider], [authorization] or
+     * [managedModels] was not called inside [init]
      */
     public fun build(init: ConfigBuilder<C, V>.() -> Unit): Config<C, V> {
         this.init()
@@ -429,10 +504,18 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     private lateinit var persistenceValue: Persistence
     private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
+    /**
+     * The storage backend to use (e.g. [dev.klerkframework.klerk.storage.SqlPersistence]). Required.
+     */
     public fun persistence(persistence: Persistence) {
         persistenceValue = persistence
     }
 
+    /**
+     * Registers the [MigrationStep]s used to evolve model shapes across schema versions. Steps are reordered by
+     * [MigrationStep.migratesToVersion]; [Config] additionally requires them to form a contiguous chain starting at
+     * version 2 (version 1 is implicit). Optional — omit if the schema has never changed.
+     */
     public fun migrations(migrationSteps: Set<MigrationStep>) {
         migrationStepsValue =
             sortedSetOf(Comparator.comparingInt(MigrationStep::migratesToVersion), *migrationSteps.toTypedArray())
@@ -447,12 +530,21 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         systemContextProviderValue = provider
     }
 
+    /**
+     * Registers the models Klerk manages. Call [ManagedModelsBlock.model] once per model class inside [init].
+     * Required — at least the models used by the application must be declared here.
+     */
     public fun managedModels(init: ManagedModelsBlock<C, V>.() -> Unit) {
         val block = ManagedModelsBlock<C, V>()
         block.init()
         managedModelsValue = block.value
     }
 
+    /**
+     * Declares the authorization rules that govern reads, commands, the event log, and attached data. Required — see
+     * [AuthorizationRulesBlock] for the sub-blocks, or [AuthorizationRulesBlock.insecureAllowEverything] to opt out
+     * of authorization entirely (development/testing only).
+     */
     public fun authorization(init: AuthorizationRulesBlock<C, V>.() -> Unit) {
         authorizationRulesBlock = AuthorizationRulesBlock<C, V>()
         authorizationRulesBlock.init()
@@ -463,6 +555,14 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
         internal val value = mutableSetOf<ManagedModel<*, *, C, V>>()
 
+        /**
+         * Registers [clazz] as a managed model with its [stateMachine] and [view] (the [ModelViews] holding its
+         * collections). [clazz] must be a data class with only `val` properties, each of a [DataContainer] type (or
+         * a collection thereof); every managed model's simple name must be unique within the config.
+         *
+         * @throws IllegalArgumentException if [clazz] has a `var` property or a property that isn't a [DataContainer]
+         * @throws IllegalArgumentException if another managed model already has the same simple name
+         */
         public fun <T : Any, ModelStates : Enum<*>> model(
             clazz: KClass<T>,
             stateMachine: StateMachine<T, ModelStates, C, V>,
@@ -476,6 +576,11 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     }
 
+    /**
+     * The six independent authorization categories, each with a `positive { rule(...) }` / `negative { rule(...) }`
+     * pair. A category with no rules denies everything in it. See the "Authorization" doc for how positive/negative
+     * rules combine, or [insecureAllowEverything] to disable authorization for development.
+     */
     @ConfigMarker
     public class AuthorizationRulesBlock<C : KlerkContext, V> {
 
@@ -505,6 +610,9 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(ArgsForLargeDataWrite<C, V>) -> NegativeAuthorization>()
 
 
+        /**
+         * Rules deciding who may read a model as a whole (returned by `get`/`list`/views).
+         */
         public fun readModels(init: AuthorizationReadRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationReadRulesBlock<C, V>()
             block.init()
@@ -512,6 +620,9 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             readModelNegativeRules.addAll(block.negativeBlock.rules)
         }
 
+        /**
+         * Rules deciding who may read individual model properties. Evaluated per property, independently of [readModels].
+         */
         public fun readProperties(init: AuthorizationReadPropertiesRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationReadPropertiesRulesBlock<C, V>()
             block.init()
@@ -519,6 +630,10 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             readPropertyNegativeRules.addAll(block.negativeBlock.rules)
         }
 
+        /**
+         * Rules deciding who may trigger which events/commands, i.e. who is allowed to call [Klerk.handle] for a
+         * given command.
+         */
         public fun commands(init: AuthorizationEventsRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationEventsRulesBlock<C, V>()
             block.init()
@@ -526,6 +641,9 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             eventNegativeRules.addAll(block.negativeBlock.rules)
         }
 
+        /**
+         * Rules deciding who may read the audit log, i.e. [EventsManager.getEventsInAuditLog].
+         */
         public fun eventLog(init: AuthorizationEventLogRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationEventLogRulesBlock<C, V>()
             block.init()
@@ -558,6 +676,12 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             largeDataWriteNegativeRules.addAll(block.negativeBlock.rules)
         }
 
+        /**
+         * Returns an `init` block for [ConfigBuilder.authorization] that allows every actor to do everything (read
+         * all models/properties/event log/attached data, trigger all commands). Logs a warning when applied.
+         *
+         * For development/testing only — never use in production.
+         */
         public fun insecureAllowEverything(): AuthorizationRulesBlock<C, V>.() -> Unit = {
             logger.warn { "The authorization rules allows everything. The application is insecure!" }
             readModels {
@@ -845,6 +969,10 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
+    /**
+     * The [MeterRegistry] Klerk publishes metrics to. Optional — defaults to a private [SimpleMeterRegistry] that
+     * isn't exported anywhere, so set this to integrate with your application's metrics backend.
+     */
     public fun micrometerRegistry(registry: MeterRegistry) {
         this.registry = registry
     }
@@ -881,10 +1009,21 @@ private fun <T : Any> validateModelClass(clazz: KClass<T>) {
     // do we also need to check so that the user provided value classes are completely immutable?
 }
 
+/**
+ * Runtime settings for a [Klerk] instance, passed to [Klerk.Companion.create] alongside [Config].
+ */
 public data class KlerkSettings(
-    val requireEventParamsValidation: Boolean = true,
-    val requireAnyValidation: Boolean = true,
+    
+    /**
+     * Only `null` (never erase, the default) and [Duration.ZERO] (erase immediately on model deletion) are
+     * currently supported; any other value is rejected on startup.
+     */
     val eraseAuditLogAfterModelDeletion: Duration? = null,
+    /**
+     * Gates the "escape hatch" functions on [KlerkModels] ([KlerkModels.unsafeCreate], [KlerkModels.unsafeUpdate],
+     * [KlerkModels.unsafeDelete]), which bypass the state machine, validation and authorization entirely. Off by
+     * default; enable only if you understand the risk.
+     */
     val allowUnsafeOperations: Boolean = false,
     /**
      * How long attached data that has been prepared but not yet claimed by a command survives (see
@@ -893,6 +1032,10 @@ public data class KlerkSettings(
     val unclaimedLargeDataLifetime: Duration = 1.minutes,
 )
 
+/**
+ * Converts a camelCase identifier (e.g. a validation rule or function name) to a human-readable phrase, e.g.
+ * `"mustBeEven"` -> `"Must be even"`. Not currently wired into [DefaultKlerkTranslation] or any other framework code.
+ */
 public fun defaultTranslator(rule: String): String {
     return camelCaseToPretty(rule)
 }

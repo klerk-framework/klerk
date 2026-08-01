@@ -86,6 +86,9 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
 
 }
 
+/**
+ * An event emitted by [dev.klerkframework.klerk.KlerkModels.subscribe] describing how a model changed.
+ */
 public sealed class ModelModification(public val id: ModelID<out Any>) {
     public class Created(id: ModelID<out Any>) : ModelModification(id)
     public class PropsUpdated(id: ModelID<out Any>) : ModelModification(id)

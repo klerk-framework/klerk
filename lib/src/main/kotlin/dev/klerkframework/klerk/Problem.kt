@@ -6,13 +6,25 @@ import kotlin.reflect.KProperty0
 import kotlin.reflect.jvm.ExperimentalReflectionOnLambdas
 import kotlin.reflect.jvm.reflect
 
+/**
+ * Base class for everything that can go wrong while processing a command, surfaced in
+ * [dev.klerkframework.klerk.CommandResult.Failure.problems]. Each subtype maps to an [asException] and a
+ * [recommendedHttpCode] for callers that want to translate a failure into a thrown exception or an HTTP response.
+ */
 public abstract class Problem(public val endUserTranslatedMessage: String, public val code: KlerkErrorCode) {
+    /** The exception [dev.klerkframework.klerk.CommandResult.orThrow] throws for this problem. */
     public abstract fun asException(): Exception
     public abstract val recommendedHttpCode: Int
+    /** The validation/authorization rule that caused this problem, if any. */
     public abstract val violatedRule: RuleDescription?
     public override fun toString(): String = "[$code] $violatedRule"
 }
 
+/**
+ * A cross-property validation rule was violated (e.g. two mutually-exclusive properties were both non-null).
+ * @param fieldsMustBeNull properties the rule requires to be null, if applicable.
+ * @param fieldsMustNotBeNull properties the rule requires to be non-null, if applicable.
+ */
 public class InvalidPropertyCollectionProblem(
     endUserTranslatedMessage: String,
     public val fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
@@ -23,6 +35,7 @@ public class InvalidPropertyCollectionProblem(
     public override val recommendedHttpCode: Int = 400
 }
 
+/** A single property's [DataContainer] rejected the value passed to it (e.g. failed its own validation). */
 public class InvalidPropertyProblem(
     endUserTranslatedMessage: String,
     public val propertyName: String,
@@ -35,11 +48,13 @@ public class InvalidPropertyProblem(
 
 }
 
+/** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
 public data class RuleDescription(val function: Function<Any>, val type: RuleType) {
     @OptIn(ExperimentalReflectionOnLambdas::class)
     public override fun toString(): String = "${type.name}: ${function.reflect()?.name}"
 }
 
+/** Which kind of rule produced a [RuleDescription]. */
 public enum class RuleType {
     ParametersValidation,
     ContextValidation,
@@ -48,6 +63,7 @@ public enum class RuleType {
     Authorization
 }
 
+/** The actor was not authorized to submit this command. Maps to HTTP 403. */
 public class AuthorizationProblem(
     endUserTranslatedMessage: String,
     override val violatedRule: RuleDescription?,
@@ -57,6 +73,7 @@ public class AuthorizationProblem(
     public override val recommendedHttpCode: Int = 403
 }
 
+/** A bug in Klerk itself, or in configured code, prevented processing. Maps to HTTP 500. */
 public class InternalProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
     public override fun asException(): InternalException = InternalException(code, endUserTranslatedMessage)
@@ -64,6 +81,11 @@ public class InternalProblem(endUserTranslatedMessage: String) :
     public override val violatedRule: RuleDescription? = null
 }
 
+/**
+ * The command could not be applied given the model's current state (e.g. the event is not possible in the model's
+ * current state machine state). Maps to HTTP 409.
+ * @param internalDescription a non-translated, developer-facing description used in the thrown [IllegalStateException].
+ */
 public class StateProblem(
     endUserTranslatedMessage: String,
     public val internalDescription: String,
@@ -74,6 +96,7 @@ public class StateProblem(
     public override val recommendedHttpCode: Int = 409
 }
 
+/** The server is temporarily unable to process the command (e.g. not started, or shutting down). Maps to HTTP 503. */
 public class ServerStateProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
     public override fun asException(): IllegalStateException = IllegalStateException(toString())
@@ -81,6 +104,7 @@ public class ServerStateProblem(endUserTranslatedMessage: String) :
     public override val violatedRule: RuleDescription? = null
 }
 
+/** The command referenced a model, or referenced data, that does not exist. Maps to HTTP 404. */
 public class NotFoundProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.NotFound) {
     public override fun asException(): NoSuchElementException = NoSuchElementException(toString())
@@ -88,6 +112,7 @@ public class NotFoundProblem(endUserTranslatedMessage: String) :
     public override val violatedRule: RuleDescription? = null
 }
 
+/** The command itself was malformed independent of model state (e.g. type mismatch between event and model). Maps to HTTP 400. */
 public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
@@ -95,6 +120,10 @@ public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErro
     public override val violatedRule: RuleDescription? = null
 }
 
+/**
+ * The [dev.klerkframework.klerk.command.CommandToken] was reused, or referenced a model that was modified since the
+ * token was created. See [dev.klerkframework.klerk.command.ProcessingOptions.token]. Maps to HTTP 400.
+ */
 public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
@@ -102,6 +131,7 @@ public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErr
     public override val violatedRule: RuleDescription? = null
 }
 
+/** Thrown by [AuthorizationProblem.asException] and other authorization failures throughout the read/write API. */
 public class AuthorizationException(code: KlerkErrorCode, message: String? = null) :
     RuntimeException("[$code] $message")
 

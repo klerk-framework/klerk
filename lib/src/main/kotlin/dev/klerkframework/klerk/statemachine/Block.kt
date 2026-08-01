@@ -45,6 +45,7 @@ internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
     val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 }
 
+/** A pending fire-and-forget job produced by [Block.VoidEventBlock.unmanagedJob] / [Block.InstanceNonEventBlock.unmanagedJob] / [Block.InstanceEventBlock.unmanagedJob], to be run after the command commits. */
 public data class UnmanagedJob(public val f: () -> Unit, public val description: String)
 
 @ConfigMarker
@@ -64,6 +65,11 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         Block<T, ModelStates, C, V>(name, type) {
         internal val executables = mutableListOf<VoidEventExecutable<T, P, C, V>>()
 
+        /**
+         * Builds the new model's properties by calling [function] and puts it directly into [initialState]. This is
+         * the only way to create a model — there is no `createModel` outside a state machine's `voidState` block
+         * (aside from the `unsafeCreate` escape hatch on `KlerkModels`).
+         */
         public fun createModel(
             initialState: ModelStates,
             function: (args: ArgForVoidEvent<T, P, C, V>) -> T,
@@ -72,6 +78,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(VoidEventCreateModel(initialState, function, onCondition))
         }
 
+        /**
+         * Returns commands produced by [function] to be submitted as part of the same transaction as the triggering
+         * command — e.g. cascading a creation into related models.
+         */
         public fun createCommands(
             function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
@@ -79,6 +89,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(VoidEventCreateEvents(function, onCondition))
         }
 
+        /**
+         * Schedules managed background work built by [function]. See [dev.klerkframework.klerk.job.RunnableJob] for
+         * the distinction from [unmanagedJob].
+         */
         public fun job(
             function: (args: ArgForVoidEvent<T, P, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
@@ -115,6 +129,11 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
         internal val executables = mutableListOf<InstanceNonEventExecutable<T, C, V>>()
 
+        /**
+         * Moves the model to [targetState] once this block finishes. At most one transition per block (`transitionTo`
+         * or `transitionWhen`) — a second call throws `IllegalArgumentException`. Rejected at startup if
+         * [targetState] equals the state this block belongs to.
+         */
         public fun transitionTo(
             targetState: ModelStates,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
@@ -123,6 +142,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceNonEventTransition(targetState, onCondition))
         }
 
+        /**
+         * Evaluates each key in [branches], in iteration order, and transitions to the first value whose key returns
+         * `true`; transitions to [otherwise] if none match (does nothing if [otherwise] is null and none match).
+         */
         public fun transitionWhen(
             branches: LinkedHashMap<(args: ArgForInstanceNonEvent<T, C, V>) -> Boolean, ModelStates>,
             otherwise: ModelStates? = null
@@ -130,11 +153,17 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceNonEventTransitionWhen(branches, otherwise))
         }
 
+        /**
+         * Deletes the model. At most one `delete` per block — a second call throws `IllegalArgumentException`.
+         */
         public fun delete(onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null) {
             require(executables.none { it is InstanceNonEventDelete<*, C, V> }) { "A block can only have one delete" }
             executables.add(InstanceNonEventDelete(onCondition))
         }
 
+        /**
+         * Replaces the model's properties with whatever [function] returns.
+         */
         public fun update(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> T,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
@@ -142,6 +171,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceNonEventUpdateModel(function, onCondition))
         }
 
+        /**
+         * Returns commands produced by [function] to be submitted as part of the same transaction — e.g. cascading
+         * a deletion to related models.
+         */
         public fun createCommands(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
@@ -165,6 +198,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceNonEventUnmanagedJob(function, onCondition))
         }
 
+        /**
+         * Schedules managed background work built by [function]. See [dev.klerkframework.klerk.job.RunnableJob] for
+         * the distinction from [unmanagedJob].
+         */
         public fun job(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
@@ -185,6 +222,11 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         Block<T, ModelStates, C, V>(name, type) {
         internal val executables = mutableListOf<InstanceEventExecutable<T, P, C, V>>()
 
+        /**
+         * Moves the model to [targetState] once this block finishes. At most one transition per block (`transitionTo`
+         * or `transitionWhen`) — a second call throws `IllegalArgumentException`. Rejected at startup if
+         * [targetState] equals the state this block belongs to.
+         */
         public fun transitionTo(
             targetState: ModelStates,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
@@ -193,6 +235,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceEventTransition(targetState, onCondition))
         }
 
+        /**
+         * Evaluates each key in [branches], in iteration order, and transitions to the first value whose key returns
+         * `true`; transitions to [otherwise] if none match (does nothing if [otherwise] is null and none match).
+         */
         public fun transitionWhen(
             branches: LinkedHashMap<(args: ArgForInstanceEvent<T, P, C, V>) -> Boolean, ModelStates>,
             otherwise: ModelStates? = null
@@ -201,11 +247,17 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceEventTransitionWhen(branches, otherwise))
         }
 
+        /**
+         * Deletes the model. At most one `delete` per block — a second call throws `IllegalArgumentException`.
+         */
         public fun delete(onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null) {
             require(executables.none { it is InstanceEventDelete<T, P, C, V> }) { "A block can only have one delete" }
             executables.add(InstanceEventDelete(onCondition))
         }
 
+        /**
+         * Replaces the model's properties with whatever [function] returns.
+         */
         public fun update(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> T,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
@@ -213,6 +265,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceEventUpdateModel(function, onCondition))
         }
 
+        /**
+         * Returns commands produced by [function] to be submitted as part of the same transaction — e.g. cascading
+         * this event to related models.
+         */
         public fun createCommands(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
@@ -220,6 +276,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             executables.add(InstanceEventCreateEvents(function, onCondition))
         }
 
+        /**
+         * Schedules managed background work built by [function]. See [dev.klerkframework.klerk.job.RunnableJob] for
+         * the distinction from [unmanagedJob].
+         */
         public fun job(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<RunnableJob<C, V>>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
@@ -249,6 +309,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     }
 }
 
+/** Which kind of block an executable belongs to: `onEnter`, `onExit`, an `onEvent` handler, or a time trigger. */
 public enum class BlockType {
     Enter,
     Exit,

@@ -19,6 +19,7 @@ internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
     return stateMachine as StateMachine<T, *, C, V>
 }
 
+/** Converts a camelCase identifier to a space-separated, capitalized phrase, e.g. `"firstName"` -> `"First name"`. */
 public fun camelCaseToPretty(s: String): String {
     var result = ""
     s.toCharArray().forEachIndexed { index, c ->
@@ -60,6 +61,11 @@ internal fun extractNameFromFunctionString(funString: String): String {
     return funString.substring(startIndex, endIndex)
 }
 
+/**
+ * Derives a human-readable name for a rule/validator function [f] via reflection, used where only a function
+ * reference (not a declared name) is available, e.g. describing why a [dev.klerkframework.klerk.PropertyCollectionValidity.Invalid]
+ * failed. Falls back to `"? unknown function name"` if [f] is a lambda (reflection on lambdas doesn't expose a name).
+ */
 public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): String {
     try {
         val kFunction = (f as KFunction<*>)

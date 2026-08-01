@@ -265,11 +265,6 @@ internal class EventProcessor<C : KlerkContext, V>(
 
 
     /**
-     * @param modelAsResultOfCommandSoFar Used as parameter in the blocks, not as a final result. An example how this is
-     * used: A void event causes a new model to be created. The model immediately transitions to state A. The
-     * modelAsResultOfCommandSoFar will be used in executables in onEnter for state A. We need this since the command
-     * doesn't contain a reference (and even if it did, the model is not stored in ModelCache yet so the reader will not
-     * find it).
      * @param context is null when we are processing the state machine due to a time-trigger (i.e. not by a command).
      * But whenever there is an Event, we know that it was caused via a command and therefore we know that context is
      * non-null.

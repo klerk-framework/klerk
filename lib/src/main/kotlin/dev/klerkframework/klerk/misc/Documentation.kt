@@ -1,9 +1,13 @@
+package dev.klerkframework.klerk.misc
+
 import dev.klerkframework.klerk.KlerkTranslation
-import dev.klerkframework.klerk.misc.FlowChartAlgorithm
-import dev.klerkframework.klerk.misc.Node
 import dev.klerkframework.klerk.statemachine.*
 import dev.klerkframework.klerk.statemachine.executables.*
 
+/**
+ * Renders [stateMachine] as a [Mermaid](https://mermaid.js.org/) `stateDiagram-v2` definition, for documentation/tooling.
+ * @param showUpdateNotes if true, adds a note on each state listing events that update properties without transitioning
+ */
 public fun <V> generateStateDiagram(
     stateMachine: StateMachine<out Any, out Enum<*>, *, V>,
     showUpdateNotes: Boolean,
@@ -160,6 +164,9 @@ private fun <V> generateDeleteTransitions(states: List<State<out Any, out Enum<*
     return result
 }
 
+/**
+ * Renders [algo]'s nodes as a [Mermaid](https://mermaid.js.org/) `flowchart TD` definition, for documentation/tooling.
+ */
 public fun generateFlowChart(algo: FlowChartAlgorithm<*, *>): String {
     return """flowchart TD
         ${algo.nodes.joinToString(separator = System.lineSeparator()) { renderNode(it) }}

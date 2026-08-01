@@ -16,6 +16,7 @@ public interface KlerkLog {
      */
     public fun add(entry: LogEntry): Unit
 
+    /** Returns the currently buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include read events. */
     public fun entries(context: KlerkContext): List<LogEntry>
 
     /**
@@ -31,6 +32,7 @@ public interface KlerkLog {
      */
     public fun subscribeToReads(context: KlerkContext): SharedFlow<LogEntry>
 
+    /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
     public fun addReads(models: List<Model<*>>, context: KlerkContext)
 
 }
@@ -77,16 +79,19 @@ internal class KlerkLogImpl : KlerkLog {
 
 }
 
+/** Which part of the system produced a [LogEntry]. */
 public enum class MajorSource() {
     Core, Plugin, Application,
 }
 
+/** Where a [LogEntry] came from: a [major] category plus an optional free-text [minor] detail (e.g. a plugin name). */
 public class LogSource(internal val major: MajorSource, internal val minor: String? = null) {
     override fun toString(): String = "${major.name}: $minor"
 }
 
 /**
- *
+ * A single named/typed value attached to a [LogEntry], substitutable into its `headingTemplate`/`contentTemplate`
+ * via `{name}` placeholders (see [LogEntry.headingTemplate]).
  */
 public class Fact(
     public val type: FactType,
@@ -95,6 +100,7 @@ public class Fact(
     public val verb: FactVerb? = null
 )
 
+/** The kind of value a [Fact] carries. */
 public enum class FactType {
     Custom, // for Application and Plugins
     Duration,
@@ -105,6 +111,7 @@ public enum class FactType {
     RuleID,
 }
 
+/** The action a [Fact] describes, when applicable. */
 public enum class FactVerb {
     Created,
     Updated,
@@ -117,10 +124,13 @@ public enum class FactVerb {
     Read,
 }
 
+/** One entry in [KlerkLog]. Implement to define a new kind of loggable event (core Klerk, a plugin, or the application). */
 public interface LogEntry {
     public val time: Instant
     public val actor: dev.klerkframework.klerk.ActorIdentity?
     public val source: LogSource
+
+    /** A short machine-readable name for this kind of entry, e.g. for filtering. Distinct from a Klerk [dev.klerkframework.klerk.Event]. */
     public val logEventName: String       // would use the term 'event' if not that term already was taken
 
     /**
@@ -142,9 +152,16 @@ public interface LogEntry {
      * ```
      */
     public val headingTemplate: String
+
+    /** Like [headingTemplate], but for a longer, optional body. */
     public val contentTemplate: String?
+
+    /** The values substituted into [headingTemplate]/[contentTemplate]'s `{name}` placeholders. */
     public val facts: List<Fact>
 
+    /** Renders [headingTemplate]. Override to substitute [facts]/[actor] into the placeholders described there. */
     public fun getHeading(): String = headingTemplate
+
+    /** Renders [contentTemplate], analogous to [getHeading]. */
     public fun getContent(): String? = contentTemplate
 }

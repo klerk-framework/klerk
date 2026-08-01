@@ -100,12 +100,20 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
      */
 
+    /**
+     * All events declared with any of the [event] overloads for this state machine, regardless of which state(s)
+     * reference them in `onEvent`.
+     */
     public fun getAllEvents(): Set<EventReference> =
         mutableStates.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 
 
     // -------- Builder ---------------------
 
+    /**
+     * Declares the void state — where a model of type [T] is before it exists. Only creation-related `onEvent`
+     * blocks (calling `createModel`) belong here. Every state machine must call this exactly once.
+     */
     public fun voidState(init: VoidState<T, ModelStates, C, V>.() -> Unit) {
         val state = VoidState<T, ModelStates, C, V>("void", type.simpleName!!)
         state.init()
@@ -113,6 +121,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         mutableStates.add(state)
     }
 
+    /**
+     * Declares one instance state, corresponding to a value of [modelState]. Call once per enum value.
+     */
     public fun state(modelState: ModelStates, init: InstanceState<T, ModelStates, C, V>.() -> Unit) {
         val state = InstanceState<T, ModelStates, C, V>(modelState.name, type.simpleName!!)
         state.init()
@@ -124,6 +135,11 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         mutableStates.forEach { it.onKlerkStart(config) }
     }
 
+    /**
+     * Declares [event] (a void event without parameters) as usable by this state machine and attaches its
+     * validation rules via [init]. Must be called before [event] is referenced in any `onEvent` block — Klerk
+     * throws `IllegalConfigurationException` at startup otherwise.
+     */
     public fun event(event: VoidEventNoParameters<T>, init: VoidEventRulesNoParameters<T, C, V>.() -> Unit) {
         declaredEvents.add(event)
         val rules = VoidEventRulesNoParameters<T, C, V>()
@@ -134,6 +150,12 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
+    /**
+     * Declares [event] (a void event with parameters of type [P]) as usable by this state machine and attaches its
+     * validation rules via [init]. Must be called before [event] is referenced in any `onEvent` block — Klerk
+     * throws `IllegalConfigurationException` at startup otherwise, and also if a [P] property of type `ModelID`
+     * has no `validReferences` rule declared in [init].
+     */
     public fun <P : Any> event(
         event: VoidEventWithParameters<T, P>,
         init: VoidEventRulesWithParameters<T, P, C, V>.() -> Unit
@@ -152,6 +174,11 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         event.validEnums = rules.validEnumsMap
     }
 
+    /**
+     * Declares [event] (an instance event without parameters) as usable by this state machine and attaches its
+     * validation rules via [init]. Must be called before [event] is referenced in any `onEvent` block — Klerk
+     * throws `IllegalConfigurationException` at startup otherwise.
+     */
     public fun event(event: InstanceEventNoParameters<T>, init: InstanceEventRulesNoParameters<T, C, V>.() -> Unit) {
         declaredEvents.add(event)
         val rules = InstanceEventRulesNoParameters<T, C, V>()
@@ -162,6 +189,12 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
     }
 
+    /**
+     * Declares [event] (an instance event with parameters of type [P]) as usable by this state machine and attaches
+     * its validation rules via [init]. Must be called before [event] is referenced in any `onEvent` block — Klerk
+     * throws `IllegalConfigurationException` at startup otherwise, and also if a [P] property of type `ModelID`
+     * has no `validReferences` rule declared in [init].
+     */
     public fun <P : Any> event(
         event: InstanceEventWithParameters<T, P>,
         init: InstanceEventRulesWithParameters<T, P, C, V>.() -> Unit

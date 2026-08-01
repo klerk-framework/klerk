@@ -2,7 +2,11 @@ package dev.klerkframework.klerk.misc
 
 import mu.KotlinLogging
 
-// a hack!
+/**
+ * Process-wide registry (a hack, per the original author) that records which [FlowChartAlgorithm]s are wired into
+ * which state-machine blocks, so [dev.klerkframework.klerk.misc.generateStateDiagram]-style tooling can render them.
+ * Not something application code calls directly.
+ */
 public object AlgorithmDocumenter {
 
     private val logger = KotlinLogging.logger {}
@@ -10,6 +14,7 @@ public object AlgorithmDocumenter {
     internal val documentation: MutableSet<AlgorithmDocumentation> = mutableSetOf()
     public var algorithms: Set<FlowChartAlgorithm<*, *>> = emptySet()
 
+    /** Records that a block named [blockName] runs an algorithm, if [functionToString] looks like an [FlowChartAlgorithm.execute] reference; otherwise a no-op. */
     public fun notify(blockName: String, executableType: String, functionToString: String) {
         if (!functionToString.startsWith("fun ") || !functionToString.contains(".execute(")) {
             return
@@ -22,6 +27,7 @@ public object AlgorithmDocumenter {
         this.algorithms = algorithms
     }
 
+    /** @throws NoSuchElementException if no registered algorithm's qualified class name equals [algorithmName] */
     public fun getAlgorithm(algorithmName: String): FlowChartAlgorithm<*, *> {
         return algorithms.single { it::class.qualifiedName == algorithmName }
     }

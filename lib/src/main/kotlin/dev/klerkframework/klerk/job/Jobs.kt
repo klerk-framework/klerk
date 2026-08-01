@@ -23,20 +23,32 @@ import kotlin.time.toDuration
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Declares the properties of a managed, persisted background job. See [RunnableJob] for the class to actually extend.
+ */
 public interface Job {
 
+    /** Number of retries after the first failed attempt before the job is marked [JobStatus.Failed]. */
     public val maxRetries: Int
         get() = 3
 
+    /** Declared but not currently read by [JobManagerImpl] — there is a single in-process worker, so delivery is always effectively at-least-once. */
     public val delivery: JobDelivery
         get() = JobDelivery.AtLeastOnce
 
+    /** Declared but not currently read by [JobManagerImpl] — there is no worker-tag filtering yet. */
     public val requiredWorkerTags: Set<String>
         get() = emptySet()
 
+    /** Declared but not currently read by [JobManagerImpl]. */
     public val tags: Set<String>
         get() = emptySet()
 
+    /**
+     * The only job state that survives a process restart (persisted alongside the class/method name and
+     * re-supplied to the run function on every attempt). Encode whatever the job needs into this string, e.g. a
+     * JSON payload or a [dev.klerkframework.klerk.ModelID]'s string form.
+     */
     public val parameters: String
 
     /**
@@ -51,6 +63,14 @@ public enum class JobDelivery {
     AtLeastOnce, AtMostOnce
 }
 
+/**
+ * Base class for a managed, persisted, retried background job. Return instances of a subclass from a state
+ * machine's `job(...)` executable, or schedule one directly via [dev.klerkframework.klerk.JobManager.schedule].
+ *
+ * [getRunFunction] must return a reference to a function declared in the subclass's `companion object` — the job
+ * manager persists the class name and method name and re-resolves the function reflectively, including after a
+ * process restart, so it cannot be a lambda or an instance method.
+ */
 public abstract class RunnableJob<C : KlerkContext, V> : Job {
     public var id: JobId? = null
 
@@ -66,6 +86,7 @@ public abstract class RunnableJob<C : KlerkContext, V> : Job {
         this.id = id
     }
 
+    /** @throws IllegalStateException if [setId] has not been called yet (i.e. the job has not been scheduled). */
     public fun getMetadata(): JobMetadata {
         val functionName = (getRunFunction() as KFunction<*>).name
         require(functionName.isNotBlank()) { "runFunction must be a function with a name" }
@@ -88,6 +109,7 @@ public abstract class RunnableJob<C : KlerkContext, V> : Job {
     }
 }
 
+/** Snapshot of a scheduled job's state, as returned by [dev.klerkframework.klerk.JobManager.getJob]/`getAllJobs`. */
 public data class JobMetadata(
     val id: JobId,
     val className: String,
@@ -110,14 +132,21 @@ public enum class JobStatus {
 }
 
 /**
+ * The outcome of one run attempt of a [RunnableJob], returned by its run function.
+ *
  * @param state a string that the job can use to remember its state between runs (e.g. after a failed attempt).
  */
 public sealed class JobResult(
     public val state: String,
     public val log: List<String>,
 ) {
+    /** Attempt failed. Retried with exponential backoff (base 3s) until [Job.maxRetries] is reached, then [JobStatus.Failed]. An uncaught exception from the run function is treated the same as this. */
     public class Fail(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
+
+    /** Not finished but not a failure either; re-queued immediately without counting against [Job.maxRetries]. Use for jobs that run in several steps. */
     public class Yeld(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
+
+    /** Done. The job is marked [JobStatus.Success] and not retried. */
     public class Success(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
 }
 

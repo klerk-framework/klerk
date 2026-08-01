@@ -16,15 +16,24 @@ import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
 import kotlin.time.Instant
 
+/**
+ * Identifies a single state within a model's state machine, e.g. `s.Book.Published`.
+ */
 public data class StateId(val modelName: String, val stateName: String) {
     override fun toString(): String = "s.$modelName.$stateName"
     public fun withoutPrefix(): String = toString().substring(2)
 }
 
+/**
+ * Identifies a [ModelView][dev.klerkframework.klerk.collection.ModelView] within a [ModelViews][dev.klerkframework.klerk.collection.ModelViews] collection, e.g. `c.Book.all`.
+ */
 public data class CollectionId(val modelName: String, val shortId: String) {
     override fun toString(): String = "c.$modelName.$shortId"
 
     public companion object {
+        /**
+         * @throws IllegalArgumentException if [string] is not of the form `c.<modelName>.<shortId>`
+         */
         public fun from(string: String): CollectionId {
             val parts = string.split(".")
             require(parts.size == 3) { "CollectionId must contain three parts separated by dots" }
@@ -34,12 +43,20 @@ public data class CollectionId(val modelName: String, val shortId: String) {
     }
 }
 
+/**
+ * Wires a model's props class to its [StateMachine] and [ModelViews]. Registered via
+ * `ConfigBuilder.managedModels { model(...) }`; not normally constructed directly.
+ */
 public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     val kClass: KClass<T>,
     val stateMachine: StateMachine<T, ModelStates, C, V>,
     val collections: ModelViews<T, C>,
 )
 
+/**
+ * A stored instance: metadata (id, timestamps, current [state]) plus the model's props of type [T].
+ * Returned from reads (e.g. [Reader.get]); never constructed directly by application code.
+ */
 public data class Model<T : Any>(
     val id: ModelID<T>,
     val createdAt: Instant,
@@ -60,6 +77,10 @@ public data class Model<T : Any>(
 }
 
 
+/**
+ * Implemented by a props class to declare cross-property validation rules (rules spanning more than one property).
+ * Each function returns a [PropertyCollectionValidity] evaluated after individual property validation passes.
+ */
 public fun interface Validatable {
     public fun validators(): Set<() -> PropertyCollectionValidity>
 }
@@ -124,6 +145,11 @@ public enum class EventVisibility(internal val level: Int) {
     EXTERNAL(5)
 }
 
+/**
+ * Base class of the four event kinds ([VoidEventNoParameters], [VoidEventWithParameters],
+ * [InstanceEventNoParameters], [InstanceEventWithParameters]). Application code declares events as `object`s
+ * extending one of those four, then registers them in a [StateMachine] with `event(...)` / `onEvent(...)`.
+ */
 public sealed class Event<T : Any, P>(private val forModel: KClass<T>, public val visibility: EventVisibility) {
 
     public val id: EventReference
@@ -171,6 +197,10 @@ public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, visibility: E
         noParamRules as Set<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity>
 }
 
+/**
+ * A void event (creates a new model of type [T]) that takes parameters of type [P] when handled. Declare a
+ * handler function `fun create(arg: ArgForVoidEvent<T, P, C, V>): T`.
+ */
 public abstract class VoidEventWithParameters<T : Any, P : Any>(
     forModel: KClass<T>,
     visibility: EventVisibility,
@@ -193,9 +223,17 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
 
 }
 
+/**
+ * A void event (creates a new model of type [T]) that takes no parameters. Declare a handler function
+ * `fun create(arg: ArgForVoidEvent<T, Nothing?, C, V>): T`.
+ */
 public abstract class VoidEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
     VoidEvent<T, Nothing?>(forModel, visibility)
 
+/**
+ * An instance event (acts on an existing model of type [T]) that takes parameters of type [P] when handled.
+ * Declare a handler function `fun update(arg: ArgForInstanceEvent<T, P, C, V>): T`.
+ */
 public open class InstanceEventWithParameters<T : Any, P : Any>(
     forModel: KClass<T>,
     visibility: EventVisibility,
@@ -218,23 +256,41 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
 
 }
 
+/**
+ * An instance event (acts on an existing model of type [T]) that takes no parameters. Declare a handler function
+ * `fun archive(arg: ArgForInstanceEvent<T, Nothing?, C, V>): T`.
+ */
 public abstract class InstanceEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
     InstanceEvent<T, Nothing?>(forModel, visibility)
 
 
+/**
+ * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
+ */
 public data class ArgContextReader<C : KlerkContext, V>(val context: C, val reader: Reader<C, V>)
+
+/**
+ * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
+ */
 public data class ArgCommandContextReader<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,
     val context: C,
     val reader: Reader<C, V>
 )
 
+/**
+ * Arguments handed to rules that evaluate against an existing [model], e.g. read/authorization rules for instance
+ * events.
+ */
 public data class ArgModelContextReader<C : KlerkContext, V>(
     val model: Model<out Any>,
     val context: C,
     val reader: Reader<C, V>
 )
 
+/**
+ * Arguments handed to property-level authorization rules deciding whether [property] on [model] may be read.
+ */
 public data class ArgsForPropertyAuth<C : KlerkContext, V>(
     val property: DataContainer<*>,
     val model: Model<out Any>,
@@ -381,17 +437,28 @@ interface CommandProducer<C:IContext, V> {
  */
 
 
+/**
+ * Implemented by the application to carry who/when/how-translated for every read, command, and rule evaluation.
+ * See the `context` documentation for a full walkthrough and an example implementation.
+ */
 public interface KlerkContext {
+    /** Who is performing the operation; what authorization and business rules key off of. */
     public val actor: ActorIdentity
+
+    /** Optional free-text stored alongside the audit log entry for whatever command uses this context. */
     public val auditExtra: String?
     public val translation: Translation
+
+    /** The instant the operation is considered to happen at. Business logic should read time from here, not `Clock.System.now()`. */
     public val time: Instant
 }
 
+/** Supplies human-readable text for validation, property, and event names. Implement to support additional languages. */
 public interface Translation {
     public val klerk: KlerkTranslation
 }
 
+/** Built-in framework-level strings (used by [DefaultKlerkTranslation] unless overridden). */
 public interface KlerkTranslation {
     public fun property(property: KProperty1<*, *>): String
     public fun propertyDescription(property: String): String?
@@ -513,6 +580,11 @@ public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
     return Instant.fromEpochSeconds(epochSeconds, micros * 1000)
 }
 
+/**
+ * A packaged extension that contributes config (managed models, events, rules, ...) to a host application.
+ * [mergeConfig] should return [previous] augmented with the plugin's own configuration; [start] is called once
+ * after [KlerkMeta.start].
+ */
 public interface KlerkPlugin<C : KlerkContext, V> {
     public val name: String
     public val description: String
@@ -520,6 +592,7 @@ public interface KlerkPlugin<C : KlerkContext, V> {
     public suspend fun start(klerk: Klerk<C, V>): Unit
 }
 
+/** A [dev.klerkframework.klerk.datatypes.DataContainer] wrapping a [JobId][dev.klerkframework.klerk.job.JobId]'s underlying value. */
 public class JobIdContainer(value: Long) : LongContainer(value) {
     override val min: Long = 0
     override val max: Long = Long.MAX_VALUE

@@ -2,6 +2,11 @@ package dev.klerkframework.klerk.misc
 
 import kotlin.reflect.KFunction1
 
+/**
+ * A decision-tree algorithm taking parameters [P] and producing a result [R], expressed as a graph of [Decision]
+ * nodes so it can be both executed and rendered as a diagram (see [dev.klerkframework.klerk.misc.generateFlowChart]).
+ * Subclass and implement [configure] to declare the graph via [AlgorithmBuilder]; call [execute] to run it.
+ */
 public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 
     private val nodesAndStartNode: Pair<Set<Node<P, R>>, Node<P, R>> by lazy { initConfig() }
@@ -18,8 +23,10 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
         return algoBuilder.build()
     }
 
+    /** Declares the graph: register [Decision] nodes via [AlgorithmBuilder.booleanNode]/[AlgorithmBuilder.enumNode] and set the entry point with [AlgorithmBuilder.start]. */
     public abstract fun configure(): AlgorithmBuilder<P, R>.() -> Unit
 
+    /** Runs the algorithm starting at the configured start node until a node terminates, and returns its result. */
     public fun execute(params: P): R = executeWithLogs(params).first
 
     internal fun executeWithLogs(params: P): Pair<R, String> = executeNode(startNode, params, "")
@@ -42,15 +49,18 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 
 }
 
+/** DSL receiver for [FlowChartAlgorithm.configure]. */
 public class AlgorithmBuilder<P, R>(private val name: String) {
 
     private var startNodeId: Decision<*, P>? = null
     public val nodes: MutableSet<Node<P, R>> = mutableSetOf<Node<P, R>>()
 
+    /** Marks [decision] as the entry node of the graph. Required — [FlowChartAlgorithm.execute] fails if never called. */
     public fun start(decision: Decision<*, P>) {
         startNodeId = decision
     }
 
+    /** Adds a node that branches on a boolean [decision]. Configure each branch with [BooleanNodeBuilder.on]. */
     public fun booleanNode(
         decision: Decision<Boolean, P>,
         init: BooleanNodeBuilder<Decision<Boolean, P>, P, R>.() -> Unit
@@ -60,6 +70,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
         nodes.add(builder.build(decision))
     }
 
+    /** Adds a node that branches on an enum-valued [decision]. Configure each branch with [EnumNodeBuilder.on]. */
     public fun <E : Enum<*>> enumNode(
         decision: Decision<E, P>,
         init: EnumNodeBuilder<E, Decision<E, P>, P, R>.() -> Unit
@@ -77,6 +88,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
 
 }
 
+/** A single node in a [FlowChartAlgorithm]'s graph. */
 public sealed class Node<P, R> {
     public abstract fun execute(params: P): NodeExecutionResult<P, R>
 
@@ -140,18 +152,27 @@ public sealed class Node<P, R> {
     }
 }
 
+/** The outcome of evaluating one [Node] against a set of parameters. */
 public sealed class NodeExecutionResult<P, R> {
+    /** The algorithm is done: [terminationResult] is the final result. */
     public data class Termination<P, R>(val terminationResult: R, val functionResult: String) :
         NodeExecutionResult<P, R>()
 
+    /** The algorithm continues at the node identified by [decision]. */
     public data class Next<P, R>(val decision: Decision<out Any, P>, val functionResult: String) :
         NodeExecutionResult<P, R>()
 }
 
+/** DSL receiver for [AlgorithmBuilder.booleanNode]. */
 public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
     private val goTos = mutableMapOf<Boolean, Decision<out Any, P>>()
     private val terminations = mutableMapOf<Boolean, R>()
 
+    /**
+     * Declares what happens when the decision function returns [option]: continue at [next], or terminate with
+     * [terminateWith]. Exactly one of the two must be non-null.
+     * @throws IllegalArgumentException if both [next] and [terminateWith] are null
+     */
     public fun on(option: Boolean, next: Decision<out Any, P>? = null, terminateWith: R? = null) {
         if (next != null) {
             goTos[option] = next
@@ -170,10 +191,16 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
 
 }
 
+/** DSL receiver for [AlgorithmBuilder.enumNode]. */
 public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
     private val goTos = mutableMapOf<E, Decision<out Any, P>>()
     private val terminations = mutableMapOf<E, R>()
 
+    /**
+     * Declares what happens when the decision function returns [option]: continue at [next], or terminate with
+     * [terminateWith]. Exactly one of the two must be non-null.
+     * @throws IllegalArgumentException if both [next] and [terminateWith] are null
+     */
     public fun on(option: E, next: Decision<out Any, P>? = null, terminateWith: R? = null) {
         if (next != null) {
             goTos[option] = next
@@ -192,6 +219,7 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
 
 }
 
+/** A named decision function that inspects the algorithm's parameters [P] and returns a value of type [T] to branch on. */
 public interface Decision<T, P> {
     public val name: String
     public val function: (P) -> T

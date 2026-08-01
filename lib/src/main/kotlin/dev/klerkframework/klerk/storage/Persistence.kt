@@ -8,6 +8,7 @@ import dev.klerkframework.klerk.migration.MigrationStep
 import java.io.InputStream
 import kotlin.time.Instant
 
+/** One persisted entry in the audit log: the record of a single committed command against a single model. */
 public data class AuditEntry(
     val time: Instant,
     val eventReference: EventReference,
@@ -51,7 +52,14 @@ public data class LargeDataDelta(
         claimedBlobs.isEmpty() && claimedStrings.isEmpty() && deletedBlobs.isEmpty() && deletedStrings.isEmpty()
 }
 
+/**
+ * Storage backend SPI: implement this to durably store models, the audit log, jobs and attached data. Klerk owns the
+ * schema; implementations only need to persist and retrieve the shapes below. Provided implementations are
+ * [dev.klerkframework.klerk.storage.SqlPersistence] and [RamStorage]. Wire an instance in via
+ * `ConfigBuilder.persistence(...)`.
+ */
 public interface Persistence {
+    /** The schema version currently stored (see [dev.klerkframework.klerk.migration.MigrationStep]). */
     public val currentModelSchemaVersion: Int
 
     public fun <T : Any, P, C : KlerkContext, V> store(

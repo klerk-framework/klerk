@@ -31,6 +31,12 @@ import kotlin.time.Instant
 
 private const val SEPARATOR = "\n"
 
+/**
+ * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
+ * On construction, connects and creates its tables if missing (audit log, models, schema-migration tracking,
+ * attached data, jobs), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
+ * Model `props` and command `params` are stored as JSON (via Gson).
+ */
 public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     private val database: Database
