@@ -19,6 +19,7 @@ import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.io.InputStream
@@ -48,9 +49,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 SchemaUtils.create(AuditLog)
                 SchemaUtils.create(Models)
                 SchemaUtils.create(ModelSchemaMigrations)
-                SchemaUtils.create(KeyValueStrings)
-                SchemaUtils.create(KeyValueInts)
-                SchemaUtils.create(KeyValueBlobs)
+                SchemaUtils.create(LargeStrings)
+                SchemaUtils.create(LargeBlobs)
                 SchemaUtils.create(Jobs)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
@@ -71,9 +71,12 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
-        context: C?
+        context: C?,
+        largeData: LargeDataDelta
     ) {
         transaction(database) {
+            applyLargeDataDelta(largeData)
+
             if (command != null) {
                 requireNotNull(context)
                 val reference = command.model?.value ?: delta.primaryModel?.value ?: 0
@@ -251,77 +254,113 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         logger.info { "Migration done (version is now $currentModelSchemaVersion)" }
     }
 
-    override fun putKeyValue(id: Int, value: String, ttl: Instant?) {
-        transaction(database) {
-            KeyValueStrings.insert {
-                it[this.id] = id
-                it[this.value] = value
-                it[this.ttl] = ttl?.to64bitMicroseconds()
+    /**
+     * Must be called within a transaction so that the large data is committed together with the models.
+     */
+    private fun applyLargeDataDelta(largeData: LargeDataDelta) {
+        largeData.claimedBlobs.forEach { (blobId, ownerId) ->
+            LargeBlobs.update(where = { LargeBlobs.id eq blobId }) {
+                it[owner] = ownerId
+                it[expires] = null
             }
+        }
+        largeData.claimedStrings.forEach { (stringId, ownerId) ->
+            LargeStrings.update(where = { LargeStrings.id eq stringId }) {
+                it[owner] = ownerId
+                it[expires] = null
+            }
+        }
+        largeData.deletedBlobs.forEach { blobId ->
+            LargeBlobs.deleteWhere { id eq blobId }
+        }
+        largeData.deletedStrings.forEach { stringId ->
+            LargeStrings.deleteWhere { id eq stringId }
         }
     }
 
-    override fun putKeyValue(id: Int, value: Int, ttl: Instant?) {
+    override fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant) {
         transaction(database) {
-            KeyValueInts.insert {
-                it[this.id] = id
-                it[this.value] = value
-                it[this.ttl] = ttl?.to64bitMicroseconds()
-            }
-        }
-    }
-
-    override fun putKeyValue(id: Int, value: InputStream, ttl: Instant?) {
-        transaction(database) {
-            KeyValueBlobs.upsert {
+            // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
+            LargeBlobs.insert {
                 it[this.id] = id
                 it[this.value] = ExposedBlob(value)
-                it[this.ttl] = ttl?.to64bitMicroseconds()
-                it[this.active] = false
+                it[this.owner] = null
+                it[this.authKey] = authKey
+                it[this.expires] = expires.to64bitMicroseconds()
             }
         }
     }
 
-    override fun updateBlob(id: Int, ttl: Instant?, active: Boolean) {
+    override fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant) {
         transaction(database) {
-            KeyValueBlobs.update(where = { KeyValueBlobs.id eq id }) {
+            LargeStrings.insert {
                 it[this.id] = id
-                it[this.ttl] = ttl?.to64bitMicroseconds()
-                it[this.active] = active
+                it[this.value] = value
+                it[this.owner] = null
+                it[this.authKey] = authKey
+                it[this.expires] = expires.to64bitMicroseconds()
             }
         }
     }
 
-    override fun getKeyValueString(id: Int): Pair<String, Instant?>? =
+    override fun getLargeBlob(id: Int): LargeDataRow<InputStream>? =
         transaction(database) {
-            KeyValueStrings.selectAll()
-                .where { KeyValueStrings.id eq id }
+            LargeBlobs.selectAll()
+                .where { LargeBlobs.id eq id }
                 .map {
-                    it[KeyValueStrings.value] to it[KeyValueStrings.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
-                }.firstOrNull()
-        }
-
-    override fun getKeyValueInt(id: Int): Pair<Int, Instant?>? =
-        transaction(database) {
-            KeyValueInts.selectAll()
-                .where { KeyValueInts.id eq id }
-                .map {
-                    it[KeyValueInts.value] to it[KeyValueInts.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) }
-                }.firstOrNull()
-        }
-
-    override fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>? =
-        transaction(database) {
-            KeyValueBlobs.selectAll()
-                .where { KeyValueBlobs.id eq id }
-                .map {
-                    Triple(
-                        it[KeyValueBlobs.value].inputStream,
-                        it[KeyValueBlobs.ttl]?.let { ttl -> decode64bitMicroseconds(ttl) },
-                        it[KeyValueBlobs.active]
+                    LargeDataRow(
+                        value = it[LargeBlobs.value].inputStream,
+                        owner = it[LargeBlobs.owner],
+                        authKey = it[LargeBlobs.authKey],
+                        expires = it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) }
                     )
                 }.firstOrNull()
         }
+
+    override fun getLargeString(id: Int): LargeDataRow<String>? =
+        transaction(database) {
+            LargeStrings.selectAll()
+                .where { LargeStrings.id eq id }
+                .map {
+                    LargeDataRow(
+                        value = it[LargeStrings.value],
+                        owner = it[LargeStrings.owner],
+                        authKey = it[LargeStrings.authKey],
+                        expires = it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) }
+                    )
+                }.firstOrNull()
+        }
+
+    override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
+        transaction(database) {
+            val blobs = LargeBlobs.select(LargeBlobs.id, LargeBlobs.owner, LargeBlobs.authKey, LargeBlobs.expires)
+                .associate {
+                    it[LargeBlobs.id] to LargeDataRow(
+                        Unit,
+                        it[LargeBlobs.owner],
+                        it[LargeBlobs.authKey],
+                        it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) })
+                }
+            val strings =
+                LargeStrings.select(LargeStrings.id, LargeStrings.owner, LargeStrings.authKey, LargeStrings.expires)
+                    .associate {
+                        it[LargeStrings.id] to LargeDataRow(
+                            Unit,
+                            it[LargeStrings.owner],
+                            it[LargeStrings.authKey],
+                            it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) })
+                    }
+            blobs to strings
+        }
+
+    override fun deleteExpiredLargeData(now: Instant) {
+        val cutoff = now.to64bitMicroseconds()
+        transaction(database) {
+            // rows with a null expiry (i.e. claimed ones) never match a comparison, so they are left alone
+            LargeBlobs.deleteWhere { expires less cutoff }
+            LargeStrings.deleteWhere { expires less cutoff }
+        }
+    }
 
     override fun insertJob(meta: JobMetadata) {
         transaction(database) {
@@ -423,25 +462,21 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val executionTimeMillis = integer("execution_time_ms")
     }
 
-    internal object KeyValueStrings : Table("\"klerk_strings\"") {
-        val id = integer("id").index()
-        val value = varchar("value", length = 100000)
-        val ttl = long("ttl").nullable() // microseconds since 1970
+    internal object LargeStrings : Table("\"klerk_large_strings\"") {
+        val id = integer("id")
+        val value = text("value")
+        val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
+        val authKey = varchar("auth_key", length = 1000).nullable()
+        val expires = long("expires").nullable()    // microseconds since 1970, null once claimed
         override val primaryKey = PrimaryKey(id)
     }
 
-    internal object KeyValueInts : Table("\"klerk_ints\"") {
-        val id = integer("id").index()
-        val value = integer("value")
-        val ttl = long("ttl").nullable() // microseconds since 1970
-        override val primaryKey = PrimaryKey(id)
-    }
-
-    internal object KeyValueBlobs : Table("\"klerk_blobs\"") {
-        val id = integer("id").index()
+    internal object LargeBlobs : Table("\"klerk_large_blobs\"") {
+        val id = integer("id")
         val value = blob("value")
-        val ttl = long("ttl").nullable() // microseconds since 1970
-        val active = bool("active")  // blobs are first prepared, then activated in the second step
+        val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
+        val authKey = varchar("auth_key", length = 1000).nullable()
+        val expires = long("expires").nullable()    // microseconds since 1970, null once claimed
         override val primaryKey = PrimaryKey(id)
     }
 

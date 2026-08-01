@@ -4,12 +4,45 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.storage.ModelCache
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import mu.KotlinLogging
 import java.security.SecureRandom
 
 internal interface IdProvider {
     fun <T : Any> getNextModelID(): ModelID<T>
     fun getNextJobID(): JobId
+}
+
+/**
+ * Allocates ids for attached data (see [dev.klerkframework.klerk.KlerkLargeData]).
+ *
+ * There must be exactly one instance, since the mutex is what makes concurrent allocation safe.
+ *
+ * Unlike [IdFactory.getNextModelID], this cannot rely on being called from the serialized command path — preparing
+ * large data deliberately happens outside it, so two concurrent calls could otherwise pick the same id and one upload
+ * would silently overwrite the other. The mutex is held only for a check-and-insert in an in-memory structure, which
+ * is also cheaper than probing the database once per attempt.
+ */
+internal class LargeDataIdAllocator {
+
+    private val random = SecureRandom.getInstanceStrong()
+    private val mutex = Mutex()
+
+    /**
+     * @param reserve is called with a candidate id while the mutex is held. It should insert the id and return true if
+     * the id was free, otherwise return false so that another candidate is tried.
+     */
+    suspend fun getNextLargeDataID(reserve: (Int) -> Boolean): Int = mutex.withLock {
+        while (true) {
+            val randomInt = random.nextInt(0, Int.MAX_VALUE)
+            if (reserve(randomInt)) {
+                return@withLock randomInt
+            }
+        }
+        @Suppress("UNREACHABLE_CODE")
+        error("unreachable")
+    }
 }
 
 internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {

@@ -69,7 +69,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Context](docs/context.md) — actor, time, and translation for every operation
 * [Jobs](docs/jobs.md) — background work, managed and unmanaged
 * [Persistence & migrations](docs/persistence.md) — storage backends and evolving model shapes
-* [Key-value store](docs/key-value-store.md) — simple storage outside the model system
+* [Attached data](docs/attached-data.md) — large blobs and strings attached to a model
 * [Translation](docs/translation.md) — localizing validation and UI text
 * [Testing](docs/testing.md) — testing a Klerk configuration
 * [Concurrency](docs/concurrency.md) — how commands and reads are serialized, and what that means for your code

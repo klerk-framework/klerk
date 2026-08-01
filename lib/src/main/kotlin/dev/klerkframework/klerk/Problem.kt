@@ -144,7 +144,13 @@ public enum class KlerkErrorCode(public val code: String) {
     CommandTokenAlreadyUsed("ERROR-COMMAND-5"),
     ModelModifiedSinceTokenCreation("ERROR-COMMAND-6"),
     CommandModelValidation("ERROR-COMMAND-7"),
-    BrokenReference("ERROR-COMMAND-8");
+    BrokenReference("ERROR-COMMAND-8"),
+    LargeDataNotFound("ERROR-COMMAND-9"),
+    LargeDataAlreadyOwned("ERROR-COMMAND-10"),
+    LargeDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
+    LargeDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
+    LargeDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
+    LargeDataWriteNegativeAuthorizationExist("ERROR-AUTH-11");
 
     override fun toString(): String = code
 }

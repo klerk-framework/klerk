@@ -3,6 +3,8 @@ package dev.klerkframework.klerk.misc
 import com.google.gson.*
 import dev.klerkframework.klerk.Config
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.LargeBlobID
+import dev.klerkframework.klerk.LargeStringID
 import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.decode64bitMicroseconds
 import java.lang.reflect.ParameterizedType
@@ -32,7 +34,29 @@ internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
         .registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(InstantContainer::class.java, InstantValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(DurationContainer::class.java, DurationValueSerializer(valueClasses))
+        .registerTypeAdapter(LargeBlobID::class.java, LargeBlobIDSerializer())
+        .registerTypeAdapter(LargeStringID::class.java, LargeStringIDSerializer())
         .create()
+}
+
+/**
+ * A non-nullable [LargeBlobID] property is inlined by the compiler and Gson sees a plain `int`, but a nullable one is
+ * boxed and would otherwise be serialized as an object with an `id` field. These adapters make both cases a number.
+ */
+internal class LargeBlobIDSerializer : JsonSerializer<LargeBlobID>, JsonDeserializer<LargeBlobID> {
+    override fun serialize(src: LargeBlobID?, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement =
+        if (src == null) JsonNull.INSTANCE else JsonPrimitive(src.id)
+
+    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): LargeBlobID =
+        LargeBlobID(requireNotNull(json).asInt)
+}
+
+internal class LargeStringIDSerializer : JsonSerializer<LargeStringID>, JsonDeserializer<LargeStringID> {
+    override fun serialize(src: LargeStringID?, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement =
+        if (src == null) JsonNull.INSTANCE else JsonPrimitive(src.id)
+
+    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): LargeStringID =
+        LargeStringID(requireNotNull(json).asInt)
 }
 
 internal class StringValueSerializer(private val valueClasses: Set<KClass<*>>) : JsonSerializer<StringContainer>,

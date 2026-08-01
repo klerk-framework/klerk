@@ -296,17 +296,61 @@ public value class ModelID<T : Any>(public val value: Int) {
     }
 }
 
+/**
+ * A reference to a large blob attached to a model (see [KlerkLargeData]).
+ *
+ * Obtain one from [KlerkLargeData.prepare] and store it in a model property. The data is owned exclusively by the
+ * first model that references it in a committed command, and is deleted when no property of that model refers to it
+ * any more.
+ *
+ * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
+ */
 @JvmInline
-public value class StringKey(internal val id: Int)
+public value class LargeBlobID(internal val id: Int) {
+    override fun toString(): String = id.toString()
+}
 
+/**
+ * A reference to a large string attached to a model (see [KlerkLargeData]).
+ *
+ * Obtain one from [KlerkLargeData.prepare] and store it in a model property. The data is owned exclusively by the
+ * first model that references it in a committed command, and is deleted when no property of that model refers to it
+ * any more.
+ *
+ * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
+ */
 @JvmInline
-public value class IntKey(internal val id: Int)
+public value class LargeStringID(internal val id: Int) {
+    override fun toString(): String = id.toString()
+}
 
-@JvmInline
-public value class BlobKey(internal val id: Int)
+/**
+ * The arguments given to the rules deciding who may read attached data (see [KlerkLargeData.get]).
+ *
+ * @property owner the model that owns the data. A rule can use this to express model-relative policies (e.g. "the
+ * actor may read the file if it belongs to a project the actor is a member of").
+ * @property authKey the key that was provided when the data was prepared (see [KlerkLargeData.prepare]). It is frozen
+ * at upload time and never changes.
+ */
+public data class ArgsForLargeDataRead<C : KlerkContext, V>(
+    val owner: Model<out Any>,
+    val authKey: String?,
+    val context: C,
+    val reader: Reader<C, V>,
+)
 
-@JvmInline
-public value class BlobToken(public val id: Int)
+/**
+ * The arguments given to the rules deciding who may prepare attached data (see [KlerkLargeData.prepare]).
+ *
+ * Note that there is no model at this point since the data has not been attached to anything yet, and that the
+ * [authKey] is chosen by the caller. The meaningful check here is the actor in the [context]. The real gate on
+ * *attaching* data to a model is the normal event authorization of the command that claims it.
+ */
+public data class ArgsForLargeDataWrite<C : KlerkContext, V>(
+    val authKey: String?,
+    val context: C,
+    val reader: Reader<C, V>,
+)
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous

@@ -82,6 +82,20 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                 }
                 negative {}
             }
+            readLargeData {
+                positive {
+                    rule(::onlyTheAuthorsOwnerCanReadThePicture)
+                }
+                negative {
+                    rule(::unauthenticatedCannotReadLargeData)
+                }
+            }
+            writeLargeData {
+                positive {
+                    rule(::everybodyCanPrepareLargeData)
+                }
+                negative {}
+            }
         }
         systemContextProvider(::myContextProvider)
     }
@@ -101,6 +115,23 @@ fun cannotReadAstrid(args: ArgsForPropertyAuth<Context, MyCollections>): dev.kle
 fun canReadAllProperties(args: ArgsForPropertyAuth<Context, MyCollections>): dev.klerkframework.klerk.PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
+
+/**
+ * A model-relative rule: it reaches the owning model, which is the point of handing the rule a [Model] and a `Reader`.
+ */
+fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForLargeDataRead<Context, MyCollections>): PositiveAuthorization {
+    val props = args.owner.props
+    if (props is Author && props.lastName.value == "Secretive") {
+        return PositiveAuthorization.NoOpinion
+    }
+    return PositiveAuthorization.Allow
+}
+
+fun unauthenticatedCannotReadLargeData(args: ArgsForLargeDataRead<Context, MyCollections>): NegativeAuthorization =
+    if (args.context.actor is Unauthenticated) Deny else Pass
+
+fun everybodyCanPrepareLargeData(args: ArgsForLargeDataWrite<Context, MyCollections>): PositiveAuthorization =
+    PositiveAuthorization.Allow
 
 fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): dev.klerkframework.klerk.NegativeAuthorization {
     val props = args.model.props
@@ -179,6 +210,11 @@ data class Book(
     val publishedAt: BookWrittenAt?,
     val releasePartyPosition: ReleasePartyPosition,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
+    // attached data, see docs/attached-data.md
+    val notes: LargeStringID? = null,
+    val cover: LargeBlobID? = null,
+    val thumbnail: LargeBlobID? = null,
+    val chapters: List<LargeStringID> = emptyList(),
 ) {
     override fun toString() = title.value
 }
@@ -187,7 +223,7 @@ data class Author(
     val firstName: FirstName,
     val lastName: LastName,
     val address: Address,
-    val picture: BlobKey
+    val picture: LargeBlobID?
 ) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
@@ -215,7 +251,8 @@ data class CreateAuthorParams(
     val age: PositiveEvenIntContainer = PositiveEvenIntContainer(68),
     //  val address: Address,
     val secretToken: SecretPasscode,
-    val favouriteColleague: ModelID<Author>? = null
+    val favouriteColleague: ModelID<Author>? = null,
+    val picture: LargeBlobID? = null,
 ) : Validatable {
 
     override fun validators(): Set<() -> PropertyCollectionValidity> =
@@ -434,12 +471,12 @@ fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyColle
         firstName = params.firstName,
         lastName = params.lastName,
         address = Address(Street("kjh")),
-        picture = BlobKey(1)
+        picture = params.picture
     )
 }
 
 fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Context, MyCollections>): Author {
-    return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")), picture = BlobKey(1))
+    return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")), picture = null)
 }
 
 
@@ -488,9 +525,15 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections
         readingTime = params.readingTime,
         publishedAt = null,
         releasePartyPosition = ReleasePartyPosition(GeoPosition(latitude = 1.234, longitude = 3.456)),
-        genre = BookGenreContainer(BookGenre.Fiction)
+        genre = BookGenreContainer(BookGenre.Fiction),
+        notes = params.notes,
+        cover = params.cover,
+        thumbnail = params.thumbnail,
+        chapters = params.chapters,
     )
 }
+
+fun updateBook(args: ArgForInstanceEvent<Book, Book, Context, MyCollections>): Book = args.command.params
 
 
 enum class AuthorStates {
@@ -886,6 +929,8 @@ object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
 
 object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
 
+object UpdateBook : InstanceEventWithParameters<Book, Book>(Book::class, EXTERNAL, Book::class)
+
 object DeleteBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
 
 data class CreateBookParams(
@@ -897,6 +942,10 @@ data class CreateBookParams(
     val averageScore: AverageScore,
     val readingTime: ReadingTime,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
+    val notes: LargeStringID? = null,
+    val cover: LargeBlobID? = null,
+    val thumbnail: LargeBlobID? = null,
+    val chapters: List<LargeStringID> = emptyList(),
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {

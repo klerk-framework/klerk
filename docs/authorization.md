@@ -22,16 +22,24 @@ ConfigBuilder<Ctx, Views>(views).build {
             positive { rule(::everybodyCanReadEventLog) }
             negative { }
         }
+        readLargeData {
+            positive { rule(::onlyProjectMembersCanReadAttachments) }
+            negative { }
+        }
+        writeLargeData {
+            positive { rule(::anyLoggedInUserCanUpload) }
+            negative { }
+        }
     }
     // other config
 }
 ```
 
-There are four independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands), and
-`eventLog` — each with its own `positive`/`negative` rule sets. A category with no rules at all denies everything in
-that category, since there is no rule to explicitly allow it.
+There are six independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
+`eventLog`, `readLargeData` and `writeLargeData` — each with its own `positive`/`negative` rule sets. A category with no
+rules at all denies everything in that category, since there is no rule to explicitly allow it.
 
-For prototyping, `insecureAllowEverything()` fills in all four categories with "allow everybody" and logs a warning —
+For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning —
 never use it in production.
 
 ## What the rules guarantee
@@ -116,6 +124,34 @@ passed — so a command that's both invalid and unauthorized is reported as inva
 Gates whether an actor can read entries from the audit log (`klerk.events.getEventsInAuditLog(...)`, see
 [events and commands](events-and-commands.md)). Rules receive an `ArgContextReader<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
+
+### readLargeData
+
+Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.largeData.get(id, context)`. Rules
+receive an `ArgsForLargeDataRead<C, V>` (`owner`, `authKey`, `context`, `reader`):
+
+```kotlin
+fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>): PositiveAuthorization {
+    val owner = args.owner.props
+    if (owner !is File) return PositiveAuthorization.NoOpinion
+    val project = args.reader.get(owner.project)
+    return if (project.props.members.contains(args.context.actor.id)) PositiveAuthorization.Allow
+    else PositiveAuthorization.NoOpinion
+}
+```
+
+`owner` is the model the data is attached to, which is what makes model-relative policies expressible and keeps them
+correct as the model changes. `authKey` is whatever was passed to `prepare` — it is frozen at upload time, so prefer a
+rule that reads the owning model for anything that has to follow the data over its lifetime.
+
+### writeLargeData
+
+Gates whether an actor can call `klerk.largeData.prepare(...)`. Rules receive an `ArgsForLargeDataWrite<C, V>`
+(`authKey`, `context`, `reader`).
+
+This category is weak by construction: at `prepare` time the data has not been attached to anything, so there is no
+model and no command, and the `authKey` is chosen by the caller. The meaningful check is the actor in the context. The
+real gate on *attaching* data to a model is the ordinary `commands` authorization of the command that claims it.
 
 ## ActorIdentity
 

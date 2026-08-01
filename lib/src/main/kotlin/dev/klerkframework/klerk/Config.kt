@@ -25,6 +25,7 @@ import kotlin.reflect.full.createType
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.withNullability
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 internal val logger = KotlinLogging.logger {}
 
@@ -343,7 +344,11 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val eventPositiveRules: Set<(ArgCommandContextReader<*, C, V>) -> PositiveAuthorization>,
     val eventNegativeRules: Set<(ArgCommandContextReader<*, C, V>) -> NegativeAuthorization>,
     val eventLogPositiveRules: Set<(args: ArgContextReader<C, V>) -> PositiveAuthorization>,
-    val eventLogNegativeRules: Set<(args: ArgContextReader<C, V>) -> NegativeAuthorization>
+    val eventLogNegativeRules: Set<(args: ArgContextReader<C, V>) -> NegativeAuthorization>,
+    val largeDataReadPositiveRules: Set<(ArgsForLargeDataRead<C, V>) -> PositiveAuthorization> = emptySet(),
+    val largeDataReadNegativeRules: Set<(ArgsForLargeDataRead<C, V>) -> NegativeAuthorization> = emptySet(),
+    val largeDataWritePositiveRules: Set<(ArgsForLargeDataWrite<C, V>) -> PositiveAuthorization> = emptySet(),
+    val largeDataWriteNegativeRules: Set<(ArgsForLargeDataWrite<C, V>) -> NegativeAuthorization> = emptySet(),
 )
 
 @DslMarker
@@ -403,7 +408,11 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
                 eventPositiveRules = authorizationRulesBlock.eventPositiveRules,
                 eventNegativeRules = authorizationRulesBlock.eventNegativeRules,
                 eventLogPositiveRules = authorizationRulesBlock.eventLogPositiveRules,
-                eventLogNegativeRules = authorizationRulesBlock.eventLogNegativeRules
+                eventLogNegativeRules = authorizationRulesBlock.eventLogNegativeRules,
+                largeDataReadPositiveRules = authorizationRulesBlock.largeDataReadPositiveRules,
+                largeDataReadNegativeRules = authorizationRulesBlock.largeDataReadNegativeRules,
+                largeDataWritePositiveRules = authorizationRulesBlock.largeDataWritePositiveRules,
+                largeDataWriteNegativeRules = authorizationRulesBlock.largeDataWriteNegativeRules,
             ),
             meterRegistry = registry,
             managedModels = managedModelsValue,
@@ -486,6 +495,14 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
         internal val eventLogNegativeRules =
             mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+        internal val largeDataReadPositiveRules =
+            mutableSetOf<(ArgsForLargeDataRead<C, V>) -> PositiveAuthorization>()
+        internal val largeDataReadNegativeRules =
+            mutableSetOf<(ArgsForLargeDataRead<C, V>) -> NegativeAuthorization>()
+        internal val largeDataWritePositiveRules =
+            mutableSetOf<(ArgsForLargeDataWrite<C, V>) -> PositiveAuthorization>()
+        internal val largeDataWriteNegativeRules =
+            mutableSetOf<(ArgsForLargeDataWrite<C, V>) -> NegativeAuthorization>()
 
 
         public fun readModels(init: AuthorizationReadRulesBlock<C, V>.() -> Unit) {
@@ -514,6 +531,31 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             block.init()
             eventLogPositiveRules.addAll(block.positiveBlock.rules)
             eventLogNegativeRules.addAll(block.negativeBlock.rules)
+        }
+
+        /**
+         * Rules deciding who may read attached data, i.e. `klerk.largeData.get(...)`.
+         * See [dev.klerkframework.klerk.KlerkLargeData].
+         */
+        public fun readLargeData(init: AuthorizationLargeDataReadRulesBlock<C, V>.() -> Unit) {
+            val block = AuthorizationLargeDataReadRulesBlock<C, V>()
+            block.init()
+            largeDataReadPositiveRules.addAll(block.positiveBlock.rules)
+            largeDataReadNegativeRules.addAll(block.negativeBlock.rules)
+        }
+
+        /**
+         * Rules deciding who may prepare attached data, i.e. `klerk.largeData.prepare(...)`.
+         *
+         * Note that this is weak by construction: at that point there is no model and no command, and the authKey is
+         * chosen by the caller. The real gate on *attaching* data to a model is the normal event authorization of the
+         * command that claims it. See [dev.klerkframework.klerk.KlerkLargeData].
+         */
+        public fun writeLargeData(init: AuthorizationLargeDataWriteRulesBlock<C, V>.() -> Unit) {
+            val block = AuthorizationLargeDataWriteRulesBlock<C, V>()
+            block.init()
+            largeDataWritePositiveRules.addAll(block.positiveBlock.rules)
+            largeDataWriteNegativeRules.addAll(block.negativeBlock.rules)
         }
 
         public fun insecureAllowEverything(): AuthorizationRulesBlock<C, V>.() -> Unit = {
@@ -546,9 +588,27 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
                 }
                 negative {}
             }
+            readLargeData {
+                positive {
+                    rule(this@AuthorizationRulesBlock::everybodyCanReadAllLargeData)
+                }
+                negative {}
+            }
+            writeLargeData {
+                positive {
+                    rule(this@AuthorizationRulesBlock::everybodyCanWriteLargeData)
+                }
+                negative {}
+            }
         }
 
         private fun everybodyCanReadModels(args: ArgModelContextReader<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanReadAllLargeData(args: ArgsForLargeDataRead<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanWriteLargeData(args: ArgsForLargeDataWrite<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
         private fun everybodyCanReadAllProperties(args: ArgsForPropertyAuth<C, V>): PositiveAuthorization =
@@ -636,6 +696,77 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
 
         public fun rule(function: (ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    // large data
+    @ConfigMarker
+    public class AuthorizationLargeDataReadRulesBlock<C : KlerkContext, V> {
+
+        internal lateinit var positiveBlock: AuthorizationLargeDataReadPositiveRulesBlock<C, V>
+        internal lateinit var negativeBlock: AuthorizationLargeDataReadNegativeRulesBlock<C, V>
+
+        public fun positive(init: AuthorizationLargeDataReadPositiveRulesBlock<C, V>.() -> Unit) {
+            positiveBlock = AuthorizationLargeDataReadPositiveRulesBlock()
+            positiveBlock.init()
+        }
+
+        public fun negative(init: AuthorizationLargeDataReadNegativeRulesBlock<C, V>.() -> Unit) {
+            negativeBlock = AuthorizationLargeDataReadNegativeRulesBlock()
+            negativeBlock.init()
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationLargeDataReadPositiveRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForLargeDataRead<C, V>) -> PositiveAuthorization>()
+
+        public fun rule(function: (ArgsForLargeDataRead<C, V>) -> PositiveAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationLargeDataReadNegativeRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForLargeDataRead<C, V>) -> NegativeAuthorization>()
+
+        public fun rule(function: (ArgsForLargeDataRead<C, V>) -> NegativeAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationLargeDataWriteRulesBlock<C : KlerkContext, V> {
+
+        internal lateinit var positiveBlock: AuthorizationLargeDataWritePositiveRulesBlock<C, V>
+        internal lateinit var negativeBlock: AuthorizationLargeDataWriteNegativeRulesBlock<C, V>
+
+        public fun positive(init: AuthorizationLargeDataWritePositiveRulesBlock<C, V>.() -> Unit) {
+            positiveBlock = AuthorizationLargeDataWritePositiveRulesBlock()
+            positiveBlock.init()
+        }
+
+        public fun negative(init: AuthorizationLargeDataWriteNegativeRulesBlock<C, V>.() -> Unit) {
+            negativeBlock = AuthorizationLargeDataWriteNegativeRulesBlock()
+            negativeBlock.init()
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationLargeDataWritePositiveRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForLargeDataWrite<C, V>) -> PositiveAuthorization>()
+
+        public fun rule(function: (ArgsForLargeDataWrite<C, V>) -> PositiveAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationLargeDataWriteNegativeRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForLargeDataWrite<C, V>) -> NegativeAuthorization>()
+
+        public fun rule(function: (ArgsForLargeDataWrite<C, V>) -> NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -755,6 +886,11 @@ public data class KlerkSettings(
     val requireAnyValidation: Boolean = true,
     val eraseAuditLogAfterModelDeletion: Duration? = null,
     val allowUnsafeOperations: Boolean = false,
+    /**
+     * How long attached data that has been prepared but not yet claimed by a command survives (see
+     * [KlerkLargeData.prepare]). Mainly here so that tests don't have to wait a minute.
+     */
+    val unclaimedLargeDataLifetime: Duration = 1.minutes,
 )
 
 public fun defaultTranslator(rule: String): String {

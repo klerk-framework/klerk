@@ -1,8 +1,8 @@
 # Persistence & migrations
 
 Klerk owns persistence itself — you don't write SQL or design a schema. You choose (or implement) a `Persistence`
-backend, hand it to `ConfigBuilder`, and Klerk uses it to durably store models, the audit log, jobs, and the key-value
-store.
+backend, hand it to `ConfigBuilder`, and Klerk uses it to durably store models, the audit log, jobs, and
+[attached data](attached-data.md).
 
 There are two implementations in the framework today.
 
@@ -15,7 +15,7 @@ persistence(persistence)
 
 Backed by a SQL database via a `javax.sql.DataSource`, using [Exposed](https://github.com/JetBrains/Exposed) as the SQL
 layer. On construction it connects and creates its tables if missing (audit log, models, schema-migration tracking,
-key-value tables, jobs), then reads the current model schema version from the
+attached data, jobs), then reads the current model schema version from the
 `klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON (via Gson).
 
 For production, supply a

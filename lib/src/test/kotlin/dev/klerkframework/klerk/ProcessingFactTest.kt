@@ -16,7 +16,7 @@ class ProcessingFactTest {
             firstName = FirstName("Astrid"),
             lastName = LastName("Lindgren"),
             address = Address(Street("Storgatan 1")),
-            picture = BlobKey(1)
+            picture = null
         )
         val authorModel = Model(
             id = authorId,

@@ -27,7 +27,7 @@ class ReaderTest {
                 FirstName("Anakin"),
                 LastName("Skywalker"),
                 Address(Street("Tatooine")),
-                picture = BlobKey(1)
+                picture = null
             )
             val originalAuthor = Model(
                 id = ref,

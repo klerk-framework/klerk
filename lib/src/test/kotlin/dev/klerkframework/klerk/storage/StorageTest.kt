@@ -20,7 +20,7 @@ class StorageTest {
             firstName = FirstName("Pelle"),
             lastName = LastName("Andersson"),
             address = Address(Street("Storgatan 12")),
-            picture = BlobKey(1)
+            picture = null
         )
 
         val now = Clock.System.now()

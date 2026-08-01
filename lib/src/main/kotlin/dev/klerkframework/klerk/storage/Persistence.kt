@@ -19,13 +19,46 @@ public data class AuditEntry(
     val extra: String?
 )
 
+/**
+ * A row in one of the large-data tables.
+ *
+ * @property owner the id of the owning model, or null while the data is still unclaimed.
+ * @property expires when an unclaimed row is reaped. Null once the data has been claimed.
+ */
+public data class LargeDataRow<T>(
+    val value: T,
+    val owner: Int?,
+    val authKey: String?,
+    val expires: Instant?,
+)
+
+/**
+ * The changes to large data that a command implies (see [dev.klerkframework.klerk.KlerkLargeData]). Applied in the
+ * same transaction as the models, so a failing command leaves the data untouched.
+ *
+ * @property claimedBlobs blob ids that got an owner, mapped to the owning model id
+ * @property claimedStrings string ids that got an owner, mapped to the owning model id
+ * @property deletedBlobs blob ids that no property refers to any more
+ * @property deletedStrings string ids that no property refers to any more
+ */
+public data class LargeDataDelta(
+    val claimedBlobs: Map<Int, Int> = emptyMap(),
+    val claimedStrings: Map<Int, Int> = emptyMap(),
+    val deletedBlobs: Set<Int> = emptySet(),
+    val deletedStrings: Set<Int> = emptySet(),
+) {
+    public fun isEmpty(): Boolean =
+        claimedBlobs.isEmpty() && claimedStrings.isEmpty() && deletedBlobs.isEmpty() && deletedStrings.isEmpty()
+}
+
 public interface Persistence {
     public val currentModelSchemaVersion: Int
 
     public fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
-        context: C?
+        context: C?,
+        largeData: LargeDataDelta = LargeDataDelta()
     ): Unit
 
     public fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit
@@ -39,13 +72,30 @@ public interface Persistence {
     public fun setConfig(config: Config<*, *>): Unit
     public fun migrate(migrations: List<MigrationStep>): Unit
 
-    public fun putKeyValue(id: Int, value: String, ttl: Instant?): Unit
-    public fun putKeyValue(id: Int, value: Int, ttl: Instant?): Unit
-    public fun putKeyValue(id: Int, value: InputStream, ttl: Instant?): Unit
-    public fun updateBlob(id: Int, ttl: Instant?, active: Boolean): Unit
-    public fun getKeyValueString(id: Int): Pair<String, Instant?>?
-    public fun getKeyValueInt(id: Int): Pair<Int, Instant?>?
-    public fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>?
+    /**
+     * Inserts an unclaimed blob. Must fail if the id is already taken (i.e. insert, never upsert).
+     */
+    public fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant): Unit
+
+    /**
+     * Inserts an unclaimed string. Must fail if the id is already taken (i.e. insert, never upsert).
+     */
+    public fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant): Unit
+
+    public fun getLargeBlob(id: Int): LargeDataRow<InputStream>?
+    public fun getLargeString(id: Int): LargeDataRow<String>?
+
+    /**
+     * Reads every large-data row without its value, so that the in-memory structures can be rebuilt at startup.
+     * @return blob rows and string rows
+     */
+    public fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>>
+
+    /**
+     * Deletes unclaimed rows whose expiry has passed.
+     */
+    public fun deleteExpiredLargeData(now: Instant): Unit
+
     public fun insertJob(meta: JobMetadata)
     public fun updateJob(updated: JobMetadata)
     public fun getAllJobs(): Set<JobMetadata>
@@ -58,16 +108,17 @@ public class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
-    private val keyValueStrings = mutableMapOf<Int, Pair<String, Instant?>>()
-    private val keyValueInts = mutableMapOf<Int, Pair<Int, Instant?>>()
-    private val keyValueBlobs = mutableMapOf<Int, Triple<ByteArray, Instant?, Boolean>>()
+    private val largeBlobs = mutableMapOf<Int, LargeDataRow<ByteArray>>()
+    private val largeStrings = mutableMapOf<Int, LargeDataRow<String>>()
     private val jobs = mutableMapOf<JobId, JobMetadata>()
 
     override fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
-        context: C?
+        context: C?,
+        largeData: LargeDataDelta
     ) {
+        applyLargeDataDelta(largeData)
         if (command != null && context != null) {
             auditLog.add(createAuditEntry(command, delta, context))
         }
@@ -121,31 +172,42 @@ public class RamStorage : Persistence {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
     }
 
-    override fun putKeyValue(id: Int, value: String, ttl: Instant?) {
-        keyValueStrings[id] = Pair(value, ttl)
-    }
-
-    override fun putKeyValue(id: Int, value: Int, ttl: Instant?) {
-        keyValueInts[id] = Pair(value, ttl)
-    }
-
-    override fun putKeyValue(id: Int, value: InputStream, ttl: Instant?) {
-        keyValueBlobs[id] = Triple(value.readAllBytes(), ttl, false)
-    }
-
-    override fun updateBlob(id: Int, ttl: Instant?, active: Boolean) {
-        val old = keyValueBlobs[id]
-        if (old == null) {
-            logger.warn { "Could not find blob with id $id" }
-            return
+    private fun applyLargeDataDelta(largeData: LargeDataDelta) {
+        largeData.claimedBlobs.forEach { (id, owner) ->
+            val row = requireNotNull(largeBlobs[id]) { "Could not find blob with id $id" }
+            largeBlobs[id] = row.copy(owner = owner, expires = null)
         }
-        keyValueBlobs[id] = Triple(old.first, ttl, active)
+        largeData.claimedStrings.forEach { (id, owner) ->
+            val row = requireNotNull(largeStrings[id]) { "Could not find string with id $id" }
+            largeStrings[id] = row.copy(owner = owner, expires = null)
+        }
+        largeData.deletedBlobs.forEach { largeBlobs.remove(it) }
+        largeData.deletedStrings.forEach { largeStrings.remove(it) }
     }
 
-    override fun getKeyValueString(id: Int): Pair<String, Instant?>? = keyValueStrings[id]
-    override fun getKeyValueInt(id: Int): Pair<Int, Instant?>? = keyValueInts[id]
-    override fun getKeyValueBlob(id: Int): Triple<InputStream, Instant?, Boolean>? =
-        keyValueBlobs[id]?.let { Triple(it.first.inputStream(), it.second, it.third) }
+    override fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant) {
+        require(!largeBlobs.containsKey(id)) { "There is already a blob with id $id" }
+        largeBlobs[id] = LargeDataRow(value.readAllBytes(), owner = null, authKey = authKey, expires = expires)
+    }
+
+    override fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant) {
+        require(!largeStrings.containsKey(id)) { "There is already a string with id $id" }
+        largeStrings[id] = LargeDataRow(value, owner = null, authKey = authKey, expires = expires)
+    }
+
+    override fun getLargeBlob(id: Int): LargeDataRow<InputStream>? =
+        largeBlobs[id]?.let { LargeDataRow(it.value.inputStream(), it.owner, it.authKey, it.expires) }
+
+    override fun getLargeString(id: Int): LargeDataRow<String>? = largeStrings[id]
+
+    override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
+        largeBlobs.mapValues { LargeDataRow(Unit, it.value.owner, it.value.authKey, it.value.expires) } to
+                largeStrings.mapValues { LargeDataRow(Unit, it.value.owner, it.value.authKey, it.value.expires) }
+
+    override fun deleteExpiredLargeData(now: Instant) {
+        largeBlobs.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }
+        largeStrings.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }
+    }
 
     override fun insertJob(meta: JobMetadata) {
         jobs[meta.id] = meta

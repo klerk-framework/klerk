@@ -12,7 +12,6 @@ import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
-import kotlin.time.Duration
 import kotlin.time.Instant
 
 public interface Klerk<C : KlerkContext, V> {
@@ -38,9 +37,9 @@ public interface Klerk<C : KlerkContext, V> {
     public val models: KlerkModels<C, V>
 
     /**
-     * Note that the keys are generated for you, i.e. you cannot give your own names to the keys.
+     * Large immutable data (blobs and strings) attached to models.
      */
-    public val keyValueStore: KlerkKeyValueStore<C>
+    public val largeData: KlerkLargeData<C>
     public val meta: KlerkMeta
     public val log: KlerkLog
 
@@ -210,58 +209,74 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
     fun isJobIdAvailable(int: Int): Boolean
 }
 
-public interface KlerkKeyValueStore<C : KlerkContext> {
+/**
+ * Large immutable data attached to models.
+ *
+ * Models should be kept small so they fit in the internal cache. Instead of storing a large value in the model
+ * itself, prepare it here and store the returned ID in a model property (of type [LargeBlobID] or [LargeStringID]).
+ *
+ * Writing happens in two steps since uploading may be slow but updating a model must be quick:
+ * 1. [prepare] inserts the data (slow, no lock is held)
+ * 2. a command stores the returned ID in a model property (fast)
+ *
+ * If no committed command references a prepared ID within one minute, the data is deleted and a later attempt to use
+ * that ID will fail the command.
+ *
+ * Attached data is exclusively owned: an ID belongs to the first model that references it in a committed command, and
+ * a command trying to attach data owned by another model is rejected. The data is deleted when no property of the
+ * owning model refers to it any more (i.e. on replacement, on set-to-null, and on model deletion), in the same
+ * transaction as the command.
+ *
+ * There is no way to delete attached data directly, and there is no way to store a standalone value.
+ */
+public interface KlerkLargeData<C : KlerkContext> {
 
     /**
-     * Put a String value in the key-value store.
-     */
-    public suspend fun put(value: String, ttl: Duration? = null): StringKey
-
-    /**
-     * Put an Int value in the key-value store.
+     * Inserts a blob so that it can be attached to a model.
+     *
+     * This may take a while, so it is deliberately done outside the command processing. No lock is held while the data
+     * is written.
+     *
+     * @param authKey an arbitrary key that is stored with the data and handed to the authorization rules. See
+     * [ArgsForLargeDataRead].
+     * @return the ID to be stored in a model property by a subsequent command. If no command does so within one
+     * minute, the data is deleted.
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public suspend fun put(value: Int, ttl: Duration? = null): IntKey
+    public suspend fun prepare(value: InputStream, context: C, authKey: String? = null): LargeBlobID
 
     /**
-     * The first step of putting a blob in the key-value store. This step inserts the blob in the database but
-     * doesn't make it available in the key-value store. To actually put it in the store, use  [KlerkKeyValueStore.put]
-     * with the token returned by this function.
-     * The reason for this extra step is that large blobs may
-     * take a long time to upload and store in the database, and we don't want to block other operations during this
-     * time. Therefore, this step happens without acquiring any lock.
+     * Inserts a string so that it can be attached to a model.
+     *
+     * See [prepare] for blobs; the semantics are identical.
      *
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public fun prepareBlob(value: InputStream): BlobToken
+    public suspend fun prepare(value: String, context: C, authKey: String? = null): LargeStringID
 
     /**
-     * Put a blob in the key-value store.
-     * @param token the token returned by [KlerkKeyValueStore.prepareBlob]
+     * Retrieves a blob.
+     *
+     * Must be called *outside* a read block: attached data is often large, and holding the read lock while streaming
+     * it would block every command and every read in the application. This function acquires the lock briefly on its
+     * own to make the authorization decision, releases it, and then returns the stream.
+     *
      * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id
      */
-    public suspend fun put(token: BlobToken, ttl: Duration? = null): BlobKey
+    public suspend fun get(id: LargeBlobID, context: C): InputStream
 
     /**
-     * Retrieve a value from the key-value store.
+     * Retrieves a string.
+     *
+     * See [get] for blobs; the semantics are identical.
+     *
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id
      */
-    public suspend fun get(id: StringKey, context: C): String
-
-    /**
-     * Retrieve a value from the key-value store.
-     * @throws AuthorizationException if the actor isn't authorized
-     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
-     */
-    public suspend fun get(id: IntKey, context: C): Int
-
-    /**
-     * Retrieve a value from the key-value store.
-     * @throws AuthorizationException if the actor isn't authorized
-     * @throws kotlin.NoSuchElementException if there exists no value for the provided key
-     */
-    public suspend fun get(id: BlobKey, context: C): InputStream
+    public suspend fun get(id: LargeStringID, context: C): String
 
 }
 

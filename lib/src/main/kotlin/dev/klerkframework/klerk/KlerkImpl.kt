@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobManagerImpl
-import dev.klerkframework.klerk.keyvaluestore.KeyValueStoreImpl
+import dev.klerkframework.klerk.largedata.LargeDataImpl
 import dev.klerkframework.klerk.log.KlerkLogImpl
 import dev.klerkframework.klerk.log.LogCommandSucceeded
 import dev.klerkframework.klerk.log.LogKlerkStarted
@@ -26,9 +26,9 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
     private val readWriteLock = ReadWriteLock()
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
-    internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs)
+    internal val largeDataImpl = LargeDataImpl<C, V>(this, readWriteLock, settings)
+    internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs, largeDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
-    private val klerkKeyValueStore = KeyValueStoreImpl(config)
     private val klerkLog = KlerkLogImpl()
     internal val validator = Validator(this)
 
@@ -75,7 +75,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
     override val log = klerkLog
 
-    override val keyValueStore = klerkKeyValueStore
+    override val largeData = largeDataImpl
 
     override suspend fun <T : Any, P> handle(
         command: Command<T, P>,
@@ -148,6 +148,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 }
 
                 klerk.eventsManager.start()
+                klerk.largeDataImpl.start()
                 klerk.jobs.start()
                 klerk.config.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }

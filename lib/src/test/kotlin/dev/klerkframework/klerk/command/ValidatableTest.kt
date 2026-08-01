@@ -61,7 +61,7 @@ class ValidatableTest {
                         FirstName("James"),
                         LastName("Clavell"),
                         Address(Street("Some street")),
-                        picture = BlobKey(1)
+                        picture = null
                     )
                 ),
                 context = Context.system(),

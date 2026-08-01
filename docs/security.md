@@ -8,7 +8,8 @@ them.
 ## Secure by design
 
 All data interactions go through Klerk, ensuring that all authorization rules are enforced. This applies independently
-to reading a model, reading a single property of a model, submitting a command, and reading the audit log. This design
+to reading a model, reading a single property of a model, submitting a command, reading the audit log, and reading or
+preparing [attached data](attached-data.md). This design
 prevents developers from accidentally bypassing security checks. If a developer needs to override a rule, they must
 explicitly state it, making such exceptions stand out in the code.
 

@@ -20,6 +20,10 @@ fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates,
 
         event(DeleteBook) {}
 
+        event(UpdateBook) {
+            validReferences(Book::author, collections.authors.all)
+        }
+
         voidState {
             onEvent(CreateBook) {
                 createModel(BookStates.Draft, ::newBook)
@@ -38,6 +42,10 @@ fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates,
 
             onEvent(DeleteBook) {
                 delete()
+            }
+
+            onEvent(UpdateBook) {
+                update(::updateBook)
             }
 
         }

@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.withContext
 
 internal class KlerkModelsImpl<C : KlerkContext, V>(
     private val klerk: KlerkImpl<C, V>,
@@ -59,7 +60,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         val reader = ReaderWithAuth(klerk, context)
         readWriteLock.acquireRead()
         try {
-            val result = reader.readFunction()
+            val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
             klerk.log.addReads(reader.modelsRead.distinctBy { it.id }, context)
             return result
         } finally {
@@ -72,7 +73,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         val reader = ReaderWithAuth(klerk, context)
         readWriteLock.acquireRead()
         try {
-            return reader.readFunction()
+            return withContext(ReadBlockGuard.Marker()) { reader.readFunction() }
         } finally {
             reader.finishRead()
             readWriteLock.releaseRead()
