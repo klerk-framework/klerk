@@ -582,7 +582,7 @@ public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
 
 /**
  * A packaged extension that contributes config (managed models, events, rules, ...) to a host application.
- * [mergeConfig] should return [previous] augmented with the plugin's own configuration; [start] is called once
+ * [mergeConfig] should return previous augmented with the plugin's own configuration; [start] is called once
  * after [KlerkMeta.start].
  */
 public interface KlerkPlugin<C : KlerkContext, V> {

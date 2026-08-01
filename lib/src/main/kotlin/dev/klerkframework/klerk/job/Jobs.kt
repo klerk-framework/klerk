@@ -144,7 +144,7 @@ public sealed class JobResult(
     public class Fail(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
 
     /** Not finished but not a failure either; re-queued immediately without counting against [Job.maxRetries]. Use for jobs that run in several steps. */
-    public class Yeld(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
+    public class Yield(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
 
     /** Done. The job is marked [JobStatus.Success] and not retried. */
     public class Success(state: String = "", log: List<String> = emptyList()) : JobResult(state, log)
@@ -236,7 +236,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerkImpl: KlerkI
                 nextAttempt = null
             )
 
-            is Yeld -> updatedMeta.copy(
+            is Yield -> updatedMeta.copy(
                 status = JobStatus.Scheduled,
                 nextAttempt = Clock.System.now()
             )

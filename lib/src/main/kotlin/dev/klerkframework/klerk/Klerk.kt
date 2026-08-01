@@ -183,7 +183,7 @@ public interface JobManager<C : KlerkContext, V> {
 
     /**
      * Schedules a job for background execution. This is for manually-created [RunnableJob]s; jobs created by a
-     * state machine's [dev.klerkframework.klerk.statemachine.executables.UnmanagedJob] executable are scheduled
+     * state machine's [dev.klerkframework.klerk.statemachine.UnmanagedJob] executable are scheduled
      * automatically.
      *
      * @return an ID that can be used with [getJob] to check on progress/result
