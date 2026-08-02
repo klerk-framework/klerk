@@ -60,8 +60,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 SchemaUtils.create(AuditLog)
                 SchemaUtils.create(Models)
                 SchemaUtils.create(ModelSchemaMigrations)
-                SchemaUtils.create(LargeStrings)
-                SchemaUtils.create(LargeBlobs)
+                SchemaUtils.create(AttachedData)
                 SchemaUtils.create(Jobs)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
@@ -83,10 +82,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?,
-        largeData: LargeDataDelta
+        attachedData: AttachedDataDelta
     ) {
         transaction(database) {
-            applyLargeDataDelta(largeData)
+            applyAttachedDataDelta(attachedData)
 
             if (command != null) {
                 requireNotNull(context)
@@ -266,33 +265,25 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     /**
-     * Must be called within a transaction so that the large data is committed together with the models.
+     * Must be called within a transaction so that the attached data is committed together with the models.
      */
-    private fun applyLargeDataDelta(largeData: LargeDataDelta) {
-        largeData.claimedBlobs.forEach { (blobId, ownerId) ->
-            LargeBlobs.update(where = { LargeBlobs.id eq blobId }) {
+    private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
+        attachedData.claimed.forEach { (dataId, ownerId) ->
+            AttachedData.update(where = { AttachedData.id eq dataId }) {
                 it[owner] = ownerId
                 it[expires] = null
             }
         }
-        largeData.claimedStrings.forEach { (stringId, ownerId) ->
-            LargeStrings.update(where = { LargeStrings.id eq stringId }) {
-                it[owner] = ownerId
-                it[expires] = null
-            }
-        }
-        largeData.deletedBlobs.forEach { blobId ->
-            LargeBlobs.deleteWhere { id eq blobId }
-        }
-        largeData.deletedStrings.forEach { stringId ->
-            LargeStrings.deleteWhere { id eq stringId }
+        attachedData.deleted.forEach { dataId ->
+            AttachedData.deleteWhere { id eq dataId }
         }
     }
 
-    override fun insertLargeBlob(
+    override fun insertAttachedData(
         id: Int,
         value: InputStream,
-        visibility: LargeDataVisibility,
+        kind: AttachedDataKind,
+        visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
         expires: Instant,
@@ -300,9 +291,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     ) {
         transaction(database) {
             // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
-            LargeBlobs.insert {
+            AttachedData.insert {
                 it[this.id] = id
                 it[this.value] = ExposedBlob(value)
+                it[this.kind] = kind.ordinal.toByte()
                 it[this.owner] = null
                 it[this.visibility] = visibility.ordinal.toByte()
                 it[this.created] = createdAt.to64bitMicroseconds()
@@ -314,106 +306,55 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             // the stream has been consumed by the insert above, so the digest is complete. Updating in the same
             // transaction means no row is ever committed without its size and hash.
             val (writtenSize, writtenHash) = digestAfterWrite()
-            LargeBlobs.update(where = { LargeBlobs.id eq id }) {
+            AttachedData.update(where = { AttachedData.id eq id }) {
                 it[this.size] = writtenSize
                 it[this.hash] = writtenHash
             }
         }
     }
 
-    override fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant) {
+    override fun getAttachedData(id: Int): AttachedDataRow<InputStream>? =
         transaction(database) {
-            LargeStrings.insert {
-                it[this.id] = id
-                it[this.value] = value
-                it[this.owner] = null
-                it[this.visibility] = metadata.visibility.ordinal.toByte()
-                it[this.created] = metadata.createdAt.to64bitMicroseconds()
-                it[this.size] = metadata.size
-                it[this.hash] = metadata.hash
-                it[this.metadata] = encodeCustomMetadata(metadata.custom)
-                it[this.expires] = expires.to64bitMicroseconds()
-            }
-        }
-    }
-
-    override fun getLargeBlob(id: Int): LargeDataRow<InputStream>? =
-        transaction(database) {
-            LargeBlobs.selectAll()
-                .where { LargeBlobs.id eq id }
+            AttachedData.selectAll()
+                .where { AttachedData.id eq id }
                 .map {
-                    LargeDataRow(
-                        value = it[LargeBlobs.value].inputStream,
-                        owner = it[LargeBlobs.owner],
-                        metadata = it.toLargeDataMetadata(
-                            LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size, LargeBlobs.hash,
-                            LargeBlobs.metadata
-                        ),
-                        expires = it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) }
+                    AttachedDataRow(
+                        value = it[AttachedData.value].inputStream,
+                        owner = it[AttachedData.owner],
+                        metadata = it.toAttachedDataMetadata(),
+                        expires = it[AttachedData.expires]?.let { e -> decode64bitMicroseconds(e) }
                     )
                 }.firstOrNull()
         }
 
-    override fun getLargeString(id: Int): LargeDataRow<String>? =
+    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
         transaction(database) {
-            LargeStrings.selectAll()
-                .where { LargeStrings.id eq id }
-                .map {
-                    LargeDataRow(
-                        value = it[LargeStrings.value],
-                        owner = it[LargeStrings.owner],
-                        metadata = it.toLargeDataMetadata(
-                            LargeStrings.visibility, LargeStrings.created, LargeStrings.size, LargeStrings.hash,
-                            LargeStrings.metadata
-                        ),
-                        expires = it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) }
-                    )
-                }.firstOrNull()
+            AttachedData.select(
+                AttachedData.id,
+                AttachedData.owner,
+                AttachedData.kind,
+                AttachedData.visibility,
+                AttachedData.created,
+                AttachedData.size,
+                AttachedData.hash,
+                AttachedData.metadata,
+                AttachedData.expires
+            ).associate {
+                it[AttachedData.id] to AttachedDataRow(
+                    Unit,
+                    it[AttachedData.owner],
+                    it.toAttachedDataMetadata(),
+                    it[AttachedData.expires]?.let { e -> decode64bitMicroseconds(e) })
+            }
         }
 
-    override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
-        transaction(database) {
-            val blobs = LargeBlobs.select(
-                LargeBlobs.id, LargeBlobs.owner, LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size,
-                LargeBlobs.hash, LargeBlobs.metadata, LargeBlobs.expires
-            ).associate {
-                it[LargeBlobs.id] to LargeDataRow(
-                    Unit,
-                    it[LargeBlobs.owner],
-                    it.toLargeDataMetadata(
-                        LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size, LargeBlobs.hash,
-                        LargeBlobs.metadata
-                    ),
-                    it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) })
-            }
-            val strings = LargeStrings.select(
-                LargeStrings.id, LargeStrings.owner, LargeStrings.visibility, LargeStrings.created, LargeStrings.size,
-                LargeStrings.hash, LargeStrings.metadata, LargeStrings.expires
-            ).associate {
-                it[LargeStrings.id] to LargeDataRow(
-                    Unit,
-                    it[LargeStrings.owner],
-                    it.toLargeDataMetadata(
-                        LargeStrings.visibility, LargeStrings.created, LargeStrings.size, LargeStrings.hash,
-                        LargeStrings.metadata
-                    ),
-                    it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) })
-            }
-            blobs to strings
-        }
-
-    private fun ResultRow.toLargeDataMetadata(
-        visibility: Column<Byte>,
-        created: Column<Long>,
-        size: Column<Long>,
-        hash: Column<String>,
-        metadata: Column<String?>,
-    ): LargeDataMetadata = LargeDataMetadata(
-        visibility = LargeDataVisibility.entries[this[visibility].toInt()],
-        createdAt = decode64bitMicroseconds(this[created]),
-        size = this[size],
-        hash = this[hash],
-        custom = decodeCustomMetadata(this[metadata]),
+    private fun ResultRow.toAttachedDataMetadata(): AttachedDataMetadata = AttachedDataMetadata(
+        kind = AttachedDataKind.entries[this[AttachedData.kind].toInt()],
+        visibility = AttachedDataVisibility.entries[this[AttachedData.visibility].toInt()],
+        createdAt = decode64bitMicroseconds(this[AttachedData.created]),
+        size = this[AttachedData.size],
+        hash = this[AttachedData.hash],
+        custom = decodeCustomMetadata(this[AttachedData.metadata]),
     )
 
     private fun encodeCustomMetadata(custom: Map<String, String>): String? =
@@ -422,12 +363,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private fun decodeCustomMetadata(json: String?): Map<String, String> =
         if (json == null) emptyMap() else plainGson.fromJson(json, stringMapType)
 
-    override fun deleteExpiredLargeData(now: Instant) {
+    override fun deleteExpiredAttachedData(now: Instant) {
         val cutoff = now.to64bitMicroseconds()
         transaction(database) {
             // rows with a null expiry (i.e. claimed ones) never match a comparison, so they are left alone
-            LargeBlobs.deleteWhere { expires less cutoff }
-            LargeStrings.deleteWhere { expires less cutoff }
+            AttachedData.deleteWhere { expires less cutoff }
         }
     }
 
@@ -531,24 +471,16 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val executionTimeMillis = integer("execution_time_ms")
     }
 
-    internal object LargeStrings : Table("\"klerk_large_strings\"") {
+    /**
+     * Blobs and strings live in the same table: Klerk never looks inside the value, so a string gains nothing from a
+     * text column, and one table means one id space (an id is a safe cache key on its own) and one code path.
+     */
+    internal object AttachedData : Table("\"klerk_attached_data\"") {
         val id = integer("id")
-        val value = text("value")
+        val value = blob("value")                   // a string is stored as its UTF-8 bytes
+        val kind = byte("kind")                     // the ordinal of AttachedDataKind
         val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
-        val visibility = byte("visibility")         // the ordinal of LargeDataVisibility
-        val created = long("created")               // microseconds since 1970
-        val size = long("size")                     // bytes
-        val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex
-        val metadata = text("metadata").nullable()  // the application's own metadata, as JSON
-        val expires = long("expires").nullable()    // microseconds since 1970, null once claimed
-        override val primaryKey = PrimaryKey(id)
-    }
-
-    internal object LargeBlobs : Table("\"klerk_large_blobs\"") {
-        val id = integer("id")
-        val value = blob("value")
-        val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
-        val visibility = byte("visibility")         // the ordinal of LargeDataVisibility
+        val visibility = byte("visibility")         // the ordinal of AttachedDataVisibility
         val created = long("created")               // microseconds since 1970
         val size = long("size")                     // bytes
         val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex

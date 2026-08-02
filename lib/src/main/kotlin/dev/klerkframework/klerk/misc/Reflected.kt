@@ -349,7 +349,7 @@ public data class EventParameter(public val raw: KParameter) {
 
              */
 
-                PropertyType.LargeDataRef -> {
+                PropertyType.AttachedDataRef -> {
                     recommendedDefaultValue = null
                     logger.warn { "validationRulesDescription not implemented for type $type" }
                 } // TODO
@@ -545,7 +545,7 @@ public enum class PropertyType {
     Float,
     Boolean,
     Ref,
-    LargeDataRef,
+    AttachedDataRef,
 
     Enum,
     Instant,
@@ -562,10 +562,10 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
         return PropertyType.Ref
     }
 
-    if (ktype.isSubtypeOf(LargeBlobID::class.starProjectedType) ||
-        ktype.isSubtypeOf(LargeStringID::class.starProjectedType)
+    if (ktype.isSubtypeOf(AttachedBlobID::class.starProjectedType) ||
+        ktype.isSubtypeOf(AttachedStringID::class.starProjectedType)
     ) {
-        return PropertyType.LargeDataRef
+        return PropertyType.AttachedDataRef
     }
 
     if (ktype.isSubtypeOf(StringContainer::class.starProjectedType)) {

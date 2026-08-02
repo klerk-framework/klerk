@@ -39,7 +39,7 @@ public interface Klerk<C : KlerkContext, V> {
     /**
      * Large immutable data (blobs and strings) attached to models.
      */
-    public val largeData: KlerkLargeData<C>
+    public val attachedData: KlerkAttachedData<C>
     public val meta: KlerkMeta
     public val log: KlerkLog
 
@@ -214,7 +214,7 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
  * Large immutable data attached to models.
  *
  * Models should be kept small so they fit in the internal cache. Instead of storing a large value in the model
- * itself, prepare it here and store the returned ID in a model property (of type [LargeBlobID] or [LargeStringID]).
+ * itself, prepare it here and store the returned ID in a model property (of type [AttachedBlobID] or [AttachedStringID]).
  *
  * Writing happens in two steps since uploading may be slow but updating a model must be quick:
  * 1. [prepare] inserts the data (slow, no lock is held)
@@ -223,6 +223,10 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
  * If no committed command references a prepared ID within one minute, the data is deleted and a later attempt to use
  * that ID will fail the command.
  *
+ * Blobs and strings are the same thing stored the same way (a string is its UTF-8 bytes) and share one ID space. What
+ * separates them is the type of the ID, which says what the value means, decides how it may be read back, and lets a
+ * model property declare which of the two it holds. An ID used through the wrong type is rejected.
+ *
  * Attached data is exclusively owned: an ID belongs to the first model that references it in a committed command, and
  * a command trying to attach data owned by another model is rejected. The data is deleted when no property of the
  * owning model refers to it any more (i.e. on replacement, on set-to-null, and on model deletion), in the same
@@ -230,7 +234,7 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
  *
  * There is no way to delete attached data directly, and there is no way to store a standalone value.
  */
-public interface KlerkLargeData<C : KlerkContext> {
+public interface KlerkAttachedData<C : KlerkContext> {
 
     /**
      * Inserts a blob so that it can be attached to a model.
@@ -238,8 +242,9 @@ public interface KlerkLargeData<C : KlerkContext> {
      * This may take a while, so it is deliberately done outside the command processing. No lock is held while the data
      * is written.
      *
-     * @param visibility whether the data may be read by anyone or only by the actors the `readLargeData` rules allow.
-     * Chosen here and never changed, so that a [LargeDataVisibility.Public] value can be cached by e.g. a CDN.
+     * @param visibility whether the data may be read by anyone or only by the actors the `readAttachedData` rules allow.
+     * Chosen here and never changed, so that a [AttachedDataVisibility.Public] value can be cached by e.g. a CDN.
+     * The returned id is unique among *all* attached data, blobs and strings alike.
      * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
@@ -251,14 +256,18 @@ public interface KlerkLargeData<C : KlerkContext> {
     public suspend fun prepare(
         value: InputStream,
         context: C,
-        visibility: LargeDataVisibility = LargeDataVisibility.Private,
+        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
-    ): LargeBlobID
+    ): AttachedBlobID
 
     /**
      * Inserts a string so that it can be attached to a model.
      *
-     * See [prepare] for blobs; the semantics are identical.
+     * See [prepare] for blobs; the semantics are identical. A string is stored as its UTF-8 bytes, so the only thing
+     * that distinguishes the two is the type of the id — and thus what the value means and how it may be read back.
+     *
+     * Note that the whole string is held in memory here. For something big enough that that is a problem, prepare it
+     * as a blob instead.
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalArgumentException if the metadata is too large
@@ -266,9 +275,9 @@ public interface KlerkLargeData<C : KlerkContext> {
     public suspend fun prepare(
         value: String,
         context: C,
-        visibility: LargeDataVisibility = LargeDataVisibility.Private,
+        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
-    ): LargeStringID
+    ): AttachedStringID
 
     /**
      * Retrieves a blob.
@@ -277,31 +286,47 @@ public interface KlerkLargeData<C : KlerkContext> {
      * it would block every command and every read in the application. This function acquires the lock briefly on its
      * own to make the authorization decision, releases it, and then returns the stream.
      *
-     * If the data is [LargeDataVisibility.Public], no authorization rule is evaluated at all.
+     * If the data is [AttachedDataVisibility.Public], no authorization rule is evaluated at all.
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
-     * @throws kotlin.NoSuchElementException if there exists no data for the provided id
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if the id refers to a
+     * string rather than a blob
      */
-    public suspend fun get(id: LargeBlobID, context: C): InputStream
+    public suspend fun get(id: AttachedBlobID, context: C): InputStream
 
     /**
-     * Retrieves a string.
+     * Retrieves a string, decoded from UTF-8.
      *
-     * See [get] for blobs; the semantics are identical.
+     * See [get] for blobs; the semantics are identical, except that the whole value is brought into memory. Use
+     * [getStream] to avoid that.
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
-     * @throws kotlin.NoSuchElementException if there exists no data for the provided id
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if the id refers to a blob
+     * rather than a string
      */
-    public suspend fun get(id: LargeStringID, context: C): String
+    public suspend fun get(id: AttachedStringID, context: C): String
+
+    /**
+     * Retrieves a string as a stream of its UTF-8 bytes, for a value large enough that holding all of it in memory is
+     * undesirable — writing it straight to an HTTP response, say.
+     *
+     * Authorized exactly like [get].
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if the id refers to a blob
+     * rather than a string
+     */
+    public suspend fun getStream(id: AttachedStringID, context: C): InputStream
 
     /**
      * Retrieves what is known about a blob apart from its value: visibility, creation time, size, content hash and
      * whatever metadata was provided to [prepare].
      *
      * Authorized exactly like [get]: public data is described to anyone, private data only to the actors the
-     * `readLargeData` rules allow — a content hash reveals whether the data is a file the caller already has.
+     * `readAttachedData` rules allow — a content hash reveals whether the data is a file the caller already has.
      *
      * This is the natural first call when serving attached data over HTTP: it provides the headers (content type from
      * the metadata, content length from the size, cache policy from the visibility) and lets a URL be stamped with the
@@ -309,10 +334,10 @@ public interface KlerkLargeData<C : KlerkContext> {
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
-     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if it has not yet been
-     * attached to a model
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, if it has not yet been
+     * attached to a model, or if the id refers to a string rather than a blob
      */
-    public suspend fun getMetadata(id: LargeBlobID, context: C): LargeDataMetadata
+    public suspend fun getMetadata(id: AttachedBlobID, context: C): AttachedDataMetadata
 
     /**
      * Retrieves what is known about a string apart from its value.
@@ -321,10 +346,10 @@ public interface KlerkLargeData<C : KlerkContext> {
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
-     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if it has not yet been
-     * attached to a model
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, if it has not yet been
+     * attached to a model, or if the id refers to a blob rather than a string
      */
-    public suspend fun getMetadata(id: LargeStringID, context: C): LargeDataMetadata
+    public suspend fun getMetadata(id: AttachedStringID, context: C): AttachedDataMetadata
 
 }
 

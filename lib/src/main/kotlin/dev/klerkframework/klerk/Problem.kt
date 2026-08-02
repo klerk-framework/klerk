@@ -15,6 +15,7 @@ public abstract class Problem(public val endUserTranslatedMessage: String, publi
     /** The exception [dev.klerkframework.klerk.CommandResult.orThrow] throws for this problem. */
     public abstract fun asException(): Exception
     public abstract val recommendedHttpCode: Int
+
     /** The validation/authorization rule that caused this problem, if any. */
     public abstract val violatedRule: RuleDescription?
     public override fun toString(): String = "[$code] $violatedRule"
@@ -175,12 +176,12 @@ public enum class KlerkErrorCode(public val code: String) {
     ModelModifiedSinceTokenCreation("ERROR-COMMAND-6"),
     CommandModelValidation("ERROR-COMMAND-7"),
     BrokenReference("ERROR-COMMAND-8"),
-    LargeDataNotFound("ERROR-COMMAND-9"),
-    LargeDataAlreadyOwned("ERROR-COMMAND-10"),
-    LargeDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
-    LargeDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
-    LargeDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
-    LargeDataWriteNegativeAuthorizationExist("ERROR-AUTH-11");
+    AttachedDataNotFound("ERROR-COMMAND-9"),
+    AttachedDataAlreadyOwned("ERROR-COMMAND-10"),
+    AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
+    AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
+    AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
+    AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11");
 
     override fun toString(): String = code
 }

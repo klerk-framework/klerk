@@ -2,18 +2,18 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.CommandResult.Failure
 import dev.klerkframework.klerk.CommandResult.Success
+import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
+import dev.klerkframework.klerk.attacheddata.AttachedDataPlan
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.DebugOptions.*
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.largedata.LargeDataImpl
-import dev.klerkframework.klerk.largedata.LargeDataPlan
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.AuditEntry
-import dev.klerkframework.klerk.storage.LargeDataDelta
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,7 +27,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val readWriteLock: ReadWriteLock,
     private val settings: KlerkSettings,
     private val jobs: JobManagerInternal<C, V>,
-    private val largeData: LargeDataImpl<C, V>
+    private val attachedData: AttachedDataImpl<C, V>
 ) : EventsManager<C, V> {
 
     private val mutex = Mutex()
@@ -84,15 +84,15 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 is Success -> {
                     // Attached data is claimed and deleted as part of the command, so a rejected claim (the data is
                     // gone, or another model already owns it) must fail the command before anything is written.
-                    when (val plan = largeData.planFor(delta)) {
-                        is LargeDataPlan.Rejected -> {
+                    when (val plan = attachedData.planFor(delta)) {
+                        is AttachedDataPlan.Rejected -> {
                             logger.log(result, options) {
                                 "Command ${command.event} failed: ${plan.problems.joinToString(", ") { it.toString() }}"
                             }
                             Failure(plan.problems)
                         }
 
-                        is LargeDataPlan.Ok -> {
+                        is AttachedDataPlan.Ok -> {
                             processedCommandTokens.add(options.token)
                             commit(delta, command, context, plan.delta)
                             logger.log(result, options) { "Command ${command.event} succeeded" }
@@ -110,14 +110,14 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?,
-        largeDataDelta: LargeDataDelta
+        attachedDataDelta: AttachedDataDelta
     ) {
-        config.persistence.store(delta, command, context, largeDataDelta)
+        config.persistence.store(delta, command, context, attachedDataDelta)
 
-        if (delta.containsMutations() || !largeDataDelta.isEmpty()) {
+        if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
             readWriteLock.acquireWrite()    // make sure nobody is reading while we mutate
             ModelCache.handleDelta(delta)
-            largeData.applyToMemory(largeDataDelta)
+            attachedData.applyToMemory(attachedDataDelta)
             updateViews(delta)
             readWriteLock.releaseWrite()    // mutation is done, reading is now permitted
         }
@@ -229,14 +229,14 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 ),
                 null,
                 null,
-                LargeDataDelta(),
+                AttachedDataDelta(),
             )
             return
         }
         // A time-trigger can change props too, so its attached data must be diffed just like a command's. There is no
         // caller to return a Problem to, so a rejected plan can only be logged and the trigger abandoned.
-        val largeDataDelta = when (val plan = largeData.planFor(delta)) {
-            is LargeDataPlan.Rejected -> {
+        val attachedDataDelta = when (val plan = attachedData.planFor(delta)) {
+            is AttachedDataPlan.Rejected -> {
                 logger.error {
                     "The time-trigger for model ${model.id} could not be committed because of its attached data: " +
                             plan.problems.joinToString(", ") { it.toString() }
@@ -244,9 +244,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 return
             }
 
-            is LargeDataPlan.Ok -> plan.delta
+            is AttachedDataPlan.Ok -> plan.delta
         }
-        commit<Any, Nothing>(delta, null, null, largeDataDelta)
+        commit<Any, Nothing>(delta, null, null, attachedDataDelta)
 
         try {
             delta.unmanagedJobs.forEach { it.f.invoke() }

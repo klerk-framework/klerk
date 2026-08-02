@@ -82,20 +82,21 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                 }
                 negative {}
             }
-            readLargeData {
+            readAttachedData {
                 positive {
                     rule(::onlyTheAuthorsOwnerCanReadThePicture)
                 }
                 negative {
-                    rule(::unauthenticatedCannotReadLargeData)
+                    rule(::unauthenticatedCannotReadAttachedData)
                 }
             }
-            writeLargeData {
+            writeAttachedData {
                 positive {
-                    rule(::everybodyCanPrepareLargeData)
+                    rule(::everybodyCanPrepareAttachedData)
                 }
                 negative {
                     rule(::unauthenticatedCannotPublishPublicly)
+                    rule(::unauthenticatedCannotPrepareStrings)
                 }
             }
         }
@@ -121,7 +122,7 @@ fun canReadAllProperties(args: ArgsForPropertyAuth<Context, MyCollections>): dev
 /**
  * A model-relative rule: it reaches the owning model, which is the point of handing the rule a [Model] and a `Reader`.
  */
-fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForLargeDataRead<Context, MyCollections>): PositiveAuthorization {
+fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Context, MyCollections>): PositiveAuthorization {
     val props = args.owner.props
     if (props is Author && props.lastName.value == "Secretive") {
         return PositiveAuthorization.NoOpinion
@@ -129,18 +130,22 @@ fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForLargeDataRead<Context, MyC
     return PositiveAuthorization.Allow
 }
 
-fun unauthenticatedCannotReadLargeData(args: ArgsForLargeDataRead<Context, MyCollections>): NegativeAuthorization =
+fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Context, MyCollections>): NegativeAuthorization =
     if (args.context.actor is Unauthenticated) Deny else Pass
 
-fun everybodyCanPrepareLargeData(args: ArgsForLargeDataWrite<Context, MyCollections>): PositiveAuthorization =
+fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Context, MyCollections>): PositiveAuthorization =
     PositiveAuthorization.Allow
 
 /**
  * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
- * visibility in [ArgsForLargeDataWrite] is for.
+ * visibility in [ArgsForAttachedDataWrite] is for.
  */
-fun unauthenticatedCannotPublishPublicly(args: ArgsForLargeDataWrite<Context, MyCollections>): NegativeAuthorization =
-    if (args.visibility == LargeDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
+fun unauthenticatedCannotPublishPublicly(args: ArgsForAttachedDataWrite<Context, MyCollections>): NegativeAuthorization =
+    if (args.visibility == AttachedDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
+
+/** A rule that keys on the kind rather than the visibility. Nonsensical as a policy, but that is not the point. */
+fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Context, MyCollections>): NegativeAuthorization =
+    if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
 fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): dev.klerkframework.klerk.NegativeAuthorization {
     val props = args.model.props
@@ -220,10 +225,10 @@ data class Book(
     val releasePartyPosition: ReleasePartyPosition,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
     // attached data, see docs/attached-data.md
-    val notes: LargeStringID? = null,
-    val cover: LargeBlobID? = null,
-    val thumbnail: LargeBlobID? = null,
-    val chapters: List<LargeStringID> = emptyList(),
+    val notes: AttachedStringID? = null,
+    val cover: AttachedBlobID? = null,
+    val thumbnail: AttachedBlobID? = null,
+    val chapters: List<AttachedStringID> = emptyList(),
 ) {
     override fun toString() = title.value
 }
@@ -232,7 +237,7 @@ data class Author(
     val firstName: FirstName,
     val lastName: LastName,
     val address: Address,
-    val picture: LargeBlobID?
+    val picture: AttachedBlobID?
 ) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
@@ -261,7 +266,7 @@ data class CreateAuthorParams(
     //  val address: Address,
     val secretToken: SecretPasscode,
     val favouriteColleague: ModelID<Author>? = null,
-    val picture: LargeBlobID? = null,
+    val picture: AttachedBlobID? = null,
 ) : Validatable {
 
     override fun validators(): Set<() -> PropertyCollectionValidity> =
@@ -951,10 +956,10 @@ data class CreateBookParams(
     val averageScore: AverageScore,
     val readingTime: ReadingTime,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
-    val notes: LargeStringID? = null,
-    val cover: LargeBlobID? = null,
-    val thumbnail: LargeBlobID? = null,
-    val chapters: List<LargeStringID> = emptyList(),
+    val notes: AttachedStringID? = null,
+    val cover: AttachedBlobID? = null,
+    val thumbnail: AttachedBlobID? = null,
+    val chapters: List<AttachedStringID> = emptyList(),
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {

@@ -15,16 +15,16 @@ internal interface IdProvider {
 }
 
 /**
- * Allocates ids for attached data (see [dev.klerkframework.klerk.KlerkLargeData]).
+ * Allocates ids for attached data (see [dev.klerkframework.klerk.KlerkAttachedData]).
  *
  * There must be exactly one instance, since the mutex is what makes concurrent allocation safe.
  *
  * Unlike [IdFactory.getNextModelID], this cannot rely on being called from the serialized command path — preparing
- * large data deliberately happens outside it, so two concurrent calls could otherwise pick the same id and one upload
+ * attached data deliberately happens outside it, so two concurrent calls could otherwise pick the same id and one upload
  * would silently overwrite the other. The mutex is held only for a check-and-insert in an in-memory structure, which
  * is also cheaper than probing the database once per attempt.
  */
-internal class LargeDataIdAllocator {
+internal class AttachedDataIdAllocator {
 
     private val random = SecureRandom.getInstanceStrong()
     private val mutex = Mutex()
@@ -33,7 +33,7 @@ internal class LargeDataIdAllocator {
      * @param reserve is called with a candidate id while the mutex is held. It should insert the id and return true if
      * the id was free, otherwise return false so that another candidate is tried.
      */
-    suspend fun getNextLargeDataID(reserve: (Int) -> Boolean): Int = mutex.withLock {
+    suspend fun getNextAttachedDataID(reserve: (Int) -> Boolean): Int = mutex.withLock {
         while (true) {
             val randomInt = random.nextInt(0, Int.MAX_VALUE)
             if (reserve(randomInt)) {

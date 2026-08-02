@@ -21,36 +21,34 @@ public data class AuditEntry(
 )
 
 /**
- * A row in one of the large-data tables.
+ * A row in the attached-data table.
  *
  * @property owner the id of the owning model, or null while the data is still unclaimed.
- * @property metadata everything about the data except the value itself. Immutable, written once on insert.
+ * @property metadata everything about the data except the value itself, including its
+ * [dev.klerkframework.klerk.AttachedDataKind]. Immutable, written once on insert.
  * @property expires when an unclaimed row is reaped. Null once the data has been claimed.
  */
-public data class LargeDataRow<T>(
+public data class AttachedDataRow<T>(
     val value: T,
     val owner: Int?,
-    val metadata: LargeDataMetadata,
+    val metadata: AttachedDataMetadata,
     val expires: Instant?,
 )
 
 /**
- * The changes to large data that a command implies (see [dev.klerkframework.klerk.KlerkLargeData]). Applied in the
+ * The changes to attached data that a command implies (see [dev.klerkframework.klerk.KlerkAttachedData]). Applied in the
  * same transaction as the models, so a failing command leaves the data untouched.
  *
- * @property claimedBlobs blob ids that got an owner, mapped to the owning model id
- * @property claimedStrings string ids that got an owner, mapped to the owning model id
- * @property deletedBlobs blob ids that no property refers to any more
- * @property deletedStrings string ids that no property refers to any more
+ * Blobs and strings share one id space, so neither map needs to distinguish between them.
+ *
+ * @property claimed ids that got an owner, mapped to the owning model id
+ * @property deleted ids that no property refers to any more
  */
-public data class LargeDataDelta(
-    val claimedBlobs: Map<Int, Int> = emptyMap(),
-    val claimedStrings: Map<Int, Int> = emptyMap(),
-    val deletedBlobs: Set<Int> = emptySet(),
-    val deletedStrings: Set<Int> = emptySet(),
+public data class AttachedDataDelta(
+    val claimed: Map<Int, Int> = emptyMap(),
+    val deleted: Set<Int> = emptySet(),
 ) {
-    public fun isEmpty(): Boolean =
-        claimedBlobs.isEmpty() && claimedStrings.isEmpty() && deletedBlobs.isEmpty() && deletedStrings.isEmpty()
+    public fun isEmpty(): Boolean = claimed.isEmpty() && deleted.isEmpty()
 }
 
 /**
@@ -67,7 +65,7 @@ public interface Persistence {
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?,
-        largeData: LargeDataDelta = LargeDataDelta()
+        attachedData: AttachedDataDelta = AttachedDataDelta()
     ): Unit
 
     public fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit
@@ -82,44 +80,40 @@ public interface Persistence {
     public fun migrate(migrations: List<MigrationStep>): Unit
 
     /**
-     * Inserts an unclaimed blob. Must fail if the id is already taken (i.e. insert, never upsert).
+     * Inserts an unclaimed value. Must fail if the id is already taken (i.e. insert, never upsert).
      *
-     * The size and hash of a blob are not known before it has been written, since it is streamed rather than held in
+     * Blobs and strings are stored identically — a string arrives as a stream over its UTF-8 bytes — so the only
+     * thing distinguishing them here is [kind], which must be reported back by [getAttachedData] and
+     * [readAllAttachedDataMetadata].
+     *
+     * The size and hash are not known before the value has been written, since it is streamed rather than held in
      * memory. [digestAfterWrite] provides them, and must therefore be called *after* [value] has been fully consumed
      * and before the insert is committed, so that a row is never visible without them.
      *
      * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written.
      */
-    public fun insertLargeBlob(
+    public fun insertAttachedData(
         id: Int,
         value: InputStream,
-        visibility: LargeDataVisibility,
+        kind: AttachedDataKind,
+        visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
         expires: Instant,
         digestAfterWrite: () -> Pair<Long, String>,
     ): Unit
 
-    /**
-     * Inserts an unclaimed string. Must fail if the id is already taken (i.e. insert, never upsert).
-     *
-     * Unlike a blob, a string is in memory already, so its [metadata] is complete before the insert.
-     */
-    public fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant): Unit
-
-    public fun getLargeBlob(id: Int): LargeDataRow<InputStream>?
-    public fun getLargeString(id: Int): LargeDataRow<String>?
+    public fun getAttachedData(id: Int): AttachedDataRow<InputStream>?
 
     /**
-     * Reads every large-data row without its value, so that the in-memory structures can be rebuilt at startup.
-     * @return blob rows and string rows
+     * Reads every attached-data row without its value, so that the in-memory structures can be rebuilt at startup.
      */
-    public fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>>
+    public fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>>
 
     /**
      * Deletes unclaimed rows whose expiry has passed.
      */
-    public fun deleteExpiredLargeData(now: Instant): Unit
+    public fun deleteExpiredAttachedData(now: Instant): Unit
 
     public fun insertJob(meta: JobMetadata)
     public fun updateJob(updated: JobMetadata)
@@ -133,17 +127,16 @@ public class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
-    private val largeBlobs = mutableMapOf<Int, LargeDataRow<ByteArray>>()
-    private val largeStrings = mutableMapOf<Int, LargeDataRow<String>>()
+    private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray>>()
     private val jobs = mutableMapOf<JobId, JobMetadata>()
 
     override fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?,
-        largeData: LargeDataDelta
+        attachedData: AttachedDataDelta
     ) {
-        applyLargeDataDelta(largeData)
+        applyAttachedDataDelta(attachedData)
         if (command != null && context != null) {
             auditLog.add(createAuditEntry(command, delta, context))
         }
@@ -197,56 +190,43 @@ public class RamStorage : Persistence {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
     }
 
-    private fun applyLargeDataDelta(largeData: LargeDataDelta) {
-        largeData.claimedBlobs.forEach { (id, owner) ->
-            val row = requireNotNull(largeBlobs[id]) { "Could not find blob with id $id" }
-            largeBlobs[id] = row.copy(owner = owner, expires = null)
+    private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
+        attachedData.claimed.forEach { (id, owner) ->
+            val row = requireNotNull(attachedRows[id]) { "Could not find attached data with id $id" }
+            attachedRows[id] = row.copy(owner = owner, expires = null)
         }
-        largeData.claimedStrings.forEach { (id, owner) ->
-            val row = requireNotNull(largeStrings[id]) { "Could not find string with id $id" }
-            largeStrings[id] = row.copy(owner = owner, expires = null)
-        }
-        largeData.deletedBlobs.forEach { largeBlobs.remove(it) }
-        largeData.deletedStrings.forEach { largeStrings.remove(it) }
+        attachedData.deleted.forEach { attachedRows.remove(it) }
     }
 
-    override fun insertLargeBlob(
+    override fun insertAttachedData(
         id: Int,
         value: InputStream,
-        visibility: LargeDataVisibility,
+        kind: AttachedDataKind,
+        visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
         expires: Instant,
         digestAfterWrite: () -> Pair<Long, String>,
     ) {
-        require(!largeBlobs.containsKey(id)) { "There is already a blob with id $id" }
+        require(!attachedRows.containsKey(id)) { "There is already attached data with id $id" }
         val bytes = value.readAllBytes()
         val (size, hash) = digestAfterWrite()
-        largeBlobs[id] = LargeDataRow(
+        attachedRows[id] = AttachedDataRow(
             value = bytes,
             owner = null,
-            metadata = LargeDataMetadata(visibility, createdAt, size, hash, custom),
+            metadata = AttachedDataMetadata(kind, visibility, createdAt, size, hash, custom),
             expires = expires,
         )
     }
 
-    override fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant) {
-        require(!largeStrings.containsKey(id)) { "There is already a string with id $id" }
-        largeStrings[id] = LargeDataRow(value, owner = null, metadata = metadata, expires = expires)
-    }
+    override fun getAttachedData(id: Int): AttachedDataRow<InputStream>? =
+        attachedRows[id]?.let { AttachedDataRow(it.value.inputStream(), it.owner, it.metadata, it.expires) }
 
-    override fun getLargeBlob(id: Int): LargeDataRow<InputStream>? =
-        largeBlobs[id]?.let { LargeDataRow(it.value.inputStream(), it.owner, it.metadata, it.expires) }
+    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
+        attachedRows.mapValues { AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires) }
 
-    override fun getLargeString(id: Int): LargeDataRow<String>? = largeStrings[id]
-
-    override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
-        largeBlobs.mapValues { LargeDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires) } to
-                largeStrings.mapValues { LargeDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires) }
-
-    override fun deleteExpiredLargeData(now: Instant) {
-        largeBlobs.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }
-        largeStrings.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }
+    override fun deleteExpiredAttachedData(now: Instant) {
+        attachedRows.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }
     }
 
     override fun insertJob(meta: JobMetadata) {

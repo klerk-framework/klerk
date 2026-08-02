@@ -353,42 +353,62 @@ public value class ModelID<T : Any>(public val value: Int) {
 }
 
 /**
- * A reference to a large blob attached to a model (see [KlerkLargeData]).
+ * A reference to a large blob attached to a model (see [KlerkAttachedData]).
  *
- * Obtain one from [KlerkLargeData.prepare] and store it in a model property. The data is owned exclusively by the
+ * Obtain one from [KlerkAttachedData.prepare] and store it in a model property. The data is owned exclusively by the
  * first model that references it in a committed command, and is deleted when no property of that model refers to it
  * any more.
+ *
+ * Blobs and strings share one id space, so an id identifies a piece of attached data on its own — see
+ * [AttachedDataKind].
  *
  * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
  */
 @JvmInline
-public value class LargeBlobID(internal val id: Int) {
+public value class AttachedBlobID(internal val id: Int) {
     override fun toString(): String = id.toString()
 }
 
 /**
- * A reference to a large string attached to a model (see [KlerkLargeData]).
+ * A reference to a large string attached to a model (see [KlerkAttachedData]).
  *
- * Obtain one from [KlerkLargeData.prepare] and store it in a model property. The data is owned exclusively by the
+ * Obtain one from [KlerkAttachedData.prepare] and store it in a model property. The data is owned exclusively by the
  * first model that references it in a committed command, and is deleted when no property of that model refers to it
  * any more.
+ *
+ * Blobs and strings share one id space, so an id identifies a piece of attached data on its own — see
+ * [AttachedDataKind].
  *
  * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
  */
 @JvmInline
-public value class LargeStringID(internal val id: Int) {
+public value class AttachedStringID(internal val id: Int) {
     override fun toString(): String = id.toString()
 }
 
 /**
- * Who may read a piece of attached data, decided once and for all when it is uploaded (see [KlerkLargeData.prepare]).
+ * Whether a piece of attached data is a blob or a string.
+ *
+ * The two are stored the same way (a string is its UTF-8 bytes) and share one id space; the kind is what decides
+ * whether an id may be used as an [AttachedBlobID] or an [AttachedStringID]. Reading through the wrong one throws.
+ *
+ * It is reported by [AttachedDataMetadata.kind] so that a handler which is given nothing but an id — an HTTP route
+ * such as `/attached/{id}/{hash}`, say — can tell what it is about to serve.
+ */
+public enum class AttachedDataKind {
+    Blob,
+    String,
+}
+
+/**
+ * Who may read a piece of attached data, decided once and for all when it is uploaded (see [KlerkAttachedData.prepare]).
  *
  * The point of [Public] is that it is a *static* property of the data. Authorization rules answer "may this actor read
  * this right now", which says nothing about the next request, so a rule-based decision can never be cached. A value
  * that is public at upload time stays public for its whole life, which is what makes it safe to hand to a CDN.
  */
-public enum class LargeDataVisibility {
-    /** Only actors allowed by the `readLargeData` rules may read the data. */
+public enum class AttachedDataVisibility {
+    /** Only actors allowed by the `readAttachedData` rules may read the data. */
     Private,
 
     /** Anyone may read the data. No read rule is evaluated, not even a negative one. */
@@ -396,17 +416,19 @@ public enum class LargeDataVisibility {
 }
 
 /**
- * What is known about a piece of attached data apart from the value itself (see [KlerkLargeData.getMetadata]).
+ * What is known about a piece of attached data apart from the value itself (see [KlerkAttachedData.getMetadata]).
  *
  * All of it is fixed when the data is uploaded and never changes.
  *
+ * @property kind whether the value is a blob or a string.
  * @property hash SHA-256 of the value, as lowercase hex. Put it in URLs: ids are recycled after the data they refer to
  * has been deleted, hashes are not, so an id alone is not a safe cache key.
  * @property size the size in bytes (for a string, the length of its UTF-8 encoding).
- * @property custom whatever was provided as metadata to [KlerkLargeData.prepare], e.g. a content type.
+ * @property custom whatever was provided as metadata to [KlerkAttachedData.prepare], e.g. a content type.
  */
-public data class LargeDataMetadata(
-    val visibility: LargeDataVisibility,
+public data class AttachedDataMetadata(
+    val kind: AttachedDataKind,
+    val visibility: AttachedDataVisibility,
     val createdAt: Instant,
     val size: Long,
     val hash: String,
@@ -414,29 +436,30 @@ public data class LargeDataMetadata(
 )
 
 /**
- * The arguments given to the rules deciding who may read attached data (see [KlerkLargeData.get]).
+ * The arguments given to the rules deciding who may read attached data (see [KlerkAttachedData.get]).
  *
- * Note that these rules are only consulted for [LargeDataVisibility.Private] data — public data is readable by anyone.
+ * Note that these rules are only consulted for [AttachedDataVisibility.Private] data — public data is readable by anyone.
  *
  * @property owner the model that owns the data. A rule can use this to express model-relative policies (e.g. "the
  * actor may read the file if it belongs to a project the actor is a member of").
  */
-public data class ArgsForLargeDataRead<C : KlerkContext, V>(
+public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
     val owner: Model<out Any>,
     val context: C,
     val reader: Reader<C, V>,
 )
 
 /**
- * The arguments given to the rules deciding who may prepare attached data (see [KlerkLargeData.prepare]).
+ * The arguments given to the rules deciding who may prepare attached data (see [KlerkAttachedData.prepare]).
  *
  * Note that there is no model at this point since the data has not been attached to anything yet. The meaningful
- * checks here are the actor in the [context] and the [visibility] — a rule can allow uploads in general but restrict
- * who may publish something the whole world can read. The real gate on *attaching* data to a model is the normal event
- * authorization of the command that claims it.
+ * checks here are the actor in the [context], the [visibility] and the [kind] — a rule can allow uploads in general
+ * but restrict who may publish something the whole world can read, or who may upload a blob as opposed to a string.
+ * The real gate on *attaching* data to a model is the normal event authorization of the command that claims it.
  */
-public data class ArgsForLargeDataWrite<C : KlerkContext, V>(
-    val visibility: LargeDataVisibility,
+public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
+    val kind: AttachedDataKind,
+    val visibility: AttachedDataVisibility,
     val context: C,
     val reader: Reader<C, V>,
 )

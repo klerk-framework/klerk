@@ -10,7 +10,7 @@ import kotlin.coroutines.coroutineContext
  *
  * This exists so that operations which must not run under the read lock can say so instead of deadlocking or silently
  * nesting. The read lock is held for the whole read block and serializes commands too, so
- * [dev.klerkframework.klerk.KlerkLargeData.get] streaming a large value under it would stall the application.
+ * [dev.klerkframework.klerk.KlerkAttachedData.get] streaming a large value under it would stall the application.
  *
  * Two mechanisms are needed because a read block can be entered in two ways. A non-suspending read block cannot switch
  * threads, so a thread local catches anything it calls (including a nested `runBlocking`). A suspending read block can

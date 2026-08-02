@@ -1,10 +1,10 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobManagerImpl
-import dev.klerkframework.klerk.largedata.LargeDataImpl
 import dev.klerkframework.klerk.log.KlerkLogImpl
 import dev.klerkframework.klerk.log.LogCommandSucceeded
 import dev.klerkframework.klerk.log.LogKlerkStarted
@@ -26,8 +26,8 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
     private val readWriteLock = ReadWriteLock()
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
-    internal val largeDataImpl = LargeDataImpl<C, V>(this, readWriteLock, settings)
-    internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs, largeDataImpl)
+    internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
+    internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
     private val klerkLog = KlerkLogImpl()
     internal val validator = Validator(this)
@@ -75,7 +75,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
     override val log = klerkLog
 
-    override val largeData = largeDataImpl
+    override val attachedData = attachedDataImpl
 
     override suspend fun <T : Any, P> handle(
         command: Command<T, P>,
@@ -148,7 +148,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 }
 
                 klerk.eventsManager.start()
-                klerk.largeDataImpl.start()
+                klerk.attachedDataImpl.start()
                 klerk.jobs.start()
                 klerk.config.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }

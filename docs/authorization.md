@@ -22,11 +22,11 @@ ConfigBuilder<Ctx, Views>(views).build {
             positive { rule(::everybodyCanReadEventLog) }
             negative { }
         }
-        readLargeData {
+        readAttachedData {
             positive { rule(::onlyProjectMembersCanReadAttachments) }
             negative { }
         }
-        writeLargeData {
+        writeAttachedData {
             positive { rule(::anyLoggedInUserCanUpload) }
             negative { }
         }
@@ -36,11 +36,11 @@ ConfigBuilder<Ctx, Views>(views).build {
 ```
 
 There are six independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
-`eventLog`, `readLargeData` and `writeLargeData` — each with its own `positive`/`negative` rule sets. A category with no
-rules at all denies everything in that category, since there is no rule to explicitly allow it.
+`eventLog`, `readAttachedData` and `writeAttachedData` — each with its own `positive`/`negative` rule sets. A category
+with no rules at all denies everything in that category, since there is no rule to explicitly allow it.
 
-For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning —
-never use it in production.
+For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning — never
+use it in production.
 
 ## What the rules guarantee
 
@@ -125,14 +125,14 @@ Gates whether an actor can read entries from the audit log (`klerk.events.getEve
 [events and commands](events-and-commands.md)). Rules receive an `ArgContextReader<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
 
-### readLargeData
+### readAttachedData
 
-Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.largeData.get(id, context)` and
-`klerk.largeData.getMetadata(id, context)`. Rules receive an `ArgsForLargeDataRead<C, V>` (`owner`, `context`,
+Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.attachedData.get(id, context)` and
+`klerk.attachedData.getMetadata(id, context)`. Rules receive an `ArgsForAttachedDataRead<C, V>` (`owner`, `context`,
 `reader`):
 
 ```kotlin
-fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>): PositiveAuthorization {
+fun onlyProjectMembersCanReadAttachments(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
     val owner = args.owner.props
     if (owner !is File) return PositiveAuthorization.NoOpinion
     val project = args.reader.get(owner.project)
@@ -144,18 +144,19 @@ fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>)
 `owner` is the model the data is attached to, which is what makes model-relative policies expressible and keeps them
 correct as the model changes.
 
-**These rules are only consulted for private data.** Data prepared as `LargeDataVisibility.Public` is readable by
+**These rules are only consulted for private data.** Data prepared as `AttachedDataVisibility.Public` is readable by
 anyone, and a negative rule here will not stop it — see [visibility](attached-data.md#visibility) for why.
 
-### writeLargeData
+### writeAttachedData
 
-Gates whether an actor can call `klerk.largeData.prepare(...)`. Rules receive an `ArgsForLargeDataWrite<C, V>`
-(`visibility`, `context`, `reader`).
+Gates whether an actor can call `klerk.attachedData.prepare(...)`. Rules receive an `ArgsForAttachedDataWrite<C, V>`
+(`kind`, `visibility`, `context`, `reader`).
 
 This category is weak by construction: at `prepare` time the data has not been attached to anything, so there is no
 model and no command. The real gate on *attaching* data to a model is the ordinary `commands` authorization of the
 command that claims it. What these rules are good at is the `visibility`: letting anyone upload, while allowing only
-some actors to publish something the whole world may read.
+some actors to publish something the whole world may read. The `kind` is there for the same sort of decision — "anyone
+may upload JSON, only editors may upload images".
 
 ## ActorIdentity
 

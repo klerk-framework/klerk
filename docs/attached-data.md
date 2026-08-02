@@ -3,15 +3,33 @@
 Models should be kept small so they fit in the internal cache. Klerk lets you attach large immutable data to a model
 instead of storing it in the model itself. There are two kinds: strings (e.g. JSON) and blobs (images, videos, PDFs).
 
-The model holds a reference to the data in a property of type `LargeStringID` or `LargeBlobID`, similar to how a model
-holds a reference to another model via `ModelID`.
+The model holds a reference to the data in a property of type `AttachedStringID` or `AttachedBlobID`, similar to how a
+model holds a reference to another model via `ModelID`.
 
 ```kotlin
-data class Author(val name: Name, val portrait: LargeBlobID?)
+data class Author(val name: Name, val portrait: AttachedBlobID?)
 ```
 
 Attached data is **immutable** — you never update a value in place, you attach a new one and drop the reference to the
-old one. It is also **exclusively owned**: a given `LargeBlobID` belongs to exactly one model.
+old one. It is also **exclusively owned**: a given `AttachedBlobID` belongs to exactly one model.
+
+### Blob or string?
+
+The two are stored identically (a string is its UTF-8 bytes) and share one id space, so an id identifies a value on its
+own. What separates them is the type of the id: it says what the value means, decides how you read it back, and lets a
+model property declare which of the two it holds. An id used through the wrong type is rejected.
+
+Pick by how you want to read the value:
+
+| | `AttachedStringID` | `AttachedBlobID` |
+|---|---|---|
+| `prepare` takes | a `String` | an `InputStream` |
+| `get` returns | a `String` | an `InputStream` |
+| in memory on upload | the whole value | never more than a buffer |
+
+So a string is the right choice for text you are going to want as a `String` anyway — JSON, Markdown, a diff. For text
+too large to hold in memory while uploading it, use a blob. (A string that is merely large to *read* is fine: see
+`getStream` below.)
 
 ## Writing
 
@@ -22,7 +40,7 @@ is done in two steps:
 2. update the model with the ID of the data (fast)
 
 ```kotlin
-val blobID: LargeBlobID = klerk.largeData.prepare(inputStream, context)
+val blobID: AttachedBlobID = klerk.attachedData.prepare(inputStream, context)
 // use blobID in a Command that creates or updates the model
 ```
 
@@ -43,16 +61,16 @@ klerk.handle(Command(UpdateAuthorPortrait, authorID, UpdatePortraitParams(newBlo
 
 ## Reading
 
-Use `klerk.largeData.get(id, context)`. If you don't have the ID, read it from the model first:
+Use `klerk.attachedData.get(id, context)`. If you don't have the ID, read it from the model first:
 
 ```kotlin
 // find the blob ID of the author's portrait. Keep the read lock short.
-val blobID: LargeBlobID = klerk.read(context) {
+val blobID: AttachedBlobID = klerk.read(context) {
     get(authorID).props.portrait
 }
 
 // then fetch the data, outside the read block
-val image: InputStream = klerk.largeData.get(blobID, context)
+val image: InputStream = klerk.attachedData.get(blobID, context)
 ```
 
 `get` **must be called outside a read block**. Calling it inside `klerk.read { }` or `klerk.readSuspend { }` throws —
@@ -60,16 +78,25 @@ attached data is often large, and holding the read lock while streaming it would
 the application. `get` acquires the lock briefly on its own to make the authorization decision, releases it, and then
 returns the stream.
 
-`get` throws `NoSuchElementException` if there is no data for that ID. Data that has been prepared but not yet claimed
-by a command is not readable either — attached data is always read through the model that owns it, and until a command
-commits there is no owner (and so nothing for the authorization rule to decide on).
+`get` throws `NoSuchElementException` if there is no data for that ID, or if the ID refers to the other kind (a blob
+read as a string, say). Data that has been prepared but not yet claimed by a command is not readable either — attached
+data is always read through the model that owns it, and until a command commits there is no owner (and so nothing for
+the authorization rule to decide on).
+
+A string comes back as a `String`, which means all of it is brought into memory. When that is not what you want — you
+are writing it straight to an HTTP response, say — use `getStream(id, context)` instead and get its UTF-8 bytes:
+
+```kotlin
+val notes: InputStream = klerk.attachedData.getStream(notesID, context)
+```
 
 ### Metadata
 
-`klerk.largeData.getMetadata(id, context)` describes the data without fetching it:
+`klerk.attachedData.getMetadata(id, context)` describes the data without fetching it:
 
 ```kotlin
-val meta: LargeDataMetadata = klerk.largeData.getMetadata(blobID, context)
+val meta: AttachedDataMetadata = klerk.attachedData.getMetadata(blobID, context)
+meta.kind           // Blob or String
 meta.visibility     // Public or Private
 meta.createdAt      // when it was uploaded
 meta.size           // bytes
@@ -84,8 +111,8 @@ ID. If you want the hash before then, compute it yourself while you have the byt
 You can attach your own metadata when preparing:
 
 ```kotlin
-val blobID = klerk.largeData.prepare(
-    inputStream, context, LargeDataVisibility.Public,
+val blobID = klerk.attachedData.prepare(
+    inputStream, context, AttachedDataVisibility.Public,
     metadata = mapOf("contentType" to "image/webp", "width" to "1200"),
 )
 ```
@@ -105,8 +132,8 @@ Deletion happens in the same transaction as the command, so a command that fails
 
 ## Ownership
 
-A `LargeBlobID` or `LargeStringID` belongs to the first model that references it in a committed command. A command that
-tries to attach data already owned by *another* model is rejected.
+An `AttachedBlobID` or `AttachedStringID` belongs to the first model that references it in a committed command. A command
+that tries to attach data already owned by *another* model is rejected.
 
 This means data cannot be shared or moved between models. To give a second model the same content, upload it again with
 a second `prepare`.
@@ -116,15 +143,17 @@ deletes the data once no property of that model refers to it any more.
 
 ## Authorization
 
-You declare the rules for reading and writing attached data in the config, as usual — in the `readLargeData` and
-`writeLargeData` blocks of `authorization` (see [authorization](authorization.md)). The rules receive a `Reader`, so
+You declare the rules for reading and writing attached data in the config, as usual — in the `readAttachedData` and
+`writeAttachedData` blocks of `authorization` (see [authorization](authorization.md)). The rules receive a `Reader`, so
 they can look up whatever they need — including the actor from the context and, when reading, the model that owns the
 data.
 
 Because the owning model is reachable from the rule, model-relative policies work and stay correct over time:
 
 ```kotlin
-fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>): PositiveAuthorization { ... }
+fun onlyProjectMembersCanReadAttachments(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
+    ...
+}
 ```
 
 At `prepare` time there is no model yet — the data has not been attached to anything — so a write rule can only see the
@@ -137,20 +166,21 @@ The read rules apply to private data only. Public data is readable by anyone, as
 Data is uploaded as either `Private` (the default) or `Public`:
 
 ```kotlin
-val blobID = klerk.largeData.prepare(inputStream, context, LargeDataVisibility.Public)
+val blobID = klerk.attachedData.prepare(inputStream, context, AttachedDataVisibility.Public)
 ```
 
 **No read rule is evaluated for public data — not even a negative one.** A rule such as "unauthenticated actors may
 never read attached data" simply does not apply to it.
 
-That is the whole point. An authorization rule answers "may this actor read this *right now*", and since a rule may
-look at anything in the model graph, an answer today says nothing about tomorrow. `Public` is a decision made once, at
-upload time, about data that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
-Visibility is chosen by whoever calls `prepare`, so the `writeLargeData` rules are the place to control who may publish:
+That is the whole point. An authorization rule answers "may this actor read this *right now*", and since a rule may look
+at anything in the model graph, an answer today says nothing about tomorrow. `Public` is a decision made once, at upload
+time, about data that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
+Visibility is chosen by whoever calls `prepare`, so the `writeAttachedData` rules are the place to control who may
+publish:
 
 ```kotlin
-fun onlyEditorsMayPublish(args: ArgsForLargeDataWrite<Ctx, Views>): NegativeAuthorization =
-    if (args.visibility == LargeDataVisibility.Public && !args.context.isEditor()) Deny else Pass
+fun onlyEditorsMayPublish(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
+    if (args.visibility == AttachedDataVisibility.Public && !args.context.isEditor()) Deny else Pass
 ```
 
 ## Serving through a CDN
@@ -159,25 +189,26 @@ A public image should be cached; a private one must not be. `getMetadata` gives 
 before it touches the value:
 
 ```kotlin
-val meta = klerk.largeData.getMetadata(blobID, context)
+val meta = klerk.attachedData.getMetadata(blobID, context)
 call.response.header(HttpHeaders.ContentType, meta.custom["contentType"] ?: "application/octet-stream")
 call.response.header(HttpHeaders.ContentLength, meta.size.toString())
 call.response.header(
     HttpHeaders.CacheControl,
     when (meta.visibility) {
-        LargeDataVisibility.Public -> "public, immutable, max-age=31536000"
-        LargeDataVisibility.Private -> "private, no-store"
+        AttachedDataVisibility.Public -> "public, immutable, max-age=31536000"
+        AttachedDataVisibility.Private -> "private, no-store"
     }
 )
-call.respondOutputStream { klerk.largeData.get(blobID, context).copyTo(this) }
+call.respondOutputStream { klerk.attachedData.get(blobID, context).copyTo(this) }
 ```
 
 Two things to keep in mind:
 
-**Put the hash in the URL.** IDs are random, but they are recycled once the data they referred to has been deleted, so
-an ID alone is not a safe cache key: a URL could end up serving year-old bytes for entirely new data. A URL like
-`/images/{id}/{hash}` cannot, since different content always means a different URL. It also lets you cache for as long
-as you like, because the URL changes whenever the content does.
+**Put the hash in the URL.** IDs are random and unique across blobs and strings alike, but they are recycled once the
+data they referred to has been deleted, so an ID alone is not a safe cache key: a URL could end up serving year-old
+bytes for entirely new data. A URL like `/attached/{id}/{hash}` cannot, since different content always means a
+different URL. It also lets you cache for as long as you like, because the URL changes whenever the content does. A
+route like that need not know in advance what it is serving — `meta.kind` tells it.
 
 **Deleted data keeps being served.** Deleting the owning model makes `get` throw immediately, but a CDN will happily go
 on serving what it already cached. If that matters, purge the URL when the data goes away.
@@ -192,5 +223,5 @@ beyond the 1-minute window for unclaimed uploads.
 
 If you need a short-lived standalone value — a password-reset token, an email confirmation code, an OAuth state
 parameter — model it: a small model with a state machine and a [time trigger](state-machines.md) that moves it to an
-expired state. You get authorization, the audit log and views for free, which an opaque key-value entry could never
-give you.
+expired state. You get authorization, the audit log and views for free, which an opaque key-value entry could never give
+you.
