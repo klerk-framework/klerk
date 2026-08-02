@@ -22,7 +22,7 @@ is done in two steps:
 2. update the model with the ID of the data (fast)
 
 ```kotlin
-val blobID: LargeBlobID = klerk.largeData.prepare(inputStream, context, authKey)
+val blobID: LargeBlobID = klerk.largeData.prepare(inputStream, context)
 // use blobID in a Command that creates or updates the model
 ```
 
@@ -64,6 +64,35 @@ returns the stream.
 by a command is not readable either — attached data is always read through the model that owns it, and until a command
 commits there is no owner (and so nothing for the authorization rule to decide on).
 
+### Metadata
+
+`klerk.largeData.getMetadata(id, context)` describes the data without fetching it:
+
+```kotlin
+val meta: LargeDataMetadata = klerk.largeData.getMetadata(blobID, context)
+meta.visibility     // Public or Private
+meta.createdAt      // when it was uploaded
+meta.size           // bytes
+meta.hash           // SHA-256, lowercase hex
+meta.custom         // whatever you passed to prepare
+```
+
+Everything in it is fixed at upload time and never changes. It is authorized exactly like `get`, and refuses unclaimed
+data for the same reason — so the hash is not available in the window between `prepare` and the command that claims the
+ID. If you want the hash before then, compute it yourself while you have the bytes.
+
+You can attach your own metadata when preparing:
+
+```kotlin
+val blobID = klerk.largeData.prepare(
+    inputStream, context, LargeDataVisibility.Public,
+    metadata = mapOf("contentType" to "image/webp", "width" to "1200"),
+)
+```
+
+Klerk does not interpret these values and never gives them to an authorization rule. They stay in memory for as long as
+the data exists, so they are limited to 1000 characters in total — put anything bigger in the data itself.
+
 ## Deleting
 
 You never delete attached data directly. It is deleted when the last reference to it goes away:
@@ -99,19 +128,62 @@ fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>)
 ```
 
 At `prepare` time there is no model yet — the data has not been attached to anything — so a write rule can only see the
-context and the `authKey`.
+context and the visibility.
 
-### authKey
+The read rules apply to private data only. Public data is readable by anyone, as described next.
 
-`prepare` takes an optional `authKey`. It is stored with the data and handed to the authorization rules. You can use it
-any way you want, but here are some examples:
+## Visibility
 
-* Set it to `"public"`, and write a rule that allows reads when the authKey is `"public"`.
-* Set it to `"user:123456"`, and write a rule that allows reads when it matches the logged-in user's id.
-* Set it to `"group:admins"`, and write a rule that allows reads when the actor is in the group `admins`.
+Data is uploaded as either `Private` (the default) or `Public`:
 
-The authKey is fixed at upload time and never changes. For anything that has to follow the data over its lifetime,
-prefer a rule that reads the owning model.
+```kotlin
+val blobID = klerk.largeData.prepare(inputStream, context, LargeDataVisibility.Public)
+```
+
+**No read rule is evaluated for public data — not even a negative one.** A rule such as "unauthenticated actors may
+never read attached data" simply does not apply to it.
+
+That is the whole point. An authorization rule answers "may this actor read this *right now*", and since a rule may
+look at anything in the model graph, an answer today says nothing about tomorrow. `Public` is a decision made once, at
+upload time, about data that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
+Visibility is chosen by whoever calls `prepare`, so the `writeLargeData` rules are the place to control who may publish:
+
+```kotlin
+fun onlyEditorsMayPublish(args: ArgsForLargeDataWrite<Ctx, Views>): NegativeAuthorization =
+    if (args.visibility == LargeDataVisibility.Public && !args.context.isEditor()) Deny else Pass
+```
+
+## Serving through a CDN
+
+A public image should be cached; a private one must not be. `getMetadata` gives a handler everything it needs to decide
+before it touches the value:
+
+```kotlin
+val meta = klerk.largeData.getMetadata(blobID, context)
+call.response.header(HttpHeaders.ContentType, meta.custom["contentType"] ?: "application/octet-stream")
+call.response.header(HttpHeaders.ContentLength, meta.size.toString())
+call.response.header(
+    HttpHeaders.CacheControl,
+    when (meta.visibility) {
+        LargeDataVisibility.Public -> "public, immutable, max-age=31536000"
+        LargeDataVisibility.Private -> "private, no-store"
+    }
+)
+call.respondOutputStream { klerk.largeData.get(blobID, context).copyTo(this) }
+```
+
+Two things to keep in mind:
+
+**Put the hash in the URL.** IDs are random, but they are recycled once the data they referred to has been deleted, so
+an ID alone is not a safe cache key: a URL could end up serving year-old bytes for entirely new data. A URL like
+`/images/{id}/{hash}` cannot, since different content always means a different URL. It also lets you cache for as long
+as you like, because the URL changes whenever the content does.
+
+**Deleted data keeps being served.** Deleting the owning model makes `get` throw immediately, but a CDN will happily go
+on serving what it already cached. If that matters, purge the URL when the data goes away.
+
+Private data is a different story: it has a hit rate of roughly zero at a shared cache, and getting it wrong leaks one
+user's data to another. Keep the CDN out of the path for it entirely.
 
 ## What attached data is not
 

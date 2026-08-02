@@ -381,16 +381,48 @@ public value class LargeStringID(internal val id: Int) {
 }
 
 /**
+ * Who may read a piece of attached data, decided once and for all when it is uploaded (see [KlerkLargeData.prepare]).
+ *
+ * The point of [Public] is that it is a *static* property of the data. Authorization rules answer "may this actor read
+ * this right now", which says nothing about the next request, so a rule-based decision can never be cached. A value
+ * that is public at upload time stays public for its whole life, which is what makes it safe to hand to a CDN.
+ */
+public enum class LargeDataVisibility {
+    /** Only actors allowed by the `readLargeData` rules may read the data. */
+    Private,
+
+    /** Anyone may read the data. No read rule is evaluated, not even a negative one. */
+    Public,
+}
+
+/**
+ * What is known about a piece of attached data apart from the value itself (see [KlerkLargeData.getMetadata]).
+ *
+ * All of it is fixed when the data is uploaded and never changes.
+ *
+ * @property hash SHA-256 of the value, as lowercase hex. Put it in URLs: ids are recycled after the data they refer to
+ * has been deleted, hashes are not, so an id alone is not a safe cache key.
+ * @property size the size in bytes (for a string, the length of its UTF-8 encoding).
+ * @property custom whatever was provided as metadata to [KlerkLargeData.prepare], e.g. a content type.
+ */
+public data class LargeDataMetadata(
+    val visibility: LargeDataVisibility,
+    val createdAt: Instant,
+    val size: Long,
+    val hash: String,
+    val custom: Map<String, String>,
+)
+
+/**
  * The arguments given to the rules deciding who may read attached data (see [KlerkLargeData.get]).
+ *
+ * Note that these rules are only consulted for [LargeDataVisibility.Private] data — public data is readable by anyone.
  *
  * @property owner the model that owns the data. A rule can use this to express model-relative policies (e.g. "the
  * actor may read the file if it belongs to a project the actor is a member of").
- * @property authKey the key that was provided when the data was prepared (see [KlerkLargeData.prepare]). It is frozen
- * at upload time and never changes.
  */
 public data class ArgsForLargeDataRead<C : KlerkContext, V>(
     val owner: Model<out Any>,
-    val authKey: String?,
     val context: C,
     val reader: Reader<C, V>,
 )
@@ -398,12 +430,13 @@ public data class ArgsForLargeDataRead<C : KlerkContext, V>(
 /**
  * The arguments given to the rules deciding who may prepare attached data (see [KlerkLargeData.prepare]).
  *
- * Note that there is no model at this point since the data has not been attached to anything yet, and that the
- * [authKey] is chosen by the caller. The meaningful check here is the actor in the [context]. The real gate on
- * *attaching* data to a model is the normal event authorization of the command that claims it.
+ * Note that there is no model at this point since the data has not been attached to anything yet. The meaningful
+ * checks here are the actor in the [context] and the [visibility] — a rule can allow uploads in general but restrict
+ * who may publish something the whole world can read. The real gate on *attaching* data to a model is the normal event
+ * authorization of the command that claims it.
  */
 public data class ArgsForLargeDataWrite<C : KlerkContext, V>(
-    val authKey: String?,
+    val visibility: LargeDataVisibility,
     val context: C,
     val reader: Reader<C, V>,
 )

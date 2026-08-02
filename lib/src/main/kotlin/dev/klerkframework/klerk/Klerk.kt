@@ -238,13 +238,22 @@ public interface KlerkLargeData<C : KlerkContext> {
      * This may take a while, so it is deliberately done outside the command processing. No lock is held while the data
      * is written.
      *
-     * @param authKey an arbitrary key that is stored with the data and handed to the authorization rules. See
-     * [ArgsForLargeDataRead].
+     * @param visibility whether the data may be read by anyone or only by the actors the `readLargeData` rules allow.
+     * Chosen here and never changed, so that a [LargeDataVisibility.Public] value can be cached by e.g. a CDN.
+     * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
+     * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
+     * JSON-encoded, since it is kept in memory for the lifetime of the data.
      * @return the ID to be stored in a model property by a subsequent command. If no command does so within one
      * minute, the data is deleted.
      * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalArgumentException if the metadata is too large
      */
-    public suspend fun prepare(value: InputStream, context: C, authKey: String? = null): LargeBlobID
+    public suspend fun prepare(
+        value: InputStream,
+        context: C,
+        visibility: LargeDataVisibility = LargeDataVisibility.Private,
+        metadata: Map<String, String> = emptyMap(),
+    ): LargeBlobID
 
     /**
      * Inserts a string so that it can be attached to a model.
@@ -252,8 +261,14 @@ public interface KlerkLargeData<C : KlerkContext> {
      * See [prepare] for blobs; the semantics are identical.
      *
      * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalArgumentException if the metadata is too large
      */
-    public suspend fun prepare(value: String, context: C, authKey: String? = null): LargeStringID
+    public suspend fun prepare(
+        value: String,
+        context: C,
+        visibility: LargeDataVisibility = LargeDataVisibility.Private,
+        metadata: Map<String, String> = emptyMap(),
+    ): LargeStringID
 
     /**
      * Retrieves a blob.
@@ -261,6 +276,8 @@ public interface KlerkLargeData<C : KlerkContext> {
      * Must be called *outside* a read block: attached data is often large, and holding the read lock while streaming
      * it would block every command and every read in the application. This function acquires the lock briefly on its
      * own to make the authorization decision, releases it, and then returns the stream.
+     *
+     * If the data is [LargeDataVisibility.Public], no authorization rule is evaluated at all.
      *
      * @throws AuthorizationException if the actor isn't authorized
      * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
@@ -278,6 +295,36 @@ public interface KlerkLargeData<C : KlerkContext> {
      * @throws kotlin.NoSuchElementException if there exists no data for the provided id
      */
     public suspend fun get(id: LargeStringID, context: C): String
+
+    /**
+     * Retrieves what is known about a blob apart from its value: visibility, creation time, size, content hash and
+     * whatever metadata was provided to [prepare].
+     *
+     * Authorized exactly like [get]: public data is described to anyone, private data only to the actors the
+     * `readLargeData` rules allow — a content hash reveals whether the data is a file the caller already has.
+     *
+     * This is the natural first call when serving attached data over HTTP: it provides the headers (content type from
+     * the metadata, content length from the size, cache policy from the visibility) and lets a URL be stamped with the
+     * hash, without touching the value.
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if it has not yet been
+     * attached to a model
+     */
+    public suspend fun getMetadata(id: LargeBlobID, context: C): LargeDataMetadata
+
+    /**
+     * Retrieves what is known about a string apart from its value.
+     *
+     * See [getMetadata] for blobs; the semantics are identical.
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if it has not yet been
+     * attached to a model
+     */
+    public suspend fun getMetadata(id: LargeStringID, context: C): LargeDataMetadata
 
 }
 

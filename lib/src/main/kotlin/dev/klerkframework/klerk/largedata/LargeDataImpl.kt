@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.LargeDataDelta
 import dev.klerkframework.klerk.storage.ModelCache
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Instant
@@ -18,12 +19,19 @@ import kotlin.time.Instant
  *
  * Keeping this in memory is not extra overhead: an id→owner map is needed anyway, both to reject a second model
  * claiming an owned id and to let [KlerkLargeData.get]'s authorization rule reach the owning model. Id allocation
- * probes the same map.
+ * probes the same map. Holding the rest here too means serving attached data needs no database round-trip for
+ * anything but the value.
  *
  * @property owner the id of the owning model, or null while the data is unclaimed
+ * @property metadata what [KlerkLargeData.getMetadata] reports. Null only between the moment an id is reserved and
+ * the moment the value has been written — a window in which the data is unclaimed, and therefore unreadable anyway.
  * @property expires when an unclaimed value is reaped. Null once claimed.
  */
-internal data class LargeDataEntry(val owner: Int?, val authKey: String?, val expires: Instant?)
+internal data class LargeDataEntry(
+    val owner: Int?,
+    val metadata: LargeDataMetadata?,
+    val expires: Instant?,
+)
 
 internal class LargeDataImpl<C : KlerkContext, V>(
     private val klerk: Klerk<C, V>,
@@ -51,18 +59,34 @@ internal class LargeDataImpl<C : KlerkContext, V>(
         val (blobRows, stringRows) = config.persistence.readAllLargeDataMetadata()
         blobs.clear()
         strings.clear()
-        blobRows.forEach { (id, row) -> blobs[id] = LargeDataEntry(row.owner, row.authKey, row.expires) }
-        stringRows.forEach { (id, row) -> strings[id] = LargeDataEntry(row.owner, row.authKey, row.expires) }
+        blobRows.forEach { (id, row) -> blobs[id] = LargeDataEntry(row.owner, row.metadata, row.expires) }
+        stringRows.forEach { (id, row) -> strings[id] = LargeDataEntry(row.owner, row.metadata, row.expires) }
         lastReap.set(now)
         logger.info { "Attached data ready (${blobs.size} blobs, ${strings.size} strings)" }
     }
 
-    override suspend fun prepare(value: InputStream, context: C, authKey: String?): LargeBlobID {
-        authorizeWrite(context, authKey)
+    override suspend fun prepare(
+        value: InputStream,
+        context: C,
+        visibility: LargeDataVisibility,
+        metadata: Map<String, String>,
+    ): LargeBlobID {
+        authorizeWrite(context, visibility)
+        validateCustomMetadata(metadata)
+        val createdAt = getCurrentInstant()
         val expires = reserveExpiry()
-        val id = allocate(blobs, authKey, expires)
+        val id = allocate(blobs, expires)
+        val hashing = HashingInputStream(value)
         try {
-            config.persistence.insertLargeBlob(id, value, authKey, expires)
+            config.persistence.insertLargeBlob(id, hashing, visibility, createdAt, metadata, expires) {
+                hashing.sizeAndHash()
+            }
+            val (size, hash) = hashing.sizeAndHash()
+            blobs[id] = LargeDataEntry(
+                owner = null,
+                metadata = LargeDataMetadata(visibility, createdAt, size, hash, metadata),
+                expires = expires,
+            )
         } catch (e: Exception) {
             blobs.remove(id)
             throw e
@@ -70,12 +94,27 @@ internal class LargeDataImpl<C : KlerkContext, V>(
         return LargeBlobID(id)
     }
 
-    override suspend fun prepare(value: String, context: C, authKey: String?): LargeStringID {
-        authorizeWrite(context, authKey)
+    override suspend fun prepare(
+        value: String,
+        context: C,
+        visibility: LargeDataVisibility,
+        metadata: Map<String, String>,
+    ): LargeStringID {
+        authorizeWrite(context, visibility)
+        validateCustomMetadata(metadata)
+        val bytes = value.toByteArray()
+        val complete = LargeDataMetadata(
+            visibility = visibility,
+            createdAt = getCurrentInstant(),
+            size = bytes.size.toLong(),
+            hash = bytes.sha256(),
+            custom = metadata,
+        )
         val expires = reserveExpiry()
-        val id = allocate(strings, authKey, expires)
+        val id = allocate(strings, expires)
         try {
-            config.persistence.insertLargeString(id, value, authKey, expires)
+            config.persistence.insertLargeString(id, value, complete, expires)
+            strings[id] = LargeDataEntry(owner = null, metadata = complete, expires = expires)
         } catch (e: Exception) {
             strings.remove(id)
             throw e
@@ -84,17 +123,41 @@ internal class LargeDataImpl<C : KlerkContext, V>(
     }
 
     override suspend fun get(id: LargeBlobID, context: C): InputStream {
-        val entry = authorizeRead(blobs[id.id], id, context)
+        val entry = authorizeRead(blobs[id.id], id, context, "klerk.largeData.get")
         val row = config.persistence.getLargeBlob(id.id) ?: throw NoSuchElementException("No data found for id $id")
         check(entry.owner == row.owner) { "The in-memory state of blob $id does not match the database" }
         return row.value
     }
 
     override suspend fun get(id: LargeStringID, context: C): String {
-        val entry = authorizeRead(strings[id.id], id, context)
+        val entry = authorizeRead(strings[id.id], id, context, "klerk.largeData.get")
         val row = config.persistence.getLargeString(id.id) ?: throw NoSuchElementException("No data found for id $id")
         check(entry.owner == row.owner) { "The in-memory state of string $id does not match the database" }
         return row.value
+    }
+
+    override suspend fun getMetadata(id: LargeBlobID, context: C): LargeDataMetadata =
+        metadataOf(authorizeRead(blobs[id.id], id, context, "klerk.largeData.getMetadata"), id)
+
+    override suspend fun getMetadata(id: LargeStringID, context: C): LargeDataMetadata =
+        metadataOf(authorizeRead(strings[id.id], id, context, "klerk.largeData.getMetadata"), id)
+
+    /**
+     * Any entry that survives [authorizeRead] is claimed, and a claimed entry always has its metadata (it is written
+     * before the command that could claim it can even see the id).
+     */
+    private fun metadataOf(entry: LargeDataEntry, id: Any): LargeDataMetadata =
+        checkNotNull(entry.metadata) { "The data with id $id has no metadata" }
+
+    private fun validateCustomMetadata(metadata: Map<String, String>) {
+        if (metadata.isEmpty()) {
+            return
+        }
+        val length = metadata.entries.sumOf { it.key.length + it.value.length + JSON_OVERHEAD_PER_ENTRY }
+        require(length <= MAX_CUSTOM_METADATA_LENGTH) {
+            "The metadata is too large ($length characters, at most $MAX_CUSTOM_METADATA_LENGTH are allowed). " +
+                    "It is kept in memory for as long as the data exists, so put large values in the data itself."
+        }
     }
 
     /**
@@ -105,13 +168,13 @@ internal class LargeDataImpl<C : KlerkContext, V>(
      */
     private fun reserveExpiry(): Instant = getCurrentInstant().plus(settings.unclaimedLargeDataLifetime)
 
-    private suspend fun allocate(
-        map: ConcurrentHashMap<Int, LargeDataEntry>,
-        authKey: String?,
-        expires: Instant
-    ): Int {
+    /**
+     * Reserves an id. The entry is a placeholder without metadata until the value has been written — see
+     * [LargeDataEntry].
+     */
+    private suspend fun allocate(map: ConcurrentHashMap<Int, LargeDataEntry>, expires: Instant): Int {
         maybeReap()
-        val entry = LargeDataEntry(owner = null, authKey = authKey, expires = expires)
+        val entry = LargeDataEntry(owner = null, metadata = null, expires = expires)
         return allocator.getNextLargeDataID { candidate ->
             map.putIfAbsent(candidate, entry) == null
         }
@@ -137,11 +200,11 @@ internal class LargeDataImpl<C : KlerkContext, V>(
 
     // ---------------------------------------------------------------- authorization
 
-    private suspend fun authorizeWrite(context: C, authKey: String?) {
+    private suspend fun authorizeWrite(context: C, visibility: LargeDataVisibility) {
         if (context.actor == SystemIdentity) {
             return
         }
-        val args = ArgsForLargeDataWrite(authKey, context, ReaderWithoutAuth<C, V>(klerk))
+        val args = ArgsForLargeDataWrite(visibility, context, ReaderWithoutAuth<C, V>(klerk))
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
         readWriteLock.acquireRead()
@@ -165,9 +228,12 @@ internal class LargeDataImpl<C : KlerkContext, V>(
 
     /**
      * Applies the read rules, holding the read lock only for as long as they run — never across the returned stream.
+     *
+     * Public data skips the rules entirely, before the lock is even taken. That is what makes the decision stable over
+     * time (and thus cacheable), and it also means serving public data never contends with command processing.
      */
-    private suspend fun authorizeRead(entry: LargeDataEntry?, id: Any, context: C): LargeDataEntry {
-        ReadBlockGuard.checkNotInsideReadBlock("klerk.largeData.get")
+    private suspend fun authorizeRead(entry: LargeDataEntry?, id: Any, context: C, caller: String): LargeDataEntry {
+        ReadBlockGuard.checkNotInsideReadBlock(caller)
         if (entry == null || entry.isExpired(getCurrentInstant())) {
             throw NoSuchElementException("No data found for id $id")
         }
@@ -175,14 +241,14 @@ internal class LargeDataImpl<C : KlerkContext, V>(
         val ownerId = entry.owner ?: throw NoSuchElementException(
             "The data with id $id has not been attached to a model yet"
         )
-        if (context.actor == SystemIdentity) {
+        if (context.actor == SystemIdentity || entry.metadata?.visibility == LargeDataVisibility.Public) {
             return entry
         }
         readWriteLock.acquireRead()
         try {
             val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
                 ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
-            val args = ArgsForLargeDataRead(owner, entry.authKey, context, ReaderWithoutAuth<C, V>(klerk))
+            val args = ArgsForLargeDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
             if (config.authorization.largeDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
                     KlerkErrorCode.LargeDataReadPositiveAuthorizationMissing,
@@ -300,6 +366,55 @@ internal class LargeDataImpl<C : KlerkContext, V>(
 }
 
 internal fun LargeDataEntry.isExpired(now: Instant): Boolean = expires?.let { it < now } ?: false
+
+/** Roughly what `{"key":"value",}` costs on top of the key and the value themselves. */
+private const val JSON_OVERHEAD_PER_ENTRY = 6
+private const val MAX_CUSTOM_METADATA_LENGTH = 1000
+
+private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256").digest(this).toHex()
+
+private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+/**
+ * Measures and hashes a stream as it is read, so that a blob can be described without ever being held in memory.
+ *
+ * Both read overloads must be implemented: [java.io.FilterInputStream.read] with a buffer delegates straight to the
+ * wrapped stream, so relying on the inherited one would silently miss almost every byte.
+ */
+private class HashingInputStream(private val source: InputStream) : InputStream() {
+
+    private val digest = MessageDigest.getInstance("SHA-256")
+    private var size = 0L
+    private var result: Pair<Long, String>? = null
+
+    override fun read(): Int {
+        val b = source.read()
+        if (b != -1) {
+            digest.update(b.toByte())
+            size++
+        }
+        return b
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val read = source.read(b, off, len)
+        if (read > 0) {
+            digest.update(b, off, read)
+            size += read
+        }
+        return read
+    }
+
+    override fun available(): Int = source.available()
+
+    override fun close(): Unit = source.close()
+
+    /**
+     * The size and hash of everything read so far. Idempotent: [MessageDigest.digest] resets the digest, so the answer
+     * is computed once and remembered — callers may well ask more than once.
+     */
+    fun sizeAndHash(): Pair<Long, String> = result ?: (size to digest.digest().toHex()).also { result = it }
+}
 
 internal sealed class LargeDataPlan {
     internal data class Ok(val delta: LargeDataDelta) : LargeDataPlan()

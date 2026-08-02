@@ -94,7 +94,9 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                 positive {
                     rule(::everybodyCanPrepareLargeData)
                 }
-                negative {}
+                negative {
+                    rule(::unauthenticatedCannotPublishPublicly)
+                }
             }
         }
         systemContextProvider(::myContextProvider)
@@ -132,6 +134,13 @@ fun unauthenticatedCannotReadLargeData(args: ArgsForLargeDataRead<Context, MyCol
 
 fun everybodyCanPrepareLargeData(args: ArgsForLargeDataWrite<Context, MyCollections>): PositiveAuthorization =
     PositiveAuthorization.Allow
+
+/**
+ * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
+ * visibility in [ArgsForLargeDataWrite] is for.
+ */
+fun unauthenticatedCannotPublishPublicly(args: ArgsForLargeDataWrite<Context, MyCollections>): NegativeAuthorization =
+    if (args.visibility == LargeDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
 
 fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): dev.klerkframework.klerk.NegativeAuthorization {
     val props = args.model.props

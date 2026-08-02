@@ -326,15 +326,164 @@ class LargeDataTest {
     }
 
     @Test
-    fun `The authKey is handed to the read rule`() = runBlocking {
+    fun `Data is private unless something else is asked for`() = runBlocking {
         val klerk = start()
-        val id = klerk.largeData.prepare(blob("keyed"), Context.system(), authKey = "public")
-        val authorID = createAuthorWithPicture(klerk, id)
-        assertNotNull(authorID)
+        val id = klerk.largeData.prepare(blob("members only"), Context.system())
+        createAuthorWithPicture(klerk, id)
 
-        // the rule in TestSetup does not look at the authKey, but it must survive the claim
-        assertEquals("keyed", String(klerk.largeData.get(id, Context.system()).readAllBytes()))
+        assertEquals(LargeDataVisibility.Private, klerk.largeData.getMetadata(id, Context.system()).visibility)
+        assertFailsWith<AuthorizationException> { klerk.largeData.get(id, Context.unauthenticated()) }
         klerk.meta.stop()
+    }
+
+    @Test
+    fun `Public data bypasses both positive and negative read rules`() = runBlocking {
+        val klerk = start()
+        // "Secretive" makes the positive rule withhold its opinion, and the actor is the one the negative rule denies
+        val id = klerk.largeData.prepare(blob("for everyone"), Context.system(), LargeDataVisibility.Public)
+        createAuthorWithPicture(klerk, id, lastName = "Secretive")
+
+        val unauthenticated = Context.unauthenticated()
+        assertEquals("for everyone", String(klerk.largeData.get(id, unauthenticated).readAllBytes()))
+        assertEquals(LargeDataVisibility.Public, klerk.largeData.getMetadata(id, unauthenticated).visibility)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `A write rule can reject a public upload`() = runBlocking {
+        val klerk = start()
+        val context = Context.unauthenticated()
+
+        // the rule in TestSetup lets anyone upload, but not anyone publish
+        assertNotNull(klerk.largeData.prepare(blob("mine"), context, LargeDataVisibility.Private))
+        assertFailsWith<AuthorizationException> {
+            klerk.largeData.prepare(blob("everyone's"), context, LargeDataVisibility.Public)
+        }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The metadata of private data is authorized like the value`() = runBlocking {
+        val klerk = start()
+        val readable = klerk.largeData.prepare(blob("readable"), Context.system())
+        val secret = klerk.largeData.prepare(blob("secret"), Context.system())
+        createAuthorWithPicture(klerk, readable, lastName = "Lindgren")
+        createAuthorWithPicture(klerk, secret, lastName = "Secretive")
+
+        val context = Context.authenticationIdentity()
+        assertEquals(8L, klerk.largeData.getMetadata(readable, context).size)
+        assertFailsWith<AuthorizationException> { klerk.largeData.getMetadata(secret, context) }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The hash and the size describe the content`() = runBlocking {
+        val klerk = start()
+        // echo -n hello | sha256sum
+        val expected = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+        val blobID = klerk.largeData.prepare(blob("hello"), Context.system())
+        val stringID = klerk.largeData.prepare("hello", Context.system())
+        createAuthorWithPicture(klerk, blobID)
+        createBookWithChapters(klerk, listOf(stringID))
+
+        val blobMeta = klerk.largeData.getMetadata(blobID, Context.system())
+        assertEquals(expected, blobMeta.hash)
+        assertEquals(5L, blobMeta.size)
+        val stringMeta = klerk.largeData.getMetadata(stringID, Context.system())
+        assertEquals(expected, stringMeta.hash)
+        assertEquals(5L, stringMeta.size)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The hash and the size cover a blob larger than one buffer`() = runBlocking {
+        val klerk = start()
+        val content = "abcdefghij".repeat(10_000)   // 100 kB, i.e. many reads
+        val id = klerk.largeData.prepare(content.toByteArray().inputStream(), Context.system())
+        createAuthorWithPicture(klerk, id)
+
+        val meta = klerk.largeData.getMetadata(id, Context.system())
+        assertEquals(content.length.toLong(), meta.size)
+        assertEquals(klerk.largeData.getMetadata(prepareString(klerk, content), Context.system()).hash, meta.hash)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The metadata is not available before the data is claimed`() = runBlocking {
+        val klerk = start()
+        val id = klerk.largeData.prepare(blob("not attached yet"), Context.system())
+        assertFailsWith<NoSuchElementException> { klerk.largeData.getMetadata(id, Context.system()) }
+        assertFailsWith<NoSuchElementException> { klerk.largeData.getMetadata(LargeBlobID(4711), Context.system()) }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The metadata goes away with the data`() = runBlocking {
+        val klerk = start()
+        val id = klerk.largeData.prepare(blob("temporary"), Context.system())
+        val authorID = createAuthorWithPicture(klerk, id)
+        assertNotNull(klerk.largeData.getMetadata(id, Context.system()))
+
+        setPicture(klerk, authorID, null).orThrow()
+        assertFailsWith<NoSuchElementException> { klerk.largeData.getMetadata(id, Context.system()) }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `Custom metadata is stored as given`() = runBlocking {
+        val klerk = start()
+        val custom = mapOf("contentType" to "image/webp", "width" to "1200")
+        val id = klerk.largeData.prepare(blob("an image"), Context.system(), metadata = custom)
+        createAuthorWithPicture(klerk, id)
+
+        assertEquals(custom, klerk.largeData.getMetadata(id, Context.system()).custom)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `Custom metadata that would bloat the cache is rejected`() = runBlocking {
+        val klerk = start()
+        assertFailsWith<IllegalArgumentException> {
+            klerk.largeData.prepare(blob("x"), Context.system(), metadata = mapOf("big" to "y".repeat(1000)))
+        }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The metadata survives a restart`() = runBlocking {
+        val storage = SQLiteInMemory.create()
+        val klerk = start(storage)
+        val custom = mapOf("contentType" to "image/png")
+        val id = klerk.largeData.prepare(blob("kept"), Context.system(), LargeDataVisibility.Public, custom)
+        createAuthorWithPicture(klerk, id)
+        val before = klerk.largeData.getMetadata(id, Context.system())
+        klerk.meta.stop()
+
+        val restarted = start(storage)
+        assertEquals(before, restarted.largeData.getMetadata(id, Context.system()))
+        assertEquals(LargeDataVisibility.Public, before.visibility)
+        assertEquals(custom, before.custom)
+        restarted.meta.stop()
+    }
+
+    @Test
+    fun `getMetadata inside a read block throws`() = runBlocking {
+        val klerk = start()
+        val id = klerk.largeData.prepare(blob("locked"), Context.system())
+        createAuthorWithPicture(klerk, id)
+
+        assertFailsWith<IllegalStateException> {
+            klerk.readSuspend(Context.system()) { klerk.largeData.getMetadata(id, Context.system()) }
+        }
+        klerk.meta.stop()
+    }
+
+    /** Attaches a string to a book so that its metadata becomes readable. */
+    private suspend fun prepareString(klerk: Klerk<Context, MyCollections>, content: String): LargeStringID {
+        val id = klerk.largeData.prepare(content, Context.system())
+        createBookWithChapters(klerk, listOf(id))
+        return id
     }
 
     @Test

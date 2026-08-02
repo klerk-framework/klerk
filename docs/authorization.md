@@ -127,8 +127,9 @@ there's no per-entry model here, so this is an all-or-nothing gate rather than s
 
 ### readLargeData
 
-Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.largeData.get(id, context)`. Rules
-receive an `ArgsForLargeDataRead<C, V>` (`owner`, `authKey`, `context`, `reader`):
+Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.largeData.get(id, context)` and
+`klerk.largeData.getMetadata(id, context)`. Rules receive an `ArgsForLargeDataRead<C, V>` (`owner`, `context`,
+`reader`):
 
 ```kotlin
 fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>): PositiveAuthorization {
@@ -141,17 +142,20 @@ fun onlyProjectMembersCanReadAttachments(args: ArgsForLargeDataRead<Ctx, Views>)
 ```
 
 `owner` is the model the data is attached to, which is what makes model-relative policies expressible and keeps them
-correct as the model changes. `authKey` is whatever was passed to `prepare` — it is frozen at upload time, so prefer a
-rule that reads the owning model for anything that has to follow the data over its lifetime.
+correct as the model changes.
+
+**These rules are only consulted for private data.** Data prepared as `LargeDataVisibility.Public` is readable by
+anyone, and a negative rule here will not stop it — see [visibility](attached-data.md#visibility) for why.
 
 ### writeLargeData
 
 Gates whether an actor can call `klerk.largeData.prepare(...)`. Rules receive an `ArgsForLargeDataWrite<C, V>`
-(`authKey`, `context`, `reader`).
+(`visibility`, `context`, `reader`).
 
 This category is weak by construction: at `prepare` time the data has not been attached to anything, so there is no
-model and no command, and the `authKey` is chosen by the caller. The meaningful check is the actor in the context. The
-real gate on *attaching* data to a model is the ordinary `commands` authorization of the command that claims it.
+model and no command. The real gate on *attaching* data to a model is the ordinary `commands` authorization of the
+command that claims it. What these rules are good at is the `visibility`: letting anyone upload, while allowing only
+some actors to publish something the whole world may read.
 
 ## ActorIdentity
 

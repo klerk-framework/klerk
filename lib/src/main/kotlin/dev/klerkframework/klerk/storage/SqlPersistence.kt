@@ -46,6 +46,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private lateinit var gson: Gson
     private val mapType = object : TypeToken<Map<String, Any>>() {}.type
 
+    // The application's own metadata for attached data is a plain string map, so it needs none of the DataContainer
+    // adapters in config.gson. Keeping it separate also means it does not depend on setConfig having run.
+    private val plainGson = Gson()
+    private val stringMapType = object : TypeToken<Map<String, String>>() {}.type
+
     init {
         logger.info { "Connecting to database: $dataSource" }
         database = Database.connect(dataSource)
@@ -284,26 +289,49 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant) {
+    override fun insertLargeBlob(
+        id: Int,
+        value: InputStream,
+        visibility: LargeDataVisibility,
+        createdAt: Instant,
+        custom: Map<String, String>,
+        expires: Instant,
+        digestAfterWrite: () -> Pair<Long, String>,
+    ) {
         transaction(database) {
             // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
             LargeBlobs.insert {
                 it[this.id] = id
                 it[this.value] = ExposedBlob(value)
                 it[this.owner] = null
-                it[this.authKey] = authKey
+                it[this.visibility] = visibility.ordinal.toByte()
+                it[this.created] = createdAt.to64bitMicroseconds()
+                it[this.size] = 0
+                it[this.hash] = ""
+                it[this.metadata] = encodeCustomMetadata(custom)
                 it[this.expires] = expires.to64bitMicroseconds()
+            }
+            // the stream has been consumed by the insert above, so the digest is complete. Updating in the same
+            // transaction means no row is ever committed without its size and hash.
+            val (writtenSize, writtenHash) = digestAfterWrite()
+            LargeBlobs.update(where = { LargeBlobs.id eq id }) {
+                it[this.size] = writtenSize
+                it[this.hash] = writtenHash
             }
         }
     }
 
-    override fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant) {
+    override fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant) {
         transaction(database) {
             LargeStrings.insert {
                 it[this.id] = id
                 it[this.value] = value
                 it[this.owner] = null
-                it[this.authKey] = authKey
+                it[this.visibility] = metadata.visibility.ordinal.toByte()
+                it[this.created] = metadata.createdAt.to64bitMicroseconds()
+                it[this.size] = metadata.size
+                it[this.hash] = metadata.hash
+                it[this.metadata] = encodeCustomMetadata(metadata.custom)
                 it[this.expires] = expires.to64bitMicroseconds()
             }
         }
@@ -317,7 +345,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     LargeDataRow(
                         value = it[LargeBlobs.value].inputStream,
                         owner = it[LargeBlobs.owner],
-                        authKey = it[LargeBlobs.authKey],
+                        metadata = it.toLargeDataMetadata(
+                            LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size, LargeBlobs.hash,
+                            LargeBlobs.metadata
+                        ),
                         expires = it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) }
                     )
                 }.firstOrNull()
@@ -331,7 +362,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     LargeDataRow(
                         value = it[LargeStrings.value],
                         owner = it[LargeStrings.owner],
-                        authKey = it[LargeStrings.authKey],
+                        metadata = it.toLargeDataMetadata(
+                            LargeStrings.visibility, LargeStrings.created, LargeStrings.size, LargeStrings.hash,
+                            LargeStrings.metadata
+                        ),
                         expires = it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) }
                     )
                 }.firstOrNull()
@@ -339,25 +373,54 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
         transaction(database) {
-            val blobs = LargeBlobs.select(LargeBlobs.id, LargeBlobs.owner, LargeBlobs.authKey, LargeBlobs.expires)
-                .associate {
-                    it[LargeBlobs.id] to LargeDataRow(
-                        Unit,
-                        it[LargeBlobs.owner],
-                        it[LargeBlobs.authKey],
-                        it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) })
-                }
-            val strings =
-                LargeStrings.select(LargeStrings.id, LargeStrings.owner, LargeStrings.authKey, LargeStrings.expires)
-                    .associate {
-                        it[LargeStrings.id] to LargeDataRow(
-                            Unit,
-                            it[LargeStrings.owner],
-                            it[LargeStrings.authKey],
-                            it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) })
-                    }
+            val blobs = LargeBlobs.select(
+                LargeBlobs.id, LargeBlobs.owner, LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size,
+                LargeBlobs.hash, LargeBlobs.metadata, LargeBlobs.expires
+            ).associate {
+                it[LargeBlobs.id] to LargeDataRow(
+                    Unit,
+                    it[LargeBlobs.owner],
+                    it.toLargeDataMetadata(
+                        LargeBlobs.visibility, LargeBlobs.created, LargeBlobs.size, LargeBlobs.hash,
+                        LargeBlobs.metadata
+                    ),
+                    it[LargeBlobs.expires]?.let { e -> decode64bitMicroseconds(e) })
+            }
+            val strings = LargeStrings.select(
+                LargeStrings.id, LargeStrings.owner, LargeStrings.visibility, LargeStrings.created, LargeStrings.size,
+                LargeStrings.hash, LargeStrings.metadata, LargeStrings.expires
+            ).associate {
+                it[LargeStrings.id] to LargeDataRow(
+                    Unit,
+                    it[LargeStrings.owner],
+                    it.toLargeDataMetadata(
+                        LargeStrings.visibility, LargeStrings.created, LargeStrings.size, LargeStrings.hash,
+                        LargeStrings.metadata
+                    ),
+                    it[LargeStrings.expires]?.let { e -> decode64bitMicroseconds(e) })
+            }
             blobs to strings
         }
+
+    private fun ResultRow.toLargeDataMetadata(
+        visibility: Column<Byte>,
+        created: Column<Long>,
+        size: Column<Long>,
+        hash: Column<String>,
+        metadata: Column<String?>,
+    ): LargeDataMetadata = LargeDataMetadata(
+        visibility = LargeDataVisibility.entries[this[visibility].toInt()],
+        createdAt = decode64bitMicroseconds(this[created]),
+        size = this[size],
+        hash = this[hash],
+        custom = decodeCustomMetadata(this[metadata]),
+    )
+
+    private fun encodeCustomMetadata(custom: Map<String, String>): String? =
+        if (custom.isEmpty()) null else plainGson.toJson(custom)
+
+    private fun decodeCustomMetadata(json: String?): Map<String, String> =
+        if (json == null) emptyMap() else plainGson.fromJson(json, stringMapType)
 
     override fun deleteExpiredLargeData(now: Instant) {
         val cutoff = now.to64bitMicroseconds()
@@ -472,7 +535,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val id = integer("id")
         val value = text("value")
         val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
-        val authKey = varchar("auth_key", length = 1000).nullable()
+        val visibility = byte("visibility")         // the ordinal of LargeDataVisibility
+        val created = long("created")               // microseconds since 1970
+        val size = long("size")                     // bytes
+        val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex
+        val metadata = text("metadata").nullable()  // the application's own metadata, as JSON
         val expires = long("expires").nullable()    // microseconds since 1970, null once claimed
         override val primaryKey = PrimaryKey(id)
     }
@@ -481,7 +548,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val id = integer("id")
         val value = blob("value")
         val owner = integer("owner").nullable()     // the id of the owning model, null while unclaimed
-        val authKey = varchar("auth_key", length = 1000).nullable()
+        val visibility = byte("visibility")         // the ordinal of LargeDataVisibility
+        val created = long("created")               // microseconds since 1970
+        val size = long("size")                     // bytes
+        val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex
+        val metadata = text("metadata").nullable()  // the application's own metadata, as JSON
         val expires = long("expires").nullable()    // microseconds since 1970, null once claimed
         override val primaryKey = PrimaryKey(id)
     }

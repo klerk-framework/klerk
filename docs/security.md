@@ -9,9 +9,9 @@ them.
 
 All data interactions go through Klerk, ensuring that all authorization rules are enforced. This applies independently
 to reading a model, reading a single property of a model, submitting a command, reading the audit log, and reading or
-preparing [attached data](attached-data.md). This design
-prevents developers from accidentally bypassing security checks. If a developer needs to override a rule, they must
-explicitly state it, making such exceptions stand out in the code.
+preparing [attached data](attached-data.md). This design prevents developers from accidentally bypassing security
+checks. If a developer needs to override a rule, they must explicitly state it, making such exceptions stand out in the
+code.
 
 However, it is the developer's responsibility to ensure that the system cannot be abused to infer information
 (see [Authorization](authorization.md)).
@@ -21,6 +21,11 @@ However, it is the developer's responsibility to ensure that the system cannot b
 [Authorization](authorization.md) rules are attribute-based (they can key off anything on the actor, the model, or the
 context) and default-deny: a rule category with no rules denies everything in it, and even with rules present, an
 operation is only allowed if at least one positive rule explicitly says so — there is no implicit allow.
+
+There is one deliberate exception. [Attached data](attached-data.md#visibility) that was uploaded as `Public` is
+readable by anyone without a rule being evaluated. Publishing it is itself an authorized operation, decided once when
+the data is uploaded — the point being that a decision which cannot change over time is one a cache can rely on.  
+Attached data becomes `Private` by default, so setting it to `Public` is an explicit operation.
 
 ## No time-of-check-to-time-of-use gap
 

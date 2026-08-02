@@ -24,12 +24,13 @@ public data class AuditEntry(
  * A row in one of the large-data tables.
  *
  * @property owner the id of the owning model, or null while the data is still unclaimed.
+ * @property metadata everything about the data except the value itself. Immutable, written once on insert.
  * @property expires when an unclaimed row is reaped. Null once the data has been claimed.
  */
 public data class LargeDataRow<T>(
     val value: T,
     val owner: Int?,
-    val authKey: String?,
+    val metadata: LargeDataMetadata,
     val expires: Instant?,
 )
 
@@ -82,13 +83,29 @@ public interface Persistence {
 
     /**
      * Inserts an unclaimed blob. Must fail if the id is already taken (i.e. insert, never upsert).
+     *
+     * The size and hash of a blob are not known before it has been written, since it is streamed rather than held in
+     * memory. [digestAfterWrite] provides them, and must therefore be called *after* [value] has been fully consumed
+     * and before the insert is committed, so that a row is never visible without them.
+     *
+     * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written.
      */
-    public fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant): Unit
+    public fun insertLargeBlob(
+        id: Int,
+        value: InputStream,
+        visibility: LargeDataVisibility,
+        createdAt: Instant,
+        custom: Map<String, String>,
+        expires: Instant,
+        digestAfterWrite: () -> Pair<Long, String>,
+    ): Unit
 
     /**
      * Inserts an unclaimed string. Must fail if the id is already taken (i.e. insert, never upsert).
+     *
+     * Unlike a blob, a string is in memory already, so its [metadata] is complete before the insert.
      */
-    public fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant): Unit
+    public fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant): Unit
 
     public fun getLargeBlob(id: Int): LargeDataRow<InputStream>?
     public fun getLargeString(id: Int): LargeDataRow<String>?
@@ -193,24 +210,39 @@ public class RamStorage : Persistence {
         largeData.deletedStrings.forEach { largeStrings.remove(it) }
     }
 
-    override fun insertLargeBlob(id: Int, value: InputStream, authKey: String?, expires: Instant) {
+    override fun insertLargeBlob(
+        id: Int,
+        value: InputStream,
+        visibility: LargeDataVisibility,
+        createdAt: Instant,
+        custom: Map<String, String>,
+        expires: Instant,
+        digestAfterWrite: () -> Pair<Long, String>,
+    ) {
         require(!largeBlobs.containsKey(id)) { "There is already a blob with id $id" }
-        largeBlobs[id] = LargeDataRow(value.readAllBytes(), owner = null, authKey = authKey, expires = expires)
+        val bytes = value.readAllBytes()
+        val (size, hash) = digestAfterWrite()
+        largeBlobs[id] = LargeDataRow(
+            value = bytes,
+            owner = null,
+            metadata = LargeDataMetadata(visibility, createdAt, size, hash, custom),
+            expires = expires,
+        )
     }
 
-    override fun insertLargeString(id: Int, value: String, authKey: String?, expires: Instant) {
+    override fun insertLargeString(id: Int, value: String, metadata: LargeDataMetadata, expires: Instant) {
         require(!largeStrings.containsKey(id)) { "There is already a string with id $id" }
-        largeStrings[id] = LargeDataRow(value, owner = null, authKey = authKey, expires = expires)
+        largeStrings[id] = LargeDataRow(value, owner = null, metadata = metadata, expires = expires)
     }
 
     override fun getLargeBlob(id: Int): LargeDataRow<InputStream>? =
-        largeBlobs[id]?.let { LargeDataRow(it.value.inputStream(), it.owner, it.authKey, it.expires) }
+        largeBlobs[id]?.let { LargeDataRow(it.value.inputStream(), it.owner, it.metadata, it.expires) }
 
     override fun getLargeString(id: Int): LargeDataRow<String>? = largeStrings[id]
 
     override fun readAllLargeDataMetadata(): Pair<Map<Int, LargeDataRow<Unit>>, Map<Int, LargeDataRow<Unit>>> =
-        largeBlobs.mapValues { LargeDataRow(Unit, it.value.owner, it.value.authKey, it.value.expires) } to
-                largeStrings.mapValues { LargeDataRow(Unit, it.value.owner, it.value.authKey, it.value.expires) }
+        largeBlobs.mapValues { LargeDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires) } to
+                largeStrings.mapValues { LargeDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires) }
 
     override fun deleteExpiredLargeData(now: Instant) {
         largeBlobs.entries.removeIf { it.value.expires?.let { expires -> expires < now } ?: false }

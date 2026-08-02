@@ -652,7 +652,12 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
-         * Rules deciding who may read attached data, i.e. `klerk.largeData.get(...)`.
+         * Rules deciding who may read attached data, i.e. `klerk.largeData.get(...)` and
+         * `klerk.largeData.getMetadata(...)`.
+         *
+         * Note that these rules are only consulted for private data. Data prepared as
+         * [dev.klerkframework.klerk.LargeDataVisibility.Public] is readable by anyone, and not even a negative rule
+         * here will stop that — the point of public data is that the decision cannot change over time.
          * See [dev.klerkframework.klerk.KlerkLargeData].
          */
         public fun readLargeData(init: AuthorizationLargeDataReadRulesBlock<C, V>.() -> Unit) {
@@ -665,9 +670,10 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         /**
          * Rules deciding who may prepare attached data, i.e. `klerk.largeData.prepare(...)`.
          *
-         * Note that this is weak by construction: at that point there is no model and no command, and the authKey is
-         * chosen by the caller. The real gate on *attaching* data to a model is the normal event authorization of the
-         * command that claims it. See [dev.klerkframework.klerk.KlerkLargeData].
+         * Note that this is weak by construction: at that point there is no model and no command. The real gate on
+         * *attaching* data to a model is the normal event authorization of the command that claims it. What these
+         * rules are good at is the visibility: they can let anyone upload while allowing only some actors to publish
+         * something the whole world may read. See [dev.klerkframework.klerk.KlerkLargeData].
          */
         public fun writeLargeData(init: AuthorizationLargeDataWriteRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationLargeDataWriteRulesBlock<C, V>()
