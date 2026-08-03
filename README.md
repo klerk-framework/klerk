@@ -68,6 +68,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Reading data](docs/reading.md) — querying with a `Reader`
 * [Context](docs/context.md) — actor, time, and translation for every operation
 * [Jobs](docs/jobs.md) — background work, managed and unmanaged
+* [Time](docs/time.md) — where "now" comes from, and choosing between time triggers, `scheduleAt` and cron
 * [Persistence & migrations](docs/persistence.md) — storage backends and evolving model shapes
 * [Attached data](docs/attached-data.md) — large blobs and strings attached to a model
 * [Translation](docs/translation.md) — localizing validation and UI text

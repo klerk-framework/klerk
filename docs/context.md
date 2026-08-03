@@ -66,6 +66,9 @@ fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyColle
 context instead of calling `Clock.System.now()` directly — this is what makes state-machine code
 ([state-machines.md](state-machines.md)) deterministic and testable, since tests can supply a fixed or fake time.
 
+See [time.md](time.md) for where "now" comes from in background work that has no caller-supplied context, and for
+choosing between time triggers, `scheduleAt` and cron.
+
 ## translation
 
 `translation` carries a `Translation`, which supplies human-readable text for validation messages, property names,

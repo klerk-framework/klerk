@@ -16,7 +16,7 @@ persistence(persistence)
 Backed by a SQL database via a `javax.sql.DataSource`, using [Exposed](https://github.com/JetBrains/Exposed) as the SQL
 layer. On construction it connects and creates its tables if missing (audit log, models, schema-migration tracking,
 attached data, jobs), then reads the current model schema version from the
-`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON (via Gson).
+`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON.
 
 For production, supply a
 `DataSource` for your actual database (e.g. a connection pool pointed at Postgres/MySQL/etc., anything Exposed can talk
@@ -76,10 +76,10 @@ interface MigrationStepV1toV1 : MigrationStep {
 `MigrationStepV1toV1` is the concrete kind of step available today (there is room in the naming for future
 `MigrationStepV1toV2`-style steps once a more structural schema version bump is introduced). Its `migrateModel`
 receives every persisted model as a generic `MigrationModelV1` — `type` (the model's simple class name), `id`,
-timestamps, `state`, and `props` as a raw `Map<String, Any>` (i.e. before Gson would deserialize it back into your
-actual data class). Returning the same instance unchanged leaves the stored model untouched, returning a modified copy
-rewrites its stored JSON, and returning `null` deletes the model. `renameKey` is a small helper for the common case of a
-renamed property; it throws if the `from` key isn't found.
+timestamps, `state`, and `props` as a raw `Map<String, Any>` (i.e. before it is deserialized back into your actual data
+class). Returning the same instance unchanged leaves the stored model untouched, returning a modified copy rewrites its
+stored JSON, and returning `null` deletes the model. `renameKey` is a small helper for the common case of a renamed
+property; it throws if the `from` key isn't found.
 
 ```kotlin
 object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
