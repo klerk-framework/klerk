@@ -12,7 +12,7 @@ class DataContainersTest {
     fun getValueType() {
 
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val config = createConfig(collections)
 
         println(config)
@@ -105,7 +105,7 @@ class DataContainersTest {
     @Test
     fun enumContainerSerialization() {
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val config = createConfig(collections)
         val gson = createGson(config)
 

@@ -31,7 +31,7 @@ class CommandTokenTest {
     fun `A token can only be used once`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -43,7 +43,7 @@ class CommandTokenTest {
                     model = null,
                     params = createAstridParameters,
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(token),
             ).orThrow()
 
@@ -53,7 +53,7 @@ class CommandTokenTest {
                     model = null,
                     params = createAstridParameters,
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(token),
             )
 
@@ -69,7 +69,7 @@ class CommandTokenTest {
     fun `Prevent command if model has been changed`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -83,7 +83,7 @@ class CommandTokenTest {
                     model = astrid,
                     null
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple()),
             ).orThrow()
 
@@ -93,7 +93,7 @@ class CommandTokenTest {
                     model = astrid,
                     null
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(token),
             )
 

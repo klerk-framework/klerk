@@ -18,12 +18,12 @@ class StateMachineTest {
     fun getVoidEvents() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
             val voidEvents = klerk.config.managedModels.single { it.kClass == Book::class }.stateMachine
-                .getEventsForVoidState(Context.unauthenticated(), EventVisibility.EXTERNAL)
+                .getEventsForVoidState(Ctx.unauthenticated(), EventVisibility.EXTERNAL)
 
             val parameters = klerk.config.getParameters(CreateBook.id)
             requireNotNull(parameters)

@@ -17,15 +17,15 @@ class ActionTest {
     fun actionTest() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
 
-            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+            val config = ConfigBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, bookStateMachine(collections), collections.books)
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
-                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()
@@ -36,20 +36,20 @@ class ActionTest {
     fun throwingAction() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
-            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+            val collections = Views(bc, AuthorViews(bc.all))
+            val config = ConfigBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, throwingStateMachine(collections), collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
-                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()
             val author = createAuthorJKRowling(klerk)
-            klerk.read(Context.system()) {
+            klerk.read(Ctx.system()) {
                 val all = collections.authors.all.withReader(this, null).toList()
                 println(all.size)
             }
@@ -67,7 +67,7 @@ class ActionTest {
                         readingTime = ReadingTime(200.minutes)
                     ),
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             ).orThrow()
             println(result)
@@ -75,7 +75,7 @@ class ActionTest {
         }
     }
 
-    private fun throwingStateMachine(collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+    private fun throwingStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> =
         stateMachine {
             event(CreateBook) {
                 validReferences(CreateBookParams::author, collections.authors.all)
@@ -100,11 +100,11 @@ class ActionTest {
 
 }
 
-fun throwSomething(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections>) {
+fun throwSomething(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>) {
     throw IllegalStateException("This didn't work")
 }
 
-fun generousAuthRules(): ConfigBuilder<Context, MyCollections>.() -> Unit = {
+fun generousAuthRules(): ConfigBuilder<Ctx, Views>.() -> Unit = {
     authorization {
         readModels {
             positive {

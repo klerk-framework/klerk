@@ -14,7 +14,7 @@ class StorageTest {
     @Test
     fun `Can store and retrieve models`() {
         val storage = RamStorage()
-        val context = Context.unauthenticated()
+        val context = Ctx.unauthenticated()
 
         val authorProps = Author(
             firstName = FirstName("Pelle"),
@@ -39,7 +39,7 @@ class StorageTest {
             timeTrigger = null,
             props = authorProps
         )
-        val result1 = ProcessingData<Author, Context, MyCollections>(
+        val result1 = ProcessingData<Author, Ctx, Views>(
             createdModels = listOf(author.id),
             aggregatedModelState = mapOf(author.id to author)
         )
@@ -80,7 +80,7 @@ class StorageTest {
             lastStateTransitionAt = now
         )
 
-        val result2 = ProcessingData<Book, Context, MyCollections>(
+        val result2 = ProcessingData<Book, Ctx, Views>(
             createdModels = listOf(ModelID(123)),
             aggregatedModelState = mapOf(book.id to book)
         )

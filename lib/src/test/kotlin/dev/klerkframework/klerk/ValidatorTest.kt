@@ -13,11 +13,11 @@ import kotlin.test.*
 
 class ValidatorTest {
 
-    private var klerk: Klerk<Context, MyCollections>
+    private var klerk: Klerk<Ctx, Views>
 
     init {
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val config = createConfig(collections, RamStorage())
         klerk = Klerk.create(config)
     }
@@ -50,7 +50,7 @@ class ValidatorTest {
                 params
             )
             val options = ProcessingOptions(CommandToken.simple())
-            when (val result = klerk.handle(command, Context.system(), options)) {
+            when (val result = klerk.handle(command, Ctx.system(), options)) {
                 is CommandResult.Failure -> assertTrue(result.problems.first().violatedRule == null)
                 is CommandResult.Success -> fail()
             }
@@ -73,7 +73,7 @@ class ValidatorTest {
                 params
             )
             val options = ProcessingOptions(CommandToken.simple())
-            val result = klerk.handle(command, Context.unauthenticated(), options)
+            val result = klerk.handle(command, Ctx.unauthenticated(), options)
             assertTrue(result is CommandResult.Failure, result.toString())
         }
     }
@@ -94,7 +94,7 @@ class ValidatorTest {
                 params
             )
             val options = ProcessingOptions(CommandToken.simple())
-            val result = klerk.handle(command, Context.system(), options)
+            val result = klerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Failure)
         }
     }
@@ -117,7 +117,7 @@ class ValidatorTest {
             val options = ProcessingOptions(CommandToken.simple())
             // BookStatemachine declares validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
             // so Mystery should be valid (all entries allowed)
-            val result = klerk.handle(command, Context.system(), options)
+            val result = klerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Success, "Expected success but got: $result")
         }
     }
@@ -126,8 +126,8 @@ class ValidatorTest {
     fun `Rejects enum parameter not in validEnums`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
-            val restrictedSm: StateMachine<Book, BookStates, Context, MyCollections> = stateMachine {
+            val collections = Views(bc, AuthorViews(bc.all))
+            val restrictedSm: StateMachine<Book, BookStates, Ctx, Views> = stateMachine {
                 event(CreateBook) {
                     validReferences(CreateBookParams::author, collections.authors.all)
                     // Only Fiction is valid, not Mystery or Fantasy
@@ -146,14 +146,14 @@ class ValidatorTest {
                     onEvent(DeleteBook) { delete() }
                 }
             }
-            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+            val config = ConfigBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, restrictedSm, collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
-                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val restrictedKlerk = Klerk.create(config)
             restrictedKlerk.meta.start()
@@ -171,7 +171,7 @@ class ValidatorTest {
             )
             val command = Command(CreateBook, null, params)
             val options = ProcessingOptions(CommandToken.simple())
-            val result = restrictedKlerk.handle(command, Context.system(), options)
+            val result = restrictedKlerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Failure, "Expected failure but got: $result")
             restrictedKlerk.meta.stop()
         }

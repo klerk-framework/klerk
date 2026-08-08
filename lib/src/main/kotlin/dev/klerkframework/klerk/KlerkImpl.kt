@@ -24,7 +24,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
     override val jobs = JobManagerImpl<C, V>(this)
 
-    private val readWriteLock = ReadWriteLock()
+    internal val readWriteLock = ReadWriteLock()
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
     internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs, attachedDataImpl)
@@ -98,7 +98,6 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
                             "function. It is considered bad practice to throw in any function provided to Klerk."
                 }
             }
-            result.jobs.forEach { jobs.notifyJobWasAddedToDb(it) }
             log.add(LogCommandSucceeded(command, context, result))
         }
 
@@ -149,6 +148,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
 
                 klerk.eventsManager.start()
                 klerk.attachedDataImpl.start()
+                // Jobs start last: reloading them may need models and attached data to be in place already.
                 klerk.jobs.start()
                 klerk.config.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }

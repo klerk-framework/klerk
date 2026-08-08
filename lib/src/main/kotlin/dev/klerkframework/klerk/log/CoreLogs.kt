@@ -5,12 +5,12 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.log.LogSourceMinor.*
-import kotlin.time.Clock
+import dev.klerkframework.klerk.misc.getCurrentInstant
 import kotlin.time.Duration
 import kotlin.time.Instant
 
 internal abstract class CoreLogEntry(minor: LogSourceMinor, val context: KlerkContext?) : LogEntry {
-    override val time: Instant = context?.time ?: Clock.System.now()
+    override val time: Instant = context?.time ?: getCurrentInstant()
     override val actor: dev.klerkframework.klerk.ActorIdentity? = context?.actor
     override val source: LogSource = LogSource(MajorSource.Core, minor.name)
     override val logEventName: String = requireNotNull(this::class.simpleName)

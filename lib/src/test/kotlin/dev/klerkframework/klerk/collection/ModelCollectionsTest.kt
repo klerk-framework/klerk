@@ -16,21 +16,21 @@ class ModelCollectionsTest {
     fun `Delete should update collections`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
             val astrid = createAuthorAstrid(klerk)
-            klerk.read(Context.system()) {
+            klerk.read(Ctx.system()) {
                 assertTrue { collections.authors.all.contains(astrid, this) }
             }
 
             klerk.handle(
                 Command(DeleteAuthor, astrid, null),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             )
-            klerk.read(Context.system()) {
+            klerk.read(Ctx.system()) {
                 assertFalse { collections.authors.all.contains(astrid, this) }
             }
         }

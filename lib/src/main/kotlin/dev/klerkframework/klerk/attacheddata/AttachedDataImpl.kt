@@ -1,9 +1,11 @@
 package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.currentJobId
 import dev.klerkframework.klerk.misc.AttachedDataIdAllocator
 import dev.klerkframework.klerk.misc.ReadWriteLock
-import dev.klerkframework.klerk.misc.getCurrentInstant
+
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.AttachedDataDelta
@@ -25,12 +27,17 @@ import kotlin.time.Instant
  * @property owner the id of the owning model, or null while the data is unclaimed
  * @property metadata what [KlerkAttachedData.getMetadata] reports. Null only between the moment an id is reserved and
  * the moment the value has been written — a window in which the data is unclaimed, and therefore unreadable anyway.
- * @property expires when an unclaimed value is reaped. Null once claimed.
+ * @property expires when an unclaimed value is reaped. Null once claimed by a model.
+ * @property claimedByJob the job that prepared this value and has not finished with it, or null. This is the second,
+ * independent claim: the reaper deletes only when there is neither a model reference nor a job claim, so a
+ * long-running job's working set is safe for as long as the job lives — including while it is dead-lettered and
+ * awaiting a human.
  */
 internal data class AttachedDataEntry(
     val owner: Int?,
     val metadata: AttachedDataMetadata?,
     val expires: Instant?,
+    val claimedByJob: JobId? = null,
 )
 
 internal class AttachedDataImpl<C : KlerkContext, V>(
@@ -54,11 +61,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * rather than reserved.
      */
     internal fun start() {
-        val now = getCurrentInstant()
+        val now = config.now()
         config.persistence.deleteExpiredAttachedData(now)
         val rows = config.persistence.readAllAttachedDataMetadata()
         entries.clear()
-        rows.forEach { (id, row) -> entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires) }
+        rows.forEach { (id, row) ->
+            entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires, row.claimedByJob)
+        }
         lastReap.set(now)
         logger.info { "Attached data ready (${entries.size} values)" }
     }
@@ -91,12 +100,18 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     ): Int {
         authorizeWrite(context, kind, visibility)
         validateCustomMetadata(metadata)
-        val createdAt = getCurrentInstant()
+        val createdAt = config.now()
         val expires = reserveExpiry()
         val id = allocate(expires)
+        // A job step often prepares data before any command references it, and the reaper would otherwise delete it a
+        // minute later. Claiming it for the running job (if there is one) is recorded here, at insert time, because
+        // the job's own commit may be many steps away.
+        val claimedByJob = currentJobId()
         val hashing = HashingInputStream(value)
         try {
-            config.persistence.insertAttachedData(id, hashing, kind, visibility, createdAt, metadata, expires) {
+            config.persistence.insertAttachedData(
+                id, hashing, kind, visibility, createdAt, metadata, expires, claimedByJob
+            ) {
                 hashing.sizeAndHash()
             }
             val (size, hash) = hashing.sizeAndHash()
@@ -104,12 +119,30 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 owner = null,
                 metadata = AttachedDataMetadata(kind, visibility, createdAt, size, hash, metadata),
                 expires = expires,
+                claimedByJob = claimedByJob,
             )
         } catch (e: Exception) {
             entries.remove(id)
             throw e
         }
         return id
+    }
+
+    /** The attached data [jobId] has claimed, so that its claims can be released when the job's row goes away. */
+    internal fun claimedBy(jobId: JobId): Set<Int> =
+        entries.filterValues { it.claimedByJob == jobId }.keys.toSet()
+
+    /**
+     * Drops the job claims on [ids] in memory, after the same change has been persisted.
+     *
+     * Releasing a job claim never deletes anything: a value a committed command attached to a live model still has its
+     * model reference, and one nothing references is left to the ordinary reaper.
+     */
+    internal fun releaseJobClaims(ids: Set<Int>) {
+        ids.forEach { id ->
+            val entry = entries[id] ?: return@forEach
+            entries[id] = entry.copy(claimedByJob = null)
+        }
     }
 
     override suspend fun get(id: AttachedBlobID, context: C): InputStream =
@@ -189,7 +222,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * Deliberately based on the real clock rather than `context.time`: the context clock is supplied by the caller and
      * must not be able to extend or shorten the claim window.
      */
-    private fun reserveExpiry(): Instant = getCurrentInstant().plus(settings.unclaimedAttachedDataLifetime)
+    private fun reserveExpiry(): Instant = config.now().plus(settings.unclaimedAttachedDataLifetime)
 
     /**
      * Reserves an id. The entry is a placeholder without metadata until the value has been written — see
@@ -208,7 +241,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * than once per lifetime window.
      */
     private fun maybeReap() {
-        val now = getCurrentInstant()
+        val now = config.now()
         val previous = lastReap.get()
         if (now < previous.plus(settings.unclaimedAttachedDataLifetime)) {
             return
@@ -261,7 +294,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         caller: String
     ): AttachedDataEntry {
         ReadBlockGuard.checkNotInsideReadBlock(caller)
-        if (entry == null || entry.isExpired(getCurrentInstant())) {
+        if (entry == null || entry.isExpired(config.now())) {
             throw NoSuchElementException("No data found for id $id")
         }
         // Unclaimed data is not reachable: attached data is always read through the model that owns it.
@@ -313,7 +346,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             return AttachedDataPlan.Ok(AttachedDataDelta())
         }
 
-        val now = getCurrentInstant()
+        val now = config.now()
         val problems = mutableListOf<Problem>()
         val claimed = mutableMapOf<Int, Int>()
         val deleted = mutableSetOf<Int>()
@@ -382,7 +415,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
 }
 
-internal fun AttachedDataEntry.isExpired(now: Instant): Boolean = expires?.let { it < now } ?: false
+/**
+ * A value a job has claimed never expires while the claim lasts, even though no model owns it yet. The two claims are
+ * independent: the reaper takes a value only when neither holds.
+ */
+internal fun AttachedDataEntry.isExpired(now: Instant): Boolean =
+    claimedByJob == null && expires?.let { it < now } ?: false
 
 /** Roughly what `{"key":"value",}` costs on top of the key and the value themselves. */
 private const val JSON_OVERHEAD_PER_ENTRY = 6

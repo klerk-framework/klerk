@@ -4,8 +4,11 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.job.RunnableJob
-import dev.klerkframework.klerk.misc.*
+import dev.klerkframework.klerk.job.PendingJob
+import dev.klerkframework.klerk.misc.IdFactory
+import dev.klerkframework.klerk.misc.IdProvider
+import dev.klerkframework.klerk.misc.ReadWriteLock
+import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.statemachine.*
@@ -106,7 +109,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     }
 
     private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: Reader<C, V>) {
-        val time = getCurrentInstant()
+        val time = klerk.config.now()
         val calculated = models.map { it to calculateTriggerTime(it, time, reader) }
 
         timeTriggerManager.init(calculated.map { it.second })
@@ -336,7 +339,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             }
 
             is Block.InstanceNonEventBlock -> {
-                val args = ArgForInstanceNonEvent(requireNotNull(model), Clock.System.now(), reader)
+                val args = ArgForInstanceNonEvent(requireNotNull(model), time, reader)
                 @Suppress("UNCHECKED_CAST")
                 currentBlock.executables.map { it as InstanceNonEventExecutable<T, C, V> }
                     .filter { it.onCondition?.invoke(args) ?: true }
@@ -415,7 +418,7 @@ public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     val deletedModels: List<ModelID<out Any>> = emptyList(),
     val unFinalizedTransition: Triple<String, Instant, Model<out Any>>? = null,
     val aggregatedModelState: Map<ModelID<out Any>, Model<out Any>> = emptyMap(),
-    val newJobs: List<RunnableJob<C, V>> = emptyList(),
+    val newJobs: List<PendingJob<C, V>> = emptyList(),
     val remainingBlocks: List<Block<*, *, C, V>> = emptyList(),
     val currentBlock: Block<*, *, C, V>? = null,
     val processedBlocks: List<Block<*, *, C, V>> = emptyList(),

@@ -14,7 +14,7 @@ import kotlin.test.fail
 class EventProcessorTest {
 
     val bc = BookViews()
-    var collections = MyCollections(bc, AuthorViews(bc.all))
+    var collections = Views(bc, AuthorViews(bc.all))
     val config = createConfig(collections)
 
     @Test
@@ -24,7 +24,7 @@ class EventProcessorTest {
         val klerk = Klerk.create(config) as KlerkImpl
         val eventProcessor = EventProcessor(klerk, KlerkSettings(), ReadWriteLock(), MyTimeTriggerManager)
         val createAuthor = Command(CreateAuthor, null, createAstridParameters)
-        val context = Context.system()
+        val context = Ctx.system()
         val reader = ReaderWithAuth(klerk, context)
         val result = eventProcessor.processPrimaryCommand(createAuthor, context, reader, options)
 
@@ -42,7 +42,7 @@ class EventProcessorTest {
             val klerk = Klerk.create(config)
             klerk.meta.start()
 
-            val context = Context.system()
+            val context = Ctx.system()
             val reader = ReaderWithAuth(klerk as KlerkImpl, context)
 
             val rowling = createAuthorJKRowling(klerk)

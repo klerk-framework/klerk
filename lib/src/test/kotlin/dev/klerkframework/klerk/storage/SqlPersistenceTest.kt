@@ -16,7 +16,7 @@ class SqlPersistenceTest {
     @Test
     fun `Store and read`() {
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val persistence = SQLiteInMemory.create()
         val config = createConfig(collections, persistence)
         var klerk = Klerk.create(config)
@@ -35,13 +35,13 @@ class SqlPersistenceTest {
                 )
             )
             val options = ProcessingOptions(token = CommandToken.simple())
-            val result = klerk.handle(command, Context.system(), options)
+            val result = klerk.handle(command, Ctx.system(), options)
             val authorRef = requireNotNull(result.orThrow().primaryModel)
-            val autorFirstRun = klerk.read(Context.system()) { get(authorRef) }
+            val autorFirstRun = klerk.read(Ctx.system()) { get(authorRef) }
             klerk.meta.stop()
             klerk = Klerk.create(config)
             klerk.meta.start()
-            val authorSecondRun = klerk.read(Context.system()) { get(authorRef) }
+            val authorSecondRun = klerk.read(Ctx.system()) { get(authorRef) }
             assertEquals(autorFirstRun, authorSecondRun)
             assertEquals(151, ModelCache.count)
             val difference = autorFirstRun.copy(props = autorFirstRun.props.copy(lastName = LastName("Other name")))

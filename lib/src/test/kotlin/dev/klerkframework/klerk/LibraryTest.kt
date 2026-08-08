@@ -24,11 +24,11 @@ class LibraryTest {
         runBlocking {
             val ramStorage = RamStorage()
             val bc = BookViews()
-            var views = MyCollections(bc, AuthorViews(bc.all))
+            var views = Views(bc, AuthorViews(bc.all))
             var klerk = Klerk.create(createConfig(views, ramStorage))
             klerk.meta.start()
 
-            val context = Context.system()
+            val context = Ctx.system()
 
             val somethingNull: Model<Book>? = klerk.read(context) {
                 firstOrNull(views.books.all) { true }
@@ -49,7 +49,7 @@ class LibraryTest {
             val modelsInCache = ModelCache.count
 
             // restart and now read from database
-            views = MyCollections(BookViews(), AuthorViews(bc.all))
+            views = Views(BookViews(), AuthorViews(bc.all))
             klerk = Klerk.create(createConfig(views, ramStorage))
             klerk.meta.start()
 
@@ -67,23 +67,23 @@ class LibraryTest {
     fun updateModel() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
             klerk.handle(
                 Command(ChangeName, rowling, ChangeNameParams(FirstName("a"), LastName("b"))),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             )
-            val updatedAuthor = klerk.read(Context.system()) { get(rowling) }
+            val updatedAuthor = klerk.read(Ctx.system()) { get(rowling) }
             assertEquals("a", updatedAuthor.props.firstName.value)
             assertEquals("b", updatedAuthor.props.lastName.value)
         }
     }
 }
 
-suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk: Klerk<Context, MyCollections>) {
+suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk: Klerk<Ctx, Views>) {
 
     val startTime = kotlin.time.Clock.System.now()
     val firstNames = setOf("Anna", "Bertil", "Janne", "Filip")
@@ -103,7 +103,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                     //address = Address(Street("Lugna gatan"))
                 ),
             ),
-            Context.system(),
+            Ctx.system(),
             ProcessingOptions(CommandToken.simple()),
         )
 
@@ -114,7 +114,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                     model = result.orThrow().primaryModel,
                     params = null
                 ),
-                context = Context.system(),
+                context = Ctx.system(),
                 ProcessingOptions(
                     CommandToken.simple()
                 )
@@ -124,7 +124,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
         val authorRef = requireNotNull(result.orThrow().primaryModel)
         println("Author: $authorRef")
 
-        val author = klerk.read(Context.system()) { get(authorRef) }
+        val author = klerk.read(Ctx.system()) { get(authorRef) }
 
         for (j in 1..booksPerAuthor) {
             klerk.handle(
@@ -141,7 +141,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                         readingTime = ReadingTime(1.days)
                     ),
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             )
         }

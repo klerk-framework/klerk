@@ -25,7 +25,7 @@ class BlockTriggeringInstanceNonInstanceEventBlockTest {
 
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()), KlerkSettings())
             klerk.meta.start()
 
@@ -33,13 +33,13 @@ class BlockTriggeringInstanceNonInstanceEventBlockTest {
 
             val result = klerk.handle(
                 Command(ImproveAuthor, rowlingId, null),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             ).getOrHandle { fail() }
 
             assertTrue(result.transitionedModels.contains(rowlingId))
 
-            val model = klerk.read(Context.system()) { get(rowlingId) }
+            val model = klerk.read(Ctx.system()) { get(rowlingId) }
 
             assertEquals(AuthorStates.Established.name, model.state)
         }

@@ -85,9 +85,21 @@ when (result) {
 }
 ```
 
-Note that `result.jobs`/`result.unmanagedJobs` tell you what was *scheduled*, not that it has *finished running* — jobs
-run asynchronously (see [jobs.md](jobs.md)), so if a test needs to observe a job's own side effect, it may need to
-wait/poll briefly after `handle` returns rather than asserting immediately.
+Note that `result.jobs`/`result.unmanagedJobs` tell you what was *scheduled*, not that it has *finished running*.
+
+For jobs, do not poll or sleep. Configure manual execution and drive the scheduler yourself, so the test is
+deterministic under repeat runs:
+
+```kotlin
+jobs { execution = JobExecution.Manual }
+
+// ... handle the command that schedules the job ...
+klerk.jobs.runUntilIdle()
+assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(result.jobs.single(), Context.system()).status)
+```
+
+Anything time-dependent — `scheduleAt`, retry backoff, cron — is driven by the config clock, so set a `MutableClock`
+and advance it rather than waiting. See [jobs.md](jobs.md#testing) and [time.md](time.md).
 
 ## Testing configuration mistakes
 
@@ -106,5 +118,5 @@ assertFailsWith<IllegalConfigurationException> {
 ## Translation
 
 If your application supports multiple languages (see [translation](translation.md)), pass the `Translation` you want to
-test through the `Context` (e.g. `Context.swedishUnauthenticated()` in this repo's test suite) and assert on
+test through the `Ctx` (e.g. `Context.swedishUnauthenticated()` in this repo's test suite) and assert on
 `Problem.endUserTranslatedMessage` rather than on the underlying rule.

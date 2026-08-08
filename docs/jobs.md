@@ -1,8 +1,5 @@
 # Jobs
 
-> **Status:** this describes the reworked job module. The current implementation in
-> `dev.klerkframework.klerk.job` predates it. See `implement-jobs.md` for the migration plan.
-
 State machines (see [state-machines.md](state-machines.md)) often need to trigger side effects — sending an email,
 calling an external API, notifying another system — when an event is handled or a state is entered. Klerk gives you two
 ways to do this, with very different guarantees:
@@ -56,7 +53,7 @@ Everything else in this document follows from three rules:
 
 ```kotlin
 @Serializable
-data class ImportCursor(val remaining: List<FileName>, val target: ModelID<Library>)
+data class ImportCursor(val remaining: List<FileName>, val target: ModelID<Library>, val done: Int, val total: Int)
 
 object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
 
@@ -64,20 +61,21 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
     override val agent = JobAgent.System
     override val priority = JobPriority.Bulk
 
-    override suspend fun step(args: JobStepArgs<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
+    override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
         val cursor = args.cursor
         val next = cursor.remaining.firstOrNull() ?: return JobResult.Success()
 
         val parsed = parseBookFile(next)          // ordinary work: IO, parsing, an HTTP call
 
         return JobResult.Yield(
-            cursor = cursor.copy(remaining = cursor.remaining.drop(1)),
+            cursor = cursor.copy(remaining = cursor.remaining.drop(1), done = cursor.done + 1),
             command = Command(CreateBook, model = null, params = parsed),
             progress = JobProgress(
-                completed = cursor.done.toLong(),
-                total = cursor.total.toLong(),
-                message = TranslatedText { it.importingFile(next) },
+                completed = cursor.done,
+                total = cursor.total,
+                message = "Importing $next",
             ),
+            log = listOf(args.info("Parsed $next")),
         )
     }
 }
@@ -92,8 +90,25 @@ jobs {
 }
 ```
 
-The persisted record holds `JobName` — a stable string you own — not a class or method name. Renaming the Kotlin object
-is safe; changing `name` is not (see [Restarts and deploys](#restarts-and-deploys)).
+The persisted record holds `JobName`. Renaming the Kotlin object is safe; changing `name` is not
+(see [Restarts and deploys](#restarts-and-deploys)).
+
+### The cursor is a persisted schema
+
+The cursor is serialized with `kotlinx.serialization`, so a cursor class must be `@Serializable`. Klerk derives the
+serializer from the type argument you declared, so there is normally nothing to write; a job type whose cursor cannot be
+serialized fails at **config time**, not on its first run.
+
+`ModelID`, `AttachedBlobID` and `AttachedStringID` are serializable out of the box — a model's own props class needs no
+annotation for its id to appear in a cursor. For an `Instant`, use
+`@Serializable(with = KlerkInstantSerializer::class)`, which stores it at the same microsecond precision as everything
+else in Klerk so that it survives a round-trip unchanged.
+
+If `@Serializable` does not suit — a legacy format, a type you cannot annotate — override `codec`:
+
+```kotlin
+override val codec = object : CursorCodec<ImportCursor> { ... }
+```
 
 ### Scheduling
 
@@ -109,21 +124,25 @@ fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Vi
     listOf(NotifyBookStores.schedule(NotifyCursor(author = args.model.id)))
 ```
 
-Or directly:
+Or directly, for work no command is responsible for:
 
 ```kotlin
-klerk.jobs.schedule(ImportBooks.schedule(ImportCursor(...), scheduleAt = tomorrow))
+val id = klerk.jobs.schedule(ImportBooks.schedule(ImportCursor(...), scheduleAt = tomorrow), context)
 ```
 
+The context is what decides the job's **owner** — the actor the [authorization rules](#who-can-see-a-job) see — and what
+the [admission policy](#priority-backpressure-and-overload) is given, so scheduling this way can be refused when the
+queue is not draining.
+
 Jobs scheduled by a command are persisted in that command's transaction. If the command fails, no job is scheduled.
-`CommandResult.Success.jobs` lists what was scheduled.
+`CommandResult.Success.jobs` lists the ids of what was scheduled.
 
 ### What a step returns
 
 | Result                                                      | Meaning                                                                                                                                                         |
 |-------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Yield(cursor, command?, spawn?, awaitSpawned?, progress?)` | Not done. Command, spawned children and cursor commit atomically; job re-queued at the tail of its priority class, or moved to `Waiting` if it awaits children. |
-| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status. `result` is delivered to the parent, if any.                                                |
+| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status. `result` (a string you encode) reaches the parent, if any.                                  |
 | `Fail(reason)`                                              | This attempt failed. Retried with exponential backoff until `maxRetries`, then dead-lettered.                                                                   |
 | `Abort(reason, runHook = true)`                             | This will never work. Straight to dead letter, no retries. Set `runHook = false` when there is deliberately nothing to compensate.                              |
 
@@ -153,6 +172,11 @@ if (previous is CommandResult.Failure) {
 ```
 
 The step still counts as completed. Retries and backoff are for `Fail`, not for commands Klerk declined to apply.
+
+**`previousResult` does not survive a restart.** A `CommandResult` cannot be faithfully rebuilt from storage, and Klerk
+would rather hand you `null` than a lossy stand-in. If your job must know the outcome even across a restart, record what
+you need in the cursor — the next step's cursor is written in the same transaction as the command, so whatever you put
+there is exactly as durable as the command itself.
 
 To make a step conditional on the model not having changed, use the existing optimistic-concurrency token:
 
@@ -187,7 +211,7 @@ a terminal state — `Succeeded`, `DeadLettered` or `Cancelled`. A child that di
 The next step receives the outcomes:
 
 ```kotlin
-override suspend fun step(args: JobStepArgs<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
+override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
     val failed = args.children.filter { it.status != JobStatus.Succeeded }
     if (failed.isNotEmpty()) {
         return JobResult.Abort("${failed.size} of ${args.children.size} files failed")
@@ -215,9 +239,13 @@ Four rules keep this from becoming a footgun:
 
 Two base classes, differing only in whether the step gets a `Reader`:
 
-- **`JobType.Local`** — `args.reader` is available. Runs on the master node. Use this by default.
-- **`JobType.Portable`** — no `Reader`. Everything the job needs is in its cursor. These will be eligible to run on
-  remote worker nodes (a later milestone); today they run on the master like any other job.
+- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` is available. Runs on the master node.
+  Use this by default.
+- **`JobType.Portable`** — the step takes a `JobStepArgs.Portable`, which has no `Reader`. Everything the job needs is
+  in its cursor. These will be eligible to run on remote worker nodes (a later milestone); today they run on the master
+  like any other job.
+
+The split is in the types rather than in a runtime check, so a `Portable` job cannot read by accident.
 
 Writing a job as `Portable` is a promise about *where it may run*, not only about the `Reader` — a job that needs a
 machine-local file, a JVM type from your app, or a node-local secret is `Local` even if it never reads.
@@ -229,15 +257,25 @@ Progress is structured so a UI can render a progress bar without parsing strings
 ```kotlin
 JobProgress(
     completed = 312,
-    total = 500,          // null when the job doesn't know yet
-    message = TranslatedText { it.importingFile(name) },   // optional, translatable
+    total = 500,                        // null when the job doesn't know yet
+    message = "Importing $name",        // optional
 )
 ```
 
-Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.getJob(id)` subject to
-[authorization](#who-can-see-a-job).
+Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.getJob(id, context)`
+subject to [authorization](#who-can-see-a-job).
 
-`log` is separate and is for diagnostics, not for progress.
+`message` is a plain string without any speciffic meaning. It will typically not be shown to the user, but may appear in
+an admin UI.
+
+`log` is separate and is for diagnostics, not for progress. Build entries with the helpers on the step's args, which
+stamp them with the step's time:
+
+```kotlin
+return JobResult.Fail("timeout", log = listOf(args.warn("The book API did not answer within 30 s")))
+```
+
+The log is capped at the most recent 200 entries per job, so a long-running job cannot grow without bound.
 
 ### Failure, retries and dead letters
 
@@ -261,15 +299,19 @@ The full set of statuses:
 | `DeadLettered`       | yes      | Gave up; `onDeadLettered` ran (or was skipped, see below) |
 | `CompensationFailed` | yes      | Dead *and* the end-of-life hook could not complete        |
 
-A dead-lettered job can be **resumed from its checkpoint** once you have fixed the cause. It cannot be restarted from
-step 0: the commands from steps 1..n are already applied, and Klerk has no way to recognise re-emitted ones (see
-[Remote workers](#remote-workers-and-what-blocks-them)).
+A dead-lettered job can be **resumed from its checkpoint** with `klerk.jobs.resume(id, context)` once you have fixed the
+cause. It cannot be restarted from step 0: the commands from steps 1..n are already applied, and Klerk has no way to
+recognise re-emitted ones (see [Remote workers](#remote-workers-and-what-blocks-them)).
+
+`klerk.jobs.delete(id, context)` removes a terminal job and releases any [claim](#attached-data) it holds on attached
+data.
 
 ### Cancellation and end-of-life hooks
 
 ```kotlin
-override suspend fun onCancelled(args: JobEndArgs<Cursor, C, V>): JobResult<Cursor>
-override suspend fun onDeadLettered(args: JobEndArgs<Cursor, C, V>): JobResult<Cursor>
+// on JobType.Local — the Portable variants take JobEndArgs.Portable, which has no Reader
+override suspend fun onCancelled(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor>
+override suspend fun onDeadLettered(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor>
 ```
 
 Both hooks are **step machines themselves** — same `Yield`/`Success`/`Fail`/`Abort` vocabulary, same
@@ -291,8 +333,8 @@ Rules:
 - **Cancellation takes effect at a step boundary, never mid-step.** Interrupting a running step would break the
   command-plus-checkpoint atomicity that everything else rests on. For long steps, check `args.cancellationRequested`
   and return early, cooperatively.
-- **`Cancelling` is a distinct, non-terminal status.** `klerk.jobs.cancel(id)` returns as soon as the request is
-  recorded; the job moves to `Cancelling` and reaches `Cancelled` only after the in-flight step returns, the cascade
+- **`Cancelling` is a distinct, non-terminal status.** `klerk.jobs.cancel(id, context)` returns as soon as the request
+  is recorded; the job moves to `Cancelling` and reaches `Cancelled` only after the in-flight step returns, the cascade
   completes and `onCancelled` finishes. **Cancel latency is therefore the slowest step in the subtree** — a parent whose
   grandchild is halfway through a ten-minute step takes ten minutes to cancel. A UI should render `Cancelling` as its
   own state ("Cancelling…") rather than showing a button that appears to do nothing.
@@ -335,7 +377,9 @@ with interactive traffic. The job module therefore sheds load rather than lettin
 | `Normal`      | 10 min         | Default                     |
 | `Bulk`        | 2 h            | Imports, backfills, cleanup |
 
-`priority = null` (the default) inherits the priority of the command that scheduled the job.
+A job type's `priority` defaults to `Normal`. Setting it to `null` means "inherit": a spawned child takes its parent's
+class, and anything else lands in `Normal`. An individual instance can override the type with
+`MyJob.schedule(cursor, priority = JobPriority.High)`.
 
 **Admission control is delay-based, not depth-based.** Klerk tracks how long the *oldest ready job* in each class has
 been waiting. Queue depth is a poor signal — one entry may be a one-step webhook and another a 500-step import, and a
@@ -359,7 +403,13 @@ fun myAdmissionPolicy(args: AdmissionArgs<Ctx>): AdmissionDecision =
 
 `AdmissionDecision` is `Allow`, `Downgrade(priority)`, `Delay(until)` or `Deny(Problem)`. **Prefer `Downgrade`.** The
 best answer to load is almost always "accept this as `Bulk`", not "fail the user's checkout"; `Deny` is a last resort
-and fails the scheduling command with `KlerkErrorCode.JobQueueOverloaded`.
+and fails the scheduling command with `KlerkErrorCode.JobQueueOverloaded` (`AdmissionDecision.Deny.overloaded(...)`
+builds one).
+
+The default policy does exactly that: a class that has been over budget for ten seconds straight is *downgraded* one
+class, and only `Bulk` — the bottom of the ladder, over its two-hour budget — is ever refused. `args.queue
+.overBudgetSince(priority)` is what gives the policy hysteresis without keeping state of its own, so it can stay a pure
+function.
 
 `args.queue` exposes per-class oldest-ready-age, depth and running counts; `args.job` is the candidate; `args.context`
 is the scheduling actor's context.
@@ -413,23 +463,31 @@ recurring work with no model behind them — "delete expired sessions every nigh
 
 ### Attached data
 
-A job may create [attached data](attached-data.md) before a command references it. Such data is **claimed by the job**:
+A job may create [attached data](attached-data.md) before a command references it. Such data is **claimed by the job**,
+automatically — `klerk.attachedData.prepare(...)` called from inside a step records the claim, so there is nothing to
+declare:
 
 - The orphan reaper deletes attached data only when it has **no model reference and no job claim**.
-- Deleting a dead-lettered job releases its claims, but never deletes data a committed command attached to a live model.
+- Deleting a job releases its claims, but never deletes data a committed command attached to a live model.
 
 A long-running job's working set is therefore safe from the reaper for as long as the job lives, including while
-dead-lettered and awaiting a human.
+dead-lettered and awaiting a human. The flip side is that a terminal job holds its claim until it is deleted, which is
+what `deadLetterRetention` is for.
 
 ### Who can see a job
 
 A job runs as an **agent**, declared on the job type:
 
-- `JobAgent.System` — full authority. Config is trusted code, so declaring this is a deliberate, privileged act.
+- `JobAgent.System` — full authority, and the default. Config is trusted code, so declaring this is a deliberate,
+  privileged act.
 - `JobAgent.Scheduler` — the actor that scheduled the job. If that actor loses permission mid-job, subsequent commands
   simply fail; your step sees it in `previousResult` and decides whether to `Success`, `Abort`, or do something else.
 
-Job metadata (status, progress, log) is authorization-checked.
+`JobAgent.Scheduler` requires `jobContextProvider(...)` in the config, since Klerk cannot construct a context for an
+arbitrary actor of your own context type. Omitting it is a configuration error, caught at startup.
+
+Job metadata (status, progress, log) is authorization-checked. The same rules gate `cancel`, so a user watching their
+own progress bar can stop their own job:
 
 ```kotlin
 authorization {
@@ -441,7 +499,13 @@ authorization {
         negative { }
     }
 }
+
+fun usersCanSeeTheirOwnJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+    if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
 ```
+
+The owner is the actor whose context scheduled the job, recorded at scheduling time. `args.isOwnedByActor()` compares
+identities by id rather than by object, since the actor may have been read back under a different identity type since.
 
 ### Restarts and deploys
 
@@ -480,8 +544,12 @@ fun `import emits one CreateBook per file`() = runTest {
         val emitted = mutableListOf<Command<*, *>>()
 
         while (true) {
-            when (val result = ImportBooks.step(JobStepArgs(cursor = cursor, previousResult = null, ...))) {
-                is JobResult.Yield -> { result.command?.let(emitted::add); cursor = result.cursor }
+            val args =
+                JobStepArgs.Local(cursor, previousResult = null, job = someJobInfo, context = ctx, reader = reader)
+            when (val result = ImportBooks.step(args)) {
+                is JobResult.Yield -> {
+                    result.command?.let(emitted::add); cursor = result.cursor
+                }
                 is JobResult.Success -> break
                 else -> fail("unexpected $result")
             }
@@ -497,13 +565,34 @@ thread, no sleeping:
 ```kotlin
 jobs { execution = JobExecution.Manual }
 
-klerk.jobs.runUntilIdle(maxSteps = 10_000)
-klerk.jobs.step()      // exactly one step
+klerk.jobs.runUntilIdle(maxSteps = 10_000)   // returns how many steps ran
+klerk.jobs.step()                            // exactly one step; false if nothing was ready
 ```
 
-**3. Time-travel.** The scheduler takes its time from a clock on the config rather than `Clock.System`, so `scheduleAt`,
-backoff, cron and delay-based admission are all controllable in tests. See [time.md](time.md) — this clock is new; time
-in Klerk today comes either from a caller's `Context` or, for background work, from a non-injectable system call.
+`runUntilIdle` stops when nothing is *ready* — a job waiting for a `scheduleAt` or a backoff that has not arrived on the
+configured clock is not ready, so it returns rather than spinning. Advance the clock and call it again.
+
+**3. Time-travel.** All background work — job scheduling, retry backoff, cron, delay-based admission and state-machine
+time triggers — reads its time from the clock on the config rather than `Clock.System`:
+
+```kotlin
+val clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
+
+val config = ConfigBuilder<Ctx, Views>(views).build {
+    clock(clock)
+    jobContextProvider(::jobContext)     // so a step's own context.time follows the clock too
+    jobs { execution = JobExecution.Manual }
+    ...
+}
+
+fun jobContext(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
+
+// ...
+clock += 3.seconds                       // the first retry backoff has now elapsed
+klerk.jobs.runUntilIdle()
+```
+
+See [time.md](time.md) for how this relates to the time a command carries in its `Ctx`.
 
 ### Remote workers, and what blocks them
 

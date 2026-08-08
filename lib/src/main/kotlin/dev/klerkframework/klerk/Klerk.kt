@@ -2,9 +2,12 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.job.JobId
-import dev.klerkframework.klerk.job.JobMetadata
-import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.job.JobInfo
+import dev.klerkframework.klerk.job.JobRecord
+import dev.klerkframework.klerk.job.PendingJob
+import dev.klerkframework.klerk.job.ScheduledJob
 import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
@@ -179,35 +182,125 @@ public interface KlerkModels<C : KlerkContext, V> {
 
 }
 
+/**
+ * Schedules, inspects and controls managed background jobs. See the "Jobs" documentation for the whole model.
+ */
 public interface JobManager<C : KlerkContext, V> {
 
     /**
-     * Schedules a job for background execution. This is for manually-created [RunnableJob]s; jobs created by a
-     * state machine's [dev.klerkframework.klerk.statemachine.UnmanagedJob] executable are scheduled
-     * automatically.
+     * Schedules one job, built with [dev.klerkframework.klerk.job.JobType.schedule].
      *
-     * @return an ID that can be used with [getJob] to check on progress/result
+     * This is the way to schedule a job that no command is responsible for. A job that belongs to a command should be
+     * returned from a state machine's `job(...)` executable instead, so that it is persisted in that command's own
+     * transaction and is not scheduled at all if the command fails.
+     *
+     * New work goes through admission control, so this can fail when the queue is not draining — see
+     * [KlerkErrorCode.JobQueueOverloaded]. Yields, retries, spawned children and end-of-life hooks never do.
+     *
+     * @param context whose actor is recorded as the job's owner, and is what the job authorization rules see.
+     * @return the id of the scheduled job.
+     * @throws IllegalStateException if the job was refused by the admission policy or the hard queue cap.
      */
-    public fun schedule(job: RunnableJob<C, V>): JobId
+    public suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId
 
     /**
-     * @throws kotlin.NoSuchElementException if no job with this id exists
+     * Everything known about one job.
+     *
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     * @throws AuthorizationException if the actor is not allowed to see it.
      */
-    public fun getJob(id: JobId): JobMetadata
+    public suspend fun getJob(id: JobId, context: C): JobInfo
 
-    public fun getAllJobs(): List<JobMetadata>
+    /** Every job the actor is allowed to see, newest first. */
+    public suspend fun getAllJobs(context: C): List<JobInfo>
+
+    /**
+     * Emits a [JobInfo] every time a job the actor may see changes — for a live progress bar.
+     *
+     * @param id if provided, only that job's changes are emitted. If null, every visible job's are.
+     */
+    public fun subscribe(context: C, id: JobId?): Flow<JobInfo>
+
+    /**
+     * Requests cancellation, and returns as soon as the request has been recorded.
+     *
+     * The job moves to [dev.klerkframework.klerk.job.JobStatus.Cancelling] and reaches
+     * [dev.klerkframework.klerk.job.JobStatus.Cancelled] only once the in-flight step has returned, every descendant
+     * is terminal and `onCancelled` has finished. **Cancel latency is therefore the slowest step in the subtree**, so
+     * a UI should render `Cancelling` as its own state rather than a button that appears to do nothing.
+     *
+     * Requires the same authorization as [getJob].
+     *
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     * @throws AuthorizationException if the actor is not allowed to see the job.
+     */
+    public suspend fun cancel(id: JobId, context: C, reason: String = "Cancelled"): Unit
+
+    /**
+     * Puts a dead-lettered job back in the queue, **resuming from its checkpoint** — never restarting from step 0,
+     * because the commands from steps 1..n have already been applied and Klerk cannot recognise re-emitted ones.
+     *
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     * @throws AuthorizationException if the actor is not allowed to see the job.
+     * @throws IllegalStateException if the job is not dead-lettered.
+     */
+    public suspend fun resume(id: JobId, context: C): Unit
+
+    /**
+     * Deletes a terminal job, releasing any claim it holds on attached data. Data that a committed command attached to
+     * a live model is never affected.
+     *
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     * @throws AuthorizationException if the actor is not allowed to see the job.
+     * @throws IllegalStateException if the job has not reached a terminal status.
+     */
+    public suspend fun delete(id: JobId, context: C): Unit
+
+    /**
+     * Runs exactly one step, if any job is ready. Only for [dev.klerkframework.klerk.job.JobExecution.Manual].
+     *
+     * @return true if a step ran, false if there was nothing to do.
+     * @throws IllegalStateException if execution is [dev.klerkframework.klerk.job.JobExecution.Automatic].
+     */
+    public suspend fun step(): Boolean
+
+    /**
+     * Runs steps until no job is ready any more. Only for [dev.klerkframework.klerk.job.JobExecution.Manual].
+     *
+     * Jobs waiting for a `scheduleAt` or a backoff that has not arrived on the configured clock are *not* ready, so
+     * this returns rather than spinning — advance a [dev.klerkframework.klerk.misc.MutableClock] and call it again.
+     *
+     * @param maxSteps a safety net against a job that yields forever.
+     * @return how many steps ran.
+     * @throws IllegalStateException if execution is [dev.klerkframework.klerk.job.JobExecution.Automatic], or if
+     * [maxSteps] was reached (which means a test would otherwise have hung).
+     */
+    public suspend fun runUntilIdle(maxSteps: Int = 10_000): Int
 
 }
 
 internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
 
-    /**
-     * Makes the JobManager aware of a new job. It is assumed that the job has already been persisted to the database.
-     */
-    fun notifyJobWasAddedToDb(job: RunnableJob<C, V>)
-
-
+    /** True if no job is using this id. Used while allocating ids during command processing. */
     fun isJobIdAvailable(int: Int): Boolean
+
+    /**
+     * Turns the jobs a command declared into rows to write, applying admission control. Called on the command path
+     * before anything is committed, so that a refusal can still fail the command.
+     */
+    fun planNewJobs(pending: List<PendingJob<C, V>>, context: C): NewJobPlan
+
+    /** Takes the jobs a committed command scheduled into the in-memory queue. */
+    fun jobsWereCommitted(plan: NewJobPlan)
+}
+
+/** What [JobManagerInternal.planNewJobs] decided: either rows to write, or the problems that must fail the command. */
+internal sealed class NewJobPlan {
+    data class Ok(val records: List<JobRecord>) : NewJobPlan() {
+        val commit: JobCommit get() = JobCommit(upserted = records)
+    }
+
+    data class Rejected(val problems: List<Problem>) : NewJobPlan()
 }
 
 /**

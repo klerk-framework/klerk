@@ -4,7 +4,7 @@ Time enters a Klerk system in more than one way, and picking the wrong one is ea
 
 ## The one rule
 
-**Never call `Clock.System.now()` in business logic.** Read the time from the `Context`
+**Never call `Clock.System.now()` in business logic.** Read the time from the `Ctx`
 ([context.md](context.md)) instead. Everything else on this page follows from that rule, and every testing story in
 Klerk depends on it.
 
@@ -12,16 +12,42 @@ Use `kotlin.time.Clock` and `kotlin.time.Instant` — not the `kotlinx.datetime`
 
 ## Where the current time comes from
 
-| Situation                                               | Source of "now"                                              |
-|---------------------------------------------------------|--------------------------------------------------------------|
-| Handling a command                                      | `Context.time`, supplied by the caller                       |
-| Reading                                                 | `Context.time`                                               |
-| Validation, authorization, `onEnter`/`onExit`/`onEvent` | `args.time`, which is the context's time                     |
-| A state-machine time trigger firing                     | Klerk itself; the context comes from `systemContextProvider` |
-| A job step running                                      | Klerk itself; the context comes from `systemContextProvider` |
+| Situation                                                        | Source of "now"                                                      |
+|------------------------------------------------------------------|----------------------------------------------------------------------|
+| Handling a command                                               | `Context.time`, supplied by the caller                               |
+| Reading                                                          | `Context.time`                                                       |
+| Validation, authorization, `onEnter`/`onExit`/`onEvent`          | `args.time`, which is the context's time                             |
+| A state-machine time trigger firing                              | The **config clock**; the context comes from `systemContextProvider` |
+| Deciding a job is ready, a backoff has elapsed, a cron has fired | The **config clock**                                                 |
+| A job step running                                               | The **config clock**, via `jobContextProvider`                       |
 
-The split matters: **actor-driven work carries its own time; background work is given one.** A test can therefore
-control actor-driven time simply by constructing a `Context` with a fixed `time`.
+The split matters: **actor-driven work carries its own time; background work is given one.** A test controls
+actor-driven time by constructing a `Ctx` with a fixed `time`, and background time by setting the config clock.
+
+## The config clock
+
+In tests, you may want to control the time of the system.
+
+```kotlin
+val clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
+
+ConfigBuilder<Ctx, Views>(views).build {
+    clock(clock)                          // defaults to Clock.System
+    jobContextProvider(::jobContext)      // gives a job step a context whose time is the clock's
+    ...
+}
+
+fun jobContext(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
+```
+
+Everything Klerk does on its own initiative reads from that clock, so `clock += 1.hours` is how a test travels forward
+without sleeping. It deliberately does **not** affect commands and reads: those carry the caller's time, and a test that
+wants to control them constructs the context it wants.
+
+`jobContextProvider` is optional. Without it a job step runs with the context from `systemContextProvider`, whose time
+is whatever your own context type decides — usually the wall clock, which is exactly the thing a test cannot control.
+Configure it if you want a job's own view of time to follow the clock, or if any job type uses `JobAgent.Scheduler`
+(which needs a context for an actor other than the system, and is a configuration error without it).
 
 ## Choosing a mechanism for "do this later"
 
@@ -49,10 +75,12 @@ retried (see [state-machines.md](state-machines.md)); jobs are.
 
 ## Testing time
 
-- **Actor-driven time** — construct a `Context` with the `time` you want. Business logic reading `args.time` sees it.
-- **Deferred work** — see [testing.md](testing.md) and [jobs.md](jobs.md#testing). The job module's manual execution
-  mode lets a test drive the scheduler directly instead of waiting.
-- **Time triggers** currently require real elapsed time; this is the limitation noted above.
+- **Actor-driven time** — construct a `Ctx` with the `time` you want. Business logic reading `args.time` sees it.
+- **Deferred work** — set a `MutableClock` as the config clock and advance it. Combined with
+  `jobs { execution = JobExecution.Manual }` and `klerk.jobs.runUntilIdle()`, this makes `scheduleAt`, retry backoff,
+  cron and delay-based admission fully deterministic with no sleeping. See [jobs.md](jobs.md#testing).
+- **Time triggers** follow the config clock too, but the thread that polls them still wakes on real time, so advancing
+  the clock makes a trigger *eligible* rather than making it fire immediately.
 
 ## Related
 

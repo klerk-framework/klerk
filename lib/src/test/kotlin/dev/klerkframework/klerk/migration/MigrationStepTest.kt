@@ -11,7 +11,7 @@ class MigrationStepTest {
     @Test
     fun migrate() {
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val persistence = SQLiteInMemory.create()
 
         runBlocking {
@@ -28,11 +28,11 @@ class MigrationStepTest {
     }
 
     private fun createConfigWithMigrations(
-        collections: MyCollections,
+        collections: Views,
         persistence: SqlPersistence,
         steps: Set<MigrationStep>
-    ): Config<Context, MyCollections> {
-        return ConfigBuilder<Context, MyCollections>(collections).build {
+    ): Config<Ctx, Views> {
+        return ConfigBuilder<Ctx, Views>(collections).build {
             persistence(persistence)
             migrations(steps)
             managedModels {

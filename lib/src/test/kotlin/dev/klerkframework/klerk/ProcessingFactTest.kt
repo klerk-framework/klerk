@@ -28,12 +28,12 @@ class ProcessingFactTest {
             props = author
         )
 
-        val withTransition = ProcessingData<Author, Context, MyCollections>(
+        val withTransition = ProcessingData<Author, Ctx, Views>(
             currentModel = authorId,
             unFinalizedTransition = Triple("second", transitionTime, authorModel)
         )
 
-        val withUpdate = ProcessingData<Author, Context, MyCollections>(
+        val withUpdate = ProcessingData<Author, Ctx, Views>(
             updatedModels = listOf(authorId),
             aggregatedModelState = mapOf(
                 authorId to authorModel.copy(

@@ -5,6 +5,9 @@ import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobsBlock
+import dev.klerkframework.klerk.job.JobsConfig
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
 import dev.klerkframework.klerk.statemachine.Block
@@ -24,8 +27,10 @@ import kotlin.reflect.*
 import kotlin.reflect.full.createType
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.withNullability
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 internal val logger = KotlinLogging.logger {}
 
@@ -46,6 +51,25 @@ public data class Config<C : KlerkContext, V>(
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
     val systemContextProvider: ((SystemIdentity) -> C),
+    /**
+     * Where *background* work gets the current time from: job scheduling, retry backoff, cron, delay-based admission
+     * and state-machine time triggers.
+     *
+     * Actor-driven work reads its time from the caller's [KlerkContext.time] instead and is unaffected by this. The
+     * split is deliberate: a test can control actor-driven time simply by constructing a context, and this clock is
+     * how it controls everything else. See [dev.klerkframework.klerk.misc.MutableClock].
+     */
+    val clock: Clock = Clock.System,
+    /** The job module's configuration, built by `ConfigBuilder.jobs { ... }`. */
+    val jobs: JobsConfig<C, V> = JobsConfig.empty(),
+    /**
+     * Builds the context a job step runs under. Optional; when absent, [systemContextProvider] is used.
+     *
+     * Configure it if you use [dev.klerkframework.klerk.job.JobAgent.Scheduler] (which needs a context for an actor
+     * other than the system), or if you want a job step's `context.time` to come from [clock] — which is what makes
+     * a job's own view of time controllable in tests.
+     */
+    val jobContextProvider: ((JobContextRequest) -> C)? = null,
 ) {
     internal lateinit var gson: Gson
 
@@ -55,6 +79,12 @@ public data class Config<C : KlerkContext, V>(
         validateMigrations()
         managedModels.map { it.stateMachine.onKlerkStart(this) }
     }
+
+    /**
+     * The current time for background work, at the precision Klerk persists timestamps with (see
+     * [makeExactSerializable]), so that a value read here survives a round-trip through storage unchanged.
+     */
+    internal fun now(): Instant = makeExactSerializable(clock.now())
 
     private fun validateMigrations() {
         migrationSteps.forEach {
@@ -73,7 +103,28 @@ public data class Config<C : KlerkContext, V>(
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
+        schedulerJobsMustHaveAJobContextProvider()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
+    }
+
+    /**
+     * A job running as [dev.klerkframework.klerk.job.JobAgent.Scheduler] needs a context for an actor other than the
+     * system, and Klerk cannot construct one for an application-defined context type on its own.
+     */
+    private fun schedulerJobsMustHaveAJobContextProvider() {
+        if (jobContextProvider != null) {
+            return
+        }
+        val needsOne = jobs.types.values.filter { it.agent == JobAgent.Scheduler }
+        if (needsOne.isEmpty()) {
+            return
+        }
+        throw IllegalConfigurationException(
+            KlerkErrorCode.MissingJobContextProvider,
+            "The job type(s) ${needsOne.joinToString(", ") { "'${it.name.value}'" }} run as JobAgent.Scheduler, " +
+                    "which means their commands are applied as the actor that scheduled them. Klerk therefore needs " +
+                    "'jobContextProvider(...)' in the config to build a context for that actor."
+        )
     }
 
     private fun modelsMustHavePropertiesOfDataContainer() {
@@ -408,6 +459,8 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val attachedDataReadNegativeRules: Set<(ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization> = emptySet(),
     val attachedDataWritePositiveRules: Set<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization> = emptySet(),
     val attachedDataWriteNegativeRules: Set<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization> = emptySet(),
+    val jobPositiveRules: Set<(ArgsForJobRead<C, V>) -> PositiveAuthorization> = emptySet(),
+    val jobNegativeRules: Set<(ArgsForJobRead<C, V>) -> NegativeAuthorization> = emptySet(),
 )
 
 @DslMarker
@@ -488,17 +541,25 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
                 attachedDataReadNegativeRules = authorizationRulesBlock.attachedDataReadNegativeRules,
                 attachedDataWritePositiveRules = authorizationRulesBlock.attachedDataWritePositiveRules,
                 attachedDataWriteNegativeRules = authorizationRulesBlock.attachedDataWriteNegativeRules,
+                jobPositiveRules = authorizationRulesBlock.jobPositiveRules,
+                jobNegativeRules = authorizationRulesBlock.jobNegativeRules,
             ),
             meterRegistry = registry,
             managedModels = managedModelsValue,
             persistence = persistenceValue,
             migrationSteps = migrationStepsValue,
             systemContextProvider = systemContextProviderValue,
+            clock = clockValue,
+            jobs = jobsValue,
+            jobContextProvider = jobContextProviderValue,
         )
     }
 
     private var migrationStepsValue: SortedSet<MigrationStep> = sortedSetOf()
     private var registry: MeterRegistry = SimpleMeterRegistry()
+    private var clockValue: Clock = Clock.System
+    private var jobsValue: JobsConfig<C, V> = JobsConfig.empty()
+    private var jobContextProviderValue: ((JobContextRequest) -> C)? = null
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
     private lateinit var persistenceValue: Persistence
@@ -548,6 +609,52 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     public fun authorization(init: AuthorizationRulesBlock<C, V>.() -> Unit) {
         authorizationRulesBlock = AuthorizationRulesBlock<C, V>()
         authorizationRulesBlock.init()
+    }
+
+    /**
+     * Registers job types and cron schedules, and configures the job module. Optional — omit it if the application has
+     * no jobs.
+     *
+     * ```
+     * jobs {
+     *     register(ImportBooks)
+     *     cron(NightlyCleanup, "0 3 * * *") { cursor = CleanupCursor() }
+     * }
+     * ```
+     */
+    public fun jobs(init: JobsBlock<C, V>.() -> Unit) {
+        val block = JobsBlock<C, V>()
+        block.init()
+        jobsValue = block.build()
+    }
+
+    /**
+     * The clock background work reads the time from — job scheduling, retry backoff, cron, delay-based admission and
+     * state-machine time triggers. Optional; defaults to [Clock.System].
+     *
+     * Set it to a [dev.klerkframework.klerk.misc.MutableClock] in tests to make everything time-dependent
+     * deterministic. Note that it does *not* affect the time seen by commands and reads, which comes from the caller's
+     * [KlerkContext.time].
+     */
+    public fun clock(clock: Clock) {
+        clockValue = clock
+    }
+
+    /**
+     * Builds the context each job step runs under, from the job's agent, the configured clock and the job itself.
+     * Optional; without it, [systemContextProvider] is used and the job runs as the system.
+     *
+     * Required if any registered job type declares [dev.klerkframework.klerk.job.JobAgent.Scheduler], since Klerk
+     * cannot construct a context for an arbitrary actor on its own.
+     *
+     * ```
+     * jobContextProvider(::jobContext)
+     *
+     * fun jobContext(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
+     * ```
+     */
+    public fun jobContextProvider(provider: (JobContextRequest) -> C) {
+        jobContextProviderValue = provider
     }
 
     @ConfigMarker
@@ -608,6 +715,8 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization>()
         internal val attachedDataWriteNegativeRules =
             mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization>()
+        internal val jobPositiveRules = mutableSetOf<(ArgsForJobRead<C, V>) -> PositiveAuthorization>()
+        internal val jobNegativeRules = mutableSetOf<(ArgsForJobRead<C, V>) -> NegativeAuthorization>()
 
 
         /**
@@ -683,6 +792,20 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
+         * Rules deciding who may see a job's metadata — its status, progress and log — via
+         * [JobManager.getJob]/[JobManager.getAllJobs]/[JobManager.subscribe].
+         *
+         * The same rules gate [JobManager.cancel], so a user who can watch their own progress bar can also cancel
+         * their own job. [ArgsForJobRead.isOwnedBy] answers "did this actor schedule it?".
+         */
+        public fun jobs(init: AuthorizationJobRulesBlock<C, V>.() -> Unit) {
+            val block = AuthorizationJobRulesBlock<C, V>()
+            block.init()
+            jobPositiveRules.addAll(block.positiveBlock.rules)
+            jobNegativeRules.addAll(block.negativeBlock.rules)
+        }
+
+        /**
          * Returns an `init` block for [ConfigBuilder.authorization] that allows every actor to do everything (read
          * all models/properties/event log/attached data, trigger all commands). Logs a warning when applied.
          *
@@ -730,7 +853,16 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
                 }
                 negative {}
             }
+            jobs {
+                positive {
+                    rule(this@AuthorizationRulesBlock::everybodyCanSeeAllJobs)
+                }
+                negative {}
+            }
         }
+
+        private fun everybodyCanSeeAllJobs(args: ArgsForJobRead<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
 
         private fun everybodyCanReadModels(args: ArgModelContextReader<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
@@ -897,6 +1029,42 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         internal val rules = mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization>()
 
         public fun rule(function: (ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    // jobs
+    @ConfigMarker
+    public class AuthorizationJobRulesBlock<C : KlerkContext, V> {
+
+        internal lateinit var positiveBlock: AuthorizationJobPositiveRulesBlock<C, V>
+        internal lateinit var negativeBlock: AuthorizationJobNegativeRulesBlock<C, V>
+
+        public fun positive(init: AuthorizationJobPositiveRulesBlock<C, V>.() -> Unit) {
+            positiveBlock = AuthorizationJobPositiveRulesBlock()
+            positiveBlock.init()
+        }
+
+        public fun negative(init: AuthorizationJobNegativeRulesBlock<C, V>.() -> Unit) {
+            negativeBlock = AuthorizationJobNegativeRulesBlock()
+            negativeBlock.init()
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationJobPositiveRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> PositiveAuthorization>()
+
+        public fun rule(function: (ArgsForJobRead<C, V>) -> PositiveAuthorization) {
+            rules.add(function)
+        }
+    }
+
+    @ConfigMarker
+    public class AuthorizationJobNegativeRulesBlock<C : KlerkContext, V> {
+        internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> NegativeAuthorization>()
+
+        public fun rule(function: (ArgsForJobRead<C, V>) -> NegativeAuthorization) {
             rules.add(function)
         }
     }

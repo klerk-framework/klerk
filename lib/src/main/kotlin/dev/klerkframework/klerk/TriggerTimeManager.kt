@@ -78,7 +78,8 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
      * Returns true if there may be another item to process now
      */
     private suspend fun processQueue(): Boolean {
-        val now = Clock.System.now()
+        // Time triggers are background work, so they follow the configured clock rather than the wall clock.
+        val now = klerk.config.now()
         val next = timeTriggers.peek()
         if (next == null || next.instant > now) {
             return false

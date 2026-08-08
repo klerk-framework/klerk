@@ -14,7 +14,7 @@ class ReaderTest {
         runBlocking {
             val ramStorage = RamStorage()
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(
                 createConfig(collections, ramStorage),
                 settings = KlerkSettings(allowUnsafeOperations = true)
@@ -39,20 +39,20 @@ class ReaderTest {
                 props = originalAuthorProps
             )
 
-            klerk.models.unsafeCreate(Context.unauthenticated(), originalAuthor)
+            klerk.models.unsafeCreate(Ctx.unauthenticated(), originalAuthor)
 
-            val storedOriginal = klerk.read(Context.unauthenticated()) { get(ref) }
+            val storedOriginal = klerk.read(Ctx.unauthenticated()) { get(ref) }
             assertEquals(storedOriginal, originalAuthor)
             val updatedAuthorProps =
                 originalAuthorProps.copy(firstName = FirstName("Darth"), lastName = LastName("Vader"))
             val updatedAuthor = originalAuthor.copy(state = "updated", props = updatedAuthorProps)
-            klerk.models.unsafeUpdate(Context.unauthenticated(), updatedAuthor)
-            val storedUpdated = klerk.read(Context.unauthenticated()) { get(ref) }
+            klerk.models.unsafeUpdate(Ctx.unauthenticated(), updatedAuthor)
+            val storedUpdated = klerk.read(Ctx.unauthenticated()) { get(ref) }
             assertNotEquals(storedUpdated.state, storedOriginal.state)
             assertNotEquals(storedUpdated.props, storedOriginal.props)
 
-            klerk.models.unsafeDelete(Context.unauthenticated(), ref)
-            val storedDeleted = klerk.read(Context.unauthenticated()) { getOrNull(ref) }
+            klerk.models.unsafeDelete(Ctx.unauthenticated(), ref)
+            val storedDeleted = klerk.read(Ctx.unauthenticated()) { getOrNull(ref) }
             assertNull(storedDeleted)
         }
     }
@@ -61,12 +61,12 @@ class ReaderTest {
     fun `Cannot bypass auth rules by reading a model as another type`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
             val astrid = createAuthorAstrid(klerk)
-            klerk.read(Context.unauthenticated()) {
+            klerk.read(Ctx.unauthenticated()) {
                 try {
                     get(astrid)
                     fail()

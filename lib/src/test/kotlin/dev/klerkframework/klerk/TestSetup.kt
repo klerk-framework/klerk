@@ -13,9 +13,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.*
-import dev.klerkframework.klerk.job.JobMetadata
-import dev.klerkframework.klerk.job.JobResult
-import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
@@ -28,6 +26,7 @@ import dev.klerkframework.klerk.storage.SqlPersistence
 import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
 import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
@@ -43,9 +42,28 @@ import kotlin.time.Instant
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
 
-fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()): Config<Context, MyCollections> {
-    return ConfigBuilder<Context, MyCollections>(collections).build {
+/**
+ * @param clock what background work (jobs, retries, cron, time triggers) reads the time from.
+ * @param configureJobs applied last inside the `jobs` block, so a test can register its own job types, declare crons,
+ * or switch to automatic execution.
+ */
+fun createConfig(
+    collections: Views,
+    storage: Persistence = RamStorage(),
+    clock: Clock = Clock.System,
+    configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
+): Config<Ctx, Views> {
+    return ConfigBuilder<Ctx, Views>(collections).build {
         persistence(storage)
+        clock(clock)
+        jobContextProvider(::myJobContextProvider)
+        jobs {
+            // Manual by default: a test that wants a job to run says so, and nothing runs behind its back.
+            execution = JobExecution.Manual
+            register(MyJob)
+            register(MyJob2)
+            configureJobs()
+        }
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
@@ -99,30 +117,46 @@ fun createConfig(collections: MyCollections, storage: Persistence = RamStorage()
                     rule(::unauthenticatedCannotPrepareStrings)
                 }
             }
+            jobs {
+                positive {
+                    rule(::authorsCanSeeTheirOwnJobs)
+                    rule(::systemCanSeeAllJobs)
+                }
+                negative {}
+            }
         }
         systemContextProvider(::myContextProvider)
     }
 }
 
-fun myContextProvider(actorIdentity: dev.klerkframework.klerk.ActorIdentity): Context {
-    return Context(
+fun myContextProvider(actorIdentity: dev.klerkframework.klerk.ActorIdentity): Ctx {
+    return Ctx(
         actor = actorIdentity,
 
         )
 }
 
-fun cannotReadAstrid(args: ArgsForPropertyAuth<Context, MyCollections>): dev.klerkframework.klerk.NegativeAuthorization {
+/** Gives a job step a context whose time comes from the configured clock, so job time is controllable in tests. */
+fun myJobContextProvider(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
+
+fun authorsCanSeeTheirOwnJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+    if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
+
+fun systemCanSeeAllJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+    if (args.context.actor is SystemIdentity) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
+
+fun cannotReadAstrid(args: ArgsForPropertyAuth<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
     return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
 }
 
-fun canReadAllProperties(args: ArgsForPropertyAuth<Context, MyCollections>): dev.klerkframework.klerk.PositiveAuthorization {
+fun canReadAllProperties(args: ArgsForPropertyAuth<Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 /**
  * A model-relative rule: it reaches the owning model, which is the point of handing the rule a [Model] and a `Reader`.
  */
-fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Context, MyCollections>): PositiveAuthorization {
+fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
     val props = args.owner.props
     if (props is Author && props.lastName.value == "Secretive") {
         return PositiveAuthorization.NoOpinion
@@ -130,43 +164,43 @@ fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Context, 
     return PositiveAuthorization.Allow
 }
 
-fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Context, MyCollections>): NegativeAuthorization =
+fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Ctx, Views>): NegativeAuthorization =
     if (args.context.actor is Unauthenticated) Deny else Pass
 
-fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Context, MyCollections>): PositiveAuthorization =
+fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 
 /**
  * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
  * visibility in [ArgsForAttachedDataWrite] is for.
  */
-fun unauthenticatedCannotPublishPublicly(args: ArgsForAttachedDataWrite<Context, MyCollections>): NegativeAuthorization =
+fun unauthenticatedCannotPublishPublicly(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
     if (args.visibility == AttachedDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
 
 /** A rule that keys on the kind rather than the visibility. Nonsensical as a policy, but that is not the point. */
-fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Context, MyCollections>): NegativeAuthorization =
+fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
     if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): dev.klerkframework.klerk.NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is dev.klerkframework.klerk.Unauthenticated) Deny else Pass
 }
 
-fun `Everybody can do everything`(argCommandContextReader: ArgCommandContextReader<*, Context, MyCollections>): dev.klerkframework.klerk.PositiveAuthorization {
+fun `Everybody can do everything`(argCommandContextReader: ArgCommandContextReader<*, Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 
-fun `Everybody can read event log`(args: ArgContextReader<Context, MyCollections>): PositiveAuthorization {
+fun `Everybody can read event log`(args: ArgContextReader<Ctx, Views>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
-fun `Everybody can read`(args: ArgModelContextReader<Context, MyCollections>): PositiveAuthorization {
+fun `Everybody can read`(args: ArgModelContextReader<Ctx, Views>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 fun pelleCannotReadOnMornings(
-    args: ArgModelContextReader<Context, MyCollections>
+    args: ArgModelContextReader<Ctx, Views>
 ): dev.klerkframework.klerk.NegativeAuthorization {
     try {
         if (args.context.user?.props?.name?.value.equals("Pelle")) {
@@ -181,14 +215,14 @@ fun pelleCannotReadOnMornings(
     return Pass
 }
 
-class BookViews : ModelViews<Book, Context>() {
+class BookViews : ModelViews<Book, Ctx>() {
 
     fun childrensBooks(): List<ModelID<Book>> {
         return emptyList()
     }
 }
 
-class AuthorViews<V>(val allBooks: AllModelView<Book, Context>) : ModelViews<Author, Context>() {
+class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     private val greatAuthorNames = setOf("Linus", "Bertil")
 
@@ -279,7 +313,7 @@ data class CreateAuthorParams(
 
 data class ChangeNameParams(val updatedFirstName: FirstName, val updatedLastName: LastName)
 
-fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorStates, Context, MyCollections> =
+fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, Ctx, Views> =
 
     stateMachine {
 
@@ -384,83 +418,74 @@ fun authorStateMachine(collections: MyCollections): StateMachine<Author, AuthorS
 
     }
 
-fun someUpdate(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Author {
+fun someUpdate(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Author {
     return args.model.props.copy(lastName = LastName("efter"))
 }
 
-fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Author {
+fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Author {
     return args.model.props.copy(FirstName("Changed name after exit"))
 }
 
-fun sayHello(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun sayHello(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
     println("Hello!")
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Instant {
+fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant {
     return args.time.plus(30.seconds)
 }
 
-fun hasTalent(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = true
-fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Boolean = false
+fun hasTalent(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = true
+fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
-    return listOf(MyJob())
+fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
+    return listOf(MyJob.schedule(MyJobCursor(greeting = "pelle")))
 }
 
 
-fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
     if (onEnterImprovingStateActionCallback != null) {
         onEnterImprovingStateActionCallback!!()
     }
 }
 
 
-fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Context, MyCollections>) {
+fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>) {
     println("It was decided that we should show a notification")
 }
 
-fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Context, MyCollections>) {
+fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
     if (onEnterAmateurStateActionCallback != null) {
         onEnterAmateurStateActionCallback!!()
     }
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): List<RunnableJob<Context, MyCollections>> {
-
-
-    return listOf(MyJob2())
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
+    return listOf(MyJob2.schedule(MyJobCursor(greeting = "Hej")))
 }
 
-class MyJob2 : RunnableJob<Context, MyCollections>() {
+/** A cursor that is deliberately just a value, so that tests can assert on what a step was given. */
+@Serializable
+data class MyJobCursor(val greeting: String, val stepsLeft: Int = 0)
 
-    companion object {
-        suspend fun run(
-            metadata: JobMetadata,
-            klerk: Klerk<Context, MyCollections>
-        ): JobResult {
-            println("Job started")
-            assertEquals("Hej", metadata.parameters)
-            return JobResult.Success()
-        }
+object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
 
+    override val name = JobName("my-job-2")
+
+    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
+        assertEquals("Hej", args.cursor.greeting)
+        return JobResult.Success()
     }
-
-
-    override val parameters: String
-        get() = "Hej"
-
-    override fun getRunFunction() = Companion::run
 }
 
-fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Context, MyCollections>): Author {
+fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
         lastName = args.command.params.updatedLastName
     )
 }
 
-fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Context, MyCollections>): List<Command<Any, Any>> {
+fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
         val result: MutableList<Command<Any, Any>> = mutableListOf()
         val books = getRelated(Book::class, requireNotNull(args.model.id))
@@ -479,7 +504,7 @@ fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Con
     }
 }
 
-fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): Author {
+fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): Author {
     val params = args.command.params
     return Author(
         firstName = params.firstName,
@@ -489,33 +514,33 @@ fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyColle
     )
 }
 
-fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Context, MyCollections>): Author {
+fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Ctx, Views>): Author {
     return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")), picture = null)
 }
 
 
-fun updateAuthor(args: ArgForInstanceEvent<Author, Author, Context, MyCollections>): Author {
+fun updateAuthor(args: ArgForInstanceEvent<Author, Author, Ctx, Views>): Author {
     return args.command.params
 }
 
 
-fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
+fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Daniel" && args.context.actor != dev.klerkframework.klerk.AuthenticationIdentity) Invalid() else Valid
 }
 
-fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
+fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris") Invalid() else Valid
 }
 
-fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
+fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
 }
 
-fun preventUnauthenticated(context: Context): PropertyCollectionValidity {
+fun preventUnauthenticated(context: Ctx): PropertyCollectionValidity {
     return if (context.actor == dev.klerkframework.klerk.Unauthenticated) Invalid() else Valid
 }
 
-fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>): PropertyCollectionValidity {
+fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     args.reader.apply {
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
@@ -525,7 +550,7 @@ fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, Cr
     }
 }
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections>): Book {
+fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>): Book {
     val params = args.command.params
     return Book(
         title = params.title,
@@ -547,7 +572,7 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections
     )
 }
 
-fun updateBook(args: ArgForInstanceEvent<Book, Book, Context, MyCollections>): Book = args.command.params
+fun updateBook(args: ArgForInstanceEvent<Book, Book, Ctx, Views>): Book = args.command.params
 
 
 enum class AuthorStates {
@@ -556,12 +581,12 @@ enum class AuthorStates {
     Established,
 }
 
-data class MyCollections(
+data class Views(
     val books: BookViews,
-    val authors: AuthorViews<MyCollections>
+    val authors: AuthorViews<Views>
 ) //, val shops: ModelView<Shop, Context>)
 
-suspend fun createAuthorJKRowling(klerk: Klerk<Context, MyCollections>): ModelID<Author> {
+suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
     val result = klerk.handle(
         Command(
             event = CreateAuthor,
@@ -574,20 +599,20 @@ suspend fun createAuthorJKRowling(klerk: Klerk<Context, MyCollections>): ModelID
                 //       address = Address(Street("Storgatan"))
             ),
         ),
-        Context.system(),
+        Ctx.system(),
         ProcessingOptions(CommandToken.simple()),
     )
     return requireNotNull(result.orThrow().primaryModel)
 }
 
-suspend fun createAuthorAstrid(klerk: Klerk<Context, MyCollections>): ModelID<Author> {
+suspend fun createAuthorAstrid(klerk: Klerk<Ctx, Views>): ModelID<Author> {
     val result = klerk.handle(
         Command(
             event = CreateAuthor,
             model = null,
             params = createAstridParameters,
         ),
-        Context.system(),
+        Ctx.system(),
         ProcessingOptions(CommandToken.simple()),
     )
     @Suppress("UNCHECKED_CAST")
@@ -601,7 +626,7 @@ val createAstridParameters = CreateAuthorParams(
     secretToken = SecretPasscode(234123515123434),
 )
 
-suspend fun createBookHarryPotter1(klerk: Klerk<Context, MyCollections>, author: ModelID<Author>): ModelID<Book> {
+suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Author>): ModelID<Book> {
     val result = klerk.handle(
         Command(
             event = CreateBook,
@@ -616,14 +641,14 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Context, MyCollections>, author:
                 readingTime = ReadingTime(2.hours)
             ),
         ),
-        Context.system(),
+        Ctx.system(),
         ProcessingOptions(CommandToken.simple())
     )
     return requireNotNull(result.orThrow().primaryModel)
 }
 
 suspend fun createBookHarryPotter2(
-    klerk: Klerk<Context, MyCollections>,
+    klerk: Klerk<Ctx, Views>,
     author: ModelID<Author>,
     previousBooksInSameSeries: List<ModelID<Book>>,
     coAuthors: Set<ModelID<Author>>
@@ -642,7 +667,7 @@ suspend fun createBookHarryPotter2(
                 readingTime = ReadingTime(2.hours)
             ),
         ),
-        Context.system(),
+        Ctx.system(),
         ProcessingOptions(CommandToken.simple()),
     )
     return requireNotNull(result.orThrow().primaryModel)
@@ -728,7 +753,7 @@ class Street(value: String) : StringContainer(value) {
     override val maxLines: Int = 1
 }
 
-fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Context, MyCollections>.() -> Unit = {
+fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Ctx, Views>.() -> Unit = {
     if (auth) {
         authorization {
             readModels {
@@ -752,8 +777,21 @@ fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Context, M
                 }
                 negative {}
             }
+            jobs {
+                positive {
+                    rule(::systemCanSeeAllJobs)
+                }
+                negative {}
+            }
         }
-        systemContextProvider { systemIdentity -> Context(systemIdentity) }
+        systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+        jobContextProvider(::myJobContextProvider)
+        // The state machines used by the tests schedule these, so they have to be loadable on a restart.
+        jobs {
+            execution = JobExecution.Manual
+            register(MyJob)
+            register(MyJob2)
+        }
     }
 }
 
@@ -800,21 +838,21 @@ object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
-    override val function: (ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyCollections>) -> Boolean
-) : Decision<Boolean, ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyCollections>> {
+    override val function: (ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>) -> Boolean
+) : Decision<Boolean, ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>> {
     data object Something : AlwaysFalseDecisions("This will always be false", ::alwaysFalse)
 
 }
 
-fun alwaysFalse(args: ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyCollections>): Boolean {
+fun alwaysFalse(args: ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>): Boolean {
     return false
 }
 
 
 object AlwaysFalseAlgorithm :
-    FlowChartAlgorithm<ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyCollections>, Boolean>("Always false") {
+    FlowChartAlgorithm<ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>, Boolean>("Always false") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, CreateAuthorParams, Context, MyCollections>, Boolean>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>, Boolean>.() -> Unit =
         {
             start(Something)
             booleanNode(Something) {
@@ -824,7 +862,7 @@ object AlwaysFalseAlgorithm :
         }
 }
 
-data class Context(
+data class Ctx(
     override val actor: dev.klerkframework.klerk.ActorIdentity,
     override val auditExtra: String? = null,
     override val time: Instant = Clock.System.now(),
@@ -834,17 +872,17 @@ data class Context(
 ) : KlerkContext {
 
     companion object {
-        fun fromUser(user: Model<User>): Context {
-            return Context(ModelIdentity(user), user = user)
+        fun fromUser(user: Model<User>): Ctx {
+            return Ctx(ModelIdentity(user), user = user)
         }
 
-        fun unauthenticated(): Context = Context(Unauthenticated)
+        fun unauthenticated(): Ctx = Ctx(Unauthenticated)
 
-        fun authenticationIdentity(): Context = Context(AuthenticationIdentity)
+        fun authenticationIdentity(): Ctx = Ctx(AuthenticationIdentity)
 
-        fun system(): Context = Context(SystemIdentity)
+        fun system(): Ctx = Ctx(SystemIdentity)
 
-        fun swedishUnauthenticated(): Context = Context(Unauthenticated, translation = SwedishTranslation)
+        fun swedishUnauthenticated(): Ctx = Ctx(Unauthenticated, translation = SwedishTranslation)
     }
 
 }
@@ -853,24 +891,22 @@ data class User(val name: FirstName)
 
 object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, EXTERNAL)
 
-class MyJob : RunnableJob<Context, MyCollections>() {
+/**
+ * Yields once per remaining step, so a test can watch a job progress through several checkpoints.
+ */
+object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
 
-    companion object {
+    override val name = JobName("my-job")
 
-        suspend fun theMethodToRun(
-            metadata: JobMetadata,
-            klerk: Klerk<Context, MyCollections>
-        ): JobResult {
-            println("Did MyJob")
-            return JobResult.Success()
+    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
+        if (args.cursor.stepsLeft == 0) {
+            return JobResult.Success(result = args.cursor.greeting)
         }
+        return JobResult.Yield(
+            cursor = args.cursor.copy(stepsLeft = args.cursor.stepsLeft - 1),
+            progress = JobProgress(completed = 1, total = args.cursor.stepsLeft),
+        )
     }
-
-    override val parameters: String
-        get() = "pelle"
-
-    override fun getRunFunction() = Companion::theMethodToRun
-
 }
 
 val english = EnglishKlerkTranslation(DefaultKlerkTranslation)

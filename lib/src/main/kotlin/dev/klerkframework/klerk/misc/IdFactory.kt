@@ -67,11 +67,12 @@ internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {
     }
 
     override fun getNextJobID(): JobId {
-        val randomInt = random.nextInt(0, Int.MAX_VALUE)
-        if (isJobIdAvailable(randomInt)) {
-            return randomInt
+        while (true) {
+            val randomInt = random.nextInt(0, Int.MAX_VALUE)
+            if (isJobIdAvailable(randomInt)) {
+                return JobId(randomInt)
+            }
         }
-        return getNextJobID()
     }
 
 }

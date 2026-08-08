@@ -25,7 +25,7 @@ class FunctionTest {
                 secretToken = SecretPasscode(234)
             )
         )
-        val args = ArgForVoidEvent(command, Context.system(), DummyReader)
+        val args = ArgForVoidEvent(command, Ctx.system(), DummyReader)
 
         val result = onlyAuthenticationIdentityCanCreateDaniel(args)
         assertEquals(PropertyCollectionValidity.Valid, result)
@@ -33,9 +33,9 @@ class FunctionTest {
 
 }
 
-object DummyReader : Reader<Context, MyCollections> {
+object DummyReader : Reader<Ctx, Views> {
     private val exception = UnsupportedOperationException("DummyReader is not meant to be used")
-    override val views: MyCollections
+    override val views: Views
         get() = throw exception
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> {
@@ -78,7 +78,7 @@ object DummyReader : Reader<Context, MyCollections> {
     }
 
     override fun <T : Any> query(
-        collection: ModelView<T, Context>,
+        collection: ModelView<T, Ctx>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
     ): QueryResponse<T> {
@@ -86,25 +86,25 @@ object DummyReader : Reader<Context, MyCollections> {
     }
 
     override fun <T : Any> list(
-        modelView: ModelView<T, Context>,
+        modelView: ModelView<T, Ctx>,
         filter: ((Model<T>) -> Boolean)?
     ): List<Model<T>> {
         throw exception
     }
 
-    override fun <T : Any> listIfAuthorized(collection: ModelView<T, Context>): List<Model<T>> {
+    override fun <T : Any> listIfAuthorized(collection: ModelView<T, Ctx>): List<Model<T>> {
         throw exception
     }
 
     override fun <T : Any> firstOrNull(
-        collection: ModelView<T, Context>,
+        collection: ModelView<T, Ctx>,
         filter: (Model<T>) -> Boolean
     ): Model<T>? {
         throw exception
     }
 
     override fun <T : Any> getFirstWhere(
-        collection: ModelView<T, Context>,
+        collection: ModelView<T, Ctx>,
         filter: (Model<T>) -> Boolean
     ): Model<T> {
         throw exception

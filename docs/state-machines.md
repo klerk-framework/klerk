@@ -141,7 +141,7 @@ with the same trigger), as this can put continuous load on the system.
 
 A time trigger fires on its own, in the background, with no command and no caller-supplied context — notice
 `ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your config, Klerk needs a
-way to manufacture a `Context` for this situation, which is what `systemContextProvider` is for — see
+way to manufacture a `Ctx` for this situation, which is what `systemContextProvider` is for — see
 [context.md](context.md#systemcontextprovider).
 
 ## Executables

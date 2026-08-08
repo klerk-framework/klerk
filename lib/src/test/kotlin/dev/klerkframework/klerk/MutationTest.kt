@@ -14,8 +14,8 @@ class MutationTest {
         runBlocking {
 
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
-            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+            val collections = Views(bc, AuthorViews(bc.all))
+            val config = ConfigBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Author::class, authorStateMachine(collections), collections.authors)
                     model(Book::class, bookStateMachine(collections), collections.books)
@@ -44,7 +44,7 @@ class MutationTest {
                     }
                 }
                 persistence(RamStorage())
-                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()
@@ -56,7 +56,7 @@ class MutationTest {
                 coAuthors = setOf(astrid),
                 previousBooksInSameSeries = listOf()
             )
-            klerk.read(Context.unauthenticated()) {
+            klerk.read(Ctx.unauthenticated()) {
                 val name = get(astrid).props.firstName
                 println(name.value)
                 val hp = get(harryPotter1).props

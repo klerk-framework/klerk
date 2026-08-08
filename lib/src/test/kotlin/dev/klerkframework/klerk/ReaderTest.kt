@@ -23,7 +23,7 @@ class ReaderTest {
         runBlocking {
 
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
@@ -31,7 +31,7 @@ class ReaderTest {
 
             val astrid = createAuthorAstrid(klerk)
 
-            val context = Context.system()
+            val context = Ctx.system()
 
             val model = klerk.read(context) { get(rowling) }
             assertEquals(model.props.firstName.value, "J.K")
@@ -86,12 +86,12 @@ class ReaderTest {
     fun actorCanBePassedIntoTheReader() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
             val rowling = createAuthorJKRowling(klerk)
-            val context = Context.system()
+            val context = Ctx.system()
 
             try {
                 val model = klerk.read(context) { get(rowling) }
@@ -114,7 +114,7 @@ class ReaderTest {
     fun multiStep() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
@@ -135,7 +135,7 @@ class ReaderTest {
             )
             ModelCache.store(ida)
 
-            val recommendedBooksForIda = klerk.read(Context.system()) {
+            val recommendedBooksForIda = klerk.read(Ctx.system()) {
                 get(idaRef).props.favouriteAuthors.flatMap { author -> getRelated(Book::author, author) }
             }
 
@@ -147,14 +147,14 @@ class ReaderTest {
     fun ergonomics() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
             val astrid = createAuthorAstrid(klerk)
             klerk.handle(
                 Command(ImproveAuthor, astrid, null),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(
                     CommandToken.simple()
                 )
@@ -162,7 +162,7 @@ class ReaderTest {
             val harryPotter1 = createBookHarryPotter1(klerk, rowling)
             createBookHarryPotter2(klerk, astrid, listOf(harryPotter1), setOf(astrid))
 
-            val context = Context.system()
+            val context = Ctx.system()
 
             // just lock
             klerk.read(context) {

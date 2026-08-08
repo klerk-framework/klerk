@@ -25,7 +25,7 @@ class OnEnterTest {
 
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections))
             klerk.meta.start()
 
@@ -43,7 +43,7 @@ class OnEnterTest {
                 Command(
                     ImproveAuthor, rowling, null
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             )
             when (result) {

@@ -8,7 +8,7 @@ enum class BookStates {
     Published,
 }
 
-fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> =
     stateMachine {
 
         event(CreateBook) {
@@ -59,6 +59,6 @@ fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates,
 
     }
 
-fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
+fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
     return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 }

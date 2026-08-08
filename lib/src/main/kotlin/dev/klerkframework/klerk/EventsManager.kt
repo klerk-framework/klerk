@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.DebugOptions.*
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
@@ -93,11 +94,26 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         }
 
                         is AttachedDataPlan.Ok -> {
-                            processedCommandTokens.add(options.token)
-                            commit(delta, command, context, plan.delta)
-                            logger.log(result, options) { "Command ${command.event} succeeded" }
-                            timeTriggerManager.handle(delta)
-                            commandResult
+                            // Jobs this command schedules are new work, so they go through admission control here —
+                            // while a refusal can still fail the command, and before anything has been written.
+                            when (val jobPlan = jobs.planNewJobs(delta.newJobs, context)) {
+                                is NewJobPlan.Rejected -> {
+                                    logger.log(result, options) {
+                                        "Command ${command.event} failed: " +
+                                                jobPlan.problems.joinToString(", ") { it.toString() }
+                                    }
+                                    Failure(jobPlan.problems)
+                                }
+
+                                is NewJobPlan.Ok -> {
+                                    processedCommandTokens.add(options.token)
+                                    commit(delta, command, context, plan.delta, jobPlan.commit)
+                                    jobs.jobsWereCommitted(jobPlan)
+                                    logger.log(result, options) { "Command ${command.event} succeeded" }
+                                    timeTriggerManager.handle(delta)
+                                    commandResult
+                                }
+                            }
                         }
                     }
                 }
@@ -106,13 +122,87 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         return result
     }
 
+    /**
+     * Commits one step of a job: the step's command (if any) and the job's own checkpoint, in a single transaction.
+     *
+     * Runs under the same mutex as [handle], so a job's command is serialized against user commands exactly like any
+     * other.
+     *
+     * **A rejected command is not a job failure.** The model may simply have moved on while the job was queued, so a
+     * command that fails still lets the job's checkpoint commit — the step counted as completed, and the next step
+     * gets to see the failure in `previousResult` and decide what to do. Only the model delta is skipped.
+     *
+     * @return the outcome of [command], or null if the step emitted none.
+     */
+    internal suspend fun <T : Any, P> commitJobStep(
+        command: Command<T, P>?,
+        context: C?,
+        options: ProcessingOptions,
+        jobCommit: JobCommit,
+    ): CommandResult<T, C, V>? = mutex.withLock {
+        if (command == null || context == null) {
+            config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+            return@withLock null
+        }
+
+        validateToken(options.token, context)?.let { problem ->
+            checkpointOnly(jobCommit)
+            return@withLock Failure<T, C, V>(listOf(problem))
+        }
+
+        val readerWithoutAuth = ReaderWithoutAuth(klerk)
+        val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
+        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
+            is Failure -> {
+                checkpointOnly(jobCommit)
+                commandResult
+            }
+
+            is Success -> when (val plan = attachedData.planFor(delta)) {
+                is AttachedDataPlan.Rejected -> {
+                    checkpointOnly(jobCommit)
+                    Failure(plan.problems)
+                }
+
+                is AttachedDataPlan.Ok -> when (val jobPlan = jobs.planNewJobs(delta.newJobs, context)) {
+                    is NewJobPlan.Rejected -> {
+                        // A command emitted by a job may itself schedule jobs, and those are new work. Refusing them
+                        // fails that command — which the step sees as an ordinary rejection, not as its own failure.
+                        checkpointOnly(jobCommit)
+                        Failure(jobPlan.problems)
+                    }
+
+                    is NewJobPlan.Ok -> {
+                        processedCommandTokens.add(options.token)
+                        val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
+                        commit(delta, command, context, plan.delta, merged, isJobStep = true)
+                        jobs.jobsWereCommitted(jobPlan)
+                        timeTriggerManager.handle(delta)
+                        commandResult
+                    }
+                }
+            }
+        }
+    }
+
+    /** Writes the job's checkpoint on its own, for a step whose command was not applied. */
+    private fun checkpointOnly(jobCommit: JobCommit) {
+        config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+    }
+
     private suspend fun <T : Any, P> commit(
         delta: ProcessingData<out T, C, V>,
         command: Command<T, P>?,
         context: C?,
-        attachedDataDelta: AttachedDataDelta
+        attachedDataDelta: AttachedDataDelta,
+        jobCommit: JobCommit = JobCommit(),
+        isJobStep: Boolean = false,
     ) {
-        config.persistence.store(delta, command, context, attachedDataDelta)
+        if (isJobStep) {
+            config.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
+        } else {
+            config.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
+        }
 
         if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
             readWriteLock.acquireWrite()    // make sure nobody is reading while we mutate
@@ -246,7 +336,22 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
             is AttachedDataPlan.Ok -> plan.delta
         }
-        commit<Any, Nothing>(delta, null, null, attachedDataDelta)
+        // A time-trigger can schedule jobs too. There is no caller to fail, so a refusal by admission control can only
+        // be logged and the jobs dropped — the trigger's own model changes still commit.
+        val systemContext = config.systemContextProvider.invoke(SystemIdentity)
+        val jobPlan = when (val planned = jobs.planNewJobs(delta.newJobs, systemContext)) {
+            is NewJobPlan.Rejected -> {
+                logger.warn {
+                    "The jobs scheduled by the time-trigger for model ${model.id} were refused: " +
+                            planned.problems.joinToString(", ") { it.toString() }
+                }
+                NewJobPlan.Ok(emptyList())
+            }
+
+            is NewJobPlan.Ok -> planned
+        }
+        commit<Any, Nothing>(delta, null, null, attachedDataDelta, jobPlan.commit)
+        jobs.jobsWereCommitted(jobPlan)
 
         try {
             delta.unmanagedJobs.forEach { it.f.invoke() }
@@ -257,7 +362,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         "provided to Klerk."
             }
         }
-        delta.newJobs.forEach { jobs.notifyJobWasAddedToDb(it) }
 
         timeTriggerManager.handle(delta)
     }

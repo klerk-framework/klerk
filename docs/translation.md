@@ -15,8 +15,8 @@ interface Translation {
 }
 ```
 
-`Translation` is carried on the [`Context`](context.md), so which language is used is decided per-request, the same way
-the actor is.
+`Translation` is carried on the [`Ctx`](context.md), so which language is used is decided per-request, the same way the
+actor is.
 
 ## KlerkTranslation
 
@@ -92,7 +92,7 @@ label, without maintaining a translation for every single field in the system.
 
 ## Wiring it up
 
-Since `translation` lives on your `Context`, switching language is just constructing the context differently — typically
+Since `translation` lives on your `Ctx`, switching language is just constructing the context differently — typically
 based on the request's locale, or a user's saved preference:
 
 ```kotlin

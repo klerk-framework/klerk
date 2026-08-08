@@ -157,6 +157,9 @@ public enum class KlerkErrorCode(public val code: String) {
     MissingAuthorization("ERROR-CONFIG-5"),
     MissingManagedModels("ERROR-CONFIG-6"),
     PropertyMustBeDataContainer("ERROR-CONFIG-7"),
+    UnregisteredJobName("ERROR-CONFIG-8"),
+    UnloadableJobCursor("ERROR-CONFIG-9"),
+    MissingJobContextProvider("ERROR-CONFIG-10"),
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
     Internal("ERROR-INTERNAL-1"),
@@ -181,7 +184,17 @@ public enum class KlerkErrorCode(public val code: String) {
     AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
     AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
     AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
-    AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11");
+    AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11"),
+    JobReadPositiveAuthorizationMissing("ERROR-AUTH-12"),
+    JobReadNegativeAuthorizationExist("ERROR-AUTH-13"),
+
+    /**
+     * A new job was refused because the queue is not draining fast enough. Only ever produced for *new* work — yields,
+     * retries, spawned children and end-of-life hooks are never refused.
+     */
+    JobQueueOverloaded("ERROR-JOB-1"),
+    JobNotFound("ERROR-JOB-2"),
+    JobAlreadyTerminal("ERROR-JOB-3");
 
     override fun toString(): String = code
 }

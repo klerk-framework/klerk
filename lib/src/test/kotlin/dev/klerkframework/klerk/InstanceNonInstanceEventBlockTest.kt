@@ -17,9 +17,9 @@ class InstanceNonInstanceEventBlockTest {
         runBlocking {
 
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val persistence = RamStorage()
-            val config = ConfigBuilder<Context, MyCollections>(collections).build {
+            val config = ConfigBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, createStateMachine(collections.authors), collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
@@ -41,19 +41,19 @@ class InstanceNonInstanceEventBlockTest {
                     }
                 }
                 persistence(persistence)
-                systemContextProvider { systemIdentity -> Context(systemIdentity) }
+                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)
             klerk.meta.start()
 
-            klerk.read(Context.system()) {
+            klerk.read(Ctx.system()) {
                 println("is empty: ${collections.authors.all.isEmpty(this)}")
             }
 
             val author = createAuthorJKRowling(klerk)
             println(author)
 
-            klerk.read(Context.system()) {
+            klerk.read(Ctx.system()) {
 
                 println("is empty: ${collections.authors.all.withReader(this).count()}")
 
@@ -67,7 +67,7 @@ class InstanceNonInstanceEventBlockTest {
                     model = harryPotter1,
                     params = null
                 ),
-                Context.system(),
+                Ctx.system(),
                 ProcessingOptions(CommandToken.simple())
             )
 
@@ -76,7 +76,7 @@ class InstanceNonInstanceEventBlockTest {
         }
     }
 
-    fun createStateMachine(authors: AuthorViews<MyCollections>): StateMachine<Book, BookStates, Context, MyCollections> =
+    fun createStateMachine(authors: AuthorViews<Views>): StateMachine<Book, BookStates, Ctx, Views> =
 
         stateMachine {
             event(CreateBook) {
@@ -101,6 +101,6 @@ class InstanceNonInstanceEventBlockTest {
 
 }
 
-fun updateModelFunction(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
+fun updateModelFunction(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
     return args.model.props.copy(title = BookTitle("something else"))
 }

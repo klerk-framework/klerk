@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.job.RunnableJob
+import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.read.PropertyAuthScope
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
@@ -48,7 +48,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
      * @property transitionedModels all models that changed state machine state.
      * @property secondaryEvents events that were triggered as a consequence of this command (e.g. by `onEnter`/time
      * triggers), in addition to the command's own event.
-     * @property jobs managed jobs that were scheduled as a result of this command.
+     * @property jobs the ids of the managed jobs this command scheduled, in declaration order.
      * @property unmanagedJobs unmanaged jobs that were scheduled as a result of this command.
      * @property authorizedModels the affected models as they are after the command, keyed by ID. A model is present
      * only if [context][C] is authorized to read it — absence does not mean the model wasn't affected.
@@ -62,7 +62,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
         val deletedModels: List<ModelID<out Any>>,
         val transitionedModels: List<ModelID<out Any>>,
         val secondaryEvents: List<EventReference>,
-        val jobs: List<RunnableJob<C, V>>,
+        val jobs: List<JobId>,
         val unmanagedJobs: List<UnmanagedJob>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
@@ -95,7 +95,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
                 modelsWithUpdatedProps = delta.updatedModels,
                 deletedModels = delta.deletedModels,
                 transitionedModels = delta.transitions,
-                jobs = delta.newJobs,
+                jobs = delta.newJobs.map { it.id },
                 secondaryEvents = emptyList(),
                 unmanagedJobs = delta.unmanagedJobs,
                 authorizedModels = authorized,

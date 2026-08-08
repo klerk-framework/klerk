@@ -6,7 +6,7 @@ short-circuits the rest and is returned as a `Problem` in a `CommandResult.Failu
 
 1. Per-property rules on each `DataContainer` in the event's parameters.
 2. Cross-property rules on the parameters class as a whole (`Validatable`).
-3. Rules that use the `Context` (`validateWithContext`).
+3. Rules that use the `Ctx` (`validateWithContext`).
 4. `ModelID` reference parameters are checked against a declared [view](views.md) (`validReferences`).
 5. `EnumContainer` parameters are checked against a declared set of allowed values (`validEnums`).
 6. Rules that see the full picture — parameters, context, and (for instance events) the current model (`validate` /
@@ -85,7 +85,7 @@ event(CreateBook) {
 }
 ```
 
-* **`validateWithContext(function: (C) -> PropertyCollectionValidity)`** — runs against the `Context` alone, before
+* **`validateWithContext(function: (C) -> PropertyCollectionValidity)`** — runs against the `Ctx` alone, before
   parameters are even looked at. Use it for rules like "this event requires an authenticated actor":
 
   ```kotlin
@@ -141,6 +141,6 @@ specific reason first (a bad property beats a generic "unauthorized").
 
 ## Translated messages
 
-Every message shown to an end user goes through the `Translation` on the current `Context` (see
+Every message shown to an end user goes through the `Translation` on the current `Ctx` (see
 [context](context.md)), so validation failures are automatically localized without your validators needing to know about
 languages.

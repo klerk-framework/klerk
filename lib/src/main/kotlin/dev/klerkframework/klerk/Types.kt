@@ -5,10 +5,13 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.misc.EventParameters
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
+import kotlinx.serialization.Serializable
 import java.math.BigInteger
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -342,7 +345,11 @@ public typealias EventId = String
  *
  * NOTE: If you make any change to this: clean build, and verify how a relation is serialized ("value" may appear). (If
  * you use IntelliJ's database tool, double check that you actually see the difference, you may have to delete/refresh)
+ *
+ * The `@Serializable` annotation is for `kotlinx.serialization`, which Klerk uses for job cursors; models themselves
+ * are still stored with Gson. It means a job cursor can hold a [ModelID] without the job author doing anything.
  */
+@Serializable(with = ModelIDSerializer::class)
 @JvmInline
 public value class ModelID<T : Any>(public val value: Int) {
 
@@ -364,6 +371,7 @@ public value class ModelID<T : Any>(public val value: Int) {
  *
  * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
  */
+@Serializable(with = AttachedBlobIDSerializer::class)
 @JvmInline
 public value class AttachedBlobID(internal val id: Int) {
     override fun toString(): String = id.toString()
@@ -381,6 +389,7 @@ public value class AttachedBlobID(internal val id: Int) {
  *
  * Implementation details: see the note on [ModelID] regarding @JvmInline and serialization.
  */
+@Serializable(with = AttachedStringIDSerializer::class)
 @JvmInline
 public value class AttachedStringID(internal val id: Int) {
     override fun toString(): String = id.toString()
@@ -463,6 +472,54 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val context: C,
     val reader: Reader<C, V>,
 )
+
+/**
+ * The arguments given to the rules deciding who may see a job's metadata (see [JobManager.getJob]).
+ *
+ * The same rules gate cancellation, so allowing an actor to watch a job also lets them stop it.
+ *
+ * @property job everything Klerk knows about the job, including who scheduled it — see [isOwnedBy] for the common
+ * case of "may an actor see their own jobs".
+ */
+/**
+ * What `ConfigBuilder.jobContextProvider` is given when a job step is about to run.
+ *
+ * @property actor `SystemIdentity` for a [dev.klerkframework.klerk.job.JobAgent.System] job, or the actor that
+ * scheduled the job for a [dev.klerkframework.klerk.job.JobAgent.Scheduler] one. Note that the latter is rebuilt from
+ * what was persisted, so an actor identified by a model arrives as a [ModelReferenceIdentity].
+ * @property time the current time according to the configured clock. Use it as the context's time so that job steps,
+ * and the audit entries of the commands they emit, follow the clock a test controls.
+ */
+public data class JobContextRequest(
+    val actor: ActorIdentity,
+    val time: Instant,
+    val job: JobInfo,
+)
+
+public data class ArgsForJobRead<C : KlerkContext, V>(
+    val job: JobInfo,
+    val context: C,
+    val reader: Reader<C, V>,
+) {
+    /**
+     * True if [context]'s actor is the one that scheduled the job.
+     *
+     * Compares the actor's model id (or external id) rather than the identity object, since the actor that scheduled
+     * the job may have been read from storage under a different identity implementation since.
+     */
+    public fun isOwnedBy(actor: ActorIdentity): Boolean {
+        if (job.ownerActorType != actor.type) {
+            return false
+        }
+        if (job.ownerActorId != null || actor.id != null) {
+            return job.ownerActorId?.value == actor.id?.value
+        }
+        return job.ownerActorExternalId == actor.externalId
+    }
+
+    /** True if [context]'s own actor scheduled the job. */
+    public fun isOwnedByActor(): Boolean = isOwnedBy(context.actor)
+}
 
 /**
  * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous
@@ -648,8 +705,16 @@ public interface KlerkPlugin<C : KlerkContext, V> {
     public suspend fun start(klerk: Klerk<C, V>): Unit
 }
 
-/** A [dev.klerkframework.klerk.datatypes.DataContainer] wrapping a [JobId][dev.klerkframework.klerk.job.JobId]'s underlying value. */
+/**
+ * A [dev.klerkframework.klerk.datatypes.DataContainer] wrapping a [JobId], so that a model can hold a reference to a
+ * job it started.
+ */
 public class JobIdContainer(value: Long) : LongContainer(value) {
+    public constructor(id: JobId) : this(id.value.toLong())
+
     override val min: Long = 0
-    override val max: Long = Long.MAX_VALUE
+    override val max: Long = Int.MAX_VALUE.toLong()
+
+    /** The wrapped value as a [JobId]. */
+    public val jobId: JobId get() = JobId(valueWithoutAuthorization.toInt())
 }

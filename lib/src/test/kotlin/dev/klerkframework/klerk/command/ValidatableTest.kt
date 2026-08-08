@@ -15,7 +15,7 @@ class ValidatableTest {
     fun `Validates created model`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -32,7 +32,7 @@ class ValidatableTest {
                         //favouriteColleague = null
                     )
                 ),
-                context = Context.system(),
+                context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())
             )
 
@@ -47,7 +47,7 @@ class ValidatableTest {
     fun `Validates updated model`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -64,7 +64,7 @@ class ValidatableTest {
                         picture = null
                     )
                 ),
-                context = Context.system(),
+                context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())
             )
 
@@ -79,7 +79,7 @@ class ValidatableTest {
     fun `Validates parameters together`() {
         runBlocking {
             val bc = BookViews()
-            val collections = MyCollections(bc, AuthorViews(bc.all))
+            val collections = Views(bc, AuthorViews(bc.all))
             val klerk = Klerk.create(createConfig(collections, RamStorage()))
             klerk.meta.start()
 
@@ -96,7 +96,7 @@ class ValidatableTest {
                         //favouriteColleague = null
                     )
                 ),
-                context = Context.system(),
+                context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())
             )
 

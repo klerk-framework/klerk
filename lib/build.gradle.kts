@@ -4,12 +4,14 @@ import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 
 plugins {
     kotlin("jvm") version "2.3.10"
+    kotlin("plugin.serialization") version "2.3.10"
     `java-library`
     `maven-publish`
     id("org.jetbrains.dokka") version "2.2.0"
 }
 
 val coroutinesVersion = "1.4.2"
+val serializationVersion = "1.9.0"
 val datetimeVersion = "0.7.1"
 val exposedVersion = "0.47.0"
 val micrometerVersion = "1.11.1"
@@ -28,6 +30,9 @@ repositories {
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+    // 'api' rather than 'implementation': KSerializer appears in Klerk's public API (JobType.cursorSerializer), and
+    // job authors annotate their own cursor classes with @Serializable.
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")

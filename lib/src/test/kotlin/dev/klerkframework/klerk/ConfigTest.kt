@@ -13,7 +13,7 @@ class ConfigTest {
     @Test
     fun `Can combine configs`() {
         val bc = BookViews()
-        val collections = MyCollections(bc, AuthorViews(bc.all))
+        val collections = Views(bc, AuthorViews(bc.all))
         val config = createConfig(collections, RamStorage())
         val newManagedModels = config.managedModels.toMutableSet()
         newManagedModels.drop(1)
@@ -24,7 +24,7 @@ class ConfigTest {
     fun `Model can not contain abstract properties`() {
         val views = ViewWithIllegal(ModelViews())
         try {
-            ConfigBuilder<Context, ViewWithIllegal>(views).build {
+            ConfigBuilder<Ctx, ViewWithIllegal>(views).build {
                 managedModels {
                     model(IllegalModel::class, illegalStateMachine, views.x)
                 }
@@ -40,9 +40,9 @@ class ConfigTest {
 
 data class IllegalModel(val v: BooleanContainer)
 
-data class ViewWithIllegal(val x: ModelViews<IllegalModel, Context>)
+data class ViewWithIllegal(val x: ModelViews<IllegalModel, Ctx>)
 
 private enum class States {}
 
-private val illegalStateMachine = stateMachine<IllegalModel, States, Context, ViewWithIllegal> { }
+private val illegalStateMachine = stateMachine<IllegalModel, States, Ctx, ViewWithIllegal> { }
 
