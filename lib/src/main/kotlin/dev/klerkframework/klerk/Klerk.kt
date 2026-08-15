@@ -15,7 +15,9 @@ import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
+import java.nio.file.Path
 import kotlin.time.Instant
+import kotlin.time.Duration
 
 public interface Klerk<C : KlerkContext, V> {
 
@@ -341,16 +343,44 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
-     * @return the ID to be stored in a model property by a subsequent command. If no command does so within one
-     * minute, the data is deleted.
+     * @param lease how long the data survives without being claimed. Defaults to
+     * [KlerkSettings.unclaimedAttachedDataLifetime] (one minute), which is right when the command follows
+     * immediately. Ask for a longer one when it cannot — an upload that is prepared as its last byte arrives but is
+     * not attached until the user submits a form, say. A lease may not exceed
+     * [KlerkSettings.maxAttachedDataLease], and the `writeAttachedData` rules see it, so who may hold data for a
+     * long time is a decision the application can make.
+     * @return the ID to be stored in a model property by a subsequent command. If no command does so before the lease
+     * runs out, the data is deleted.
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large
+     * @throws IllegalArgumentException if the metadata is too large, or the lease exceeds the maximum
      */
     public suspend fun prepare(
         value: InputStream,
         context: C,
         visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
+    ): AttachedBlobID
+
+    /**
+     * Inserts a blob that is already a file, taking the file over instead of copying it when the blob store can.
+     *
+     * With [dev.klerkframework.klerk.storage.FileBlobStore] on the same filesystem as [file], this is a rename: the
+     * bytes are read once to compute the size and hash, and never written a second time. Anywhere else it behaves
+     * exactly like [prepare] with the file's stream.
+     *
+     * The file is *moved*, so it no longer exists at its old location afterwards — unless the store could not adopt
+     * it, in which case it is copied and left alone.
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws java.io.IOException if the file cannot be read
+     */
+    public suspend fun prepareFromFile(
+        file: Path,
+        context: C,
+        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
+        metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
     ): AttachedBlobID
 
     /**
@@ -370,6 +400,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
         context: C,
         visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
     ): AttachedStringID
 
     /**

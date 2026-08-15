@@ -31,6 +31,38 @@ So a string is the right choice for text you are going to want as a `String` any
 too large to hold in memory while uploading it, use a blob. (A string that is merely large to *read* is fine: see
 `getStream` below.)
 
+## Where blob bytes are kept
+
+Strings always live in the database. For blobs you choose, because the choice decides what a database backup contains:
+
+```kotlin
+ConfigBuilder<Ctx, Views>(views).build {
+    persistence(SqlPersistence(dataSource))
+    attachedBlobStore(AttachedBlobStore.Database)          // in the row, alongside everything else
+    // attachedBlobStore(FileBlobStore(Path("/var/lib/myapp/blobs")))
+    // attachedBlobStore(AttachedBlobStore.None)           // this application has no blobs
+}
+```
+
+| | `Database` | `FileBlobStore` | `None` |
+|---|---|---|---|
+| Where the bytes are | the attached-data row | one file per blob under a directory | nowhere |
+| Largest value | what the database can hold in one value — about 1 GB for SQLite, held in memory on the way in and out | whatever the filesystem allows | — |
+| A database backup is enough | yes | **no**, back up the directory too | yes |
+| Delete is transactional | yes | no (see below) | — |
+
+Required as soon as any model property or event parameter is an `AttachedBlobID` — including one contributed by a
+plugin, such as klerk-web's compressed assets. An application that declares none needs no store at all.
+
+**Pick the store before you have data in it.** Klerk never moves blobs between stores, and refuses to start when the
+configured store does not have the bytes the database refers to, rather than letting the first user to open an old
+attachment discover it.
+
+With a store outside the database, writing and deleting are no longer part of the transaction. Klerk writes the bytes
+before committing the row and deletes them after, so a crash can only ever leave bytes that nothing refers to — those
+are swept at the next startup. Bytes without a row are invisible, so this is safe, but it is a real difference from
+`Database`.
+
 ## Writing
 
 Updating a model must be quick, but uploading an image may take a while. To avoid blocking command processing, writing
@@ -49,6 +81,32 @@ as well as for events that update one. Ownership is recorded when the command co
 
 If you call `prepare` but no committed command references the ID within **1 minute**, the data is deleted. A later
 attempt to use that ID fails the command.
+
+### When a minute is not enough
+
+A minute is right when the command follows immediately. When it cannot — a file that is uploaded as soon as the user
+picks it but not attached until they submit the form — ask for a longer lease:
+
+```kotlin
+val blobID = klerk.attachedData.prepare(inputStream, context, lease = 15.minutes)
+```
+
+A lease may not exceed `KlerkSettings.maxAttachedDataLease` (24 hours by default), and the `writeAttachedData` rules
+see it, so who may keep unclaimed data around is a decision the application can make.
+
+Data prepared inside a job needs no lease: it is kept for as long as the job lives, however many steps that takes.
+
+### Taking over a file
+
+When the value is already a file — a completed upload, say — `prepareFromFile` hands it over instead of copying it:
+
+```kotlin
+val blobID = klerk.attachedData.prepareFromFile(path, context, lease = 15.minutes)
+```
+
+With a `FileBlobStore` on the same filesystem this is a rename: the bytes are read once to compute the size and hash,
+and never written a second time, so the size of the file stops mattering. The file is *moved*, and no longer exists at
+its old location. Any other store copies the bytes and leaves the file alone.
 
 ### Attaching to a model that already has data
 
@@ -137,6 +195,10 @@ that tries to attach data already owned by *another* model is rejected.
 
 This means data cannot be shared or moved between models. To give a second model the same content, upload it again with
 a second `prepare`.
+
+Sharing would mean counting references across models, and that count could not be maintained in the same transaction
+as the command — which is exactly what makes deletion here reliable rather than a background chore. Exclusive
+ownership is the price of never leaking a value.
 
 The owner is the *model*, not the property, so the same ID may appear in two properties of the same model. Klerk only
 deletes the data once no property of that model refers to it any more.

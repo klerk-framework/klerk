@@ -8,12 +8,17 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.ModelCache
 import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
@@ -56,20 +61,65 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val allocator = AttachedDataIdAllocator()
     private val lastReap = AtomicReference(Instant.DISTANT_PAST)
 
+    /** Where blob bytes live when they are not in the database, or null when they are. */
+    private val externalBlobs: AttachedBlobStore.External?
+        get() = config.attachedBlobStore as? AttachedBlobStore.External
+
     /**
      * Rebuilds the in-memory state from storage. Rows that are unclaimed and already past their expiry are reaped
      * rather than reserved.
      */
     internal fun start() {
         val now = config.now()
-        config.persistence.deleteExpiredAttachedData(now)
+        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
         val rows = config.persistence.readAllAttachedDataMetadata()
         entries.clear()
         rows.forEach { (id, row) ->
             entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires, row.claimedByJob)
         }
         lastReap.set(now)
+        reconcileExternalBlobs()
         logger.info { "Attached data ready (${entries.size} values)" }
+    }
+
+    /**
+     * Compares the rows against what the blob store actually holds.
+     *
+     * Bytes without a row are orphans — a crash between writing them and committing the row, or between deleting the
+     * row and deleting them — and are deleted. A row without bytes means the store was changed under an existing
+     * database, which Klerk cannot repair and will not paper over: the first user to open an old attachment would
+     * otherwise get an unexplained "not found".
+     */
+    private fun reconcileExternalBlobs() {
+        val store = externalBlobs ?: return
+        val stored = store.listIds() ?: return
+        val expected = entries.filterValues { it.metadata?.kind == AttachedDataKind.Blob }.keys
+
+        val missing = expected.minus(stored)
+        if (missing.isNotEmpty()) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.AttachedBlobStoreMissingData,
+                "The configured attachedBlobStore does not have the bytes for ${missing.size} blob(s) that this " +
+                        "database refers to (for example id ${missing.first()}). This happens when the store is " +
+                        "changed after the application already has data — Klerk does not move blobs between stores."
+            )
+        }
+
+        val orphans = stored.minus(expected)
+        if (orphans.isNotEmpty()) {
+            logger.info { "Deleting ${orphans.size} orphaned blob(s) from the blob store" }
+            orphans.forEach { store.delete(it) }
+        }
+    }
+
+    /** Removes the bytes of [ids] from the blob store, if that is where they are. Never throws. */
+    private fun deleteBytes(ids: Set<Int>) {
+        val store = externalBlobs ?: return
+        ids.forEach { id ->
+            // Failing to delete leaves an orphan, which the next startup sweeps. Failing the command would be worse.
+            runCatching { store.delete(id) }
+                .onFailure { logger.error(it) { "Could not delete the bytes of attached data $id" } }
+        }
     }
 
     override suspend fun prepare(
@@ -77,15 +127,35 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         context: C,
         visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
-    ): AttachedBlobID = AttachedBlobID(insert(value, AttachedDataKind.Blob, context, visibility, metadata))
+        lease: Duration?,
+    ): AttachedBlobID = AttachedBlobID(insert(value, AttachedDataKind.Blob, context, visibility, metadata, lease))
+
+    override suspend fun prepareFromFile(
+        file: Path,
+        context: C,
+        visibility: AttachedDataVisibility,
+        metadata: Map<String, String>,
+        lease: Duration?,
+    ): AttachedBlobID = AttachedBlobID(
+        insert(
+            Files.newInputStream(file),
+            AttachedDataKind.Blob,
+            context,
+            visibility,
+            metadata,
+            lease,
+            adoptFrom = file,
+        )
+    )
 
     override suspend fun prepare(
         value: String,
         context: C,
         visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
+        lease: Duration?,
     ): AttachedStringID =
-        AttachedStringID(insert(value.byteInputStream(), AttachedDataKind.String, context, visibility, metadata))
+        AttachedStringID(insert(value.byteInputStream(), AttachedDataKind.String, context, visibility, metadata, lease))
 
     /**
      * The one write path. A string differs from a blob only in its [AttachedDataKind] and in arriving as a stream over
@@ -97,20 +167,47 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         context: C,
         visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
+        lease: Duration? = null,
+        adoptFrom: Path? = null,
     ): Int {
-        authorizeWrite(context, kind, visibility)
+        val requested = lease ?: settings.unclaimedAttachedDataLifetime
+        require(requested <= settings.maxAttachedDataLease) {
+            "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +
+                    "(KlerkSettings.maxAttachedDataLease)"
+        }
+        authorizeWrite(context, kind, visibility, requested)
         validateCustomMetadata(metadata)
+        if (kind == AttachedDataKind.Blob && config.attachedBlobStore == AttachedBlobStore.None) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.AttachedBlobStoreIsNone,
+                "The config says attachedBlobStore(None), so this application cannot store blobs."
+            )
+        }
         val createdAt = config.now()
-        val expires = reserveExpiry()
+        val expires = reserveExpiry(requested)
         val id = allocate(expires)
         // A job step often prepares data before any command references it, and the reaper would otherwise delete it a
         // minute later. Claiming it for the running job (if there is one) is recorded here, at insert time, because
         // the job's own commit may be many steps away.
         val claimedByJob = currentJobId()
         val hashing = HashingInputStream(value)
+        // A blob kept outside the database is written first and the row committed after, so a crash can only leave
+        // bytes nothing refers to. Those are swept at the next startup; the other order would lose the value instead.
+        val store = if (kind == AttachedDataKind.Blob) externalBlobs else null
         try {
+            // Adoption still reads the file — the size and hash have to be known — but it saves writing the bytes a
+            // second time, which is the expensive half.
+            val adopted = adoptFrom != null && store != null && run {
+                // Read (and close) before moving the file: the digest has to be complete, and the stream is open on
+                // the very file that adoption renames.
+                hashing.use { it.copyTo(OutputStream.nullOutputStream()) }
+                store.adopt(id, adoptFrom)
+            }
+            if (!adopted) {
+                store?.put(id, hashing)
+            }
             config.persistence.insertAttachedData(
-                id, hashing, kind, visibility, createdAt, metadata, expires, claimedByJob
+                id, if (store == null) hashing else null, kind, visibility, createdAt, metadata, expires, claimedByJob
             ) {
                 hashing.sizeAndHash()
             }
@@ -123,6 +220,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             )
         } catch (e: Exception) {
             entries.remove(id)
+            store?.let { runCatching { it.delete(id) } }
             throw e
         }
         return id
@@ -162,7 +260,15 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         requireKind(entry, expected, publicId)
         val row = config.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
         check(entry.owner == row.owner) { "The in-memory state of attached data $publicId does not match the database" }
-        return row.value
+        val store = if (expected == AttachedDataKind.Blob) externalBlobs else null
+        return if (store == null) {
+            config.persistence.getAttachedValue(id)
+                ?: throw NoSuchElementException("No data found for id $publicId")
+        } else {
+            store.get(id) ?: throw NoSuchElementException(
+                "The attached data $publicId has a row but no bytes in the blob store"
+            )
+        }
     }
 
     override suspend fun getMetadata(id: AttachedBlobID, context: C): AttachedDataMetadata =
@@ -222,7 +328,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * Deliberately based on the real clock rather than `context.time`: the context clock is supplied by the caller and
      * must not be able to extend or shorten the claim window.
      */
-    private fun reserveExpiry(): Instant = config.now().plus(settings.unclaimedAttachedDataLifetime)
+    private fun reserveExpiry(lease: Duration): Instant = config.now().plus(lease)
 
     /**
      * Reserves an id. The entry is a placeholder without metadata until the value has been written — see
@@ -250,16 +356,21 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             return
         }
         entries.entries.removeIf { it.value.isExpired(now) }
-        config.persistence.deleteExpiredAttachedData(now)
+        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
     }
 
     // ---------------------------------------------------------------- authorization
 
-    private suspend fun authorizeWrite(context: C, kind: AttachedDataKind, visibility: AttachedDataVisibility) {
+    private suspend fun authorizeWrite(
+        context: C,
+        kind: AttachedDataKind,
+        visibility: AttachedDataVisibility,
+        lease: Duration,
+    ) {
         if (context.actor == SystemIdentity) {
             return
         }
-        val args = ArgsForAttachedDataWrite(kind, visibility, context, ReaderWithoutAuth<C, V>(klerk))
+        val args = ArgsForAttachedDataWrite(kind, visibility, context, ReaderWithoutAuth<C, V>(klerk), lease)
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
         readWriteLock.acquireRead()
@@ -411,6 +522,9 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             entries[id] = entry.copy(owner = owner, expires = null)
         }
         attachedData.deleted.forEach { entries.remove(it) }
+        // After the row is gone, never before: bytes nothing refers to are swept at startup, but a row referring to
+        // bytes that were already deleted would be a hard error on the next read.
+        deleteBytes(attachedData.deleted)
     }
 
 }

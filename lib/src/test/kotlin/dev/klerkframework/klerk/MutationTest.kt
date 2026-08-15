@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -44,6 +45,7 @@ class MutationTest {
                     }
                 }
                 persistence(RamStorage())
+                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)

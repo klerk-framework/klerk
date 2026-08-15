@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
@@ -153,6 +154,7 @@ class ValidatorTest {
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
+                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val restrictedKlerk = Klerk.create(config)

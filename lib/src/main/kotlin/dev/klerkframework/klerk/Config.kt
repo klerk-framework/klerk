@@ -18,6 +18,7 @@ import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransitionWhen
 import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransitionWhen
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -25,10 +26,13 @@ import mu.KotlinLogging
 import java.util.*
 import kotlin.reflect.*
 import kotlin.reflect.full.createType
+import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.memberProperties
+import kotlin.reflect.full.starProjectedType
 import kotlin.reflect.full.withNullability
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
@@ -48,6 +52,11 @@ public data class Config<C : KlerkContext, V>(
     public val meterRegistry: MeterRegistry,
     val managedModels: Set<ManagedModel<*, *, C, V>>,
     val persistence: Persistence,
+    /**
+     * Where the bytes of attached blobs are kept. Null means the application never said, which is only allowed when it
+     * declares no [AttachedBlobID] anywhere — see [attachedBlobStoreMustMatchDeclarations].
+     */
+    val attachedBlobStore: AttachedBlobStore? = null,
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
     val systemContextProvider: ((SystemIdentity) -> C),
@@ -104,6 +113,7 @@ public data class Config<C : KlerkContext, V>(
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
         schedulerJobsMustHaveAJobContextProvider()
+        attachedBlobStoreMustMatchDeclarations()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
     }
 
@@ -126,6 +136,62 @@ public data class Config<C : KlerkContext, V>(
                     "'jobContextProvider(...)' in the config to build a context for that actor."
         )
     }
+
+    /**
+     * Where blob bytes are kept decides what a database backup contains, and Klerk cannot guess it. An application
+     * that declares a blob anywhere must say; one that declares none needs no store at all.
+     */
+    private fun attachedBlobStoreMustMatchDeclarations() {
+        val declarations = declaredBlobProperties()
+        if (declarations.isEmpty()) {
+            return
+        }
+        val where = declarations.sorted().joinToString(", ")
+        if (attachedBlobStore == null) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingAttachedBlobStore,
+                "$where holds an AttachedBlobID, so 'attachedBlobStore(...)' is required in the config. Choose " +
+                        "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
+                        "keep them on disk. Pick before you have data: Klerk does not move blobs between stores."
+            )
+        }
+        if (attachedBlobStore == AttachedBlobStore.None) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.AttachedBlobStoreIsNone,
+                "The config says attachedBlobStore(None), which means this application has no blobs, but $where " +
+                        "holds an AttachedBlobID."
+            )
+        }
+    }
+
+    /** Descriptions of every place an [AttachedBlobID] is declared: model properties and event parameters. */
+    private fun declaredBlobProperties(): List<String> {
+        val found = mutableListOf<String>()
+        managedModels.forEach { managed ->
+            blobPropertyNames(managed.kClass).forEach { found.add("${managed.kClass.simpleName}.$it") }
+            managed.stateMachine.mutableStates.flatMap { it.getEvents() }.forEach { event ->
+                val parameters = when (event) {
+                    is InstanceEventWithParameters<*, *> -> event.parametersClass
+                    is VoidEventWithParameters<*, *> -> event.parametersClass
+                    else -> null
+                }
+                parameters?.let { kClass ->
+                    blobPropertyNames(kClass).forEach { found.add("${event.id.eventName}.$it") }
+                }
+            }
+        }
+        return found.distinct()
+    }
+
+    private fun blobPropertyNames(kClass: KClass<*>): List<String> =
+        kClass.memberProperties.filter { property ->
+            val type = property.returnType.withNullability(false)
+            type.isSubtypeOf(AttachedBlobID::class.starProjectedType) ||
+                    // a List<AttachedBlobID> or Set<AttachedBlobID>
+                    (type.isSubtypeOf(Collection::class.starProjectedType) &&
+                            type.arguments.singleOrNull()?.type?.withNullability(false)
+                                ?.isSubtypeOf(AttachedBlobID::class.starProjectedType) == true)
+        }.map { it.name }
 
     private fun modelsMustHavePropertiesOfDataContainer() {
         managedModels.forEach { managed ->
@@ -547,6 +613,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
             meterRegistry = registry,
             managedModels = managedModelsValue,
             persistence = persistenceValue,
+            attachedBlobStore = attachedBlobStoreValue,
             migrationSteps = migrationStepsValue,
             systemContextProvider = systemContextProviderValue,
             clock = clockValue,
@@ -563,6 +630,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
     private lateinit var persistenceValue: Persistence
+    private var attachedBlobStoreValue: AttachedBlobStore? = null
     private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
     /**
@@ -570,6 +638,21 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
      */
     public fun persistence(persistence: Persistence) {
         persistenceValue = persistence
+    }
+
+    /**
+     * Where the bytes of attached blobs are kept: [AttachedBlobStore.Database],
+     * [dev.klerkframework.klerk.storage.FileBlobStore] or [AttachedBlobStore.None].
+     *
+     * Required as soon as any model property or event parameter is an [AttachedBlobID] — the choice decides what a
+     * database backup contains, so Klerk will not pick one for you. Attached *strings* are unaffected; they always
+     * live in the database.
+     *
+     * Choose before the application has data: Klerk does not move blobs between stores, and refuses to start if the
+     * configured store does not have the bytes it expects.
+     */
+    public fun attachedBlobStore(store: AttachedBlobStore) {
+        attachedBlobStoreValue = store
     }
 
     /**
@@ -1204,6 +1287,11 @@ public data class KlerkSettings(
      * [KlerkAttachedData.prepare]). Mainly here so that tests don't have to wait a minute.
      */
     val unclaimedAttachedDataLifetime: Duration = 1.minutes,
+    /**
+     * The longest lease [KlerkAttachedData.prepare] will grant. A lease keeps storage occupied by data that no model
+     * refers to, so there is an upper bound; who may ask for a long one is decided by the `writeAttachedData` rules.
+     */
+    val maxAttachedDataLease: Duration = 24.hours,
 )
 
 /**

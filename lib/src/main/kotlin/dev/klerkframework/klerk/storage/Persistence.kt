@@ -126,21 +126,24 @@ public interface Persistence {
     /**
      * Inserts an unclaimed value. Must fail if the id is already taken (i.e. insert, never upsert).
      *
-     * Blobs and strings are stored identically — a string arrives as a stream over its UTF-8 bytes — so the only
-     * thing distinguishing them here is [kind], which must be reported back by [getAttachedData] and
+     * Strings and blobs are stored identically here — a string arrives as a stream over its UTF-8 bytes — so the only
+     * thing distinguishing them is [kind], which must be reported back by [getAttachedData] and
      * [readAllAttachedDataMetadata].
      *
      * The size and hash are not known before the value has been written, since it is streamed rather than held in
      * memory. [digestAfterWrite] provides them, and must therefore be called *after* [value] has been fully consumed
      * and before the insert is committed, so that a row is never visible without them.
      *
+     * @param value the bytes to store, or null when they live in an [AttachedBlobStore.External] and this row is only
+     * the record of them. A null value never happens for [AttachedDataKind.String].
      * @param claimedByJob the job that prepared this value, if it was prepared inside a job step. Such a row is not
      * reaped for as long as the job lives — see [deleteExpiredAttachedData].
-     * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written.
+     * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written. Already
+     * complete when [value] is null, since the bytes were written before this call.
      */
     public fun insertAttachedData(
         id: Int,
-        value: InputStream,
+        value: InputStream?,
         kind: AttachedDataKind,
         visibility: AttachedDataVisibility,
         createdAt: Instant,
@@ -150,7 +153,23 @@ public interface Persistence {
         digestAfterWrite: () -> Pair<Long, String>,
     ): Unit
 
-    public fun getAttachedData(id: Int): AttachedDataRow<InputStream>?
+    /**
+     * One attached-data row, without its value — see [getAttachedValue] for that.
+     *
+     * The two are separate because a blob's bytes need not be here at all: with an [AttachedBlobStore.External] they
+     * live outside the database, and only the caller knows which. `Unit` in place of the value says so in the type,
+     * rather than leaving a null for every caller to interpret.
+     */
+    public fun getAttachedData(id: Int): AttachedDataRow<Unit>?
+
+    /**
+     * The bytes stored in the row for [id], or null if there is no such row.
+     *
+     * Called only for values this row actually holds: strings always, and blobs when the store is
+     * [AttachedBlobStore.Database]. A blob kept in an [AttachedBlobStore.External] is read from that store instead,
+     * and its row holds no bytes at all.
+     */
+    public fun getAttachedValue(id: Int): InputStream?
 
     /**
      * Reads every attached-data row without its value, so that the in-memory structures can be rebuilt at startup.
@@ -163,8 +182,10 @@ public interface Persistence {
      * There are two independent claims on a piece of attached data: a model reference (which nulls `expires`) and a
      * job claim (`claimedByJob`). The reaper deletes only when neither holds, so a long-running job's working set is
      * safe for as long as the job lives — including while it is dead-lettered and awaiting a human.
+     *
+     * @return the ids of the rows that were deleted, so that their bytes can be removed from an external blob store.
      */
-    public fun deleteExpiredAttachedData(now: Instant): Unit
+    public fun deleteExpiredAttachedData(now: Instant): Set<Int>
 
     /**
      * Every persisted job, in no particular order. Called once at startup to rebuild the scheduler's state; the job
@@ -190,7 +211,8 @@ public open class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
-    private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray>>()
+    // A null value means the bytes are in an external blob store rather than here.
+    private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray?>>()
     private val jobs = mutableMapOf<JobId, JobRecord>()
     private val cronState = mutableMapOf<String, Instant>()
 
@@ -305,7 +327,7 @@ public open class RamStorage : Persistence {
 
     override fun insertAttachedData(
         id: Int,
-        value: InputStream,
+        value: InputStream?,
         kind: AttachedDataKind,
         visibility: AttachedDataVisibility,
         createdAt: Instant,
@@ -315,7 +337,7 @@ public open class RamStorage : Persistence {
         digestAfterWrite: () -> Pair<Long, String>,
     ) {
         require(!attachedRows.containsKey(id)) { "There is already attached data with id $id" }
-        val bytes = value.readAllBytes()
+        val bytes = value?.readAllBytes()
         val (size, hash) = digestAfterWrite()
         attachedRows[id] = AttachedDataRow(
             value = bytes,
@@ -326,20 +348,24 @@ public open class RamStorage : Persistence {
         )
     }
 
-    override fun getAttachedData(id: Int): AttachedDataRow<InputStream>? =
+    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
         attachedRows[id]?.let {
-            AttachedDataRow(it.value.inputStream(), it.owner, it.metadata, it.expires, it.claimedByJob)
+            AttachedDataRow(Unit, it.owner, it.metadata, it.expires, it.claimedByJob)
         }
+
+    override fun getAttachedValue(id: Int): InputStream? = attachedRows[id]?.value?.inputStream()
 
     override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
         attachedRows.mapValues {
             AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires, it.value.claimedByJob)
         }
 
-    override fun deleteExpiredAttachedData(now: Instant) {
-        attachedRows.entries.removeIf { (_, row) ->
+    override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
+        val expired = attachedRows.filterValues { row ->
             row.claimedByJob == null && row.expires?.let { it < now } ?: false
-        }
+        }.keys.toSet()
+        expired.forEach { attachedRows.remove(it) }
+        return expired
     }
 
     override fun getAllJobs(): List<JobRecord> = synchronized(lock) { jobs.values.toList() }

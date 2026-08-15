@@ -20,6 +20,7 @@ import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.misc.ShouldSendNotificationAlgorithm
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
@@ -51,10 +52,12 @@ fun createConfig(
     collections: Views,
     storage: Persistence = RamStorage(),
     clock: Clock = Clock.System,
+    blobStore: AttachedBlobStore = AttachedBlobStore.Database,
     configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
 ): Config<Ctx, Views> {
     return ConfigBuilder<Ctx, Views>(collections).build {
         persistence(storage)
+        attachedBlobStore(blobStore)
         clock(clock)
         jobContextProvider(::myJobContextProvider)
         jobs {
@@ -754,6 +757,8 @@ class Street(value: String) : StringContainer(value) {
 }
 
 fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Ctx, Views>.() -> Unit = {
+    // Author.picture is an AttachedBlobID, so a store is required. Database keeps the tests self-contained.
+    attachedBlobStore(AttachedBlobStore.Database)
     if (auth) {
         authorization {
             readModels {

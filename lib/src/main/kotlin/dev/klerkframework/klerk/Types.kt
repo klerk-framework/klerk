@@ -17,6 +17,8 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
@@ -471,6 +473,11 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val visibility: AttachedDataVisibility,
     val context: C,
     val reader: Reader<C, V>,
+    /**
+     * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
+     * the place to decide who may ask for one.
+     */
+    val lease: Duration = 1.minutes,
 )
 
 /**

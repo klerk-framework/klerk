@@ -4,9 +4,12 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.storage.AttachedBlobStore
+import dev.klerkframework.klerk.storage.FileBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.async
+import java.nio.file.Files
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
@@ -16,7 +19,10 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
-class AttachedDataTest {
+open class AttachedDataTest {
+
+    /** Where blob bytes go. Overridden by [AttachedDataOnFileStoreTest] to run the whole suite against files. */
+    protected open val blobStore: AttachedBlobStore = AttachedBlobStore.Database
 
     private suspend fun start(
         storage: Persistence = RamStorage(),
@@ -24,7 +30,7 @@ class AttachedDataTest {
     ): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage), settings)
+        val klerk = Klerk.create(createConfig(collections, storage, blobStore = blobStore), settings)
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -673,4 +679,12 @@ class AttachedDataTest {
         return result
     }
 
+}
+
+/**
+ * The entire attached-data suite again, with blob bytes on disk instead of in the database. The two stores must be
+ * indistinguishable from the outside — that is the whole point of the SPI.
+ */
+class AttachedDataOnFileStoreTest : AttachedDataTest() {
+    override val blobStore: AttachedBlobStore = FileBlobStore(Files.createTempDirectory("klerk-blobs"))
 }

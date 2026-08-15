@@ -209,7 +209,7 @@ class JobManagerImplTest {
     ): Fixture {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, clock, configureJobs))
+        val klerk = Klerk.create(createConfig(collections, storage, clock, configureJobs = configureJobs))
         klerk.meta.start(installShutdownHook = false)
         return Fixture(klerk, clock, storage)
     }

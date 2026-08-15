@@ -30,10 +30,6 @@ processed between them.
 Models returned from a read are snapshots, so they remain perfectly usable after the lock is released — they just may
 already be stale by the time you look at them again, since another command could have been processed in the meantime.
 
-The snapshot includes the [property authorization](authorization.md#readproperties): the `DataContainer`s you get are
-copies belonging to your read, carrying the decisions that were made for *your* actor. Reads made by others afterwards
-cannot change what your snapshot answers.
-
 ## Keep read locks short
 
 `readSuspend` lets you call suspending functions (e.g. a network request) while still holding the reader, but the lock

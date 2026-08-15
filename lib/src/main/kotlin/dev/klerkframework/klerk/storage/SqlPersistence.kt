@@ -31,6 +31,9 @@ import kotlin.system.measureTimeMillis
 import kotlin.time.Clock
 import kotlin.time.Instant
 
+/** Stands in for the value of a row whose bytes live in an [AttachedBlobStore.External]. */
+private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
+
 /** The job log and the child outcomes are stored as JSON, since neither is ever queried by SQL. */
 private val jobJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 private val logSerializer = ListSerializer(JobLogEntry.serializer())
@@ -318,7 +321,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun insertAttachedData(
         id: Int,
-        value: InputStream,
+        value: InputStream?,
         kind: AttachedDataKind,
         visibility: AttachedDataVisibility,
         createdAt: Instant,
@@ -331,7 +334,9 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
             AttachedData.insert {
                 it[this.id] = id
-                it[this.value] = ExposedBlob(value)
+                // An empty blob rather than null when the bytes live in an external store: the column is NOT NULL in
+                // databases created by earlier versions, and SchemaUtils.create never alters an existing table.
+                it[this.value] = if (value == null) EMPTY_BLOB else ExposedBlob(value)
                 it[this.kind] = kind.ordinal.toByte()
                 it[this.owner] = null
                 it[this.visibility] = visibility.ordinal.toByte()
@@ -352,19 +357,37 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun getAttachedData(id: Int): AttachedDataRow<InputStream>? =
+    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
         transaction(database) {
-            AttachedData.selectAll()
+            AttachedData.select(
+                AttachedData.owner,
+                AttachedData.kind,
+                AttachedData.visibility,
+                AttachedData.created,
+                AttachedData.size,
+                AttachedData.hash,
+                AttachedData.metadata,
+                AttachedData.expires,
+                AttachedData.claimedByJob,
+            )
                 .where { AttachedData.id eq id }
                 .map {
                     AttachedDataRow(
-                        value = it[AttachedData.value].inputStream,
+                        value = Unit,
                         owner = it[AttachedData.owner],
                         metadata = it.toAttachedDataMetadata(),
                         expires = it[AttachedData.expires]?.let { e -> decode64bitMicroseconds(e) },
                         claimedByJob = it[AttachedData.claimedByJob]?.let { j -> JobId(j) },
                     )
                 }.firstOrNull()
+        }
+
+    override fun getAttachedValue(id: Int): InputStream? =
+        transaction(database) {
+            AttachedData.select(AttachedData.value)
+                .where { AttachedData.id eq id }
+                .map { it[AttachedData.value].inputStream }
+                .firstOrNull()
         }
 
     override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
@@ -405,12 +428,18 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private fun decodeCustomMetadata(json: String?): Map<String, String> =
         if (json == null) emptyMap() else plainGson.fromJson(json, stringMapType)
 
-    override fun deleteExpiredAttachedData(now: Instant) {
+    override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
         val cutoff = now.to64bitMicroseconds()
-        transaction(database) {
+        return transaction(database) {
             // Rows with a null expiry (i.e. ones a model owns) never match a comparison, so they are left alone. Rows
             // a job has claimed are excluded explicitly: they have no owning model yet, but they are not orphans.
+            // Read the ids first: the caller needs them to delete the bytes from an external blob store.
+            val doomed = AttachedData.select(AttachedData.id)
+                .where { (AttachedData.expires less cutoff) and (AttachedData.claimedByJob eq null) }
+                .map { it[AttachedData.id] }
+                .toSet()
             AttachedData.deleteWhere { (expires less cutoff) and (claimedByJob eq null) }
+            doomed
         }
     }
 
