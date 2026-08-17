@@ -30,6 +30,7 @@ internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
         .registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(InstantContainer::class.java, InstantValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(DurationContainer::class.java, DurationValueSerializer(valueClasses))
+        .registerTypeHierarchyAdapter(BlobContainer::class.java, BlobValueSerializer(valueClasses))
         .registerTypeAdapter(AttachedBlobID::class.java, AttachedBlobIDSerializer())
         .registerTypeAdapter(AttachedStringID::class.java, AttachedStringIDSerializer())
         .create()
@@ -254,5 +255,25 @@ internal class DurationValueSerializer(private val valueClasses: Set<KClass<*>>)
         requireNotNull(typeOfT)
         val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
         return paramClass.primaryConstructor!!.call(json.asLong.microseconds) as DurationContainer
+    }
+}
+
+/**
+ * A [BlobContainer] is stored as the id it refers to — the declaration around it is code, not data.
+ */
+internal class BlobValueSerializer(private val valueClasses: Set<KClass<*>>) : JsonSerializer<BlobContainer>,
+    JsonDeserializer<BlobContainer> {
+    override fun serialize(src: BlobContainer?, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement =
+        if (src == null) JsonNull.INSTANCE else JsonPrimitive(src.id.id)
+
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): BlobContainer {
+        requireNotNull(json)
+        requireNotNull(typeOfT)
+        val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
+        return paramClass.primaryConstructor!!.call(AttachedBlobID(json.asInt)) as BlobContainer
     }
 }

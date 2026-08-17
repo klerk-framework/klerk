@@ -146,6 +146,52 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
         internal const val DEFAULT_HARD_QUEUE_LIMIT: Int = 100_000
         internal const val DEFAULT_MAX_PARALLEL_STEPS: Int = 4
     }
+
+    /**
+     * The same configuration with more job types and crons in it, and everything else untouched.
+     *
+     * Deliberately not a `copy()`: how many steps run at once, how often the dispatcher polls and what happens to an
+     * unloadable job are the application's operational choices, and a plugin quietly changing one of them would be
+     * very hard to notice.
+     */
+    internal fun with(
+        types: Map<JobName, JobType<*, C, V>>,
+        crons: List<CronSchedule<C, V>>,
+    ): JobsConfig<C, V> = JobsConfig(
+        types = types,
+        crons = crons,
+        onUnloadableJob = onUnloadableJob,
+        execution = execution,
+        admission = admission,
+        deadLetterRetention = deadLetterRetention,
+        hardQueueLimit = hardQueueLimit,
+        maxParallelSteps = maxParallelSteps,
+        pollInterval = pollInterval,
+        backoffBase = backoffBase,
+    )
+}
+
+/**
+ * What a [dev.klerkframework.klerk.KlerkPlugin] may add to the job module: its own job types and crons, and nothing
+ * else. See `Config.withJobs`.
+ */
+@JobsConfigMarker
+public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private val delegate: JobsBlock<C, V>) {
+
+    /**
+     * Makes a job type loadable by name.
+     *
+     * @throws IllegalArgumentException if the application, or another plugin, already registered this name. Prefix
+     * the name with the plugin's own to avoid collisions.
+     */
+    public fun register(type: JobType<*, C, V>): Unit = delegate.register(type)
+
+    /** Declares a recurring run of [type], which must have been registered first. */
+    public fun <Cursor : Any> cron(
+        type: JobType<Cursor, C, V>,
+        expression: String,
+        init: CronBuilder<Cursor>.() -> Unit,
+    ): Unit = delegate.cron(type, expression, init)
 }
 
 /**
@@ -261,6 +307,20 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
      */
     public fun admission(policy: (AdmissionArgs<C>) -> AdmissionDecision) {
         admissionPolicy = policy
+    }
+
+    /** The types registered so far. Used when a plugin's registrations are merged into an existing config. */
+    internal fun types(): Map<JobName, JobType<*, C, V>> = types.toMap()
+
+    internal fun crons(): List<CronSchedule<C, V>> = crons.toList()
+
+    /**
+     * Starts from what an application already configured, so that a plugin's `register` sees existing names (and
+     * rejects a collision) and its `cron` can refer to a type either of them registered.
+     */
+    internal fun seedFrom(existing: JobsConfig<C, V>) {
+        types.putAll(existing.types)
+        crons.addAll(existing.crons)
     }
 
     internal fun build(): JobsConfig<C, V> {

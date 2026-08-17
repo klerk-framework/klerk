@@ -163,6 +163,7 @@ public enum class KlerkErrorCode(public val code: String) {
     MissingAttachedBlobStore("ERROR-CONFIG-11"),
     AttachedBlobStoreIsNone("ERROR-CONFIG-12"),
     AttachedBlobStoreMissingData("ERROR-CONFIG-13"),
+    BlobMustBeDeclaredInAContainer("ERROR-CONFIG-14"),
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
     Internal("ERROR-INTERNAL-1"),
@@ -184,6 +185,8 @@ public enum class KlerkErrorCode(public val code: String) {
     BrokenReference("ERROR-COMMAND-8"),
     AttachedDataNotFound("ERROR-COMMAND-9"),
     AttachedDataAlreadyOwned("ERROR-COMMAND-10"),
+    AttachedDataNotAcceptable("ERROR-COMMAND-11"),
+    AttachedDataNotProcessed("ERROR-COMMAND-12"),
     AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
     AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
     AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
@@ -201,3 +204,6 @@ public enum class KlerkErrorCode(public val code: String) {
 
     override fun toString(): String = code
 }
+
+/** Thrown by `attachedData.process` when a file does not pass what its property declares. */
+public class BlobRejected(message: String) : RuntimeException(message)

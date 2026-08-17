@@ -308,10 +308,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
      * Must be called within a transaction so that the attached data is committed together with the models.
      */
     private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
-        attachedData.claimed.forEach { (dataId, ownerId) ->
+        attachedData.claimed.forEach { (dataId, claim) ->
             AttachedData.update(where = { AttachedData.id eq dataId }) {
-                it[owner] = ownerId
+                it[owner] = claim.owner
                 it[expires] = null
+                it[visibility] = claim.visibility.ordinal.toByte()
             }
         }
         attachedData.deleted.forEach { dataId ->
@@ -328,7 +329,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         custom: Map<String, String>,
         expires: Instant,
         claimedByJob: JobId?,
-        digestAfterWrite: () -> Pair<Long, String>,
+        digestAfterWrite: () -> AttachedDataDigest,
     ) {
         transaction(database) {
             // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
@@ -348,11 +349,12 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[this.claimedByJob] = claimedByJob?.value
             }
             // the stream has been consumed by the insert above, so the digest is complete. Updating in the same
-            // transaction means no row is ever committed without its size and hash.
-            val (writtenSize, writtenHash) = digestAfterWrite()
+            // transaction means no row is ever committed without its size, hash and content type.
+            val digest = digestAfterWrite()
             AttachedData.update(where = { AttachedData.id eq id }) {
-                it[this.size] = writtenSize
-                it[this.hash] = writtenHash
+                it[this.size] = digest.size
+                it[this.hash] = digest.hash
+                it[this.contentType] = digest.contentType
             }
         }
     }
@@ -367,6 +369,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 AttachedData.size,
                 AttachedData.hash,
                 AttachedData.metadata,
+                AttachedData.contentType,
+                AttachedData.completedSteps,
                 AttachedData.expires,
                 AttachedData.claimedByJob,
             )
@@ -381,6 +385,28 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     )
                 }.firstOrNull()
         }
+
+    override fun updateAttachedData(
+        id: Int,
+        value: InputStream?,
+        completedSteps: List<String>,
+        digestAfterWrite: () -> AttachedDataDigest,
+    ) {
+        transaction(database) {
+            if (value != null) {
+                AttachedData.update(where = { AttachedData.id eq id }) { it[this.value] = ExposedBlob(value) }
+            }
+            // As on insert: the stream has been consumed above, so the digest is complete, and it is written in the
+            // same transaction as the bytes it describes.
+            val digest = digestAfterWrite()
+            AttachedData.update(where = { AttachedData.id eq id }) {
+                it[this.size] = digest.size
+                it[this.hash] = digest.hash
+                it[this.contentType] = digest.contentType
+                it[this.completedSteps] = completedSteps.joinToString(",")
+            }
+        }
+    }
 
     override fun getAttachedValue(id: Int): InputStream? =
         transaction(database) {
@@ -401,6 +427,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 AttachedData.size,
                 AttachedData.hash,
                 AttachedData.metadata,
+                AttachedData.contentType,
+                AttachedData.completedSteps,
                 AttachedData.expires,
                 AttachedData.claimedByJob
             ).associate {
@@ -420,6 +448,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         size = this[AttachedData.size],
         hash = this[AttachedData.hash],
         custom = decodeCustomMetadata(this[AttachedData.metadata]),
+        contentType = this[AttachedData.contentType],
+        completedSteps = this[AttachedData.completedSteps]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
     )
 
     private fun encodeCustomMetadata(custom: Map<String, String>): String? =
@@ -619,6 +649,14 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex
         val metadata = text("metadata").nullable()  // the application's own metadata, as JSON
         val expires = long("expires").nullable()    // microseconds since 1970, null once claimed by a model
+
+        // What the bytes were recognised as, or null when they match no known format. Klerk's own finding: what the
+        // uploader claimed the value was, if anything, is the application's business and lives in metadata.
+        val contentType = varchar("content_type", length = 255).nullable()
+
+        // The names of the declared steps that have run against this value, comma-separated. What makes an
+        // interrupted pipeline resumable, and what a command checks before letting a model claim the value.
+        val completedSteps = text("completed_steps").nullable()
 
         // The second, independent claim: a job that prepared this data and is still alive. A row is reaped only when
         // neither claim holds.

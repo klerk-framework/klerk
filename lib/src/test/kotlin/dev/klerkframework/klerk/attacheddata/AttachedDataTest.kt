@@ -50,7 +50,7 @@ open class AttachedDataTest {
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
-                    picture = picture,
+                    picture = picture?.let { AuthorPicture(it) },
                 ),
             ),
             context,
@@ -67,13 +67,31 @@ open class AttachedDataTest {
     ): CommandResult<Author, Ctx, Views> {
         val author = klerk.read(context) { get(authorID) }
         return klerk.handle(
-            Command(event = UpdateAuthor, model = authorID, params = author.props.copy(picture = picture)),
+            Command(event = UpdateAuthor, model = authorID, params = author.props.copy(picture = picture?.let { AuthorPicture(it) })),
             context,
             ProcessingOptions(CommandToken.simple()),
         )
     }
 
     private fun blob(content: String) = content.toByteArray().inputStream()
+
+    /** 24 bytes that PaintingImage will accept. */
+    private fun png() =
+        (byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)).inputStream()
+
+    /** Attaches a blob to a property that declares itself Public. */
+    private suspend fun hangPainting(klerk: Klerk<Ctx, Views>, image: AttachedBlobID): ModelID<Painting> {
+        val result = klerk.handle(
+            Command(
+                event = CreatePainting,
+                model = null,
+                params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
+            ),
+            Ctx.system(),
+            ProcessingOptions(CommandToken.simple()),
+        )
+        return requireNotNull(result.orThrow().primaryModel)
+    }
 
     private fun Klerk<Ctx, Views>.blobExists(id: AttachedBlobID): Boolean =
         runCatching { runBlocking { attachedData.get(id, Ctx.system()) } }.isSuccess
@@ -84,7 +102,7 @@ open class AttachedDataTest {
         val id = klerk.attachedData.prepare(blob("a portrait"), Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
 
-        val stored = klerk.read(Ctx.system()) { get(authorID).props.picture }
+        val stored = klerk.read(Ctx.system()) { get(authorID).props.picture?.id }
         assertEquals(id, stored)
         assertEquals("a portrait", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
         klerk.meta.stop()
@@ -94,12 +112,12 @@ open class AttachedDataTest {
     fun `Attaches a blob when the model is updated`() = runBlocking {
         val klerk = start()
         val authorID = createAuthorWithPicture(klerk, null)
-        assertNull(klerk.read(Ctx.system()) { get(authorID).props.picture })
+        assertNull(klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
 
         val id = klerk.attachedData.prepare(blob("later"), Ctx.system())
         setPicture(klerk, authorID, id).orThrow()
 
-        assertEquals(id, klerk.read(Ctx.system()) { get(authorID).props.picture })
+        assertEquals(id, klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
         klerk.meta.stop()
     }
 
@@ -197,7 +215,7 @@ open class AttachedDataTest {
             "The problem should name the current owner but was: ${problem.internalDescription}"
         )
         // the first owner still has its data
-        assertEquals(id, klerk.read(Ctx.system()) { get(firstOwner).props.picture })
+        assertEquals(id, klerk.read(Ctx.system()) { get(firstOwner).props.picture?.id })
         assertTrue(klerk.blobExists(id))
         klerk.meta.stop()
     }
@@ -278,7 +296,7 @@ open class AttachedDataTest {
                 params = author.props.copy(
                     firstName = FirstName("James"),
                     lastName = LastName("Clavell"),
-                    picture = newPicture
+                    picture = newPicture?.let { AuthorPicture(it) }
                 )
             ),
             Ctx.system(),
@@ -287,7 +305,7 @@ open class AttachedDataTest {
         assertTrue(result is CommandResult.Failure)
 
         assertEquals("survivor", String(klerk.attachedData.get(old, Ctx.system()).readAllBytes()))
-        assertEquals(old, klerk.read(Ctx.system()) { get(authorID).props.picture })
+        assertEquals(old, klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
         klerk.meta.stop()
     }
 
@@ -409,25 +427,27 @@ open class AttachedDataTest {
     @Test
     fun `Public data bypasses both positive and negative read rules`() = runBlocking {
         val klerk = start()
-        // "Secretive" makes the positive rule withhold its opinion, and the actor is the one the negative rule denies
-        val id = klerk.attachedData.prepare(blob("for everyone"), Ctx.system(), AttachedDataVisibility.Public)
-        createAuthorWithPicture(klerk, id, lastName = "Secretive")
+        // PaintingImage declares Public, so attaching the blob publishes it and no read rule is consulted — not even
+        // the negative one that denies unauthenticated actors everything.
+        val id = klerk.attachedData.prepare(png(), Ctx.system())
+        hangPainting(klerk, id)
 
         val unauthenticated = Ctx.unauthenticated()
-        assertEquals("for everyone", String(klerk.attachedData.get(id, unauthenticated).readAllBytes()))
+        assertEquals(24, klerk.attachedData.get(id, unauthenticated).readAllBytes().size)
         assertEquals(AttachedDataVisibility.Public, klerk.attachedData.getMetadata(id, unauthenticated).visibility)
         klerk.meta.stop()
     }
 
     @Test
-    fun `A write rule can reject a public upload`() = runBlocking {
+    fun `A write rule can reject a public string`() = runBlocking {
         val klerk = start()
-        val context = Ctx.unauthenticated()
+        // A string has no container, so it is the one kind whose visibility is still chosen at prepare — and
+        // therefore the one kind a write rule can still decide about.
+        val context = Ctx.authenticationIdentity()
 
-        // the rule in TestSetup lets anyone upload, but not anyone publish
-        assertNotNull(klerk.attachedData.prepare(blob("mine"), context, AttachedDataVisibility.Private))
+        assertNotNull(klerk.attachedData.prepare("mine", context, AttachedDataVisibility.Private))
         assertFailsWith<AuthorizationException> {
-            klerk.attachedData.prepare(blob("everyone's"), context, AttachedDataVisibility.Public)
+            klerk.attachedData.prepare("everyone's", context, AttachedDataVisibility.Public)
         }
         klerk.meta.stop()
     }
@@ -529,9 +549,10 @@ open class AttachedDataTest {
     fun `The metadata survives a restart`() = runBlocking {
         val storage = SQLiteInMemory.create()
         val klerk = start(storage)
-        val custom = mapOf("contentType" to "image/png")
-        val id = klerk.attachedData.prepare(blob("kept"), Ctx.system(), AttachedDataVisibility.Public, custom)
-        createAuthorWithPicture(klerk, id)
+        val custom = mapOf("claimedBy" to "the uploader")
+        val id = klerk.attachedData.prepare(png(), Ctx.system(), metadata = custom)
+        // attached to a property that declares Public, so that the visibility is worth checking after a restart
+        hangPainting(klerk, id)
         val before = klerk.attachedData.getMetadata(id, Ctx.system())
         klerk.meta.stop()
 
@@ -613,7 +634,7 @@ open class AttachedDataTest {
         val restarted = start(storage)
         // this also checks that the value classes survive Gson and the database — both the nullable (boxed) property
         // and the one inside a List
-        assertEquals(claimed, restarted.read(Ctx.system()) { get(authorID).props.picture })
+        assertEquals(claimed, restarted.read(Ctx.system()) { get(authorID).props.picture?.id })
         assertEquals(listOf(chapter), restarted.read(Ctx.system()) { get(bookID).props.chapters })
         assertEquals("a chapter", restarted.attachedData.get(chapter, Ctx.system()))
         assertEquals("kept", String(restarted.attachedData.get(claimed, Ctx.system()).readAllBytes()))
@@ -648,7 +669,7 @@ open class AttachedDataTest {
         klerk: Klerk<Ctx, Views>,
         cover: AttachedBlobID,
         thumbnail: AttachedBlobID
-    ) = createBook(klerk) { it.copy(cover = cover, thumbnail = thumbnail) }
+    ) = createBook(klerk) { it.copy(cover = cover?.let { c -> BookCover(c) }, thumbnail = thumbnail?.let { t -> BookThumbnail(t) }) }
 
     private suspend fun createBookWithChapters(
         klerk: Klerk<Ctx, Views>,
@@ -669,7 +690,7 @@ open class AttachedDataTest {
                     lastName = LastName("Lagerlöf"),
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
-                    picture = picture,
+                    picture = picture?.let { AuthorPicture(it) },
                 ),
             ),
             context,

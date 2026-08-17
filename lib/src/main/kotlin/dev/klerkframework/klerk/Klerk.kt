@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.datatypes.BlobContainer
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.job.JobId
@@ -337,9 +338,12 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * This may take a while, so it is deliberately done outside the command processing. No lock is held while the data
      * is written.
      *
-     * @param visibility whether the data may be read by anyone or only by the actors the `readAttachedData` rules allow.
-     * Chosen here and never changed, so that a [AttachedDataVisibility.Public] value can be cached by e.g. a CDN.
+     * Whether the blob may be read by anyone is *not* decided here: it is declared by the
+     * [dev.klerkframework.klerk.datatypes.BlobContainer] the value ends up in, and applied when a command attaches it.
+     * Whoever uploads a file cannot know what it will be used for, so it is not their decision to make.
+     *
      * The returned id is unique among *all* attached data, blobs and strings alike.
+     *
      * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
@@ -357,7 +361,6 @@ public interface KlerkAttachedData<C : KlerkContext> {
     public suspend fun prepare(
         value: InputStream,
         context: C,
-        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedBlobID
@@ -378,10 +381,35 @@ public interface KlerkAttachedData<C : KlerkContext> {
     public suspend fun prepareFromFile(
         file: Path,
         context: C,
-        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedBlobID
+
+    /**
+     * Runs the steps [declaration] declares against the blob it refers to — a virus scan, a Content Disarm &
+     * Reconstruct pass, a check that a CSV has the right columns — and records which of them have completed.
+     *
+     * ```kotlin
+     * klerk.attachedData.process(FlowerImage(blobID), context)
+     * ```
+     *
+     * A command attaching a blob whose declared steps have not all run is rejected, so this is a guarantee rather
+     * than a convention. Call it before issuing that command — normally from a job, since a scan takes far longer
+     * than a command may.
+     *
+     * Steps that have already completed are skipped, so an interrupted run resumes rather than starting over, and a
+     * step that rewrites the bytes cannot run twice. A step may only rewrite them while the value is unclaimed;
+     * once a model owns it, it is immutable.
+     *
+     * Not subject to authorization: what runs here is what the developer declared on the property, not something an
+     * actor chose to do. Who may put a file into the system at all is decided by [prepare], and what may be attached
+     * to a model by the command that attaches it.
+     *
+     * @throws BlobRejected if a step refuses the file, or if it does not satisfy `accept`/`maxSize` — which are
+     * re-checked first, and again after any step that replaces the bytes.
+     * @throws IllegalStateException if the value has already been claimed by a model.
+     */
+    public suspend fun process(declaration: BlobContainer, context: C): Unit
 
     /**
      * Inserts a string so that it can be attached to a model.

@@ -3,15 +3,21 @@
 Models should be kept small so they fit in the internal cache. Klerk lets you attach large immutable data to a model
 instead of storing it in the model itself. There are two kinds: strings (e.g. JSON) and blobs (images, videos, PDFs).
 
-The model holds a reference to the data in a property of type `AttachedStringID` or `AttachedBlobID`, similar to how a
-model holds a reference to another model via `ModelID`.
+A string is referenced by a property of type `AttachedStringID`, similar to how a model holds a reference to another
+model via `ModelID`. A blob is referenced by a `BlobContainer`, which is a `DataContainer` like any other property's:
+it holds the reference *and* declares what the value is allowed to be.
 
 ```kotlin
-data class Author(val name: Name, val portrait: AttachedBlobID?)
+class Portrait(id: AttachedBlobID) : BlobContainer(id) {
+    override val accept = setOf("image/png", "image/jpeg")
+    override val maxSize = 5_000_000L
+}
+
+data class Author(val name: Name, val portrait: Portrait?)
 ```
 
 Attached data is **immutable** — you never update a value in place, you attach a new one and drop the reference to the
-old one. It is also **exclusively owned**: a given `AttachedBlobID` belongs to exactly one model.
+old one. It is also **exclusively owned**: a given blob belongs to exactly one model.
 
 ### Blob or string?
 
@@ -21,15 +27,67 @@ model property declare which of the two it holds. An id used through the wrong t
 
 Pick by how you want to read the value:
 
-| | `AttachedStringID` | `AttachedBlobID` |
-|---|---|---|
-| `prepare` takes | a `String` | an `InputStream` |
-| `get` returns | a `String` | an `InputStream` |
-| in memory on upload | the whole value | never more than a buffer |
+|                     | `AttachedStringID` | `AttachedBlobID`         |
+|---------------------|--------------------|--------------------------|
+| `prepare` takes     | a `String`         | an `InputStream`         |
+| `get` returns       | a `String`         | an `InputStream`         |
+| in memory on upload | the whole value    | never more than a buffer |
 
 So a string is the right choice for text you are going to want as a `String` anyway — JSON, Markdown, a diff. For text
 too large to hold in memory while uploading it, use a blob. (A string that is merely large to *read* is fine: see
 `getStream` below.)
+
+## What a blob property declares
+
+Everything a `BlobContainer` declares is checked when a command attaches the value, against what Klerk itself found the
+bytes to be. That is the point of declaring it on the property rather than at the upload: the check holds for a command
+from a web form, from klerk-graphql, from a job and from a test alike, and it is still true a year later when somebody
+adds a second way to create the model.
+
+|                      |                                                                                                              |
+|----------------------|--------------------------------------------------------------------------------------------------------------|
+| `accept`             | the content types this property takes, as IANA media types. Empty (the default) means anything.              |
+| `acceptUnrecognised` | whether a value whose type could not be recognised is acceptable. Only consulted when `accept` is non-empty. |
+| `maxSize`            | the largest value, in bytes.                                                                                 |
+| `visibility`         | `Private` (the default) or `Public` — see below.                                                             |
+| `inspect(value)`     | the bytes themselves, for what metadata cannot answer.                                                       |
+
+`acceptUnrecognised` has to be a decision rather than a default, because "unrecognised" is the normal state of affairs
+for CSV, for plain text and for any format Klerk has no signature for. A property that accepts those must say so; one
+that accepts images must not.
+
+### What the bytes are
+
+Klerk recognises the content type from the first bytes of every value as it is written, and reports it as
+`metadata.contentType`. That is the only statement about a value's type Klerk will make — what a client *said* it was
+uploading is the application's own metadata and is never treated as fact.
+
+**Recognising a format is not vouching for it.** A file can satisfy two formats at once (a valid PNG that is also valid
+JavaScript), so `accept` keeps honest mistakes out, not a determined attacker. What makes serving safe is the response
+headers and the origin the bytes are served from — see [serving through a CDN](#serving-through-a-cdn).
+
+### Looking at the bytes
+
+When metadata is not enough, override `inspect`:
+
+```kotlin
+class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
+    override val accept = setOf("text/plain")
+    override val acceptUnrecognised = false
+
+    override fun inspect(value: InputStream): String? {
+        val header = value.bufferedReader().buffered().readLine()
+        return if (header == "name,quantity") null else "the first line must be 'name,quantity'"
+    }
+}
+```
+
+It runs before the command commits, so a file that fails never reaches a model. Return null if the value is fine, or a
+description of what is wrong — that text becomes the command's problem.
+
+**Read only what you need.** The stream opens on the first read, so a container that does not override `inspect` costs
+nothing at all, but whatever you do read happens inside command processing while every other command waits. Checking a
+header is fine; parsing a gigabyte is not. Work that big belongs in a job after the model exists.
 
 ## Where blob bytes are kept
 
@@ -44,12 +102,12 @@ ConfigBuilder<Ctx, Views>(views).build {
 }
 ```
 
-| | `Database` | `FileBlobStore` | `None` |
-|---|---|---|---|
-| Where the bytes are | the attached-data row | one file per blob under a directory | nowhere |
-| Largest value | what the database can hold in one value — about 1 GB for SQLite, held in memory on the way in and out | whatever the filesystem allows | — |
-| A database backup is enough | yes | **no**, back up the directory too | yes |
-| Delete is transactional | yes | no (see below) | — |
+|                             | `Database`                                                                                            | `FileBlobStore`                     | `None`  |
+|-----------------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------|---------|
+| Where the bytes are         | the attached-data row                                                                                 | one file per blob under a directory | nowhere |
+| Largest value               | what the database can hold in one value — about 1 GB for SQLite, held in memory on the way in and out | whatever the filesystem allows      | —       |
+| A database backup is enough | yes                                                                                                   | **no**, back up the directory too   | yes     |
+| Delete is transactional     | yes                                                                                                   | no (see below)                      | —       |
 
 Required as soon as any model property or event parameter is an `AttachedBlobID` — including one contributed by a
 plugin, such as klerk-web's compressed assets. An application that declares none needs no store at all.
@@ -91,8 +149,8 @@ picks it but not attached until they submit the form — ask for a longer lease:
 val blobID = klerk.attachedData.prepare(inputStream, context, lease = 15.minutes)
 ```
 
-A lease may not exceed `KlerkSettings.maxAttachedDataLease` (24 hours by default), and the `writeAttachedData` rules
-see it, so who may keep unclaimed data around is a decision the application can make.
+A lease may not exceed `KlerkSettings.maxAttachedDataLease` (24 hours by default), and the `writeAttachedData` rules see
+it, so who may keep unclaimed data around is a decision the application can make.
 
 Data prepared inside a job needs no lease: it is kept for as long as the job lives, however many steps that takes.
 
@@ -170,13 +228,18 @@ You can attach your own metadata when preparing:
 
 ```kotlin
 val blobID = klerk.attachedData.prepare(
-    inputStream, context, AttachedDataVisibility.Public,
-    metadata = mapOf("contentType" to "image/webp", "width" to "1200"),
+    inputStream, context,
+    metadata = mapOf("filename" to "rose.webp", "clientContentType" to "image/webp"),
 )
 ```
 
 Klerk does not interpret these values and never gives them to an authorization rule. They stay in memory for as long as
-the data exists, so they are limited to 1000 characters in total — put anything bigger in the data itself.
+the data exists, so they are limited to 1000 characters in total — put anything bigger in the data itself. Keys starting
+with `__` are reserved.
+
+Note the difference between `meta.custom["clientContentType"]` and `meta.contentType`: the first is what somebody said,
+the second is what the bytes are. Keeping a claim is useful — for showing the user the name they uploaded, or for
+noticing that the two disagree — but only the second is a finding.
 
 ## Deleting
 
@@ -190,15 +253,15 @@ Deletion happens in the same transaction as the command, so a command that fails
 
 ## Ownership
 
-An `AttachedBlobID` or `AttachedStringID` belongs to the first model that references it in a committed command. A command
-that tries to attach data already owned by *another* model is rejected.
+An `AttachedBlobID` or `AttachedStringID` belongs to the first model that references it in a committed command. A
+command that tries to attach data already owned by *another* model is rejected.
 
 This means data cannot be shared or moved between models. To give a second model the same content, upload it again with
 a second `prepare`.
 
-Sharing would mean counting references across models, and that count could not be maintained in the same transaction
-as the command — which is exactly what makes deletion here reliable rather than a background chore. Exclusive
-ownership is the price of never leaking a value.
+Sharing would mean counting references across models, and that count could not be maintained in the same transaction as
+the command — which is exactly what makes deletion here reliable rather than a background chore. Exclusive ownership is
+the price of never leaking a value.
 
 The owner is the *model*, not the property, so the same ID may appear in two properties of the same model. Klerk only
 deletes the data once no property of that model refers to it any more.
@@ -225,25 +288,34 @@ The read rules apply to private data only. Public data is readable by anyone, as
 
 ## Visibility
 
-Data is uploaded as either `Private` (the default) or `Public`:
+Data is either `Private` (the default) or `Public`. For a blob, the property says which:
 
 ```kotlin
-val blobID = klerk.attachedData.prepare(inputStream, context, AttachedDataVisibility.Public)
+class FlowerImage(id: AttachedBlobID) : BlobContainer(id) {
+    override val visibility = AttachedDataVisibility.Public
+}
 ```
 
 **No read rule is evaluated for public data — not even a negative one.** A rule such as "unauthenticated actors may
 never read attached data" simply does not apply to it.
 
 That is the whole point. An authorization rule answers "may this actor read this *right now*", and since a rule may look
-at anything in the model graph, an answer today says nothing about tomorrow. `Public` is a decision made once, at upload
-time, about data that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
-Visibility is chosen by whoever calls `prepare`, so the `writeAttachedData` rules are the place to control who may
-publish:
+at anything in the model graph, an answer today says nothing about tomorrow. `Public` is a decision made once about data
+that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
+
+The decision is applied when a command attaches the value, and never again. Declaring it on the property rather than
+passing it to `prepare` puts it where it is known: whoever uploads a file has no idea what it will end up being used
+for. It also means "who may publish" is decided by the ordinary command rules — whoever may execute the event that
+attaches a public blob is who may publish one.
+
+A blob is therefore always prepared as `Private` and there is no way to say otherwise — `prepare` does not take a
+visibility for one. An attached *string* has no container, so for a string `prepare` still decides:
 
 ```kotlin
-fun onlyEditorsMayPublish(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
-    if (args.visibility == AttachedDataVisibility.Public && !args.context.isEditor()) Deny else Pass
+val notesID = klerk.attachedData.prepare(json, context, AttachedDataVisibility.Public)
 ```
+
+which is also the only case where the `visibility` in `ArgsForAttachedDataWrite` can be anything but `Private`.
 
 ## Serving through a CDN
 
@@ -252,7 +324,14 @@ before it touches the value:
 
 ```kotlin
 val meta = klerk.attachedData.getMetadata(blobID, context)
-call.response.header(HttpHeaders.ContentType, meta.custom["contentType"] ?: "application/octet-stream")
+// What Klerk recognised the bytes to be, and only for types that are safe to render inline. Anything else is a
+// download: an HTML or SVG file served inline from your own origin is a script running as your application.
+val inlineSafe = meta.contentType in setOf("image/png", "image/jpeg", "image/gif", "image/webp")
+call.response.header(HttpHeaders.ContentType, if (inlineSafe) meta.contentType!! else "application/octet-stream")
+call.response.header(HttpHeaders.XContentTypeOptions, "nosniff")
+if (!inlineSafe) {
+    call.response.header(HttpHeaders.ContentDisposition, "attachment")
+}
 call.response.header(HttpHeaders.ContentLength, meta.size.toString())
 call.response.header(
     HttpHeaders.CacheControl,
@@ -264,13 +343,18 @@ call.response.header(
 call.respondOutputStream { klerk.attachedData.get(blobID, context).copyTo(this) }
 ```
 
-Two things to keep in mind:
+Three things to keep in mind:
+
+**A declared `accept` is not a serving policy.** The property already refused anything that is not an image, and the
+handler above still refuses to serve one inline unless the bytes say so. Both are cheap, and neither is sufficient
+alone — a file can satisfy two formats at once. For public files, a separate origin is what actually contains the
+damage.
 
 **Put the hash in the URL.** IDs are random and unique across blobs and strings alike, but they are recycled once the
 data they referred to has been deleted, so an ID alone is not a safe cache key: a URL could end up serving year-old
-bytes for entirely new data. A URL like `/attached/{id}/{hash}` cannot, since different content always means a
-different URL. It also lets you cache for as long as you like, because the URL changes whenever the content does. A
-route like that need not know in advance what it is serving — `meta.kind` tells it.
+bytes for entirely new data. A URL like `/attached/{id}/{hash}` cannot, since different content always means a different
+URL. It also lets you cache for as long as you like, because the URL changes whenever the content does. A route like
+that need not know in advance what it is serving — `meta.kind` tells it.
 
 **Deleted data keeps being served.** Deleting the owning model makes `get` throw immediately, but a CDN will happily go
 on serving what it already cached. If that matters, purge the URL when the data goes away.

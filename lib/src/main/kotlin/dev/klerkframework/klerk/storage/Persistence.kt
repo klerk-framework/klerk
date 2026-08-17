@@ -40,6 +40,18 @@ public data class AttachedDataRow<T>(
 )
 
 /**
+ * Everything about a value that is only known once it has been written: it is streamed rather than held in memory, so
+ * none of this can be measured in advance.
+ *
+ * @property contentType what the bytes were recognised as, or null when they match no known format.
+ */
+public data class AttachedDataDigest(
+    val size: Long,
+    val hash: String,
+    val contentType: String?,
+)
+
+/**
  * The changes to attached data that a command implies (see [dev.klerkframework.klerk.KlerkAttachedData]). Applied in the
  * same transaction as the models, so a failing command leaves the data untouched.
  *
@@ -49,11 +61,22 @@ public data class AttachedDataRow<T>(
  * @property deleted ids that no property refers to any more
  */
 public data class AttachedDataDelta(
-    val claimed: Map<Int, Int> = emptyMap(),
+    val claimed: Map<Int, AttachedDataClaim> = emptyMap(),
     val deleted: Set<Int> = emptySet(),
 ) {
     public fun isEmpty(): Boolean = claimed.isEmpty() && deleted.isEmpty()
 }
+
+/**
+ * What happens to a value when a model claims it: it gets an owner, it stops expiring, and its visibility is settled.
+ *
+ * @property visibility declared by the property the value was attached to. Written once, here, and never changed
+ * afterwards — which is what makes [AttachedDataVisibility.Public] safe to cache.
+ */
+public data class AttachedDataClaim(
+    val owner: Int,
+    val visibility: AttachedDataVisibility,
+)
 
 /**
  * Storage backend SPI: implement this to durably store models, the audit log, jobs and attached data. Klerk owns the
@@ -150,7 +173,25 @@ public interface Persistence {
         custom: Map<String, String>,
         expires: Instant,
         claimedByJob: JobId? = null,
-        digestAfterWrite: () -> Pair<Long, String>,
+        digestAfterWrite: () -> AttachedDataDigest,
+    ): Unit
+
+    /**
+     * Records what running a value's declared steps did to it: which of them have completed, and — when a step
+     * rewrote the bytes — the new value and digest.
+     *
+     * Only ever called for unclaimed data, which is what makes rewriting safe: nothing can read it, no URL names it
+     * and no cache can hold it. Once a model claims a value it never changes again.
+     *
+     * @param value the new bytes when they belong in the row and a step replaced them, otherwise null. A blob kept in
+     * an [AttachedBlobStore.External] is replaced in that store instead, and only the digest is recorded here.
+     * @param digestAfterWrite as in [insertAttachedData]: called after [value] has been consumed.
+     */
+    public fun updateAttachedData(
+        id: Int,
+        value: InputStream?,
+        completedSteps: List<String>,
+        digestAfterWrite: () -> AttachedDataDigest,
     ): Unit
 
     /**
@@ -318,9 +359,13 @@ public open class RamStorage : Persistence {
     }
 
     private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
-        attachedData.claimed.forEach { (id, owner) ->
+        attachedData.claimed.forEach { (id, claim) ->
             val row = requireNotNull(attachedRows[id]) { "Could not find attached data with id $id" }
-            attachedRows[id] = row.copy(owner = owner, expires = null)
+            attachedRows[id] = row.copy(
+                owner = claim.owner,
+                expires = null,
+                metadata = row.metadata.copy(visibility = claim.visibility),
+            )
         }
         attachedData.deleted.forEach { attachedRows.remove(it) }
     }
@@ -334,17 +379,39 @@ public open class RamStorage : Persistence {
         custom: Map<String, String>,
         expires: Instant,
         claimedByJob: JobId?,
-        digestAfterWrite: () -> Pair<Long, String>,
+        digestAfterWrite: () -> AttachedDataDigest,
     ) {
         require(!attachedRows.containsKey(id)) { "There is already attached data with id $id" }
         val bytes = value?.readAllBytes()
-        val (size, hash) = digestAfterWrite()
+        val digest = digestAfterWrite()
         attachedRows[id] = AttachedDataRow(
             value = bytes,
             owner = null,
-            metadata = AttachedDataMetadata(kind, visibility, createdAt, size, hash, custom),
+            metadata = AttachedDataMetadata(
+                kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType
+            ),
             expires = expires,
             claimedByJob = claimedByJob,
+        )
+    }
+
+    override fun updateAttachedData(
+        id: Int,
+        value: InputStream?,
+        completedSteps: List<String>,
+        digestAfterWrite: () -> AttachedDataDigest,
+    ) {
+        val row = requireNotNull(attachedRows[id]) { "There is no attached data with id $id" }
+        val bytes = value?.readAllBytes()
+        val digest = digestAfterWrite()
+        attachedRows[id] = row.copy(
+            value = bytes ?: row.value,
+            metadata = row.metadata.copy(
+                size = digest.size,
+                hash = digest.hash,
+                contentType = digest.contentType,
+                completedSteps = completedSteps,
+            ),
         )
     }
 

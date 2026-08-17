@@ -1,0 +1,296 @@
+package dev.klerkframework.klerk.attacheddata
+
+import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.storage.AttachedBlobStore
+import dev.klerkframework.klerk.storage.FileBlobStore
+import java.nio.file.Files
+import dev.klerkframework.klerk.storage.Persistence
+import dev.klerkframework.klerk.storage.RamStorage
+import kotlinx.coroutines.runBlocking
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * What a blob property declares is enforced where it counts: in the command pipeline, against what Klerk found the
+ * bytes to be. A caller that never went through a form — a job, an API, a test — is held to the same declaration.
+ */
+class BlobContainerTest {
+
+    private suspend fun start(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val klerk = Klerk.create(createConfig(collections, storage, blobStore = AttachedBlobStore.Database))
+        klerk.meta.start(installShutdownHook = false)
+        return klerk
+    }
+
+    private fun png(size: Int = 24): ByteArray =
+        byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(size - 8)
+
+    private suspend fun hang(
+        klerk: Klerk<Ctx, Views>,
+        image: AttachedBlobID,
+        context: Ctx = Ctx.system(),
+    ): CommandResult<Painting, Ctx, Views> = klerk.handle(
+        Command(
+            event = CreatePainting,
+            model = null,
+            params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
+        ),
+        context,
+        ProcessingOptions(CommandToken.simple()),
+    )
+
+    @Test
+    fun `a bare AttachedBlobID is refused, with the container to write instead`() {
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val config = ConfigBuilder<Ctx, Views>(collections).build {
+            managedModels {
+                model(Sketch::class, sketchStateMachine(), collections.sketches)
+            }
+            apply(generousAuthRules())
+            persistence(RamStorage())
+            attachedBlobStore(AttachedBlobStore.Database)
+            systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+        }
+
+        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        assertEquals(KlerkErrorCode.BlobMustBeDeclaredInAContainer, e.code)
+        assertTrue(e.message!!.contains("Sketch.drawing"), e.message!!)
+        assertTrue(e.message!!.contains("BlobContainer"), "the message should say what to write instead")
+    }
+
+    @Test
+    fun `an accepted file is attached`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+
+        val painting = requireNotNull(hang(klerk, id).orThrow().primaryModel)
+
+        assertEquals(id, klerk.read(Ctx.system()) { get(painting) }.props.image.id)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a file of the wrong type is refused, whatever it was called`() = runBlocking {
+        val klerk = start()
+        // an HTML file, uploaded with every claim in the world that it is a PNG
+        val id = klerk.attachedData.prepare(
+            "<html><script>alert(1)</script></html>".byteInputStream(),
+            Ctx.system(),
+            metadata = mapOf("filename" to "innocent.png", "clientContentType" to "image/png"),
+        )
+
+        val result = hang(klerk, id)
+
+        assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
+        val problem = result.problems.single()
+        assertEquals(KlerkErrorCode.AttachedDataNotAcceptable, problem.code)
+        assertTrue(problem.endUserTranslatedMessage.contains("text/html"), problem.endUserTranslatedMessage)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a file that is too large is refused`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(png(2000).inputStream(), Ctx.system())
+
+        val result = hang(klerk, id)
+
+        assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
+        assertEquals(KlerkErrorCode.AttachedDataNotAcceptable, result.problems.single().code)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a file whose type cannot be recognised is refused when the property wants images`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(byteArrayOf(0x07, 0x03, 0x42, 0x11).inputStream(), Ctx.system())
+
+        val result = hang(klerk, id)
+
+        assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
+        assertTrue(
+            result.problems.single().endUserTranslatedMessage.contains("could not be recognised"),
+            result.problems.single().endUserTranslatedMessage,
+        )
+        klerk.meta.stop()
+    }
+
+    private suspend fun count(
+        klerk: Klerk<Ctx, Views>,
+        rows: AttachedBlobID,
+    ): CommandResult<Inventory, Ctx, Views> = klerk.handle(
+        Command(
+            event = CreateInventory,
+            model = null,
+            params = CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows)),
+        ),
+        Ctx.system(),
+        ProcessingOptions(CommandToken.simple()),
+    )
+
+    @Test
+    fun `a value that has been through its steps can be attached`() = runBlocking {
+        val klerk = start()
+        val good = klerk.attachedData.prepare("name,quantity\nrose,3\n".byteInputStream(), Ctx.system())
+
+        klerk.attachedData.process(InventoryCsv(good), Ctx.system())
+        val inventory = requireNotNull(count(klerk, good).orThrow().primaryModel)
+
+        assertEquals(good, klerk.read(Ctx.system()) { get(inventory) }.props.rows.id)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a value whose steps have not run cannot be attached`() = runBlocking {
+        val klerk = start()
+        val good = klerk.attachedData.prepare("name,quantity\nrose,3\n".byteInputStream(), Ctx.system())
+
+        // never processed, so the command refuses it and says which step is missing
+        val result = count(klerk, good)
+
+        assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
+        val problem = result.problems.single()
+        assertEquals(KlerkErrorCode.AttachedDataNotAcceptable, problem.code)
+        assertTrue(problem.endUserTranslatedMessage.contains("checkTheHeader"), problem.endUserTranslatedMessage)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a step can refuse a file that the metadata checks would have allowed`() = runBlocking {
+        val klerk = start()
+        // a perfectly good text file, of the accepted type and a reasonable size — but not this CSV
+        val wrong = klerk.attachedData.prepare("quantity,name\n3,rose\n".byteInputStream(), Ctx.system())
+
+        val refusal = assertFailsWith<BlobRejected> {
+            klerk.attachedData.process(InventoryCsv(wrong), Ctx.system())
+        }
+
+        assertTrue(refusal.message!!.contains("quantity,name"), refusal.message!!)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a step can rewrite the bytes, and what is stored is what it produced`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare("name,quantity\r\nrose,3\r\n".byteInputStream(), Ctx.system())
+
+        klerk.attachedData.process(InventoryCsv(id), Ctx.system())
+        val inventory = requireNotNull(count(klerk, id).orThrow().primaryModel)
+
+        assertEquals("name,quantity\nrose,3\n", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
+        // the digest describes what is actually stored, not what arrived
+        val meta = klerk.attachedData.getMetadata(id, Ctx.system())
+        assertEquals(21, meta.size)
+        assertEquals(listOf("checkTheHeader", "normaliseLineEndings"), meta.completedSteps)
+        assertNotNull(inventory)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `processing twice does not run a step twice`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare("name,quantity\r\nrose,3\r\n".byteInputStream(), Ctx.system())
+
+        klerk.attachedData.process(InventoryCsv(id), Ctx.system())
+        // a retry after a crash must not disarm an already disarmed file a second time
+        klerk.attachedData.process(InventoryCsv(id), Ctx.system())
+        count(klerk, id).orThrow()
+
+        val meta = klerk.attachedData.getMetadata(id, Ctx.system())
+        assertEquals(listOf("checkTheHeader", "normaliseLineEndings"), meta.completedSteps, "each step ran once")
+        assertEquals("name,quantity\nrose,3\n", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `an already claimed value is never processed`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+        hang(klerk, id).orThrow()
+
+        assertFailsWith<IllegalStateException> { klerk.attachedData.process(PaintingImage(id), Ctx.system()) }
+        klerk.meta.stop()
+    }
+
+    /** Counts how often the value is fetched from storage, which is what "a step costs nothing unless declared" means. */
+    private class CountingBlobStore(root: java.nio.file.Path) : AttachedBlobStore.External {
+        private val delegate = FileBlobStore(root)
+        var fetches: Int = 0
+
+        override fun put(id: Int, value: java.io.InputStream) = delegate.put(id, value)
+        override fun get(id: Int): java.io.InputStream? = delegate.get(id).also { fetches++ }
+        override fun delete(id: Int) = delegate.delete(id)
+        override fun listIds(): Set<Int>? = delegate.listIds()
+    }
+
+    @Test
+    fun `attaching never reads the bytes`() = runBlocking {
+        val store = CountingBlobStore(Files.createTempDirectory("klerk-steps"))
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val klerk = Klerk.create(createConfig(collections, RamStorage(), blobStore = store))
+        klerk.meta.start(installShutdownHook = false)
+
+        val image = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+        val before = store.fetches
+        hang(klerk, image).orThrow()
+
+        // PaintingImage declares no steps, so nothing has to be read — and even a container that declares them is
+        // checked against what was recorded when they ran, never by reading the value inside command processing.
+        assertEquals(before, store.fetches, "attaching must not have read the value")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `the property decides the visibility, not whoever uploaded the bytes`() = runBlocking {
+        val klerk = start()
+        // prepared without saying anything about visibility, as an upload always is. Nothing can be read about it
+        // yet — unclaimed data has no owner, so there is nothing for a rule to decide on.
+        val id = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+
+        hang(klerk, id).orThrow()
+
+        // PaintingImage declares Public, so attaching it published it
+        assertEquals(AttachedDataVisibility.Public, klerk.attachedData.getMetadata(id, Ctx.system()).visibility)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a published blob is readable by anyone, which is what publishing means`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+        hang(klerk, id).orThrow()
+
+        // the read rules in this config deny unauthenticated actors, but they are not consulted for public data
+        assertEquals(24, klerk.attachedData.get(id, Ctx.unauthenticated()).readAllBytes().size)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `the declaration survives a round-trip through storage`() = runBlocking {
+        val storage = RamStorage()
+        val klerk = start(storage)
+        val id = klerk.attachedData.prepare(png().inputStream(), Ctx.system())
+        val painting = requireNotNull(hang(klerk, id).orThrow().primaryModel)
+        klerk.meta.stop()
+
+        val restarted = start(storage)
+        val image = restarted.read(Ctx.system()) { get(painting) }.props.image
+        assertEquals(id, image.id)
+        assertEquals(setOf("image/png", "image/jpeg"), image.accept, "the declaration is code, and comes back with it")
+        assertEquals(
+            AttachedDataVisibility.Public,
+            restarted.attachedData.getMetadata(id, Ctx.system()).visibility,
+        )
+        restarted.meta.stop()
+    }
+}

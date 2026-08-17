@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.datatypes
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.validation.PropertyValidation
 import dev.klerkframework.klerk.validation.PropertyValidation.Invalid
+import java.io.InputStream
 import kotlin.reflect.KFunction
 import kotlin.time.Duration
 import kotlin.time.Instant
@@ -452,4 +453,159 @@ public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
+}
+
+/**
+ * A reference to an attached blob, together with what that blob is allowed to be.
+ *
+ * A blob's bytes are not in the model, so unlike every other container this one does not validate a value it holds —
+ * it declares what Klerk should check about the value when a command attaches it, and what should happen when it is
+ * served afterwards:
+ *
+ * ```kotlin
+ * class FlowerImage(id: AttachedBlobID) : BlobContainer(id) {
+ *     override val accept = setOf("image/png", "image/jpeg", "image/webp")
+ *     override val maxSize = 5_000_000L
+ *     override val visibility = AttachedDataVisibility.Public
+ * }
+ *
+ * data class Flower(val name: FlowerName, val image: FlowerImage)
+ * ```
+ *
+ * The checks run in the command pipeline, against what Klerk itself recognised the bytes to be — so they hold for a
+ * command from a web form, from klerk-graphql, from a job or from a test alike. klerk-web additionally renders the
+ * declaration as the file input's `accept` attribute, the same way it renders `maxLength` for a string.
+ *
+ * **A declared type is not a promise about safety.** A file can satisfy two formats at once, so `accept` keeps
+ * honest mistakes out, not a determined attacker. What makes serving safe is the response headers and the origin the
+ * bytes are served from.
+ */
+public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<AttachedBlobID>(id) {
+
+    /**
+     * The content types this property accepts, as IANA media types (e.g. `image/png`). Empty means anything.
+     *
+     * Checked against the type Klerk recognised from the bytes themselves, never against what the uploader claimed.
+     */
+    public open val accept: Set<String> = emptySet()
+
+    /**
+     * Whether a value whose type Klerk could not recognise is acceptable.
+     *
+     * Only consulted when [accept] is non-empty. It has to be a decision rather than a default: CSV, plain text and
+     * plenty of binary formats have no signature at all, so a property accepting those must say so, and one
+     * accepting images must not.
+     */
+    public open val acceptUnrecognised: Boolean = false
+
+    /** The largest value this property accepts, in bytes. */
+    public open val maxSize: Long = Long.MAX_VALUE
+
+    /**
+     * Whether the bytes may be read by anyone, or only by the actors the `readAttachedData` rules allow.
+     *
+     * Applied when a command attaches the blob, and never changed afterwards — which is what makes
+     * [AttachedDataVisibility.Public] safe to cache. Declaring it here rather than passing it to `prepare` means the
+     * decision is made where it is known: whoever uploads a file has no idea what it will end up being used for.
+     */
+    public open val visibility: AttachedDataVisibility = AttachedDataVisibility.Private
+
+    /** The blob this property refers to. */
+    public val id: AttachedBlobID get() = valueWithoutAuthorization
+
+    /**
+     * Always valid: there is no value here to check. What this container declares is checked when a command attaches
+     * the blob, against metadata Klerk produced while the bytes were being written.
+     */
+    final override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /**
+     * What has to happen to a file before this property will hold it: looking at the bytes, and where necessary
+     * rewriting them.
+     *
+     * ```kotlin
+     * override val steps = listOf(::scanForViruses, ::stripMacros, ::scanForViruses)
+     *
+     * suspend fun stripMacros(args: BlobStepArgs): BlobStepResult = BlobStepResult.Replace(disarm(args.value))
+     * ```
+     *
+     * Steps run in declared order, each on the current bytes, and **nothing re-runs implicitly** — if the scanner
+     * should see the disarmed output, declare it twice, as above.
+     *
+     * They are run by `klerk.attachedData.process(...)`, not by Klerk on its own, because a virus scan or a Content
+     * Disarm & Reconstruct pass takes far too long to sit inside command processing. A command that attaches a value
+     * whose declared steps have not all run is rejected, so this is a guarantee rather than a convention.
+     *
+     * A step is a **pure function of the file**: it gets the bytes and the metadata, and nothing else. Anything that
+     * needs the actor or the model graph is an authorization rule or a validator, not a step.
+     *
+     * Each must be a named function reference — the name is what a later claim is checked against, and what makes a
+     * half-finished pipeline resumable.
+     */
+    public open val steps: List<BlobStep> = emptyList()
+
+    /** The names [steps] are recorded under. Computed once, and it is here that an unnamed step is caught. */
+    public val stepNames: List<String> by lazy {
+        steps.map { step ->
+            (step as? KFunction<*>)?.name
+                ?: throw IllegalArgumentException(
+                    "Every step of ${this::class.simpleName} must be a named function reference (::myStep), since " +
+                            "the name is what records that it has run. A lambda has no name to record."
+                )
+        }
+    }
+
+    /**
+     * Whether [metadata] satisfies what this property declares.
+     *
+     * @return null if it does, otherwise a description of what is wrong, for the command's problem.
+     */
+    public fun reasonToReject(metadata: AttachedDataMetadata): String? {
+        if (metadata.size > maxSize) {
+            return "it is ${metadata.size} bytes, and at most $maxSize is allowed"
+        }
+        if (accept.isEmpty()) {
+            return null
+        }
+        val detected = metadata.contentType
+            ?: return if (acceptUnrecognised) null else "its type could not be recognised, and ${describeAccepted()}"
+        return if (accept.contains(detected)) null else "it is $detected, and ${describeAccepted()}"
+    }
+
+    private fun describeAccepted(): String = "only ${accept.sorted().joinToString(", ")} is allowed"
+}
+
+/**
+ * One thing that must happen to a file before a property will hold it — see [BlobContainer.steps].
+ *
+ * Must be a named function reference. It runs outside command processing, so it may take its time, but it is a pure
+ * function of the file: no context, no reader, no model.
+ */
+public typealias BlobStep = suspend (BlobStepArgs) -> BlobStepResult
+
+/**
+ * What a [BlobStep] is given.
+ *
+ * @property value the current bytes. Opened on the first read, so a step that decides from the metadata alone costs
+ * nothing.
+ * @property metadata what Klerk knows about the value, including the content type it recognised and the size.
+ */
+public class BlobStepArgs(public val value: InputStream, public val metadata: AttachedDataMetadata)
+
+/** What a [BlobStep] concluded. */
+public sealed class BlobStepResult {
+
+    /** The file is fine as it is. */
+    public data object Pass : BlobStepResult()
+
+    /** The file must not be stored. [reason] is shown to whoever submitted it. */
+    public data class Reject(val reason: String) : BlobStepResult()
+
+    /**
+     * The file has been rewritten — a disarmed document, a re-encoded image — and [value] replaces it.
+     *
+     * Allowed only because the value is not yet claimed by any model: nothing can read it, no URL names it and no
+     * cache can hold it. Once a command attaches it, it is immutable.
+     */
+    public data class Replace(val value: InputStream) : BlobStepResult()
 }

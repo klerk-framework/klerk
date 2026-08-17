@@ -46,7 +46,7 @@ class AttachedBlobStoreTest {
                     lastName = LastName("Lindgren"),
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
-                    picture = picture,
+                    picture = picture?.let { AuthorPicture(it) },
                 ),
             ),
             Ctx.system(),
@@ -150,13 +150,66 @@ class AttachedBlobStoreTest {
                     lastName = LastName("Lagerlöf"),
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
-                    picture = unleased,
+                    picture = AuthorPicture(unleased),
                 ),
             ),
             Ctx.system(),
             ProcessingOptions(CommandToken.simple()),
         )
         assertTrue(failure is CommandResult.Failure, "The unleased value should have expired, but got $failure")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `The metadata says what the bytes are, not what the uploader claimed`() = runBlocking {
+        val storage = RamStorage()
+        val klerk = start(storage, AttachedBlobStore.Database)
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)
+
+        val id = klerk.attachedData.prepare(
+            png.inputStream(),
+            Ctx.system(),
+            metadata = mapOf("filename" to "totally-a-document.pdf"),
+        )
+        createAuthorWithPicture(klerk, id)
+
+        val meta = klerk.attachedData.getMetadata(id, Ctx.system())
+        assertEquals("image/png", meta.contentType)
+        // the claim is kept, separately, and never confused with the finding
+        assertEquals("totally-a-document.pdf", meta.custom["filename"])
+        klerk.meta.stop()
+
+        // and it survives a restart, since it is stored rather than re-derived
+        val restarted = start(storage, AttachedBlobStore.Database)
+        assertEquals("image/png", restarted.attachedData.getMetadata(id, Ctx.system()).contentType)
+        restarted.meta.stop()
+    }
+
+    @Test
+    fun `The content type survives a round-trip through SQL, not only through memory`() = runBlocking {
+        val klerk = start(SQLiteInMemory.create(), AttachedBlobStore.Database)
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)
+
+        val id = klerk.attachedData.prepare(png.inputStream(), Ctx.system(), metadata = mapOf("origin" to "camera"))
+        createAuthorWithPicture(klerk, id)
+
+        // read back through the row rather than from the in-memory entry
+        val row = requireNotNull(klerk.config.persistence.readAllAttachedDataMetadata()[id.id])
+        assertEquals("image/png", row.metadata.contentType)
+        assertEquals(mapOf("origin" to "camera"), row.metadata.custom)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `An application cannot pass off its own metadata as a Klerk finding`() = runBlocking {
+        val klerk = start(RamStorage(), AttachedBlobStore.Database)
+        assertFailsWith<IllegalArgumentException> {
+            klerk.attachedData.prepare(
+                "<html>evil</html>".byteInputStream(),
+                Ctx.system(),
+                metadata = mapOf("__contentType" to "image/png"),
+            )
+        }
         klerk.meta.stop()
     }
 

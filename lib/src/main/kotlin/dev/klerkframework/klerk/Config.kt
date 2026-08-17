@@ -4,10 +4,12 @@ import com.google.gson.Gson
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.BlobContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobsBlock
 import dev.klerkframework.klerk.job.JobsConfig
+import dev.klerkframework.klerk.job.PluginJobsBlock
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
 import dev.klerkframework.klerk.statemachine.Block
@@ -142,7 +144,23 @@ public data class Config<C : KlerkContext, V>(
      * that declares a blob anywhere must say; one that declares none needs no store at all.
      */
     private fun attachedBlobStoreMustMatchDeclarations() {
-        val declarations = declaredBlobProperties()
+        val bare = declaredBlobProperties(BlobDeclaration.BareId)
+        if (bare.isNotEmpty()) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.BlobMustBeDeclaredInAContainer,
+                "${bare.sorted().joinToString(", ")} is an AttachedBlobID. Declare a BlobContainer subclass for it " +
+                        "instead, the way every other property has a DataContainer:\n\n" +
+                        "    class Portrait(id: AttachedBlobID) : BlobContainer(id) {\n" +
+                        "        override val accept = setOf(\"image/png\", \"image/jpeg\")\n" +
+                        "        override val maxSize = 5_000_000L\n" +
+                        "    }\n\n" +
+                        "That is what says which files are acceptable, how large they may be, and whether they may " +
+                        "be read by anyone — and it is checked when a command attaches the file, whichever caller " +
+                        "sent it."
+            )
+        }
+
+        val declarations = declaredBlobProperties(BlobDeclaration.Container)
         if (declarations.isEmpty()) {
             return
         }
@@ -150,7 +168,7 @@ public data class Config<C : KlerkContext, V>(
         if (attachedBlobStore == null) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingAttachedBlobStore,
-                "$where holds an AttachedBlobID, so 'attachedBlobStore(...)' is required in the config. Choose " +
+                "$where holds a blob, so 'attachedBlobStore(...)' is required in the config. Choose " +
                         "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
                         "keep them on disk. Pick before you have data: Klerk does not move blobs between stores."
             )
@@ -159,16 +177,18 @@ public data class Config<C : KlerkContext, V>(
             throw IllegalConfigurationException(
                 KlerkErrorCode.AttachedBlobStoreIsNone,
                 "The config says attachedBlobStore(None), which means this application has no blobs, but $where " +
-                        "holds an AttachedBlobID."
+                        "holds one."
             )
         }
     }
 
-    /** Descriptions of every place an [AttachedBlobID] is declared: model properties and event parameters. */
-    private fun declaredBlobProperties(): List<String> {
+    private enum class BlobDeclaration { BareId, Container }
+
+    /** Descriptions of every place a blob is declared: model properties and event parameters. */
+    private fun declaredBlobProperties(kind: BlobDeclaration): List<String> {
         val found = mutableListOf<String>()
         managedModels.forEach { managed ->
-            blobPropertyNames(managed.kClass).forEach { found.add("${managed.kClass.simpleName}.$it") }
+            blobPropertyNames(managed.kClass, kind).forEach { found.add("${managed.kClass.simpleName}.$it") }
             managed.stateMachine.mutableStates.flatMap { it.getEvents() }.forEach { event ->
                 val parameters = when (event) {
                     is InstanceEventWithParameters<*, *> -> event.parametersClass
@@ -176,22 +196,30 @@ public data class Config<C : KlerkContext, V>(
                     else -> null
                 }
                 parameters?.let { kClass ->
-                    blobPropertyNames(kClass).forEach { found.add("${event.id.eventName}.$it") }
+                    blobPropertyNames(kClass, kind).forEach { found.add("${event.id.eventName}.$it") }
                 }
             }
         }
         return found.distinct()
     }
 
-    private fun blobPropertyNames(kClass: KClass<*>): List<String> =
-        kClass.memberProperties.filter { property ->
-            val type = property.returnType.withNullability(false)
-            type.isSubtypeOf(AttachedBlobID::class.starProjectedType) ||
-                    // a List<AttachedBlobID> or Set<AttachedBlobID>
-                    (type.isSubtypeOf(Collection::class.starProjectedType) &&
-                            type.arguments.singleOrNull()?.type?.withNullability(false)
-                                ?.isSubtypeOf(AttachedBlobID::class.starProjectedType) == true)
-        }.map { it.name }
+    private fun blobPropertyNames(kClass: KClass<*>, kind: BlobDeclaration): List<String> {
+        val wanted = when (kind) {
+            BlobDeclaration.BareId -> AttachedBlobID::class
+            BlobDeclaration.Container -> BlobContainer::class
+        }.starProjectedType
+
+        fun matches(type: KType): Boolean {
+            val bare = type.withNullability(false)
+            // A BlobContainer is not an AttachedBlobID, so the two kinds never match each other.
+            return bare.isSubtypeOf(wanted) ||
+                    // a List<...> or Set<...> of them
+                    (bare.isSubtypeOf(Collection::class.starProjectedType) &&
+                            bare.arguments.singleOrNull()?.type?.withNullability(false)?.isSubtypeOf(wanted) == true)
+        }
+
+        return kClass.memberProperties.filter { matches(it.returnType) }.map { it.name }
+    }
 
     private fun modelsMustHavePropertiesOfDataContainer() {
         managedModels.forEach { managed ->
@@ -490,6 +518,30 @@ public data class Config<C : KlerkContext, V>(
      * appended to [plugins]. Used to install plugins after `ConfigBuilder.build`, e.g.
      * `Klerk.create(baseConfig.withPlugin(myPlugin))`.
      */
+    /**
+     * The same configuration with a plugin's own job types and crons added, for use from
+     * [KlerkPlugin.mergeConfig]:
+     *
+     * ```kotlin
+     * override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
+     *     previous.withJobs {
+     *         register(sweepStagingArea)
+     *         cron(sweepStagingArea, "0 * * * *") { cursor = "" }
+     *     }
+     * ```
+     *
+     * A plugin can add work, not change how the job module runs: how many steps run at once, how often the dispatcher
+     * polls and what happens to an unloadable job stay the application's decisions.
+     *
+     * @throws IllegalArgumentException if a job name is already registered — prefix names with the plugin's own.
+     */
+    public fun withJobs(init: PluginJobsBlock<C, V>.() -> Unit): Config<C, V> {
+        val block = JobsBlock<C, V>()
+        block.seedFrom(jobs)
+        PluginJobsBlock(block).init()
+        return copy(jobs = jobs.with(block.types(), block.crons()))
+    }
+
     public fun withPlugin(plugin: KlerkPlugin<C, V>): Config<C, V> {
         val updatedPlugins = plugins.toMutableList()
         updatedPlugins.add(plugin)

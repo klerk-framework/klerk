@@ -31,6 +31,7 @@ import kotlinx.serialization.Serializable
 import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
+import java.io.InputStream
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.test.assertEquals
@@ -70,6 +71,8 @@ fun createConfig(
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
+            model(Painting::class, paintingStateMachine(), collections.paintings)
+            model(Inventory::class, inventoryStateMachine(), collections.inventories)
         }
         authorization {
             readModels {
@@ -116,7 +119,7 @@ fun createConfig(
                     rule(::everybodyCanPrepareAttachedData)
                 }
                 negative {
-                    rule(::unauthenticatedCannotPublishPublicly)
+                    rule(::onlyTheSystemMayPublishStrings)
                     rule(::unauthenticatedCannotPrepareStrings)
                 }
             }
@@ -175,10 +178,11 @@ fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Ctx, Views>):
 
 /**
  * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
- * visibility in [ArgsForAttachedDataWrite] is for.
+ * visibility in [ArgsForAttachedDataWrite] is for — and since a blob gets its visibility from the property it is
+ * attached to, this can only ever be about a string.
  */
-fun unauthenticatedCannotPublishPublicly(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
-    if (args.visibility == AttachedDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
+fun onlyTheSystemMayPublishStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
+    if (args.visibility == AttachedDataVisibility.Public) Deny else Pass
 
 /** A rule that keys on the kind rather than the visibility. Nonsensical as a policy, but that is not the point. */
 fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
@@ -263,8 +267,8 @@ data class Book(
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
     // attached data, see docs/attached-data.md
     val notes: AttachedStringID? = null,
-    val cover: AttachedBlobID? = null,
-    val thumbnail: AttachedBlobID? = null,
+    val cover: BookCover? = null,
+    val thumbnail: BookThumbnail? = null,
     val chapters: List<AttachedStringID> = emptyList(),
 ) {
     override fun toString() = title.value
@@ -274,7 +278,7 @@ data class Author(
     val firstName: FirstName,
     val lastName: LastName,
     val address: Address,
-    val picture: AttachedBlobID?
+    val picture: AuthorPicture?
 ) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
@@ -303,7 +307,7 @@ data class CreateAuthorParams(
     //  val address: Address,
     val secretToken: SecretPasscode,
     val favouriteColleague: ModelID<Author>? = null,
-    val picture: AttachedBlobID? = null,
+    val picture: AuthorPicture? = null,
 ) : Validatable {
 
     override fun validators(): Set<() -> PropertyCollectionValidity> =
@@ -586,7 +590,10 @@ enum class AuthorStates {
 
 data class Views(
     val books: BookViews,
-    val authors: AuthorViews<Views>
+    val authors: AuthorViews<Views>,
+    val paintings: ModelViews<Painting, Ctx> = ModelViews(),
+    val sketches: ModelViews<Sketch, Ctx> = ModelViews(),
+    val inventories: ModelViews<Inventory, Ctx> = ModelViews(),
 ) //, val shops: ModelView<Shop, Context>)
 
 suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
@@ -998,8 +1005,8 @@ data class CreateBookParams(
     val readingTime: ReadingTime,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
     val notes: AttachedStringID? = null,
-    val cover: AttachedBlobID? = null,
-    val thumbnail: AttachedBlobID? = null,
+    val cover: BookCover? = null,
+    val thumbnail: BookThumbnail? = null,
     val chapters: List<AttachedStringID> = emptyList(),
 )
 
@@ -1007,3 +1014,113 @@ class AverageScore(value: Float) : FloatContainer(value) {
     override val min: Float = 0f
     override val max: Float = Float.MAX_VALUE
 }
+
+// A model whose blob property declares what it will accept, so that the checks can be exercised from a command.
+data class Painting(val title: PaintingTitle, val image: PaintingImage)
+
+enum class PaintingStates { Hung }
+
+class PaintingTitle(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+/** Images only, published to the world, and small. */
+class PaintingImage(id: AttachedBlobID) : BlobContainer(id) {
+    override val accept: Set<String> = setOf("image/png", "image/jpeg")
+    override val maxSize: Long = 1000
+    override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
+}
+
+data class CreatePaintingParams(val title: PaintingTitle, val image: PaintingImage)
+
+object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(
+    Painting::class, EXTERNAL, CreatePaintingParams::class
+)
+
+object DeletePainting : InstanceEventNoParameters<Painting>(Painting::class, EXTERNAL)
+
+fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> = stateMachine {
+    event(CreatePainting) {}
+    event(DeletePainting) {}
+    voidState {
+        onEvent(CreatePainting) { createModel(PaintingStates.Hung, ::newPainting) }
+    }
+    state(PaintingStates.Hung) {
+        onEvent(DeletePainting) { delete() }
+    }
+}
+
+private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ctx, Views>): Painting =
+    Painting(args.command.params.title, args.command.params.image)
+
+// Blob properties must be declared in a BlobContainer. These three accept anything, which is what the attached-data
+// tests need; PaintingImage above is the one that declares real constraints.
+class AuthorPicture(id: AttachedBlobID) : BlobContainer(id)
+class BookCover(id: AttachedBlobID) : BlobContainer(id)
+class BookThumbnail(id: AttachedBlobID) : BlobContainer(id)
+
+// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+data class Sketch(val drawing: AttachedBlobID)
+
+enum class SketchStates { Drawn }
+
+object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(Sketch::class, EXTERNAL, Sketch::class)
+
+fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = stateMachine {
+    event(CreateSketch) {}
+    voidState {
+        onEvent(CreateSketch) { createModel(SketchStates.Drawn, ::newSketch) }
+    }
+    state(SketchStates.Drawn) {}
+}
+
+private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
+
+// A blob whose bytes are checked, not just its metadata: the CSV must have the columns the application expects.
+data class Inventory(val name: InventoryName, val rows: InventoryCsv)
+
+enum class InventoryStates { Counted }
+
+class InventoryName(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+    override val steps: List<BlobStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
+}
+
+/** A step that only looks. */
+suspend fun checkTheHeader(args: BlobStepArgs): BlobStepResult {
+    val header = args.value.bufferedReader().buffered().readLine()
+    return if (header == "name,quantity") BlobStepResult.Pass
+    else BlobStepResult.Reject("the first line must be 'name,quantity', not '$header'")
+}
+
+/** A step that rewrites the bytes, standing in for something like a Content Disarm & Reconstruct pass. */
+suspend fun normaliseLineEndings(args: BlobStepArgs): BlobStepResult {
+    val text = args.value.readBytes().decodeToString()
+    return if (!text.contains("\r\n")) BlobStepResult.Pass
+    else BlobStepResult.Replace(text.replace("\r\n", "\n").byteInputStream())
+}
+
+data class CreateInventoryParams(val name: InventoryName, val rows: InventoryCsv)
+
+object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(
+    Inventory::class, EXTERNAL, CreateInventoryParams::class
+)
+
+fun inventoryStateMachine(): StateMachine<Inventory, InventoryStates, Ctx, Views> = stateMachine {
+    event(CreateInventory) {}
+    voidState {
+        onEvent(CreateInventory) { createModel(InventoryStates.Counted, ::newInventory) }
+    }
+    state(InventoryStates.Counted) {}
+}
+
+private fun newInventory(args: ArgForVoidEvent<Inventory, CreateInventoryParams, Ctx, Views>): Inventory =
+    Inventory(args.command.params.name, args.command.params.rows)

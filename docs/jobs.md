@@ -461,6 +461,22 @@ jobs {
 instance* and are part of its lifecycle — "cancel this booking if unconfirmed after 48 h". Crons are system-wide
 recurring work with no model behind them — "delete expired sessions every night".
 
+### Jobs from a plugin
+
+A [plugin](plugins.md) registers its own job types and crons from `mergeConfig`:
+
+```kotlin
+override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
+    previous.withJobs {
+        register(sweepStagingArea)
+        cron(sweepStagingArea, "0 * * * *") { cursor = "" }
+    }
+```
+
+A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
+remain the application's decisions. Job names are global, so prefix a plugin's names with the plugin's own —
+registering a name the application already used fails when the config is built.
+
 ### Attached data
 
 A job may create [attached data](attached-data.md) before a command references it. Such data is **claimed by the job**,
