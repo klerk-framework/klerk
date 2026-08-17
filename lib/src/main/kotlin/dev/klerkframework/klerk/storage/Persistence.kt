@@ -229,6 +229,14 @@ public interface Persistence {
     public fun deleteExpiredAttachedData(now: Instant): Set<Int>
 
     /**
+     * Deletes the given rows, whatever their expiry says.
+     *
+     * Called for a value a step refused: it is unclaimed, nothing may ever attach it, and waiting for its lease to run
+     * out would only keep a file somebody has already been told is unacceptable.
+     */
+    public fun deleteAttachedData(ids: Set<Int>): Unit
+
+    /**
      * Every persisted job, in no particular order. Called once at startup to rebuild the scheduler's state; the job
      * module keeps the rows in memory from then on.
      */
@@ -433,6 +441,10 @@ public open class RamStorage : Persistence {
         }.keys.toSet()
         expired.forEach { attachedRows.remove(it) }
         return expired
+    }
+
+    override fun deleteAttachedData(ids: Set<Int>) {
+        ids.forEach { attachedRows.remove(it) }
     }
 
     override fun getAllJobs(): List<JobRecord> = synchronized(lock) { jobs.values.toList() }

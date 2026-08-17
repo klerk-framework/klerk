@@ -467,6 +467,7 @@ public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
  *     override val accept = setOf("image/png", "image/jpeg", "image/webp")
  *     override val maxSize = 5_000_000L
  *     override val visibility = AttachedDataVisibility.Public
+ *     override val preAttachSteps = listOf(::stripExif, ::reEncode)
  * }
  *
  * data class Flower(val name: FlowerName, val image: FlowerImage)
@@ -524,7 +525,7 @@ public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<Attached
      * rewriting them.
      *
      * ```kotlin
-     * override val steps = listOf(::scanForViruses, ::stripMacros, ::scanForViruses)
+     * override val preAttachSteps = listOf(::scanForViruses, ::stripMacros, ::scanForViruses)
      *
      * suspend fun stripMacros(args: BlobStepArgs): BlobStepResult = BlobStepResult.Replace(disarm(args.value))
      * ```
@@ -532,28 +533,56 @@ public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<Attached
      * Steps run in declared order, each on the current bytes, and **nothing re-runs implicitly** — if the scanner
      * should see the disarmed output, declare it twice, as above.
      *
-     * They are run by `klerk.attachedData.process(...)`, not by Klerk on its own, because a virus scan or a Content
-     * Disarm & Reconstruct pass takes far too long to sit inside command processing. A command that attaches a value
-     * whose declared steps have not all run is rejected, so this is a guarantee rather than a convention.
+     * Klerk runs them in a job it schedules from `prepare` — a virus scan or a Content Disarm & Reconstruct pass takes
+     * far too long to sit inside command processing — one step of the job per step declared here. A command that
+     * attaches a value whose declared steps have not all run is rejected, so this is a guarantee rather than a
+     * convention; wait for `klerk.attachedData.awaitProcessing(...)` before issuing it.
      *
      * A step is a **pure function of the file**: it gets the bytes and the metadata, and nothing else. Anything that
      * needs the actor or the model graph is an authorization rule or a validator, not a step.
      *
      * Each must be a named function reference — the name is what a later claim is checked against, and what makes a
      * half-finished pipeline resumable.
+     *
+     * At least one step is required: an uploaded file usually has to be looked at before it is kept. A property that
+     * genuinely wants nothing done says so with [noPreAttachProcessing], which must then be the only step and costs
+     * nothing at runtime.
      */
-    public open val steps: List<BlobStep> = emptyList()
+    public abstract val preAttachSteps: List<BlobStep>
 
-    /** The names [steps] are recorded under. Computed once, and it is here that an unnamed step is caught. */
-    public val stepNames: List<String> by lazy {
-        steps.map { step ->
-            (step as? KFunction<*>)?.name
+    /**
+     * The steps that actually run, with the names they are recorded under. Computed once, and it is here that an empty
+     * list, an unnamed step, or a misused [noPreAttachProcessing] is caught.
+     */
+    internal val stepsToRun: List<Pair<String, BlobStep>> by lazy {
+        val named = preAttachSteps.map { step ->
+            val name = (step as? KFunction<*>)?.name
                 ?: throw IllegalArgumentException(
                     "Every step of ${this::class.simpleName} must be a named function reference (::myStep), since " +
                             "the name is what records that it has run. A lambda has no name to record."
                 )
+            name to step
         }
+        if (named.isEmpty()) {
+            throw IllegalArgumentException(
+                "${this::class.simpleName} must declare at least one preAttachStep: an uploaded file is not to be " +
+                        "trusted until something has looked at it (a virus scan, an EXIF strip, a re-encode). If " +
+                        "this property really wants the bytes exactly as they arrived, say so explicitly with " +
+                        "'override val preAttachSteps = listOf(::noPreAttachProcessing)'."
+            )
+        }
+        val doNothing = named.filter { it.second == NO_PRE_ATTACH_PROCESSING }
+        if (doNothing.isNotEmpty() && named.size > 1) {
+            throw IllegalArgumentException(
+                "${this::class.simpleName} declares noPreAttachProcessing together with other steps. It says that " +
+                        "there is nothing to do, so it can only be the only step."
+            )
+        }
+        named.filterNot { it.second == NO_PRE_ATTACH_PROCESSING }
     }
+
+    /** The names of the steps that run against a value before this property may hold it, in order. */
+    public val stepNames: List<String> get() = stepsToRun.map { it.first }
 
     /**
      * Whether [metadata] satisfies what this property declares.
@@ -576,7 +605,7 @@ public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<Attached
 }
 
 /**
- * One thing that must happen to a file before a property will hold it — see [BlobContainer.steps].
+ * One thing that must happen to a file before a property will hold it — see [BlobContainer.preAttachSteps].
  *
  * Must be a named function reference. It runs outside command processing, so it may take its time, but it is a pure
  * function of the file: no context, no reader, no model.
@@ -591,6 +620,24 @@ public typealias BlobStep = suspend (BlobStepArgs) -> BlobStepResult
  * @property metadata what Klerk knows about the value, including the content type it recognised and the size.
  */
 public class BlobStepArgs(public val value: InputStream, public val metadata: AttachedDataMetadata)
+
+/**
+ * A [BlobStep] that does nothing, for a [BlobContainer] that wants the bytes exactly as they arrived:
+ *
+ * ```kotlin
+ * override val preAttachSteps = listOf(::noPreAttachProcessing)
+ * ```
+ *
+ * It must then be the only step. Klerk skips the processing job entirely, so a value prepared for such a property is
+ * ready to be attached at once and needs no `awaitProcessing`.
+ *
+ * Think twice before using it: an uploaded file arrives from whoever sent it, and `accept` alone does not make it
+ * safe to keep or to serve.
+ */
+public suspend fun noPreAttachProcessing(args: BlobStepArgs): BlobStepResult = BlobStepResult.Pass
+
+/** The reference the steps are compared against, so that a user function of the same name is not mistaken for it. */
+private val NO_PRE_ATTACH_PROCESSING: BlobStep = ::noPreAttachProcessing
 
 /** What a [BlobStep] concluded. */
 public sealed class BlobStepResult {

@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.attacheddata.PROCESS_ATTACHED_DATA
+import dev.klerkframework.klerk.attacheddata.ProcessAttachedData
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -116,8 +118,7 @@ internal annotation class JobsConfigMarker
  * The assembled job-module configuration. Built by `ConfigBuilder.jobs { ... }`.
  */
 public class JobsConfig<C : KlerkContext, V> internal constructor(
-    /** Every registered job type, by name. Nothing else can be loaded from storage. */
-    public val types: Map<JobName, JobType<*, C, V>>,
+    types: Map<JobName, JobType<*, C, V>>,
     public val crons: List<CronSchedule<C, V>>,
     public val onUnloadableJob: UnloadableJobPolicy,
     public val execution: JobExecution,
@@ -128,6 +129,16 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
     public val pollInterval: Duration,
     public val backoffBase: Duration,
 ) {
+
+    /**
+     * Runs the steps a blob's declaration declares. Klerk schedules it itself, so it is registered whether or not the
+     * application configured any jobs at all.
+     */
+    internal val processAttachedData: ProcessAttachedData<C, V> = ProcessAttachedData()
+
+    /** Every registered job type, by name. Nothing else can be loaded from storage. */
+    public val types: Map<JobName, JobType<*, C, V>> = types + (processAttachedData.name to processAttachedData)
+
     public companion object {
         /** The default job configuration: no job types, everything else at its default. */
         public fun <C : KlerkContext, V> empty(): JobsConfig<C, V> = JobsConfig(
@@ -251,6 +262,9 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
      * type's cursor cannot be serialized.
      */
     public fun register(type: JobType<*, C, V>) {
+        require(type.name.value != PROCESS_ATTACHED_DATA) {
+            "The job name '$PROCESS_ATTACHED_DATA' belongs to Klerk itself"
+        }
         require(!types.containsKey(type.name)) {
             "There is already a job type registered under the name '${type.name.value}'"
         }

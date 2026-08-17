@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.statements.UpdateBuilder
@@ -470,6 +471,15 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 .toSet()
             AttachedData.deleteWhere { (expires less cutoff) and (claimedByJob eq null) }
             doomed
+        }
+    }
+
+    override fun deleteAttachedData(ids: Set<Int>) {
+        if (ids.isEmpty()) {
+            return
+        }
+        transaction(database) {
+            AttachedData.deleteWhere { AttachedData.id inList ids }
         }
     }
 

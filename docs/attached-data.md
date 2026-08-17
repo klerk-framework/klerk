@@ -11,6 +11,7 @@ it holds the reference *and* declares what the value is allowed to be.
 class Portrait(id: AttachedBlobID) : BlobContainer(id) {
     override val accept = setOf("image/png", "image/jpeg")
     override val maxSize = 5_000_000L
+    override val preAttachSteps = listOf(::stripExif)   // required — see below
 }
 
 data class Author(val name: Name, val portrait: Portrait?)
@@ -50,7 +51,7 @@ adds a second way to create the model.
 | `acceptUnrecognised` | whether a value whose type could not be recognised is acceptable. Only consulted when `accept` is non-empty. |
 | `maxSize`            | the largest value, in bytes.                                                                                 |
 | `visibility`         | `Private` (the default) or `Public` — see below.                                                             |
-| `inspect(value)`     | the bytes themselves, for what metadata cannot answer.                                                       |
+| `preAttachSteps`     | what has to happen to the file before this property will hold it — required, see below.                      |
 
 `acceptUnrecognised` has to be a decision rather than a default, because "unrecognised" is the normal state of affairs
 for CSV, for plain text and for any format Klerk has no signature for. A property that accepts those must say so; one
@@ -66,28 +67,55 @@ uploading is the application's own metadata and is never treated as fact.
 JavaScript), so `accept` keeps honest mistakes out, not a determined attacker. What makes serving safe is the response
 headers and the origin the bytes are served from — see [serving through a CDN](#serving-through-a-cdn).
 
-### Looking at the bytes
+### Steps: looking at the bytes, and rewriting them
 
-When metadata is not enough, override `inspect`:
+Metadata cannot answer everything. A virus scan has to read the file; a Content Disarm & Reconstruct pass reads it and
+hands back *different bytes*. Both are declared as `preAttachSteps`:
 
 ```kotlin
 class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
     override val accept = setOf("text/plain")
-    override val acceptUnrecognised = false
+    override val acceptUnrecognised = true
+    override val preAttachSteps = listOf(::checkTheHeader, ::normaliseLineEndings)
+}
 
-    override fun inspect(value: InputStream): String? {
-        val header = value.bufferedReader().buffered().readLine()
-        return if (header == "name,quantity") null else "the first line must be 'name,quantity'"
-    }
+suspend fun checkTheHeader(args: BlobStepArgs): BlobStepResult {
+    val header = args.value.bufferedReader().buffered().readLine()
+    return if (header == "name,quantity") BlobStepResult.Pass
+    else BlobStepResult.Reject("the first line must be 'name,quantity'")
+}
+
+suspend fun normaliseLineEndings(args: BlobStepArgs): BlobStepResult =
+    BlobStepResult.Replace(args.value.readBytes().decodeToString().replace("\r\n", "\n").byteInputStream())
+```
+
+A step returns `Pass` (the file is fine), `Reject` (it must not be stored, with the reason the user is shown) or
+`Replace` (these bytes instead). They run in declared order, each on the current bytes, and **nothing re-runs
+implicitly** — if the scanner should see the disarmed output, declare it twice.
+
+A step is a **pure function of the file**: it gets the bytes and the metadata, and nothing else. Anything that needs
+the actor or the model graph is an authorization rule or a validator, not a step. Each must be a named function
+reference (`::checkTheHeader`), because the name is what Klerk records when it has run.
+
+**Klerk runs them itself**, in a [job](jobs.md) it schedules from `prepare` — see [Writing](#writing). A command
+attaching a value whose declared steps have not all run is rejected, so this is a guarantee rather than a convention.
+
+Bytes may be rewritten only while the value is unclaimed. Once a command has attached it to a model it never changes
+again: no URL names an unclaimed value and no cache can have seen it, so the immutability that matters is untouched.
+
+**Every container must declare at least one step.** An uploaded file arrives from whoever sent it, and `accept` alone
+does not make it safe to keep or to serve — most files should be looked at, and many should be rewritten (an image
+re-encoded, its EXIF stripped). A property that genuinely wants the bytes exactly as they arrived has to say so:
+
+```kotlin
+class CompressedAsset(id: AttachedBlobID) : BlobContainer(id) {
+    override val preAttachSteps = listOf(::noPreAttachProcessing)
 }
 ```
 
-It runs before the command commits, so a file that fails never reaches a model. Return null if the value is fine, or a
-description of what is wrong — that text becomes the command's problem.
-
-**Read only what you need.** The stream opens on the first read, so a container that does not override `inspect` costs
-nothing at all, but whatever you do read happens inside command processing while every other command waits. Checking a
-header is fine; parsing a gigabyte is not. Work that big belongs in a job after the model exists.
+`noPreAttachProcessing` must then be the only step, and it costs nothing at all: no job is scheduled, `awaitProcessing`
+returns immediately, and attaching never reads the value. A container that declares an empty list is refused when the
+config is built.
 
 ## Where blob bytes are kept
 
@@ -130,12 +158,32 @@ is done in two steps:
 2. update the model with the ID of the data (fast)
 
 ```kotlin
-val blobID: AttachedBlobID = klerk.attachedData.prepare(inputStream, context)
+val blobID: AttachedBlobID = klerk.attachedData.prepare(inputStream, Portrait::class, context)
 // use blobID in a Command that creates or updates the model
 ```
 
-`prepare` does not need to know which model the data will belong to, so it works for events that *create* a model just
-as well as for events that update one. Ownership is recorded when the command commits.
+`prepare` does not need to know which *model* the data will belong to, so it works for events that create a model just
+as well as for events that update one. Ownership is recorded when the command commits. It does need to know which
+**property** the value is destined for: that is what says how large it may be, what it may be, and what has to happen
+to it first.
+
+### Waiting for the steps
+
+When the declaration declares real [steps](#steps-looking-at-the-bytes-and-rewriting-them) — anything other than
+`noPreAttachProcessing` — `prepare` schedules a job to run them and returns as soon as the bytes are written. Wait for that job before the command that attaches the value:
+
+```kotlin
+val blobID = klerk.attachedData.prepare(inputStream, InventoryCsv::class, context)
+klerk.attachedData.awaitProcessing(blobID)   // throws BlobRejected if a step refused the file
+```
+
+`awaitProcessing` returns immediately when there is nothing to wait for, so it is safe to call for any value. A step
+that refuses the file throws `BlobRejected` with the reason, and the value is deleted. A step that *fails* — a scanner
+that is briefly unreachable — is retried with the usual backoff, and ends up in the dead-letter queue if it keeps
+failing; the job is called `klerk-process-attached-data` in the admin UI.
+
+Nothing forces you to wait: a longer-running application can prepare the value now and issue the command when the job
+has finished. What is not allowed is attaching a value whose steps have not run — that command is rejected.
 
 If you call `prepare` but no committed command references the ID within **1 minute**, the data is deleted. A later
 attempt to use that ID fails the command.
@@ -146,7 +194,7 @@ A minute is right when the command follows immediately. When it cannot — a fil
 picks it but not attached until they submit the form — ask for a longer lease:
 
 ```kotlin
-val blobID = klerk.attachedData.prepare(inputStream, context, lease = 15.minutes)
+val blobID = klerk.attachedData.prepare(inputStream, Portrait::class, context, lease = 15.minutes)
 ```
 
 A lease may not exceed `KlerkSettings.maxAttachedDataLease` (24 hours by default), and the `writeAttachedData` rules see
@@ -159,7 +207,7 @@ Data prepared inside a job needs no lease: it is kept for as long as the job liv
 When the value is already a file — a completed upload, say — `prepareFromFile` hands it over instead of copying it:
 
 ```kotlin
-val blobID = klerk.attachedData.prepareFromFile(path, context, lease = 15.minutes)
+val blobID = klerk.attachedData.prepareFromFile(path, Portrait::class, context, lease = 15.minutes)
 ```
 
 With a `FileBlobStore` on the same filesystem this is a rename: the bytes are read once to compute the size and hash,
@@ -228,7 +276,7 @@ You can attach your own metadata when preparing:
 
 ```kotlin
 val blobID = klerk.attachedData.prepare(
-    inputStream, context,
+    inputStream, Portrait::class, context,
     metadata = mapOf("filename" to "rose.webp", "clientContentType" to "image/webp"),
 )
 ```

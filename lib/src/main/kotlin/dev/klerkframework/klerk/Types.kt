@@ -455,7 +455,7 @@ public data class AttachedDataMetadata(
      */
     val contentType: String? = null,
     /**
-     * The names of the [dev.klerkframework.klerk.datatypes.BlobContainer.steps] that have run against this value, in
+     * The names of the [dev.klerkframework.klerk.datatypes.BlobContainer.preAttachSteps] that have run against this value, in
      * the order they ran.
      *
      * A command attaching the value checks this against what the property declares, which is what makes a virus scan

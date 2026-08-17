@@ -164,6 +164,7 @@ public enum class KlerkErrorCode(public val code: String) {
     AttachedBlobStoreIsNone("ERROR-CONFIG-12"),
     AttachedBlobStoreMissingData("ERROR-CONFIG-13"),
     BlobMustBeDeclaredInAContainer("ERROR-CONFIG-14"),
+    MissingPreAttachStep("ERROR-CONFIG-15"),
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
     Internal("ERROR-INTERNAL-1"),
@@ -205,5 +206,5 @@ public enum class KlerkErrorCode(public val code: String) {
     override fun toString(): String = code
 }
 
-/** Thrown by `attachedData.process` when a file does not pass what its property declares. */
+/** Thrown by `attachedData.awaitProcessing` when a step refused the file, or when it is not what its property wants. */
 public class BlobRejected(message: String) : RuntimeException(message)

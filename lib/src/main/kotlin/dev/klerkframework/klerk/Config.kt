@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import com.google.gson.Gson
+import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.DataContainer
@@ -116,6 +117,7 @@ public data class Config<C : KlerkContext, V>(
         checkContextProviderExistIfConfigContainsTimeTriggers()
         schedulerJobsMustHaveAJobContextProvider()
         attachedBlobStoreMustMatchDeclarations()
+        blobContainersMustDeclareAPreAttachStep()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
     }
 
@@ -153,6 +155,7 @@ public data class Config<C : KlerkContext, V>(
                         "    class Portrait(id: AttachedBlobID) : BlobContainer(id) {\n" +
                         "        override val accept = setOf(\"image/png\", \"image/jpeg\")\n" +
                         "        override val maxSize = 5_000_000L\n" +
+                        "        override val preAttachSteps = listOf(::stripExif)\n" +
                         "    }\n\n" +
                         "That is what says which files are acceptable, how large they may be, and whether they may " +
                         "be read by anyone — and it is checked when a command attaches the file, whichever caller " +
@@ -219,6 +222,65 @@ public data class Config<C : KlerkContext, V>(
         }
 
         return kClass.memberProperties.filter { matches(it.returnType) }.map { it.name }
+    }
+
+    /**
+     * An uploaded file has to be looked at before it is kept, so a [BlobContainer] must declare at least one
+     * preAttachStep — [dev.klerkframework.klerk.datatypes.noPreAttachProcessing] if it truly wants none. Checked here,
+     * since a property that is only reached from an upload page would otherwise not complain until someone uploads a
+     * file.
+     */
+    private fun blobContainersMustDeclareAPreAttachStep() {
+        declaredBlobContainers().forEach { (kClass, where) ->
+            val container = try {
+                instantiateDeclaration(kClass, AttachedBlobID(0))
+            } catch (e: IllegalArgumentException) {
+                throw IllegalConfigurationException(
+                    KlerkErrorCode.BlobMustBeDeclaredInAContainer,
+                    "$where: ${e.message}"
+                )
+            }
+            try {
+                container.stepNames
+            } catch (e: IllegalArgumentException) {
+                throw IllegalConfigurationException(KlerkErrorCode.MissingPreAttachStep, "$where: ${e.message}")
+            }
+        }
+    }
+
+    /** Every [BlobContainer] class a model property or event parameter uses, and where it was found. */
+    private fun declaredBlobContainers(): Map<KClass<out BlobContainer>, String> {
+        val found = mutableMapOf<KClass<out BlobContainer>, String>()
+
+        fun collect(kClass: KClass<*>, describe: (String) -> String) {
+            kClass.memberProperties.forEach { property ->
+                val bare = property.returnType.withNullability(false)
+                val type = if (bare.isSubtypeOf(Collection::class.starProjectedType)) {
+                    bare.arguments.singleOrNull()?.type?.withNullability(false)
+                } else {
+                    bare
+                } ?: return@forEach
+                if (!type.isSubtypeOf(BlobContainer::class.starProjectedType)) {
+                    return@forEach
+                }
+                @Suppress("UNCHECKED_CAST")
+                val container = type.classifier as? KClass<out BlobContainer> ?: return@forEach
+                found.putIfAbsent(container, describe(property.name))
+            }
+        }
+
+        managedModels.forEach { managed ->
+            collect(managed.kClass) { "${managed.kClass.simpleName}.$it" }
+            managed.stateMachine.mutableStates.flatMap { it.getEvents() }.forEach { event ->
+                val parameters = when (event) {
+                    is InstanceEventWithParameters<*, *> -> event.parametersClass
+                    is VoidEventWithParameters<*, *> -> event.parametersClass
+                    else -> null
+                }
+                parameters?.let { kClass -> collect(kClass) { "${event.id.eventName}.$it" } }
+            }
+        }
+        return found
     }
 
     private fun modelsMustHavePropertiesOfDataContainer() {

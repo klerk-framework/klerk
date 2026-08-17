@@ -86,7 +86,7 @@ class AttachedBlobStoreTest {
     fun `Klerk refuses to start when the blob store does not have the data the database refers to`() = runBlocking {
         val storage = RamStorage()
         val klerk = start(storage, AttachedBlobStore.Database)
-        val id = klerk.attachedData.prepare("a portrait".byteInputStream(), Ctx.system())
+        val id = klerk.attachedData.prepare("a portrait".byteInputStream(), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
         klerk.meta.stop()
 
@@ -114,7 +114,7 @@ class AttachedBlobStoreTest {
         val klerk = start(RamStorage(), FileBlobStore(tempDir()))
         val content = ByteArray(8 * 1024 * 1024) { (it % 251).toByte() }
 
-        val id = klerk.attachedData.prepare(content.inputStream(), Ctx.system())
+        val id = klerk.attachedData.prepare(content.inputStream(), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertEquals(content.size.toLong(), klerk.attachedData.getMetadata(id, Ctx.system()).size)
@@ -135,8 +135,8 @@ class AttachedBlobStoreTest {
         )
         klerk.meta.start(installShutdownHook = false)
 
-        val leased = klerk.attachedData.prepare("survives".byteInputStream(), Ctx.system(), lease = 1.hours)
-        val unleased = klerk.attachedData.prepare("does not".byteInputStream(), Ctx.system())
+        val leased = klerk.attachedData.prepare("survives".byteInputStream(), AuthorPicture::class, Ctx.system(), lease = 1.hours)
+        val unleased = klerk.attachedData.prepare("does not".byteInputStream(), AuthorPicture::class, Ctx.system())
         Thread.sleep(20)
 
         // claiming forces the reaper's hand: the leased value is still there, the other one is gone
@@ -168,6 +168,7 @@ class AttachedBlobStoreTest {
 
         val id = klerk.attachedData.prepare(
             png.inputStream(),
+            AuthorPicture::class,
             Ctx.system(),
             metadata = mapOf("filename" to "totally-a-document.pdf"),
         )
@@ -190,7 +191,7 @@ class AttachedBlobStoreTest {
         val klerk = start(SQLiteInMemory.create(), AttachedBlobStore.Database)
         val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)
 
-        val id = klerk.attachedData.prepare(png.inputStream(), Ctx.system(), metadata = mapOf("origin" to "camera"))
+        val id = klerk.attachedData.prepare(png.inputStream(), AuthorPicture::class, Ctx.system(), metadata = mapOf("origin" to "camera"))
         createAuthorWithPicture(klerk, id)
 
         // read back through the row rather than from the in-memory entry
@@ -206,6 +207,7 @@ class AttachedBlobStoreTest {
         assertFailsWith<IllegalArgumentException> {
             klerk.attachedData.prepare(
                 "<html>evil</html>".byteInputStream(),
+                AuthorPicture::class,
                 Ctx.system(),
                 metadata = mapOf("__contentType" to "image/png"),
             )
@@ -217,7 +219,7 @@ class AttachedBlobStoreTest {
     fun `A lease longer than the maximum is refused`() = runBlocking {
         val klerk = start(RamStorage(), AttachedBlobStore.Database)
         assertFailsWith<IllegalArgumentException> {
-            klerk.attachedData.prepare("too long".byteInputStream(), Ctx.system(), lease = 48.hours)
+            klerk.attachedData.prepare("too long".byteInputStream(), AuthorPicture::class, Ctx.system(), lease = 48.hours)
         }
         klerk.meta.stop()
     }
@@ -232,7 +234,7 @@ class AttachedBlobStoreTest {
         val staged = Files.createTempFile(dir.parent, "staged", "")
         Files.write(staged, "adopt me".toByteArray())
 
-        val id = klerk.attachedData.prepareFromFile(staged, Ctx.system())
+        val id = klerk.attachedData.prepareFromFile(staged, AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertFalse(Files.exists(staged), "the file should have been moved, not copied")
@@ -249,7 +251,7 @@ class AttachedBlobStoreTest {
         val staged = Files.createTempFile("staged", "")
         Files.write(staged, "copy me".toByteArray())
 
-        val id = klerk.attachedData.prepareFromFile(staged, Ctx.system())
+        val id = klerk.attachedData.prepareFromFile(staged, AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertTrue(Files.exists(staged), "a store that cannot adopt must leave the file alone")
@@ -267,7 +269,7 @@ class AttachedBlobStoreTest {
         val store = FileBlobStore(dir)
         val klerk = start(RamStorage(), store)
 
-        val id = klerk.attachedData.prepare("bytes".byteInputStream(), Ctx.system())
+        val id = klerk.attachedData.prepare("bytes".byteInputStream(), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
         assertTrue(store.listIds()!!.contains(id.id))
 

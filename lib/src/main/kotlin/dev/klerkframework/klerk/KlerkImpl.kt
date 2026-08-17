@@ -19,6 +19,12 @@ import kotlin.time.Duration
 import kotlin.time.measureTime
 
 
+/**
+ * The implementation behind a [Klerk] handle, for the framework's own use — a job step is handed the interface, but
+ * Klerk's own job types need the internals.
+ */
+internal fun <C : KlerkContext, V> Klerk<C, V>.impl(): KlerkImpl<C, V> = this as KlerkImpl<C, V>
+
 internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>, val settings: KlerkSettings) :
     Klerk<C, V> {
 

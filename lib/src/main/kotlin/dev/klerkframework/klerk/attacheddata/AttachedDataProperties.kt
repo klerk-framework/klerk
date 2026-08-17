@@ -4,6 +4,8 @@ import dev.klerkframework.klerk.AttachedBlobID
 import dev.klerkframework.klerk.AttachedStringID
 import dev.klerkframework.klerk.datatypes.BlobContainer
 import dev.klerkframework.klerk.logger
+import kotlin.reflect.KClass
+import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
 
 /**
@@ -50,6 +52,43 @@ internal fun collectAttachedData(props: Any): Map<Int, AttachedDataReference> {
         }
     }
     return found
+}
+
+/**
+ * Builds the container [kClass] around a particular blob, so that what it declares can be applied to that value.
+ *
+ * A container must therefore be constructible from an id alone — which is what a model property does anyway — and the
+ * error says so plainly, because the alternative is a puzzling failure inside a job.
+ *
+ * @throws IllegalArgumentException if there is no such constructor, or if it threw.
+ */
+internal fun instantiateDeclaration(kClass: KClass<out BlobContainer>, id: AttachedBlobID): BlobContainer {
+    val constructor = kClass.constructors.singleOrNull { it.parameters.size == 1 }
+        ?: throw IllegalArgumentException(
+            "${kClass.qualifiedName ?: kClass} cannot be used as a blob declaration: a BlobContainer must have " +
+                    "exactly one constructor taking an AttachedBlobID, as 'class MyImage(id: AttachedBlobID) : " +
+                    "BlobContainer(id)' does. An anonymous or inner class cannot be one."
+        )
+    return try {
+        constructor.call(id) as BlobContainer
+    } catch (e: Exception) {
+        throw IllegalArgumentException("Could not build the blob declaration ${kClass.qualifiedName ?: kClass}", e)
+    }
+}
+
+/**
+ * The same, from the name a job cursor carries. The class is gone if it was renamed since the value was prepared, in
+ * which case the job fails rather than silently letting an unprocessed value through.
+ */
+@Suppress("UNCHECKED_CAST")
+internal fun instantiateDeclaration(className: String, id: AttachedBlobID): BlobContainer {
+    val kClass = try {
+        Class.forName(className).kotlin
+    } catch (e: ClassNotFoundException) {
+        throw IllegalArgumentException("There is no longer a blob declaration called '$className'", e)
+    }
+    require(kClass.isSubclassOf(BlobContainer::class)) { "$className is not a BlobContainer" }
+    return instantiateDeclaration(kClass as KClass<out BlobContainer>, id)
 }
 
 /** The ids alone, for the places that only need to know which values a model refers to. */

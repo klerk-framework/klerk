@@ -99,7 +99,7 @@ open class AttachedDataTest {
     @Test
     fun `Attaches a blob when the model is created`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("a portrait"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("a portrait"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
 
         val stored = klerk.read(Ctx.system()) { get(authorID).props.picture?.id }
@@ -114,7 +114,7 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, null)
         assertNull(klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
 
-        val id = klerk.attachedData.prepare(blob("later"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("later"), AuthorPicture::class, Ctx.system())
         setPicture(klerk, authorID, id).orThrow()
 
         assertEquals(id, klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
@@ -146,7 +146,7 @@ open class AttachedDataTest {
     fun `An id may only be used through the type it was prepared as`() = runBlocking {
         // blobs and strings share one id space, so the kind is what keeps them apart
         val klerk = start()
-        val blobID = klerk.attachedData.prepare(blob("bytes"), Ctx.system())
+        val blobID = klerk.attachedData.prepare(blob("bytes"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, blobID)
         val stringID = prepareString(klerk, "text")
 
@@ -168,7 +168,7 @@ open class AttachedDataTest {
     @Test
     fun `The kind is not disclosed to an actor who may not read the data`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("members only"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("members only"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         // the wrong kind would also fail, but authorization is what decides, and it comes first
@@ -181,7 +181,7 @@ open class AttachedDataTest {
     @Test
     fun `The metadata reports the kind`() = runBlocking {
         val klerk = start()
-        val blobID = klerk.attachedData.prepare(blob("bytes"), Ctx.system())
+        val blobID = klerk.attachedData.prepare(blob("bytes"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, blobID)
         val stringID = prepareString(klerk, "text")
 
@@ -196,7 +196,7 @@ open class AttachedDataTest {
         val context = Ctx.unauthenticated()
 
         // the rule in TestSetup denies unauthenticated actors strings, but not blobs
-        assertNotNull(klerk.attachedData.prepare(blob("fine"), context))
+        assertNotNull(klerk.attachedData.prepare(blob("fine"), AuthorPicture::class, context))
         assertFailsWith<AuthorizationException> { klerk.attachedData.prepare("not fine", context) }
         klerk.meta.stop()
     }
@@ -204,7 +204,7 @@ open class AttachedDataTest {
     @Test
     fun `A second model cannot claim data owned by another model`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("mine"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("mine"), AuthorPicture::class, Ctx.system())
         val firstOwner = createAuthorWithPicture(klerk, id)
 
         val result = createAuthorWithPictureExpectingFailure(klerk, id)
@@ -223,10 +223,10 @@ open class AttachedDataTest {
     @Test
     fun `Replacing a reference deletes the old data`() = runBlocking {
         val klerk = start()
-        val old = klerk.attachedData.prepare(blob("old"), Ctx.system())
+        val old = klerk.attachedData.prepare(blob("old"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, old)
 
-        val new = klerk.attachedData.prepare(blob("new"), Ctx.system())
+        val new = klerk.attachedData.prepare(blob("new"), AuthorPicture::class, Ctx.system())
         setPicture(klerk, authorID, new).orThrow()
 
         assertEquals("new", String(klerk.attachedData.get(new, Ctx.system()).readAllBytes()))
@@ -237,7 +237,7 @@ open class AttachedDataTest {
     @Test
     fun `Setting a reference to null deletes the data`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("bye"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("bye"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
 
         setPicture(klerk, authorID, null).orThrow()
@@ -249,7 +249,7 @@ open class AttachedDataTest {
     @Test
     fun `Setting one of two properties holding the same id to null does not delete the data`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("shared within the model"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("shared within the model"), AuthorPicture::class, Ctx.system())
         val bookID = createBookWithCoverAndThumbnail(klerk, cover = id, thumbnail = id)
 
         // drop the thumbnail; the cover still points at the same data
@@ -267,7 +267,7 @@ open class AttachedDataTest {
     @Test
     fun `Deleting a model deletes everything it owned`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("gone with the model"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("gone with the model"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
 
         klerk.handle(
@@ -283,12 +283,12 @@ open class AttachedDataTest {
     @Test
     fun `A command that fails after a property changed leaves the data intact`() = runBlocking {
         val klerk = start()
-        val old = klerk.attachedData.prepare(blob("survivor"), Ctx.system())
+        val old = klerk.attachedData.prepare(blob("survivor"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, old)
 
         // 'James Clavell' is rejected by the Author validator, so the whole command fails
         val author = klerk.read(Ctx.system()) { get(authorID) }
-        val newPicture = klerk.attachedData.prepare(blob("never attached"), Ctx.system())
+        val newPicture = klerk.attachedData.prepare(blob("never attached"), AuthorPicture::class, Ctx.system())
         val result = klerk.handle(
             Command(
                 event = UpdateAuthor,
@@ -312,7 +312,7 @@ open class AttachedDataTest {
     @Test
     fun `Unclaimed data disappears when it expires`() = runBlocking {
         val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 1.milliseconds))
-        val id = klerk.attachedData.prepare(blob("too slow"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("too slow"), AuthorPicture::class, Ctx.system())
         Thread.sleep(30)
 
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(id, Ctx.system()) }
@@ -326,7 +326,7 @@ open class AttachedDataTest {
     fun `A context clock in the future does not extend the claim window`() = runBlocking {
         val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 1.milliseconds))
         val distantFuture = Ctx(SystemIdentity, time = Clock.System.now().plus(365.days))
-        val id = klerk.attachedData.prepare(blob("no time travel"), distantFuture)
+        val id = klerk.attachedData.prepare(blob("no time travel"), AuthorPicture::class, distantFuture)
         Thread.sleep(30)
 
         val result = createAuthorWithPictureExpectingFailure(klerk, id, context = distantFuture)
@@ -338,7 +338,7 @@ open class AttachedDataTest {
     fun `A context clock in the past does not shorten the claim window`() = runBlocking {
         val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 10.minutes))
         val distantPast = Ctx(SystemIdentity, time = Clock.System.now().minus(365.days))
-        val id = klerk.attachedData.prepare(blob("still here"), distantPast)
+        val id = klerk.attachedData.prepare(blob("still here"), AuthorPicture::class, distantPast)
 
         createAuthorWithPicture(klerk, id, context = distantPast)
         assertEquals("still here", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
@@ -348,7 +348,7 @@ open class AttachedDataTest {
     @Test
     fun `get inside a read block throws`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("locked"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("locked"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         val fromNonSuspendingRead = assertFailsWith<IllegalStateException> {
@@ -384,7 +384,7 @@ open class AttachedDataTest {
     @Test
     fun `Unclaimed data cannot be read`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("not attached yet"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("not attached yet"), AuthorPicture::class, Ctx.system())
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(id, Ctx.system()) }
         klerk.meta.stop()
     }
@@ -392,8 +392,8 @@ open class AttachedDataTest {
     @Test
     fun `The read rule can reach the owning model`() = runBlocking {
         val klerk = start()
-        val readable = klerk.attachedData.prepare(blob("public"), Ctx.system())
-        val secret = klerk.attachedData.prepare(blob("secret"), Ctx.system())
+        val readable = klerk.attachedData.prepare(blob("public"), AuthorPicture::class, Ctx.system())
+        val secret = klerk.attachedData.prepare(blob("secret"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, readable, lastName = "Lindgren")
         createAuthorWithPicture(klerk, secret, lastName = "Secretive")
 
@@ -406,7 +406,7 @@ open class AttachedDataTest {
     @Test
     fun `A negative read rule denies`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("members only"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("members only"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertFailsWith<AuthorizationException> { klerk.attachedData.get(id, Ctx.unauthenticated()) }
@@ -416,7 +416,7 @@ open class AttachedDataTest {
     @Test
     fun `Data is private unless something else is asked for`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("members only"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("members only"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertEquals(AttachedDataVisibility.Private, klerk.attachedData.getMetadata(id, Ctx.system()).visibility)
@@ -429,7 +429,7 @@ open class AttachedDataTest {
         val klerk = start()
         // PaintingImage declares Public, so attaching the blob publishes it and no read rule is consulted — not even
         // the negative one that denies unauthenticated actors everything.
-        val id = klerk.attachedData.prepare(png(), Ctx.system())
+        val id = klerk.attachedData.prepare(png(), AuthorPicture::class, Ctx.system())
         hangPainting(klerk, id)
 
         val unauthenticated = Ctx.unauthenticated()
@@ -455,8 +455,8 @@ open class AttachedDataTest {
     @Test
     fun `The metadata of private data is authorized like the value`() = runBlocking {
         val klerk = start()
-        val readable = klerk.attachedData.prepare(blob("readable"), Ctx.system())
-        val secret = klerk.attachedData.prepare(blob("secret"), Ctx.system())
+        val readable = klerk.attachedData.prepare(blob("readable"), AuthorPicture::class, Ctx.system())
+        val secret = klerk.attachedData.prepare(blob("secret"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, readable, lastName = "Lindgren")
         createAuthorWithPicture(klerk, secret, lastName = "Secretive")
 
@@ -472,7 +472,7 @@ open class AttachedDataTest {
         // echo -n hello | sha256sum
         val expected = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
-        val blobID = klerk.attachedData.prepare(blob("hello"), Ctx.system())
+        val blobID = klerk.attachedData.prepare(blob("hello"), AuthorPicture::class, Ctx.system())
         val stringID = klerk.attachedData.prepare("hello", Ctx.system())
         createAuthorWithPicture(klerk, blobID)
         createBookWithChapters(klerk, listOf(stringID))
@@ -490,7 +490,7 @@ open class AttachedDataTest {
     fun `The hash and the size cover a blob larger than one buffer`() = runBlocking {
         val klerk = start()
         val content = "abcdefghij".repeat(10_000)   // 100 kB, i.e. many reads
-        val id = klerk.attachedData.prepare(content.toByteArray().inputStream(), Ctx.system())
+        val id = klerk.attachedData.prepare(content.toByteArray().inputStream(), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         val meta = klerk.attachedData.getMetadata(id, Ctx.system())
@@ -502,7 +502,7 @@ open class AttachedDataTest {
     @Test
     fun `The metadata is not available before the data is claimed`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("not attached yet"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("not attached yet"), AuthorPicture::class, Ctx.system())
         assertFailsWith<NoSuchElementException> { klerk.attachedData.getMetadata(id, Ctx.system()) }
         assertFailsWith<NoSuchElementException> {
             klerk.attachedData.getMetadata(
@@ -516,7 +516,7 @@ open class AttachedDataTest {
     @Test
     fun `The metadata goes away with the data`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("temporary"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("temporary"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
         assertNotNull(klerk.attachedData.getMetadata(id, Ctx.system()))
 
@@ -529,7 +529,7 @@ open class AttachedDataTest {
     fun `Custom metadata is stored as given`() = runBlocking {
         val klerk = start()
         val custom = mapOf("contentType" to "image/webp", "width" to "1200")
-        val id = klerk.attachedData.prepare(blob("an image"), Ctx.system(), metadata = custom)
+        val id = klerk.attachedData.prepare(blob("an image"), AuthorPicture::class, Ctx.system(), metadata = custom)
         createAuthorWithPicture(klerk, id)
 
         assertEquals(custom, klerk.attachedData.getMetadata(id, Ctx.system()).custom)
@@ -540,7 +540,7 @@ open class AttachedDataTest {
     fun `Custom metadata that would bloat the cache is rejected`() = runBlocking {
         val klerk = start()
         assertFailsWith<IllegalArgumentException> {
-            klerk.attachedData.prepare(blob("x"), Ctx.system(), metadata = mapOf("big" to "y".repeat(1000)))
+            klerk.attachedData.prepare(blob("x"), AuthorPicture::class, Ctx.system(), metadata = mapOf("big" to "y".repeat(1000)))
         }
         klerk.meta.stop()
     }
@@ -550,7 +550,7 @@ open class AttachedDataTest {
         val storage = SQLiteInMemory.create()
         val klerk = start(storage)
         val custom = mapOf("claimedBy" to "the uploader")
-        val id = klerk.attachedData.prepare(png(), Ctx.system(), metadata = custom)
+        val id = klerk.attachedData.prepare(png(), AuthorPicture::class, Ctx.system(), metadata = custom)
         // attached to a property that declares Public, so that the visibility is worth checking after a restart
         hangPainting(klerk, id)
         val before = klerk.attachedData.getMetadata(id, Ctx.system())
@@ -566,7 +566,7 @@ open class AttachedDataTest {
     @Test
     fun `getMetadata inside a read block throws`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare(blob("locked"), Ctx.system())
+        val id = klerk.attachedData.prepare(blob("locked"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
         assertFailsWith<IllegalStateException> {
@@ -608,7 +608,7 @@ open class AttachedDataTest {
     fun `The ids are serialized as plain numbers`() = runBlocking {
         // see the note on ModelID in Types.kt: a value class can leak its field name into the serialized form
         val klerk = start()
-        val picture = klerk.attachedData.prepare(blob("x"), Ctx.system())
+        val picture = klerk.attachedData.prepare(blob("x"), AuthorPicture::class, Ctx.system())
         val chapter = klerk.attachedData.prepare("y", Ctx.system())
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
@@ -624,8 +624,8 @@ open class AttachedDataTest {
     fun `Attached data survives a restart`() = runBlocking {
         val storage = SQLiteInMemory.create()
         val klerk = start(storage)
-        val claimed = klerk.attachedData.prepare(blob("kept"), Ctx.system())
-        val unclaimed = klerk.attachedData.prepare(blob("dropped"), Ctx.system())
+        val claimed = klerk.attachedData.prepare(blob("kept"), AuthorPicture::class, Ctx.system())
+        val unclaimed = klerk.attachedData.prepare(blob("dropped"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, claimed)
         val chapter = klerk.attachedData.prepare("a chapter", Ctx.system())
         val bookID = createBookWithChapters(klerk, listOf(chapter))

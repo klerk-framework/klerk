@@ -401,6 +401,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             job = info,
                             context = context,
                             reader = reader,
+                            klerk = klerk,
                             children = outcomes,
                             cancellationRequested = record.cancellationRequested,
                         )
@@ -415,6 +416,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             job = info,
                             context = context,
                             reader = reader,
+                            klerk = klerk,
                             children = outcomes,
                         )
                         if (record.hookKind == JobHookKind.Cancelled) local.onCancelled(args)
@@ -544,6 +546,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             if (commandResult == null) previousResults.remove(record.id)
             else previousResults[record.id] = commandResult
         }
+        klerk.attachedDataImpl.releaseJobClaims(transition.commit.attachedDataReleased)
         transition.commit.upserted.forEach { changes.tryEmit(it) }
         wakeup.trySend(Unit)
     }
@@ -721,6 +724,13 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * and the child's outcome are updated here, in the *child's* transaction, so the last child's completion can
      * never be lost.
      */
+    /**
+     * Writes a job's terminal row, wakes a parent that was awaiting it, and lets go of the attached data it claimed.
+     *
+     * A job that ran to completion has no working set any more, so its claims are released and whatever it prepared
+     * but never attached goes back to being governed by its lease. A job that died or was stopped keeps them: the
+     * point of the claim is that a human can still look at what it was working on, until the job itself is deleted.
+     */
     private fun finish(record: JobRecord, status: JobStatus, now: Instant, rows: RowSet): JobCommit {
         val terminal = record.copy(
             status = status,
@@ -745,7 +755,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 )
             }
         }
-        return rows.toCommit()
+        val released = if (status == JobStatus.Succeeded) klerk.attachedDataImpl.claimedBy(record.id) else emptySet()
+        return rows.toCommit().copy(attachedDataReleased = released)
     }
 
     /**
@@ -940,13 +951,17 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
     }
 
-    override suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId {
+    override suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId =
+        scheduleClaiming(job, context, emptySet())
+
+    override suspend fun scheduleClaiming(job: ScheduledJob<C, V>, context: C, claim: Set<Int>): JobId {
         check(started) { "Klerk has not been started" }
         val id = lock.withLock { allocateId() }
         when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
             is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
             is NewJobPlan.Ok -> {
-                config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = plan.commit)
+                val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
+                config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
                 lock.withLock { jobsWereCommitted(plan) }
             }
         }

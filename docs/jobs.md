@@ -239,13 +239,17 @@ Four rules keep this from becoming a footgun:
 
 Two base classes, differing only in whether the step gets a `Reader`:
 
-- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` is available. Runs on the master node.
-  Use this by default.
+- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` and `args.klerk` are available. Runs on
+  the master node. Use this by default.
 - **`JobType.Portable`** — the step takes a `JobStepArgs.Portable`, which has no `Reader`. Everything the job needs is
   in its cursor. These will be eligible to run on remote worker nodes (a later milestone); today they run on the master
   like any other job.
 
 The split is in the types rather than in a runtime check, so a `Portable` job cannot read by accident.
+
+`args.klerk` is the framework itself, for the subsystems a step may need — `attachedData` above all. It is **not** for
+issuing commands: return the command from the step instead, so that it commits together with the checkpoint. Read
+through `args.reader`, not `klerk.read`.
 
 Writing a job as `Portable` is a promise about *where it may run*, not only about the `Reader` — a job that needs a
 machine-local file, a JVM type from your app, or a node-local secret is `Local` even if it never reads.
@@ -484,11 +488,26 @@ automatically — `klerk.attachedData.prepare(...)` called from inside a step re
 declare:
 
 - The orphan reaper deletes attached data only when it has **no model reference and no job claim**.
-- Deleting a job releases its claims, but never deletes data a committed command attached to a live model.
+- A job that **succeeds** releases its claims: its work is done, and whatever it prepared but never attached goes back
+  to being governed by its lease.
+- A job that died or was cancelled keeps them, so that a human can still see what it was working on. Deleting the job
+  releases them, but never deletes data a committed command attached to a live model.
 
-A long-running job's working set is therefore safe from the reaper for as long as the job lives, including while
-dead-lettered and awaiting a human. The flip side is that a terminal job holds its claim until it is deleted, which is
-what `deadLetterRetention` is for.
+A long-running job's working set is therefore safe from the reaper for as long as the job is running, including while
+dead-lettered and awaiting a human. The flip side is that a job that ended without succeeding holds its claim until it
+is deleted, which is what `deadLetterRetention` is for.
+
+### The job Klerk runs itself
+
+One job type is registered in every configuration, whether or not the application declares a `jobs { }` block:
+`klerk-process-attached-data` runs the [steps](attached-data.md#steps-looking-at-the-bytes-and-rewriting-them) a blob
+property declares — a virus scan, a Content Disarm & Reconstruct pass — one step of the job per declared step. It is
+scheduled by `klerk.attachedData.prepare(...)` when the destination declares any real step, and by nothing else: a
+property whose only step is `noPreAttachProcessing` gets no job. The name is
+reserved: `register` refuses it.
+
+A step that *refuses* a file dead-letters the job without retrying and deletes the value, since retrying would reach
+the same conclusion. A step that *fails* is retried like any other.
 
 ### Who can see a job
 
@@ -561,7 +580,7 @@ fun `import emits one CreateBook per file`() = runTest {
 
         while (true) {
             val args =
-                JobStepArgs.Local(cursor, previousResult = null, job = someJobInfo, context = ctx, reader = reader)
+                JobStepArgs.Local(cursor, previousResult = null, job = someJobInfo, context = ctx, reader = reader, klerk = klerk)
             when (val result = ImportBooks.step(args)) {
                 is JobResult.Yield -> {
                     result.command?.let(emitted::add); cursor = result.cursor

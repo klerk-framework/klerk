@@ -35,7 +35,7 @@ class JobAttachedDataClaimTest {
         override suspend fun step(args: JobStepArgs.Local<UploadCursor, Ctx, Views>): JobResult<UploadCursor> {
             val prepared = args.cursor.prepared
             if (prepared == null) {
-                val id = klerkForTest!!.attachedData.prepare("a portrait".byteInputStream(), args.context)
+                val id = klerkForTest!!.attachedData.prepare("a portrait".byteInputStream(), AuthorPicture::class, args.context)
                 return JobResult.Yield(cursor = UploadCursor(prepared = id))
             }
             if (!args.cursor.attach) {

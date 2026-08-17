@@ -31,7 +31,6 @@ import kotlinx.serialization.Serializable
 import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
-import java.io.InputStream
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 import kotlin.test.assertEquals
@@ -593,6 +592,7 @@ data class Views(
     val authors: AuthorViews<Views>,
     val paintings: ModelViews<Painting, Ctx> = ModelViews(),
     val sketches: ModelViews<Sketch, Ctx> = ModelViews(),
+    val doodles: ModelViews<Doodle, Ctx> = ModelViews(),
     val inventories: ModelViews<Inventory, Ctx> = ModelViews(),
 ) //, val shops: ModelView<Shop, Context>)
 
@@ -1031,6 +1031,7 @@ class PaintingImage(id: AttachedBlobID) : BlobContainer(id) {
     override val accept: Set<String> = setOf("image/png", "image/jpeg")
     override val maxSize: Long = 1000
     override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
+    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
 }
 
 data class CreatePaintingParams(val title: PaintingTitle, val image: PaintingImage)
@@ -1057,9 +1058,17 @@ private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ct
 
 // Blob properties must be declared in a BlobContainer. These three accept anything, which is what the attached-data
 // tests need; PaintingImage above is the one that declares real constraints.
-class AuthorPicture(id: AttachedBlobID) : BlobContainer(id)
-class BookCover(id: AttachedBlobID) : BlobContainer(id)
-class BookThumbnail(id: AttachedBlobID) : BlobContainer(id)
+class AuthorPicture(id: AttachedBlobID) : BlobContainer(id) {
+    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+}
+
+class BookCover(id: AttachedBlobID) : BlobContainer(id) {
+    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+}
+
+class BookThumbnail(id: AttachedBlobID) : BlobContainer(id) {
+    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+}
 
 // Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
 data class Sketch(val drawing: AttachedBlobID)
@@ -1078,6 +1087,27 @@ fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = state
 
 private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
 
+// A container that declares no step at all, which the config must refuse. Never registered in createConfig.
+class DoodleImage(id: AttachedBlobID) : BlobContainer(id) {
+    override val preAttachSteps: List<BlobStep> = emptyList()
+}
+
+data class Doodle(val drawing: DoodleImage)
+
+enum class DoodleStates { Drawn }
+
+object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(Doodle::class, EXTERNAL, Doodle::class)
+
+fun doodleStateMachine(): StateMachine<Doodle, DoodleStates, Ctx, Views> = stateMachine {
+    event(CreateDoodle) {}
+    voidState {
+        onEvent(CreateDoodle) { createModel(DoodleStates.Drawn, ::newDoodle) }
+    }
+    state(DoodleStates.Drawn) {}
+}
+
+private fun newDoodle(args: ArgForVoidEvent<Doodle, Doodle, Ctx, Views>): Doodle = args.command.params
+
 // A blob whose bytes are checked, not just its metadata: the CSV must have the columns the application expects.
 data class Inventory(val name: InventoryName, val rows: InventoryCsv)
 
@@ -1091,7 +1121,7 @@ class InventoryName(value: String) : StringContainer(value) {
 
 class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
     override val accept: Set<String> = setOf("text/plain")
-    override val steps: List<BlobStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
+    override val preAttachSteps: List<BlobStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
 }
 
 /** A step that only looks. */
