@@ -475,7 +475,7 @@ public open class RamStorage : Persistence {
             context.actor.type.toByte(),
             context.actor.id?.value,
             context.actor.externalId,
-            gson.toJson(command.params),
+            if (::gson.isInitialized) gson.toJson(command.params) else "{}",    // TODO
             extra = context.auditExtra
         )
     }
