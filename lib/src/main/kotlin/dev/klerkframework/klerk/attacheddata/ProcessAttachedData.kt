@@ -25,12 +25,13 @@ internal data class ProcessBlobCursor(val blobId: Int, val declaration: String)
  * Runs the steps a [dev.klerkframework.klerk.datatypes.BlobContainer] declares against a prepared blob.
  *
  * Scheduled by `prepare` when the destination declares any step, and by nothing else. One step of the job runs one
- * [dev.klerkframework.klerk.datatypes.BlobStep], so an expensive pipeline checkpoints between its stages and a
+ * [dev.klerkframework.klerk.datatypes.BlobPreAttachStep], so an expensive pipeline checkpoints between its stages and a
  * failure retries only the stage that failed.
  */
 internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessBlobCursor, C, V>() {
 
     override val name: JobName = JobName(PROCESS_ATTACHED_DATA)
+    override val agent: JobAgent = JobAgent.System
 
     override suspend fun step(args: JobStepArgs.Local<ProcessBlobCursor, C, V>): JobResult<ProcessBlobCursor> {
         val attachedData = args.klerk.impl().attachedDataImpl

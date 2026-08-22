@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.storage
 
+import com.google.gson.Gson
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobCommit
@@ -257,6 +258,10 @@ public interface Persistence {
  * Keeps all data in memory. Should only be used for testing.
  */
 public open class RamStorage : Persistence {
+    // Set by setConfig with the app's configured Gson (which knows how to serialize Klerk's own data types) once
+    // Klerk starts. Left uninitialized when RamStorage is used standalone, e.g. in a test that never calls
+    // setConfig -- createAuditEntry falls back to an empty params string in that case.
+    private lateinit var gson: Gson
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
@@ -359,7 +364,7 @@ public open class RamStorage : Persistence {
     }
 
     override fun setConfig(config: Config<*, *>) {
-        // not used
+        this.gson = config.gson
     }
 
     override fun migrate(migrations: List<MigrationStep>) {
@@ -463,13 +468,13 @@ public open class RamStorage : Persistence {
         val reference = command.model?.value
             ?: result.createdModels.single { true }.value
         return AuditEntry(
-            context.time,
+            decode64bitMicroseconds(context.time.to64bitMicroseconds()),
             command.event.id,
             reference,
             context.actor.type.toByte(),
             context.actor.id?.value,
             context.actor.externalId,
-            "some JSON", // TODO
+            if (::gson.isInitialized) gson.toJson(command.params) else "{}",
             extra = context.auditExtra
         )
     }

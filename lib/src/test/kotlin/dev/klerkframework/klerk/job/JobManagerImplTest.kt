@@ -31,6 +31,7 @@ class JobManagerImplTest {
     /** Yields once per remaining unit, so a single job produces a known number of checkpoints. */
     object Counter : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("counter")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> {
             if (args.cursor.remaining == 0) {
@@ -49,6 +50,7 @@ class JobManagerImplTest {
     /** Emits exactly one command, then inspects its outcome on the next step. */
     object Renamer : JobType.Local<NameCursor, Ctx, Views>() {
         override val name = JobName("renamer")
+        override val agent: JobAgent = JobAgent.System
 
         var sawPreviousResult: CommandResult<*, Ctx, Views>? = null
 
@@ -73,6 +75,7 @@ class JobManagerImplTest {
 
     object Flaky : JobType.Local<FlakyCursor, Ctx, Views>() {
         override val name = JobName("flaky")
+        override val agent: JobAgent = JobAgent.System
         override val maxRetries = 2
 
         var attempts = 0
@@ -93,6 +96,7 @@ class JobManagerImplTest {
 
     object Doomed : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("doomed")
+        override val agent: JobAgent = JobAgent.System
 
         var hookRan = 0
 
@@ -112,6 +116,7 @@ class JobManagerImplTest {
     /** Never changes its cursor or its progress, which is what the livelock guard is for. */
     object Stuck : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("stuck")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
             JobResult.Yield(cursor = args.cursor)
@@ -122,6 +127,7 @@ class JobManagerImplTest {
 
     object Child : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("child")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
             JobResult.Success(result = "child-${args.cursor.remaining}")
@@ -129,6 +135,7 @@ class JobManagerImplTest {
 
     object Parent : JobType.Local<FanOutCursor, Ctx, Views>() {
         override val name = JobName("parent")
+        override val agent: JobAgent = JobAgent.System
 
         var seenChildren: List<ChildOutcome> = emptyList()
 
@@ -136,7 +143,7 @@ class JobManagerImplTest {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
-                    spawn = (1..args.cursor.children).map { Child.schedule(CountCursor(it)) },
+                    spawn = (1..args.cursor.children).map { Child.declare(CountCursor(it)) },
                     awaitSpawned = true,
                 )
             }
@@ -154,6 +161,7 @@ class JobManagerImplTest {
      */
     object Tree : JobType.Local<TreeCursor, Ctx, Views>() {
         override val name = JobName("tree")
+        override val agent: JobAgent = JobAgent.System
 
         var cancelHookRan = 0
 
@@ -161,7 +169,7 @@ class JobManagerImplTest {
             if (args.cursor.levels > 0 && !args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
-                    spawn = List(2) { Tree.schedule(TreeCursor(args.cursor.levels - 1)) },
+                    spawn = List(2) { Tree.declare(TreeCursor(args.cursor.levels - 1)) },
                     awaitSpawned = true,
                 )
             }
@@ -185,6 +193,7 @@ class JobManagerImplTest {
 
     object Nightly : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("nightly")
+        override val agent: JobAgent = JobAgent.System
 
         var runs = 0
 
@@ -251,7 +260,7 @@ class JobManagerImplTest {
     @Test
     fun `a yielding job runs one step per checkpoint and reports progress`() = runBlocking<Unit> {
         val f = fixture { register(Counter) }
-        val id = f.klerk.jobs.schedule(Counter.schedule(CountCursor(remaining = 5)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Counter.declare(CountCursor(remaining = 5)), Ctx.system())
 
         assertTrue(f.klerk.jobs.step())
         assertEquals(1, f.job(id).step)
@@ -269,7 +278,7 @@ class JobManagerImplTest {
         val storage = RamStorage()
         val clock = MutableClock(start)
         val first = fixture(clock, storage) { register(Counter) }
-        val id = first.klerk.jobs.schedule(Counter.schedule(CountCursor(remaining = 500)), Ctx.system())
+        val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(remaining = 500)), Ctx.system())
         repeat(200) { first.klerk.jobs.step() }
         assertEquals(200, first.job(id).step)
         first.klerk.meta.stop()
@@ -294,7 +303,7 @@ class JobManagerImplTest {
         val rowling = createAuthorJKRowling(f.klerk)
         Renamer.sawPreviousResult = null
 
-        val id = f.klerk.jobs.schedule(Renamer.schedule(NameCursor(rowling, "Joanne")), Ctx.system())
+        val id = f.klerk.jobs.schedule(Renamer.declare(NameCursor(rowling, "Joanne")), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
         assertEquals(JobStatus.Succeeded, f.job(id).status)
@@ -309,7 +318,7 @@ class JobManagerImplTest {
         Renamer.sawPreviousResult = null
 
         // A model id that does not exist: the command fails, but the step still counted as completed.
-        val id = f.klerk.jobs.schedule(Renamer.schedule(NameCursor(ModelID(987654), "Joanne")), Ctx.system())
+        val id = f.klerk.jobs.schedule(Renamer.declare(NameCursor(ModelID(987654), "Joanne")), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
         assertEquals(JobStatus.Succeeded, f.job(id).status)
@@ -323,7 +332,7 @@ class JobManagerImplTest {
         Flaky.attempts = 0
         Flaky.deadLetterHookRan = 0
 
-        val id = f.klerk.jobs.schedule(Flaky.schedule(FlakyCursor(3)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Flaky.declare(FlakyCursor(3)), Ctx.system())
         assertEquals(1, f.klerk.jobs.runUntilIdle())
         assertEquals(JobStatus.Backoff, f.job(id).status)
 
@@ -345,7 +354,7 @@ class JobManagerImplTest {
         val f = fixture { register(Doomed) }
         Doomed.hookRan = 0
 
-        val id = f.klerk.jobs.schedule(Doomed.schedule(CountCursor(remaining = 7)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Doomed.declare(CountCursor(remaining = 7)), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
         assertEquals(JobStatus.DeadLettered, f.job(id).status)
@@ -359,7 +368,7 @@ class JobManagerImplTest {
         val f = fixture(clock) { register(Flaky) }
         Flaky.attempts = 0
 
-        val id = f.klerk.jobs.schedule(Flaky.schedule(FlakyCursor(3)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Flaky.declare(FlakyCursor(3)), Ctx.system())
         repeat(4) {
             f.klerk.jobs.runUntilIdle()
             clock += 1.hours
@@ -375,7 +384,7 @@ class JobManagerImplTest {
     @Test
     fun `three steps without progress is treated as a livelock`() = runBlocking<Unit> {
         val f = fixture { register(Stuck) }
-        val id = f.klerk.jobs.schedule(Stuck.schedule(CountCursor(remaining = 1)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Stuck.declare(CountCursor(remaining = 1)), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
         assertEquals(JobStatus.DeadLettered, f.job(id).status)
@@ -385,7 +394,7 @@ class JobManagerImplTest {
     @Test
     fun `maxSteps aborts a job that would otherwise yield forever`() = runBlocking<Unit> {
         val f = fixture { register(Endless) }
-        val id = f.klerk.jobs.schedule(Endless.schedule(CountCursor(remaining = 0)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Endless.declare(CountCursor(remaining = 0)), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
         assertEquals(JobStatus.DeadLettered, f.job(id).status)
@@ -400,7 +409,7 @@ class JobManagerImplTest {
         }
         Parent.seenChildren = emptyList()
 
-        val id = f.klerk.jobs.schedule(Parent.schedule(FanOutCursor(children = 10)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Parent.declare(FanOutCursor(children = 10)), Ctx.system())
         assertTrue(f.klerk.jobs.step())
         assertEquals(JobStatus.Waiting, f.job(id).status)
 
@@ -417,7 +426,7 @@ class JobManagerImplTest {
             register(Parent)
             register(Child)
         }
-        repeat(4) { f.klerk.jobs.schedule(Parent.schedule(FanOutCursor(children = 3)), Ctx.system()) }
+        repeat(4) { f.klerk.jobs.schedule(Parent.declare(FanOutCursor(children = 3)), Ctx.system()) }
         // Every parent yields into Waiting first; if Waiting occupied a slot the children could never run.
         f.klerk.jobs.runUntilIdle()
 
@@ -431,7 +440,7 @@ class JobManagerImplTest {
         val f = fixture { register(Tree) }
         Tree.cancelHookRan = 0
 
-        val root = f.klerk.jobs.schedule(Tree.schedule(TreeCursor(levels = 2)), Ctx.system())
+        val root = f.klerk.jobs.schedule(Tree.declare(TreeCursor(levels = 2)), Ctx.system())
         // Let the tree build itself out: 1 root + 2 + 4 = 7 jobs. Stepping by condition rather than by a fixed count,
         // because with a frozen clock every job is equally ready and the dispatch order between them is arbitrary.
         var guard = 0
@@ -454,7 +463,7 @@ class JobManagerImplTest {
     @Test
     fun `job metadata is authorization-checked`() = runBlocking<Unit> {
         val f = fixture { register(Counter) }
-        val id = f.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+        val id = f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
 
         // The test config only lets the system, or the scheduling actor, see a job.
         assertFailsWith<AuthorizationException> { f.klerk.jobs.getJob(id, Ctx.unauthenticated()) }
@@ -466,7 +475,7 @@ class JobManagerImplTest {
     fun `an unregistered job name fails startup by default`() = runBlocking<Unit> {
         val storage = RamStorage()
         val first = fixture(storage = storage) { register(Counter) }
-        first.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+        first.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         first.klerk.meta.stop()
 
         // Counter is no longer registered, so its persisted instance cannot be loaded.
@@ -480,7 +489,7 @@ class JobManagerImplTest {
     fun `an unregistered job name can be dead-lettered instead`() = runBlocking<Unit> {
         val storage = RamStorage()
         val first = fixture(storage = storage) { register(Counter) }
-        val id = first.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+        val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         first.klerk.meta.stop()
 
         val second = fixture(storage = storage) { onUnloadableJob = UnloadableJobPolicy.DeadLetter }
@@ -516,7 +525,7 @@ class JobManagerImplTest {
             admission(::denyEverything)
         }
         assertFailsWith<IllegalStateException> {
-            f.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+            f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         }
     }
 
@@ -527,17 +536,17 @@ class JobManagerImplTest {
             admission(::allowEverything)
             hardQueueLimit = 2
         }
-        f.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
-        f.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+        f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
+        f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         assertFailsWith<IllegalStateException> {
-            f.klerk.jobs.schedule(Counter.schedule(CountCursor(1)), Ctx.system())
+            f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         }
     }
 
     @Test
     fun `maxConcurrent limits dispatch, not scheduling`() = runBlocking<Unit> {
         val f = fixture { register(Serial) }
-        repeat(5) { f.klerk.jobs.schedule(Serial.schedule(CountCursor(remaining = 2)), Ctx.system()) }
+        repeat(5) { f.klerk.jobs.schedule(Serial.declare(CountCursor(remaining = 2)), Ctx.system()) }
         // All five were accepted even though only one may run at a time.
         assertEquals(5, f.klerk.jobs.getAllJobs(Ctx.system()).size)
         f.klerk.jobs.runUntilIdle()
@@ -550,6 +559,7 @@ class JobManagerImplTest {
      */
     object Reshaped : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("reshaped")
+        override val agent: JobAgent = JobAgent.System
 
         var decodingBroken = false
 
@@ -572,7 +582,7 @@ class JobManagerImplTest {
         val storage = RamStorage()
         Reshaped.decodingBroken = false
         val first = fixture(storage = storage) { register(Reshaped) }
-        val id = first.klerk.jobs.schedule(Reshaped.schedule(CountCursor(3)), Ctx.system())
+        val id = first.klerk.jobs.schedule(Reshaped.declare(CountCursor(3)), Ctx.system())
         first.klerk.meta.stop()
 
         Reshaped.decodingBroken = true
@@ -590,6 +600,7 @@ class JobManagerImplTest {
 
     object Endless : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("endless")
+        override val agent: JobAgent = JobAgent.System
         override val maxSteps = 4
 
         override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
@@ -598,6 +609,7 @@ class JobManagerImplTest {
 
     object Serial : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("serial")
+        override val agent: JobAgent = JobAgent.System
         override val maxConcurrent = 1
 
         override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> {

@@ -113,7 +113,7 @@ public data class JobRecord(
  */
 public class PendingJob<C : KlerkContext, V> internal constructor(
     public val id: JobId,
-    internal val scheduled: ScheduledJob<C, V>,
+    internal val scheduled: DeclaredJob<C, V>,
 ) {
     public val name: JobName get() = scheduled.name
 

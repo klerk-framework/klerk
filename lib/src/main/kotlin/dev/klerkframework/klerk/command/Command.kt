@@ -11,7 +11,7 @@ import kotlin.time.Instant
  * Describes a single request to run [event][Event], passed to `Klerk.handle`.
  *
  * @param model the model (if any) on which this event should apply. Must be non-null for instance events and null
- * for void events; a mismatch is rejected as a [dev.klerkframework.klerk.Problem] rather than throwing.
+ * for void events.
  * @param params the event's parameter object, or `Nothing?` (pass `null`) if the event declares no parameters.
  */
 public data class Command<T : Any, P>(

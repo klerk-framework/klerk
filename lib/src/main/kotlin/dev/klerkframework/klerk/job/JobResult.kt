@@ -42,7 +42,7 @@ public sealed interface JobResult<out Cursor> {
         public val cursor: Cursor,
         public val command: Command<*, *>? = null,
         public val options: ProcessingOptions? = null,
-        public val spawn: List<ScheduledJob<*, *>> = emptyList(),
+        public val spawn: List<DeclaredJob<*, *>> = emptyList(),
         public val awaitSpawned: Boolean = false,
         public val progress: JobProgress? = null,
         override val log: List<JobLogEntry> = emptyList(),

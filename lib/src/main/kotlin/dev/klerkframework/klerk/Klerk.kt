@@ -188,7 +188,7 @@ public interface KlerkModels<C : KlerkContext, V> {
 public interface JobManager<C : KlerkContext, V> {
 
     /**
-     * Schedules one job, built with [dev.klerkframework.klerk.job.JobType.schedule].
+     * Schedules one job, built with [dev.klerkframework.klerk.job.JobType.declare].
      *
      * This is the way to schedule a job that no command is responsible for. A job that belongs to a command should be
      * returned from a state machine's `job(...)` executable instead, so that it is persisted in that command's own
@@ -201,7 +201,7 @@ public interface JobManager<C : KlerkContext, V> {
      * @return the id of the scheduled job.
      * @throws IllegalStateException if the job was refused by the admission policy or the hard queue cap.
      */
-    public suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId
+    public suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobId
 
     /**
      * Everything known about one job.
@@ -299,7 +299,7 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
      * Used when the job exists to work on attached data that nothing references yet: without the claim in the same
      * transaction, the orphan reaper could take the value between the two writes.
      */
-    suspend fun scheduleClaiming(job: ScheduledJob<C, V>, context: C, claim: Set<Int>): JobId
+    suspend fun scheduleClaiming(job: DeclaredJob<C, V>, context: C, claim: Set<Int>): JobId
 }
 
 /** What [JobManagerInternal.planNewJobs] decided: either rows to write, or the problems that must fail the command. */

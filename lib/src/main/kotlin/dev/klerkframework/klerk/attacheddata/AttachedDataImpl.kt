@@ -2,8 +2,8 @@ package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.BlobContainer
-import dev.klerkframework.klerk.datatypes.BlobStepArgs
-import dev.klerkframework.klerk.datatypes.BlobStepResult
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
 import dev.klerkframework.klerk.job.JobExecution
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.currentJobId
@@ -237,11 +237,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
         val (name, step) = steps[next]
         val result = LazyInputStream { openValue(id, metadata.kind) }
-            .use { step(BlobStepArgs(it, metadata)) }
+            .use { step(BlobPreAttachStepArgs(it, metadata)) }
         when (result) {
-            is BlobStepResult.Pass -> Unit
-            is BlobStepResult.Reject -> throw BlobRejected(result.reason)
-            is BlobStepResult.Replace -> {
+            is BlobPreAttachStepResult.Pass -> Unit
+            is BlobPreAttachStepResult.Reject -> throw BlobRejected(result.reason)
+            is BlobPreAttachStepResult.Replace -> {
                 metadata = replaceValue(id, result.value, metadata)
                 // A rewrite can change what the file is and how large it is, so the declaration applies again.
                 declaration.reasonToReject(metadata)?.let {
@@ -415,7 +415,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         waiters[id] = CompletableDeferred()
         val jobId = try {
             jobs.scheduleClaiming(
-                job = config.jobs.processAttachedData.schedule(ProcessBlobCursor(id, className)),
+                job = config.jobs.processAttachedData.declare(ProcessBlobCursor(id, className)),
                 context = context,
                 claim = setOf(id),
             )
@@ -864,7 +864,7 @@ internal sealed class AttachedDataPlan {
 /**
  * A stream that opens the underlying one on the first read, and closes nothing if it never did.
  *
- * This is what makes a [dev.klerkframework.klerk.datatypes.BlobStep] that decides from the metadata alone free: the
+ * This is what makes a [dev.klerkframework.klerk.datatypes.BlobPreAttachStep] that decides from the metadata alone free: the
  * value is fetched from wherever it lives only if the step actually asks for a byte.
  */
 private class LazyInputStream(private val open: () -> InputStream) : InputStream() {

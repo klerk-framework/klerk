@@ -59,10 +59,9 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
     public abstract val name: JobName
 
     /**
-     * Whose authority this job's commands are applied with. Defaults to [JobAgent.System] — a job is configuration,
-     * i.e. trusted code.
+     * Whose authority this job's commands are applied with.
      */
-    public open val agent: JobAgent get() = JobAgent.System
+    public abstract val agent: JobAgent
 
     /**
      * The queueing class of instances of this type, or null to inherit the priority of the command that scheduled the
@@ -116,11 +115,11 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
      * @param scheduleAt the earliest time the job may run. Null means as soon as a dispatch slot is free.
      * @param priority overrides the type's [priority] for this instance.
      */
-    public fun schedule(
+    public fun declare(
         cursor: Cursor,
         scheduleAt: Instant? = null,
         priority: JobPriority? = null,
-    ): ScheduledJob<C, V> = ScheduledJob(this, encodeCursor(cursor), scheduleAt, priority)
+    ): DeclaredJob<C, V> = DeclaredJob(this, encodeCursor(cursor), scheduleAt, priority)
 
     internal fun encodeCursor(cursor: Cursor): String =
         codec?.encode(cursor) ?: cursorJson.encodeToString(cursorSerializer, cursor)

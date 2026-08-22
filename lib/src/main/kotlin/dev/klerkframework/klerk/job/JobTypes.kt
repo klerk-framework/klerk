@@ -226,12 +226,12 @@ public data class JobInfo(
 )
 
 /**
- * A job that has been declared but not yet given an id — the value returned by [JobType.schedule].
+ * A job that has been declared but not yet given an id.
  *
  * Hand it to `klerk.jobs.schedule(...)`, return it from a state machine's `job(...)` executable, or declare it in a
  * step's `JobResult.Yield(spawn = ...)`. Nothing happens until one of those commits.
  */
-public class ScheduledJob<C : KlerkContext, V> internal constructor(
+public class DeclaredJob<C : KlerkContext, V> internal constructor(
     internal val type: JobType<*, C, V>,
     internal val encodedCursor: String,
     public val scheduleAt: Instant?,

@@ -443,8 +443,8 @@ fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant {
 fun hasTalent(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = true
 fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
-    return listOf(MyJob.schedule(MyJobCursor(greeting = "pelle")))
+fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+    return listOf(MyJob.declare(MyJobCursor(greeting = "pelle")))
 }
 
 
@@ -466,8 +466,8 @@ fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) 
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
-    return listOf(MyJob2.schedule(MyJobCursor(greeting = "Hej")))
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+    return listOf(MyJob2.declare(MyJobCursor(greeting = "Hej")))
 }
 
 /** A cursor that is deliberately just a value, so that tests can assert on what a step was given. */
@@ -477,6 +477,7 @@ data class MyJobCursor(val greeting: String, val stepsLeft: Int = 0)
 object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
 
     override val name = JobName("my-job-2")
+    override val agent: JobAgent = JobAgent.System
 
     override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
         assertEquals("Hej", args.cursor.greeting)
@@ -909,7 +910,8 @@ object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, E
 object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
 
     override val name = JobName("my-job")
-
+    override val agent: JobAgent = JobAgent.System
+    
     override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
         if (args.cursor.stepsLeft == 0) {
             return JobResult.Success(result = args.cursor.greeting)
@@ -1031,7 +1033,7 @@ class PaintingImage(id: AttachedBlobID) : BlobContainer(id) {
     override val accept: Set<String> = setOf("image/png", "image/jpeg")
     override val maxSize: Long = 1000
     override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 data class CreatePaintingParams(val title: PaintingTitle, val image: PaintingImage)
@@ -1059,15 +1061,15 @@ private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ct
 // Blob properties must be declared in a BlobContainer. These three accept anything, which is what the attached-data
 // tests need; PaintingImage above is the one that declares real constraints.
 class AuthorPicture(id: AttachedBlobID) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 class BookCover(id: AttachedBlobID) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 class BookThumbnail(id: AttachedBlobID) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 // Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
@@ -1089,7 +1091,7 @@ private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch
 
 // A container that declares no step at all, which the config must refuse. Never registered in createConfig.
 class DoodleImage(id: AttachedBlobID) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = emptyList()
+    override val preAttachSteps: List<BlobPreAttachStep> = emptyList()
 }
 
 data class Doodle(val drawing: DoodleImage)
@@ -1121,21 +1123,21 @@ class InventoryName(value: String) : StringContainer(value) {
 
 class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
     override val accept: Set<String> = setOf("text/plain")
-    override val preAttachSteps: List<BlobStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
 }
 
 /** A step that only looks. */
-suspend fun checkTheHeader(args: BlobStepArgs): BlobStepResult {
+suspend fun checkTheHeader(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
     val header = args.value.bufferedReader().buffered().readLine()
-    return if (header == "name,quantity") BlobStepResult.Pass
-    else BlobStepResult.Reject("the first line must be 'name,quantity', not '$header'")
+    return if (header == "name,quantity") BlobPreAttachStepResult.Pass
+    else BlobPreAttachStepResult.Reject("the first line must be 'name,quantity', not '$header'")
 }
 
 /** A step that rewrites the bytes, standing in for something like a Content Disarm & Reconstruct pass. */
-suspend fun normaliseLineEndings(args: BlobStepArgs): BlobStepResult {
+suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
     val text = args.value.readBytes().decodeToString()
-    return if (!text.contains("\r\n")) BlobStepResult.Pass
-    else BlobStepResult.Replace(text.replace("\r\n", "\n").byteInputStream())
+    return if (!text.contains("\r\n")) BlobPreAttachStepResult.Pass
+    else BlobPreAttachStepResult.Replace(text.replace("\r\n", "\n").byteInputStream())
 }
 
 data class CreateInventoryParams(val name: InventoryName, val rows: InventoryCsv)

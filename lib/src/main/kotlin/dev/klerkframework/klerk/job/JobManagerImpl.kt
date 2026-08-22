@@ -585,7 +585,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 if (spawnProblem != null) {
                     return Transition(deadLetter(logged, type, spawnProblem, runHook = true, now, rows))
                 }
-                val children = result.spawn.map { spawnRecord(record, it as ScheduledJob<C, V>, now) }
+                val children = result.spawn.map { spawnRecord(record, it as DeclaredJob<C, V>, now) }
                 children.forEach { rows.put(it) }
                 if (children.isNotEmpty()) {
                     rows.update(record.rootId) { it.copy(descendants = it.descendants + children.size) }
@@ -593,7 +593,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
                 // Progress means "the cursor or the progress changed". A job reporting "file 312 of 500" is by
                 // definition alive; one re-emitting a command that keeps being rejected, forever, is not.
-                val madeProgress = encoded != record.cursor || (result.progress != null && result.progress != record.progress)
+                val madeProgress =
+                    encoded != record.cursor || (result.progress != null && result.progress != record.progress)
                 val next = logged
                     .withProgress(result.progress)
                     .copy(
@@ -777,7 +778,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return null
     }
 
-    private fun spawnRecord(parent: JobRecord, child: ScheduledJob<C, V>, now: Instant): JobRecord = newRecord(
+    private fun spawnRecord(parent: JobRecord, child: DeclaredJob<C, V>, now: Instant): JobRecord = newRecord(
         id = allocateId(),
         scheduled = child,
         priority = child.priority ?: child.type.priority ?: parent.priority,
@@ -880,7 +881,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun newRecord(
         id: JobId,
-        scheduled: ScheduledJob<C, V>,
+        scheduled: DeclaredJob<C, V>,
         priority: JobPriority,
         context: C,
         now: Instant,
@@ -900,7 +901,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun newRecord(
         id: JobId,
-        scheduled: ScheduledJob<C, V>,
+        scheduled: DeclaredJob<C, V>,
         priority: JobPriority,
         ownerActorType: Int,
         ownerActorId: Int?,
@@ -951,10 +952,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
     }
 
-    override suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId =
+    override suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobId =
         scheduleClaiming(job, context, emptySet())
 
-    override suspend fun scheduleClaiming(job: ScheduledJob<C, V>, context: C, claim: Set<Int>): JobId {
+    override suspend fun scheduleClaiming(job: DeclaredJob<C, V>, context: C, claim: Set<Int>): JobId {
         check(started) { "Klerk has not been started" }
         val id = lock.withLock { allocateId() }
         when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
@@ -1229,7 +1230,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             val id = lock.withLock { allocateId() }
             // Jitter spreads the fire over a random window, so that many nodes (or many schedules on the same
             // expression) do not all start at the same instant.
-            val scheduled = ScheduledJob(
+            val scheduled = DeclaredJob(
                 schedule.type,
                 schedule.encodedCursor,
                 scheduleAt = now + jitterFor(schedule),

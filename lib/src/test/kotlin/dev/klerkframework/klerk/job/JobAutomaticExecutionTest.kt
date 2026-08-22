@@ -26,6 +26,7 @@ class JobAutomaticExecutionTest {
 
     object Ticker : JobType.Local<TickCursor, Ctx, Views>() {
         override val name = JobName("ticker")
+        override val agent: JobAgent = JobAgent.System
 
         val stepsRun = AtomicInteger(0)
 
@@ -67,7 +68,7 @@ class JobAutomaticExecutionTest {
         )
         klerk.meta.start(installShutdownHook = false)
 
-        val id = klerk.jobs.schedule(Ticker.schedule(TickCursor(remaining = 25)), Ctx.system())
+        val id = klerk.jobs.schedule(Ticker.declare(TickCursor(remaining = 25)), Ctx.system())
         val finished = awaitStatus(klerk, id, JobStatus.Succeeded)
 
         assertEquals(26, finished.step)
@@ -89,7 +90,7 @@ class JobAutomaticExecutionTest {
         )
         klerk.meta.start(installShutdownHook = false)
 
-        val id = klerk.jobs.schedule(Ticker.schedule(TickCursor(remaining = 10_000)), Ctx.system())
+        val id = klerk.jobs.schedule(Ticker.declare(TickCursor(remaining = 10_000)), Ctx.system())
         // Let it get going, then stop while it is still nowhere near done.
         withTimeout(20.seconds) {
             while (klerk.jobs.getJob(id, Ctx.system()).step < 3) {

@@ -4,11 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.datatypes.BlobContainer
-import dev.klerkframework.klerk.datatypes.BlobStep
-import dev.klerkframework.klerk.datatypes.BlobStepArgs
-import dev.klerkframework.klerk.datatypes.BlobStepResult
-import dev.klerkframework.klerk.datatypes.noPreAttachProcessing
+import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.job.JobProgress
 import dev.klerkframework.klerk.job.JobStatus
 import dev.klerkframework.klerk.misc.MutableClock
@@ -440,7 +436,7 @@ class BlobContainerTest {
 
 /** Says both that there is something to do and that there is not. */
 class Confused(id: AttachedBlobID) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing, ::countIt)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing, ::countIt)
 }
 
 /** How many times [countIt] has run, and how many times [failOnce] still has to fail. */
@@ -449,24 +445,24 @@ private var flaky = 0
 
 /** A container Klerk cannot build on its own, since it wants something the id does not tell it. */
 class NeedsMoreThanAnId(id: AttachedBlobID, val extra: String) : BlobContainer(id) {
-    override val preAttachSteps: List<BlobStep> = listOf(::noPreAttachProcessing)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 /** A container whose second step fails the first time it is asked, standing in for a scanner that is briefly down. */
 class FlakyDocument(id: AttachedBlobID) : BlobContainer(id) {
     override val acceptUnrecognised: Boolean = true
-    override val preAttachSteps: List<BlobStep> = listOf(::countIt, ::failOnce)
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::failOnce)
 }
 
-suspend fun countIt(args: BlobStepArgs): BlobStepResult {
+suspend fun countIt(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
     counted++
-    return BlobStepResult.Pass
+    return BlobPreAttachStepResult.Pass
 }
 
-suspend fun failOnce(args: BlobStepArgs): BlobStepResult {
+suspend fun failOnce(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
     if (flaky > 0) {
         flaky--
         throw IllegalStateException("the scanner is not answering")
     }
-    return BlobStepResult.Pass
+    return BlobPreAttachStepResult.Pass
 }

@@ -15,10 +15,9 @@ import kotlin.time.Duration.Companion.seconds
  */
 public enum class UnloadableJobPolicy {
     /**
-     * Refuse to start. The default: a job you can no longer run is a deploy mistake, and silently discarding durable
-     * work is worse than not starting.
+     * Refuse to start. This is the default to prevent discarding jobs.
      *
-     * Control this from an environment variable so that changing it does not require a rebuild.
+     * It is recommended to control this from an environment variable so that changing it does not require a rebuild.
      */
     FailToStart,
 

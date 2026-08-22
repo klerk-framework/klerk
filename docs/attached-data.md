@@ -79,14 +79,14 @@ class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
     override val preAttachSteps = listOf(::checkTheHeader, ::normaliseLineEndings)
 }
 
-suspend fun checkTheHeader(args: BlobStepArgs): BlobStepResult {
+suspend fun checkTheHeader(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
     val header = args.value.bufferedReader().buffered().readLine()
-    return if (header == "name,quantity") BlobStepResult.Pass
-    else BlobStepResult.Reject("the first line must be 'name,quantity'")
+    return if (header == "name,quantity") BlobPreAttachStepResult.Pass
+    else BlobPreAttachStepResult.Reject("the first line must be 'name,quantity'")
 }
 
-suspend fun normaliseLineEndings(args: BlobStepArgs): BlobStepResult =
-    BlobStepResult.Replace(args.value.readBytes().decodeToString().replace("\r\n", "\n").byteInputStream())
+suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAttachStepResult =
+    BlobPreAttachStepResult.Replace(args.value.readBytes().decodeToString().replace("\r\n", "\n").byteInputStream())
 ```
 
 A step returns `Pass` (the file is fine), `Reject` (it must not be stored, with the reason the user is shown) or
