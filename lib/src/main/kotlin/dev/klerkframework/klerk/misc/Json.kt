@@ -7,6 +7,7 @@ import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import kotlin.reflect.KClass
 import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.jvm.jvmErasure
 import kotlin.time.Duration.Companion.microseconds
 
 internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
@@ -30,6 +31,7 @@ internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
         .registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(InstantContainer::class.java, InstantValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(DurationContainer::class.java, DurationValueSerializer(valueClasses))
+        .registerTypeHierarchyAdapter(AttachedDataContainer::class.java, AttachedDataContainerSerializer(valueClasses))
         .registerTypeAdapter(AttachedBlobID::class.java, AttachedBlobIDSerializer())
         .registerTypeAdapter(AttachedStringID::class.java, AttachedStringIDSerializer())
         .create()
@@ -254,5 +256,33 @@ internal class DurationValueSerializer(private val valueClasses: Set<KClass<*>>)
         requireNotNull(typeOfT)
         val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
         return paramClass.primaryConstructor!!.call(json.asLong.microseconds) as DurationContainer
+    }
+}
+
+/**
+ * An [AttachedDataContainer] (blob or string) is stored as the id it refers to — the declaration around it is code,
+ * not data.
+ */
+internal class AttachedDataContainerSerializer(private val valueClasses: Set<KClass<*>>) :
+    JsonSerializer<AttachedDataContainer<*>>, JsonDeserializer<AttachedDataContainer<*>> {
+    override fun serialize(
+        src: AttachedDataContainer<*>?,
+        typeOfSrc: Type?,
+        context: JsonSerializationContext?
+    ): JsonElement =
+        if (src == null) JsonNull.INSTANCE else JsonPrimitive(src.rawId)
+
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): AttachedDataContainer<*> {
+        requireNotNull(json)
+        requireNotNull(typeOfT)
+        val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
+        val constructor = paramClass.primaryConstructor!!
+        val idParamType = constructor.parameters.single().type.jvmErasure
+        val id = if (idParamType == AttachedBlobID::class) AttachedBlobID(json.asInt) else AttachedStringID(json.asInt)
+        return constructor.call(id) as AttachedDataContainer<*>
     }
 }

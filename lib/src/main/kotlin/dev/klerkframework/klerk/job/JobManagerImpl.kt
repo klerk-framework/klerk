@@ -401,6 +401,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             job = info,
                             context = context,
                             reader = reader,
+                            klerk = klerk,
                             children = outcomes,
                             cancellationRequested = record.cancellationRequested,
                         )
@@ -415,6 +416,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             job = info,
                             context = context,
                             reader = reader,
+                            klerk = klerk,
                             children = outcomes,
                         )
                         if (record.hookKind == JobHookKind.Cancelled) local.onCancelled(args)
@@ -544,6 +546,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             if (commandResult == null) previousResults.remove(record.id)
             else previousResults[record.id] = commandResult
         }
+        klerk.attachedDataImpl.releaseJobClaims(transition.commit.attachedDataReleased)
         transition.commit.upserted.forEach { changes.tryEmit(it) }
         wakeup.trySend(Unit)
     }
@@ -582,7 +585,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 if (spawnProblem != null) {
                     return Transition(deadLetter(logged, type, spawnProblem, runHook = true, now, rows))
                 }
-                val children = result.spawn.map { spawnRecord(record, it as ScheduledJob<C, V>, now) }
+                val children = result.spawn.map { spawnRecord(record, it as DeclaredJob<C, V>, now) }
                 children.forEach { rows.put(it) }
                 if (children.isNotEmpty()) {
                     rows.update(record.rootId) { it.copy(descendants = it.descendants + children.size) }
@@ -590,7 +593,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
                 // Progress means "the cursor or the progress changed". A job reporting "file 312 of 500" is by
                 // definition alive; one re-emitting a command that keeps being rejected, forever, is not.
-                val madeProgress = encoded != record.cursor || (result.progress != null && result.progress != record.progress)
+                val madeProgress =
+                    encoded != record.cursor || (result.progress != null && result.progress != record.progress)
                 val next = logged
                     .withProgress(result.progress)
                     .copy(
@@ -721,6 +725,13 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * and the child's outcome are updated here, in the *child's* transaction, so the last child's completion can
      * never be lost.
      */
+    /**
+     * Writes a job's terminal row, wakes a parent that was awaiting it, and lets go of the attached data it claimed.
+     *
+     * A job that ran to completion has no working set any more, so its claims are released and whatever it prepared
+     * but never attached goes back to being governed by its lease. A job that died or was stopped keeps them: the
+     * point of the claim is that a human can still look at what it was working on, until the job itself is deleted.
+     */
     private fun finish(record: JobRecord, status: JobStatus, now: Instant, rows: RowSet): JobCommit {
         val terminal = record.copy(
             status = status,
@@ -745,7 +756,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 )
             }
         }
-        return rows.toCommit()
+        val released = if (status == JobStatus.Succeeded) klerk.attachedDataImpl.claimedBy(record.id) else emptySet()
+        return rows.toCommit().copy(attachedDataReleased = released)
     }
 
     /**
@@ -766,7 +778,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return null
     }
 
-    private fun spawnRecord(parent: JobRecord, child: ScheduledJob<C, V>, now: Instant): JobRecord = newRecord(
+    private fun spawnRecord(parent: JobRecord, child: DeclaredJob<C, V>, now: Instant): JobRecord = newRecord(
         id = allocateId(),
         scheduled = child,
         priority = child.priority ?: child.type.priority ?: parent.priority,
@@ -869,7 +881,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun newRecord(
         id: JobId,
-        scheduled: ScheduledJob<C, V>,
+        scheduled: DeclaredJob<C, V>,
         priority: JobPriority,
         context: C,
         now: Instant,
@@ -889,7 +901,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun newRecord(
         id: JobId,
-        scheduled: ScheduledJob<C, V>,
+        scheduled: DeclaredJob<C, V>,
         priority: JobPriority,
         ownerActorType: Int,
         ownerActorId: Int?,
@@ -940,13 +952,17 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
     }
 
-    override suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId {
+    override suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobId =
+        scheduleClaiming(job, context, emptySet())
+
+    override suspend fun scheduleClaiming(job: DeclaredJob<C, V>, context: C, claim: Set<Int>): JobId {
         check(started) { "Klerk has not been started" }
         val id = lock.withLock { allocateId() }
         when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
             is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
             is NewJobPlan.Ok -> {
-                config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = plan.commit)
+                val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
+                config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
                 lock.withLock { jobsWereCommitted(plan) }
             }
         }
@@ -1214,7 +1230,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             val id = lock.withLock { allocateId() }
             // Jitter spreads the fire over a random window, so that many nodes (or many schedules on the same
             // expression) do not all start at the same instant.
-            val scheduled = ScheduledJob(
+            val scheduled = DeclaredJob(
                 schedule.type,
                 schedule.encodedCursor,
                 scheduleAt = now + jitterFor(schedule),

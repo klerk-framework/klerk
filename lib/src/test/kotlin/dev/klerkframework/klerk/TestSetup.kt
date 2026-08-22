@@ -20,6 +20,7 @@ import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.misc.ShouldSendNotificationAlgorithm
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
@@ -51,10 +52,12 @@ fun createConfig(
     collections: Views,
     storage: Persistence = RamStorage(),
     clock: Clock = Clock.System,
+    blobStore: AttachedBlobStore = AttachedBlobStore.Database,
     configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
 ): Config<Ctx, Views> {
     return ConfigBuilder<Ctx, Views>(collections).build {
         persistence(storage)
+        attachedBlobStore(blobStore)
         clock(clock)
         jobContextProvider(::myJobContextProvider)
         jobs {
@@ -67,6 +70,9 @@ fun createConfig(
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
+            model(Painting::class, paintingStateMachine(), collections.paintings)
+            model(Inventory::class, inventoryStateMachine(), collections.inventories)
+            model(Note::class, noteStateMachine(), collections.notes)
         }
         authorization {
             readModels {
@@ -113,7 +119,6 @@ fun createConfig(
                     rule(::everybodyCanPrepareAttachedData)
                 }
                 negative {
-                    rule(::unauthenticatedCannotPublishPublicly)
                     rule(::unauthenticatedCannotPrepareStrings)
                 }
             }
@@ -170,14 +175,7 @@ fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Ctx, Vie
 fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 
-/**
- * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
- * visibility in [ArgsForAttachedDataWrite] is for.
- */
-fun unauthenticatedCannotPublishPublicly(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
-    if (args.visibility == AttachedDataVisibility.Public && args.context.actor is Unauthenticated) Deny else Pass
-
-/** A rule that keys on the kind rather than the visibility. Nonsensical as a policy, but that is not the point. */
+/** A rule that keys on the kind. Nonsensical as a policy, but that is not the point. */
 fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
     if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
@@ -259,10 +257,10 @@ data class Book(
     val releasePartyPosition: ReleasePartyPosition,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
     // attached data, see docs/attached-data.md
-    val notes: AttachedStringID? = null,
-    val cover: AttachedBlobID? = null,
-    val thumbnail: AttachedBlobID? = null,
-    val chapters: List<AttachedStringID> = emptyList(),
+    val notes: BookNotes? = null,
+    val cover: BookCover? = null,
+    val thumbnail: BookThumbnail? = null,
+    val chapters: List<BookChapter> = emptyList(),
 ) {
     override fun toString() = title.value
 }
@@ -271,7 +269,7 @@ data class Author(
     val firstName: FirstName,
     val lastName: LastName,
     val address: Address,
-    val picture: AttachedBlobID?
+    val picture: AuthorPicture?
 ) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
@@ -300,7 +298,7 @@ data class CreateAuthorParams(
     //  val address: Address,
     val secretToken: SecretPasscode,
     val favouriteColleague: ModelID<Author>? = null,
-    val picture: AttachedBlobID? = null,
+    val picture: AuthorPicture? = null,
 ) : Validatable {
 
     override fun validators(): Set<() -> PropertyCollectionValidity> =
@@ -437,8 +435,8 @@ fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant {
 fun hasTalent(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = true
 fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
-    return listOf(MyJob.schedule(MyJobCursor(greeting = "pelle")))
+fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+    return listOf(MyJob.declare(MyJobCursor(greeting = "pelle")))
 }
 
 
@@ -460,8 +458,8 @@ fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) 
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<ScheduledJob<Ctx, Views>> {
-    return listOf(MyJob2.schedule(MyJobCursor(greeting = "Hej")))
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+    return listOf(MyJob2.declare(MyJobCursor(greeting = "Hej")))
 }
 
 /** A cursor that is deliberately just a value, so that tests can assert on what a step was given. */
@@ -471,6 +469,7 @@ data class MyJobCursor(val greeting: String, val stepsLeft: Int = 0)
 object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
 
     override val name = JobName("my-job-2")
+    override val agent: JobAgent = JobAgent.System
 
     override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
         assertEquals("Hej", args.cursor.greeting)
@@ -583,7 +582,13 @@ enum class AuthorStates {
 
 data class Views(
     val books: BookViews,
-    val authors: AuthorViews<Views>
+    val authors: AuthorViews<Views>,
+    val paintings: ModelViews<Painting, Ctx> = ModelViews(),
+    val sketches: ModelViews<Sketch, Ctx> = ModelViews(),
+    val scribbles: ModelViews<Scribble, Ctx> = ModelViews(),
+    val doodles: ModelViews<Doodle, Ctx> = ModelViews(),
+    val inventories: ModelViews<Inventory, Ctx> = ModelViews(),
+    val notes: ModelViews<Note, Ctx> = ModelViews(),
 ) //, val shops: ModelView<Shop, Context>)
 
 suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
@@ -754,6 +759,8 @@ class Street(value: String) : StringContainer(value) {
 }
 
 fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Ctx, Views>.() -> Unit = {
+    // Author.picture is an AttachedBlobID, so a store is required. Database keeps the tests self-contained.
+    attachedBlobStore(AttachedBlobStore.Database)
     if (auth) {
         authorization {
             readModels {
@@ -897,7 +904,8 @@ object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, E
 object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
 
     override val name = JobName("my-job")
-
+    override val agent: JobAgent = JobAgent.System
+    
     override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
         if (args.cursor.stepsLeft == 0) {
             return JobResult.Success(result = args.cursor.greeting)
@@ -992,13 +1000,218 @@ data class CreateBookParams(
     val averageScore: AverageScore,
     val readingTime: ReadingTime,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
-    val notes: AttachedStringID? = null,
-    val cover: AttachedBlobID? = null,
-    val thumbnail: AttachedBlobID? = null,
-    val chapters: List<AttachedStringID> = emptyList(),
+    val notes: BookNotes? = null,
+    val cover: BookCover? = null,
+    val thumbnail: BookThumbnail? = null,
+    val chapters: List<BookChapter> = emptyList(),
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {
     override val min: Float = 0f
     override val max: Float = Float.MAX_VALUE
 }
+
+// A model whose blob property declares what it will accept, so that the checks can be exercised from a command.
+data class Painting(val title: PaintingTitle, val image: PaintingImage)
+
+enum class PaintingStates { Hung }
+
+class PaintingTitle(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+/** Images only, published to the world, and small. */
+class PaintingImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val accept: Set<String> = setOf("image/png", "image/jpeg")
+    override val maxSize: Long = 1000
+    override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
+}
+
+data class CreatePaintingParams(val title: PaintingTitle, val image: PaintingImage)
+
+object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(
+    Painting::class, EXTERNAL, CreatePaintingParams::class
+)
+
+object DeletePainting : InstanceEventNoParameters<Painting>(Painting::class, EXTERNAL)
+
+fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> = stateMachine {
+    event(CreatePainting) {}
+    event(DeletePainting) {}
+    voidState {
+        onEvent(CreatePainting) { createModel(PaintingStates.Hung, ::newPainting) }
+    }
+    state(PaintingStates.Hung) {
+        onEvent(DeletePainting) { delete() }
+    }
+}
+
+private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ctx, Views>): Painting =
+    Painting(args.command.params.title, args.command.params.image)
+
+// Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the attached-data
+// tests need; PaintingImage above is the one that declares real constraints.
+class AuthorPicture(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
+}
+
+class BookCover(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
+}
+
+class BookThumbnail(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
+}
+
+// String properties must likewise be declared in an AttachedStringContainer. These accept text/plain, which is all
+// the attached-data tests write.
+class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+}
+
+class BookChapter(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+}
+
+// A model whose string property declares what it will accept, so that the checks can be exercised from a command —
+// the string-kind counterpart of Painting/PaintingImage above.
+data class Note(val title: NoteTitle, val body: NoteBody)
+
+enum class NoteStates { Written }
+
+class NoteTitle(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+/** Plain text only, and small. */
+class NoteBody(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+    override val maxSize: Long = 20
+}
+
+data class CreateNoteParams(val title: NoteTitle, val body: NoteBody)
+
+object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(Note::class, EXTERNAL, CreateNoteParams::class)
+
+object DeleteNote : InstanceEventNoParameters<Note>(Note::class, EXTERNAL)
+
+fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachine {
+    event(CreateNote) {}
+    event(DeleteNote) {}
+    voidState {
+        onEvent(CreateNote) { createModel(NoteStates.Written, ::newNote) }
+    }
+    state(NoteStates.Written) {
+        onEvent(DeleteNote) { delete() }
+    }
+}
+
+private fun newNote(args: ArgForVoidEvent<Note, CreateNoteParams, Ctx, Views>): Note =
+    Note(args.command.params.title, args.command.params.body)
+
+// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+data class Sketch(val drawing: AttachedBlobID)
+
+enum class SketchStates { Drawn }
+
+object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(Sketch::class, EXTERNAL, Sketch::class)
+
+fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = stateMachine {
+    event(CreateSketch) {}
+    voidState {
+        onEvent(CreateSketch) { createModel(SketchStates.Drawn, ::newSketch) }
+    }
+    state(SketchStates.Drawn) {}
+}
+
+private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
+
+// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+data class Scribble(val text: AttachedStringID)
+
+enum class ScribbleStates { Written }
+
+object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(Scribble::class, EXTERNAL, Scribble::class)
+
+fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> = stateMachine {
+    event(CreateScribble) {}
+    voidState {
+        onEvent(CreateScribble) { createModel(ScribbleStates.Written, ::newScribble) }
+    }
+    state(ScribbleStates.Written) {}
+}
+
+private fun newScribble(args: ArgForVoidEvent<Scribble, Scribble, Ctx, Views>): Scribble = args.command.params
+
+// A container that declares no step at all, which the config must refuse. Never registered in createConfig.
+class DoodleImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val preAttachSteps: List<BlobPreAttachStep> = emptyList()
+}
+
+data class Doodle(val drawing: DoodleImage)
+
+enum class DoodleStates { Drawn }
+
+object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(Doodle::class, EXTERNAL, Doodle::class)
+
+fun doodleStateMachine(): StateMachine<Doodle, DoodleStates, Ctx, Views> = stateMachine {
+    event(CreateDoodle) {}
+    voidState {
+        onEvent(CreateDoodle) { createModel(DoodleStates.Drawn, ::newDoodle) }
+    }
+    state(DoodleStates.Drawn) {}
+}
+
+private fun newDoodle(args: ArgForVoidEvent<Doodle, Doodle, Ctx, Views>): Doodle = args.command.params
+
+// A blob whose bytes are checked, not just its metadata: the CSV must have the columns the application expects.
+data class Inventory(val name: InventoryName, val rows: InventoryCsv)
+
+enum class InventoryStates { Counted }
+
+class InventoryName(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+class InventoryCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
+}
+
+/** A step that only looks. */
+suspend fun checkTheHeader(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
+    val header = args.value.bufferedReader().buffered().readLine()
+    return if (header == "name,quantity") BlobPreAttachStepResult.Pass
+    else BlobPreAttachStepResult.Reject("the first line must be 'name,quantity', not '$header'")
+}
+
+/** A step that rewrites the bytes, standing in for something like a Content Disarm & Reconstruct pass. */
+suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {
+    val text = args.value.readBytes().decodeToString()
+    return if (!text.contains("\r\n")) BlobPreAttachStepResult.Pass
+    else BlobPreAttachStepResult.Replace(text.replace("\r\n", "\n").byteInputStream())
+}
+
+data class CreateInventoryParams(val name: InventoryName, val rows: InventoryCsv)
+
+object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(
+    Inventory::class, EXTERNAL, CreateInventoryParams::class
+)
+
+fun inventoryStateMachine(): StateMachine<Inventory, InventoryStates, Ctx, Views> = stateMachine {
+    event(CreateInventory) {}
+    voidState {
+        onEvent(CreateInventory) { createModel(InventoryStates.Counted, ::newInventory) }
+    }
+    state(InventoryStates.Counted) {}
+}
+
+private fun newInventory(args: ArgForVoidEvent<Inventory, CreateInventoryParams, Ctx, Views>): Inventory =
+    Inventory(args.command.params.name, args.command.params.rows)

@@ -31,11 +31,16 @@ class JobAttachedDataClaimTest {
      */
     object Uploader : JobType.Local<UploadCursor, Ctx, Views>() {
         override val name = JobName("uploader")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<UploadCursor, Ctx, Views>): JobResult<UploadCursor> {
             val prepared = args.cursor.prepared
             if (prepared == null) {
-                val id = klerkForTest!!.attachedData.prepare("a portrait".byteInputStream(), args.context)
+                val id = klerkForTest!!.attachedData.prepare(
+                    "a portrait".byteInputStream(),
+                    AuthorPicture::class,
+                    args.context
+                )
                 return JobResult.Yield(cursor = UploadCursor(prepared = id))
             }
             if (!args.cursor.attach) {
@@ -54,7 +59,7 @@ class JobAttachedDataClaimTest {
                         lastName = LastName("Lindgren"),
                         phone = PhoneNumber("+4699999"),
                         secretToken = SecretPasscode(1),
-                        picture = prepared,
+                        picture = AuthorPicture(prepared),
                     ),
                 ),
             )
@@ -85,7 +90,7 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val klerk = start(storage, clock)
 
-        val id = klerk.jobs.schedule(Uploader.schedule(UploadCursor()), Ctx.system())
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
         klerk.jobs.step()
 
         val claimed = storage.readAllAttachedDataMetadata().entries.single()
@@ -111,7 +116,7 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val klerk = start(storage, clock)
 
-        val id = klerk.jobs.schedule(Uploader.schedule(UploadCursor()), Ctx.system())
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
         klerk.jobs.runUntilIdle()
         val blobId = storage.readAllAttachedDataMetadata().keys.single()
 
@@ -134,7 +139,7 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val klerk = start(storage, clock)
 
-        val id = klerk.jobs.schedule(Uploader.schedule(UploadCursor()), Ctx.system())
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
         klerk.jobs.step()                       // prepares the blob
         klerk.jobs.cancel(id, Ctx.system()) // stops it before the data is ever attached
         klerk.jobs.runUntilIdle()
@@ -171,7 +176,7 @@ class JobAttachedDataClaimTest {
         Uploader.klerkForTest = klerk
         Uploader.abortAfterPreparing = true
         try {
-            val id = klerk.jobs.schedule(Uploader.schedule(UploadCursor()), Ctx.system())
+            val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
             klerk.jobs.runUntilIdle()
             assertEquals(JobStatus.DeadLettered, klerk.jobs.getJob(id, Ctx.system()).status)
             assertEquals(1, storage.getAllJobs().size)
@@ -196,7 +201,7 @@ class JobAttachedDataClaimTest {
     @Test
     fun `deleting a job that is not terminal is refused`() = runBlocking<Unit> {
         val klerk = start()
-        val id = klerk.jobs.schedule(Uploader.schedule(UploadCursor()), Ctx.system())
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
         assertFailsWith<IllegalStateException> { klerk.jobs.delete(id, Ctx.system()) }
         klerk.meta.stop()
     }

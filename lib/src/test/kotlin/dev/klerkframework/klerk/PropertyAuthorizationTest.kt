@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
@@ -152,6 +153,7 @@ fun createPropertyAuthConfig(
 ): Config<Ctx, Views> {
     return ConfigBuilder<Ctx, Views>(collections).build {
         persistence(storage)
+        attachedBlobStore(AttachedBlobStore.Database)
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)

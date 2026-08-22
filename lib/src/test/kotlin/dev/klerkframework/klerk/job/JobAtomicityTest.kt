@@ -33,6 +33,7 @@ class JobAtomicityTest {
     /** Emits exactly one `CreateAuthor` per step, so the model count is the ground truth for "how many committed". */
     object Writer : JobType.Local<WriteCursor, Ctx, Views>() {
         override val name = JobName("writer")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<WriteCursor, Ctx, Views>): JobResult<WriteCursor> {
             if (args.cursor.remaining == 0) {
@@ -59,12 +60,13 @@ class JobAtomicityTest {
 
     object Spawner : JobType.Local<SpawnerCursor, Ctx, Views>() {
         override val name = JobName("spawner")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<SpawnerCursor, Ctx, Views>): JobResult<SpawnerCursor> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
-                    spawn = (1..args.cursor.children).map { Leaf.schedule(WriteCursor(0)) },
+                    spawn = (1..args.cursor.children).map { Leaf.declare(WriteCursor(0)) },
                     awaitSpawned = true,
                 )
             }
@@ -74,6 +76,7 @@ class JobAtomicityTest {
 
     object Leaf : JobType.Local<WriteCursor, Ctx, Views>() {
         override val name = JobName("leaf")
+        override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(args: JobStepArgs.Local<WriteCursor, Ctx, Views>): JobResult<WriteCursor> =
             JobResult.Success(result = "done")
@@ -140,7 +143,7 @@ class JobAtomicityTest {
                 val clock = MutableClock(start)
 
                 var klerk = klerkOver(storage, clock)
-                val id = klerk.jobs.schedule(Writer.schedule(WriteCursor(steps - 1)), Ctx.system())
+                val id = klerk.jobs.schedule(Writer.declare(WriteCursor(steps - 1)), Ctx.system())
                 storage.crashAt(crashAt)
                 // Run until the crash. The manager treats a failed commit as "nothing was written" and stops there.
                 repeat(steps + 2) { runCatching { klerk.jobs.step() } }
@@ -174,7 +177,7 @@ class JobAtomicityTest {
             val clock = MutableClock(start)
 
             var klerk = klerkOver(storage, clock)
-            val id = klerk.jobs.schedule(Spawner.schedule(SpawnerCursor(children = 5)), Ctx.system())
+            val id = klerk.jobs.schedule(Spawner.declare(SpawnerCursor(children = 5)), Ctx.system())
             storage.crashAt(crashAt)
             repeat(10) { runCatching { klerk.jobs.step() } }
             klerk.meta.stop()

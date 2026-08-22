@@ -56,6 +56,10 @@ ConfigBuilder<Context, MyCollections>(collections).build {
 `persistence(...)` is mandatory — `ConfigBuilder.build()` throws `IllegalConfigurationException` with
 `KlerkErrorCode.MissingPersistence` if you never call it.
 
+Attached blobs are configured separately with `attachedBlobStore(...)`, and required as soon as the config declares
+a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back up its directory as
+well. See [attached data](attached-data.md).
+
 ## Migrations
 
 Model classes evolve over time, but already-persisted data was written against an older shape. `MigrationStep`

@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.statements.UpdateBuilder
@@ -30,6 +31,9 @@ import kotlin.reflect.KClass
 import kotlin.system.measureTimeMillis
 import kotlin.time.Clock
 import kotlin.time.Instant
+
+/** Stands in for the value of a row whose bytes live in an [AttachedBlobStore.External]. */
+private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
 
 /** The job log and the child outcomes are stored as JSON, since neither is ever queried by SQL. */
 private val jobJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
@@ -305,10 +309,11 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
      * Must be called within a transaction so that the attached data is committed together with the models.
      */
     private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
-        attachedData.claimed.forEach { (dataId, ownerId) ->
+        attachedData.claimed.forEach { (dataId, claim) ->
             AttachedData.update(where = { AttachedData.id eq dataId }) {
-                it[owner] = ownerId
+                it[owner] = claim.owner
                 it[expires] = null
+                it[visibility] = claim.visibility.ordinal.toByte()
             }
         }
         attachedData.deleted.forEach { dataId ->
@@ -318,20 +323,22 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun insertAttachedData(
         id: Int,
-        value: InputStream,
+        value: InputStream?,
         kind: AttachedDataKind,
         visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
         expires: Instant,
         claimedByJob: JobId?,
-        digestAfterWrite: () -> Pair<Long, String>,
+        digestAfterWrite: () -> AttachedDataDigest,
     ) {
         transaction(database) {
             // insert (not upsert): with a primary key, an id collision from any source throws instead of destroying data
             AttachedData.insert {
                 it[this.id] = id
-                it[this.value] = ExposedBlob(value)
+                // An empty blob rather than null when the bytes live in an external store: the column is NOT NULL in
+                // databases created by earlier versions, and SchemaUtils.create never alters an existing table.
+                it[this.value] = if (value == null) EMPTY_BLOB else ExposedBlob(value)
                 it[this.kind] = kind.ordinal.toByte()
                 it[this.owner] = null
                 it[this.visibility] = visibility.ordinal.toByte()
@@ -343,28 +350,71 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[this.claimedByJob] = claimedByJob?.value
             }
             // the stream has been consumed by the insert above, so the digest is complete. Updating in the same
-            // transaction means no row is ever committed without its size and hash.
-            val (writtenSize, writtenHash) = digestAfterWrite()
+            // transaction means no row is ever committed without its size, hash and content type.
+            val digest = digestAfterWrite()
             AttachedData.update(where = { AttachedData.id eq id }) {
-                it[this.size] = writtenSize
-                it[this.hash] = writtenHash
+                it[this.size] = digest.size
+                it[this.hash] = digest.hash
+                it[this.contentType] = digest.contentType
             }
         }
     }
 
-    override fun getAttachedData(id: Int): AttachedDataRow<InputStream>? =
+    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
         transaction(database) {
-            AttachedData.selectAll()
+            AttachedData.select(
+                AttachedData.owner,
+                AttachedData.kind,
+                AttachedData.visibility,
+                AttachedData.created,
+                AttachedData.size,
+                AttachedData.hash,
+                AttachedData.metadata,
+                AttachedData.contentType,
+                AttachedData.completedSteps,
+                AttachedData.expires,
+                AttachedData.claimedByJob,
+            )
                 .where { AttachedData.id eq id }
                 .map {
                     AttachedDataRow(
-                        value = it[AttachedData.value].inputStream,
+                        value = Unit,
                         owner = it[AttachedData.owner],
                         metadata = it.toAttachedDataMetadata(),
                         expires = it[AttachedData.expires]?.let { e -> decode64bitMicroseconds(e) },
                         claimedByJob = it[AttachedData.claimedByJob]?.let { j -> JobId(j) },
                     )
                 }.firstOrNull()
+        }
+
+    override fun updateAttachedData(
+        id: Int,
+        value: InputStream?,
+        completedSteps: List<String>,
+        digestAfterWrite: () -> AttachedDataDigest,
+    ) {
+        transaction(database) {
+            if (value != null) {
+                AttachedData.update(where = { AttachedData.id eq id }) { it[this.value] = ExposedBlob(value) }
+            }
+            // As on insert: the stream has been consumed above, so the digest is complete, and it is written in the
+            // same transaction as the bytes it describes.
+            val digest = digestAfterWrite()
+            AttachedData.update(where = { AttachedData.id eq id }) {
+                it[this.size] = digest.size
+                it[this.hash] = digest.hash
+                it[this.contentType] = digest.contentType
+                it[this.completedSteps] = completedSteps.joinToString(",")
+            }
+        }
+    }
+
+    override fun getAttachedValue(id: Int): InputStream? =
+        transaction(database) {
+            AttachedData.select(AttachedData.value)
+                .where { AttachedData.id eq id }
+                .map { it[AttachedData.value].inputStream }
+                .firstOrNull()
         }
 
     override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
@@ -378,6 +428,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 AttachedData.size,
                 AttachedData.hash,
                 AttachedData.metadata,
+                AttachedData.contentType,
+                AttachedData.completedSteps,
                 AttachedData.expires,
                 AttachedData.claimedByJob
             ).associate {
@@ -397,6 +449,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         size = this[AttachedData.size],
         hash = this[AttachedData.hash],
         custom = decodeCustomMetadata(this[AttachedData.metadata]),
+        contentType = this[AttachedData.contentType],
+        completedSteps = this[AttachedData.completedSteps]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
     )
 
     private fun encodeCustomMetadata(custom: Map<String, String>): String? =
@@ -405,12 +459,27 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private fun decodeCustomMetadata(json: String?): Map<String, String> =
         if (json == null) emptyMap() else plainGson.fromJson(json, stringMapType)
 
-    override fun deleteExpiredAttachedData(now: Instant) {
+    override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
         val cutoff = now.to64bitMicroseconds()
-        transaction(database) {
+        return transaction(database) {
             // Rows with a null expiry (i.e. ones a model owns) never match a comparison, so they are left alone. Rows
             // a job has claimed are excluded explicitly: they have no owning model yet, but they are not orphans.
+            // Read the ids first: the caller needs them to delete the bytes from an external blob store.
+            val doomed = AttachedData.select(AttachedData.id)
+                .where { (AttachedData.expires less cutoff) and (AttachedData.claimedByJob eq null) }
+                .map { it[AttachedData.id] }
+                .toSet()
             AttachedData.deleteWhere { (expires less cutoff) and (claimedByJob eq null) }
+            doomed
+        }
+    }
+
+    override fun deleteAttachedData(ids: Set<Int>) {
+        if (ids.isEmpty()) {
+            return
+        }
+        transaction(database) {
+            AttachedData.deleteWhere { AttachedData.id inList ids }
         }
     }
 
@@ -590,6 +659,14 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val hash = varchar("hash", length = 64)     // SHA-256, lowercase hex
         val metadata = text("metadata").nullable()  // the application's own metadata, as JSON
         val expires = long("expires").nullable()    // microseconds since 1970, null once claimed by a model
+
+        // What the bytes were recognised as, or null when they match no known format. Klerk's own finding: what the
+        // uploader claimed the value was, if anything, is the application's business and lives in metadata.
+        val contentType = varchar("content_type", length = 255).nullable()
+
+        // The names of the declared steps that have run against this value, comma-separated. What makes an
+        // interrupted pipeline resumable, and what a command checks before letting a model claim the value.
+        val completedSteps = text("completed_steps").nullable()
 
         // The second, independent claim: a job that prepared this data and is still alive. A row is reaped only when
         // neither claim holds.

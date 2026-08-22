@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -25,6 +26,7 @@ class ActionTest {
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
+                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)
@@ -44,6 +46,7 @@ class ActionTest {
                 }
                 apply(generousAuthRules())
                 persistence(RamStorage())
+                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)

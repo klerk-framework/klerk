@@ -160,6 +160,12 @@ public enum class KlerkErrorCode(public val code: String) {
     UnregisteredJobName("ERROR-CONFIG-8"),
     UnloadableJobCursor("ERROR-CONFIG-9"),
     MissingJobContextProvider("ERROR-CONFIG-10"),
+    MissingAttachedBlobStore("ERROR-CONFIG-11"),
+    AttachedBlobStoreIsNone("ERROR-CONFIG-12"),
+    AttachedBlobStoreMissingData("ERROR-CONFIG-13"),
+    BlobMustBeDeclaredInAContainer("ERROR-CONFIG-14"),
+    MissingPreAttachStep("ERROR-CONFIG-15"),
+    StringMustBeDeclaredInAContainer("ERROR-CONFIG-16"),
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
     Internal("ERROR-INTERNAL-1"),
@@ -181,6 +187,8 @@ public enum class KlerkErrorCode(public val code: String) {
     BrokenReference("ERROR-COMMAND-8"),
     AttachedDataNotFound("ERROR-COMMAND-9"),
     AttachedDataAlreadyOwned("ERROR-COMMAND-10"),
+    AttachedDataNotAcceptable("ERROR-COMMAND-11"),
+    AttachedDataNotProcessed("ERROR-COMMAND-12"),
     AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
     AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
     AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
@@ -198,3 +206,6 @@ public enum class KlerkErrorCode(public val code: String) {
 
     override fun toString(): String = code
 }
+
+/** Thrown by `attachedData.awaitProcessing` when a step refused the file, or when it is not what its property wants. */
+public class BlobRejected(message: String) : RuntimeException(message)

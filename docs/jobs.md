@@ -239,13 +239,17 @@ Four rules keep this from becoming a footgun:
 
 Two base classes, differing only in whether the step gets a `Reader`:
 
-- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` is available. Runs on the master node.
-  Use this by default.
+- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` and `args.klerk` are available. Runs on
+  the master node. Use this by default.
 - **`JobType.Portable`** — the step takes a `JobStepArgs.Portable`, which has no `Reader`. Everything the job needs is
   in its cursor. These will be eligible to run on remote worker nodes (a later milestone); today they run on the master
   like any other job.
 
 The split is in the types rather than in a runtime check, so a `Portable` job cannot read by accident.
+
+`args.klerk` is the framework itself, for the subsystems a step may need — `attachedData` above all. It is **not** for
+issuing commands: return the command from the step instead, so that it commits together with the checkpoint. Read
+through `args.reader`, not `klerk.read`.
 
 Writing a job as `Portable` is a promise about *where it may run*, not only about the `Reader` — a job that needs a
 machine-local file, a JVM type from your app, or a node-local secret is `Local` even if it never reads.
@@ -461,6 +465,24 @@ jobs {
 instance* and are part of its lifecycle — "cancel this booking if unconfirmed after 48 h". Crons are system-wide
 recurring work with no model behind them — "delete expired sessions every night".
 
+### Jobs from a plugin
+
+A [plugin](plugins.md) registers its own job types and crons from `mergeConfig`:
+
+```kotlin
+override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
+    previous.withJobs {
+        register(sweepStagingArea)
+        cron(sweepStagingArea, "0 * * * *") { cursor = "" }
+    }
+```
+
+A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
+remain the application's decisions. Job names are global, so prefix a plugin's names with the plugin's own — registering
+a name the application already used fails when the config is built.
+
+Some of the official Klerk plugins (and Klerk itself) register their own jobs and crons.
+
 ### Attached data
 
 A job may create [attached data](attached-data.md) before a command references it. Such data is **claimed by the job**,
@@ -468,11 +490,14 @@ automatically — `klerk.attachedData.prepare(...)` called from inside a step re
 declare:
 
 - The orphan reaper deletes attached data only when it has **no model reference and no job claim**.
-- Deleting a job releases its claims, but never deletes data a committed command attached to a live model.
+- A job that **succeeds** releases its claims: its work is done, and whatever it prepared but never attached goes back
+  to being governed by its lease.
+- A job that died or was cancelled keeps them, so that a human can still see what it was working on. Deleting the job
+  releases them, but never deletes data a committed command attached to a live model.
 
-A long-running job's working set is therefore safe from the reaper for as long as the job lives, including while
-dead-lettered and awaiting a human. The flip side is that a terminal job holds its claim until it is deleted, which is
-what `deadLetterRetention` is for.
+A long-running job's working set is therefore safe from the reaper for as long as the job is running, including while
+dead-lettered and awaiting a human. The flip side is that a job that ended without succeeding holds its claim until it
+is deleted, which is what `deadLetterRetention` is for.
 
 ### Who can see a job
 
@@ -522,9 +547,9 @@ jobs {
 - **A cursor that no longer deserializes** — you changed the cursor type while instances were checkpointed against the
   old shape.
 
-`FailToStart` is the default. It is recommended that you control this setting via an environment variable so that you
-don't have to rebuild the software to change this setting. As an alternative, if you use klerk-web to generate an admin
-UI, you can delete the jobs from there.
+`FailToStart` is the default. It is recommended that you control this setting via e.g. an environment variable so that
+you don't have to rebuild the software to change this setting. As an alternative, if you use klerk-web to generate an
+admin UI, you can delete the jobs from there.
 
 The practical rule: **treat cursor types as a persisted schema.** Add optional fields; do not remove or retype fields
 while jobs may be in flight.
@@ -545,7 +570,14 @@ fun `import emits one CreateBook per file`() = runTest {
 
         while (true) {
             val args =
-                JobStepArgs.Local(cursor, previousResult = null, job = someJobInfo, context = ctx, reader = reader)
+                JobStepArgs.Local(
+                    cursor,
+                    previousResult = null,
+                    job = someJobInfo,
+                    context = ctx,
+                    reader = reader,
+                    klerk = klerk
+                )
             when (val result = ImportBooks.step(args)) {
                 is JobResult.Yield -> {
                     result.command?.let(emitted::add); cursor = result.cursor
@@ -593,16 +625,3 @@ klerk.jobs.runUntilIdle()
 ```
 
 See [time.md](time.md) for how this relates to the time a command carries in its `Ctx`.
-
-### Remote workers, and what blocks them
-
-`JobType.Portable` exists so that jobs can later run on worker nodes, possibly written in other languages: a worker
-receives a cursor as JSON, does the work, and returns a command as JSON for the master to apply.
-
-That milestone is **blocked on idempotent command tokens.** Locally, a step's command and cursor commit in one
-transaction, so a resumed job can never re-emit a committed command — no deduplication is needed and none exists. Over a
-network the response can be lost after the master committed, so the worker retries a step the master already applied.
-Detecting that requires `CommandToken` to carry an explicit identity (`jobId` + step number) separate from its freshness
-timestamp, and requires used tokens to be persisted rather than held in memory. Neither exists today.
-
-Until then, jobs run only on the master node.

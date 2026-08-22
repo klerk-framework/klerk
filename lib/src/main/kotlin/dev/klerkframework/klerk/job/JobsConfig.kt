@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.attacheddata.PROCESS_ATTACHED_DATA
+import dev.klerkframework.klerk.attacheddata.ProcessAttachedData
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -13,10 +15,9 @@ import kotlin.time.Duration.Companion.seconds
  */
 public enum class UnloadableJobPolicy {
     /**
-     * Refuse to start. The default: a job you can no longer run is a deploy mistake, and silently discarding durable
-     * work is worse than not starting.
+     * Refuse to start. This is the default to prevent discarding jobs.
      *
-     * Control this from an environment variable so that changing it does not require a rebuild.
+     * It is recommended to control this from e.g. an environment variable so that changing it does not require a rebuild.
      */
     FailToStart,
 
@@ -116,8 +117,7 @@ internal annotation class JobsConfigMarker
  * The assembled job-module configuration. Built by `ConfigBuilder.jobs { ... }`.
  */
 public class JobsConfig<C : KlerkContext, V> internal constructor(
-    /** Every registered job type, by name. Nothing else can be loaded from storage. */
-    public val types: Map<JobName, JobType<*, C, V>>,
+    types: Map<JobName, JobType<*, C, V>>,
     public val crons: List<CronSchedule<C, V>>,
     public val onUnloadableJob: UnloadableJobPolicy,
     public val execution: JobExecution,
@@ -128,6 +128,16 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
     public val pollInterval: Duration,
     public val backoffBase: Duration,
 ) {
+
+    /**
+     * Runs the steps a blob's declaration declares. Klerk schedules it itself, so it is registered whether or not the
+     * application configured any jobs at all.
+     */
+    internal val processAttachedData: ProcessAttachedData<C, V> = ProcessAttachedData()
+
+    /** Every registered job type, by name. Nothing else can be loaded from storage. */
+    public val types: Map<JobName, JobType<*, C, V>> = types + (processAttachedData.name to processAttachedData)
+
     public companion object {
         /** The default job configuration: no job types, everything else at its default. */
         public fun <C : KlerkContext, V> empty(): JobsConfig<C, V> = JobsConfig(
@@ -146,6 +156,52 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
         internal const val DEFAULT_HARD_QUEUE_LIMIT: Int = 100_000
         internal const val DEFAULT_MAX_PARALLEL_STEPS: Int = 4
     }
+
+    /**
+     * The same configuration with more job types and crons in it, and everything else untouched.
+     *
+     * Deliberately not a `copy()`: how many steps run at once, how often the dispatcher polls and what happens to an
+     * unloadable job are the application's operational choices, and a plugin quietly changing one of them would be
+     * very hard to notice.
+     */
+    internal fun with(
+        types: Map<JobName, JobType<*, C, V>>,
+        crons: List<CronSchedule<C, V>>,
+    ): JobsConfig<C, V> = JobsConfig(
+        types = types,
+        crons = crons,
+        onUnloadableJob = onUnloadableJob,
+        execution = execution,
+        admission = admission,
+        deadLetterRetention = deadLetterRetention,
+        hardQueueLimit = hardQueueLimit,
+        maxParallelSteps = maxParallelSteps,
+        pollInterval = pollInterval,
+        backoffBase = backoffBase,
+    )
+}
+
+/**
+ * What a [dev.klerkframework.klerk.KlerkPlugin] may add to the job module: its own job types and crons, and nothing
+ * else. See `Config.withJobs`.
+ */
+@JobsConfigMarker
+public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private val delegate: JobsBlock<C, V>) {
+
+    /**
+     * Makes a job type loadable by name.
+     *
+     * @throws IllegalArgumentException if the application, or another plugin, already registered this name. Prefix
+     * the name with the plugin's own to avoid collisions.
+     */
+    public fun register(type: JobType<*, C, V>): Unit = delegate.register(type)
+
+    /** Declares a recurring run of [type], which must have been registered first. */
+    public fun <Cursor : Any> cron(
+        type: JobType<Cursor, C, V>,
+        expression: String,
+        init: CronBuilder<Cursor>.() -> Unit,
+    ): Unit = delegate.cron(type, expression, init)
 }
 
 /**
@@ -205,6 +261,9 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
      * type's cursor cannot be serialized.
      */
     public fun register(type: JobType<*, C, V>) {
+        require(type.name.value != PROCESS_ATTACHED_DATA) {
+            "The job name '$PROCESS_ATTACHED_DATA' belongs to Klerk itself"
+        }
         require(!types.containsKey(type.name)) {
             "There is already a job type registered under the name '${type.name.value}'"
         }
@@ -261,6 +320,20 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
      */
     public fun admission(policy: (AdmissionArgs<C>) -> AdmissionDecision) {
         admissionPolicy = policy
+    }
+
+    /** The types registered so far. Used when a plugin's registrations are merged into an existing config. */
+    internal fun types(): Map<JobName, JobType<*, C, V>> = types.toMap()
+
+    internal fun crons(): List<CronSchedule<C, V>> = crons.toList()
+
+    /**
+     * Starts from what an application already configured, so that a plugin's `register` sees existing names (and
+     * rejects a collision) and its `cron` can refer to a type either of them registered.
+     */
+    internal fun seedFrom(existing: JobsConfig<C, V>) {
+        types.putAll(existing.types)
+        crons.addAll(existing.crons)
     }
 
     internal fun build(): JobsConfig<C, V> {

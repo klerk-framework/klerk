@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
+import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -41,6 +42,7 @@ class InstanceNonInstanceEventBlockTest {
                     }
                 }
                 persistence(persistence)
+                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
             val klerk = Klerk.create(config)

@@ -3,7 +3,7 @@ import org.jetbrains.dokka.gradle.internal.InternalDokkaGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 
 plugins {
-    kotlin("jvm") version "2.3.10"
+    kotlin("jvm") version "2.4.10"
     kotlin("plugin.serialization") version "2.3.10"
     `java-library`
     `maven-publish`

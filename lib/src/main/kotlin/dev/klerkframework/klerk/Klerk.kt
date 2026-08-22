@@ -2,12 +2,9 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.job.JobCommit
-import dev.klerkframework.klerk.job.JobId
-import dev.klerkframework.klerk.job.JobInfo
-import dev.klerkframework.klerk.job.JobRecord
-import dev.klerkframework.klerk.job.PendingJob
-import dev.klerkframework.klerk.job.ScheduledJob
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedStringContainer
+import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
@@ -15,6 +12,10 @@ import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
+import java.nio.file.Path
+import kotlin.reflect.KClass
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 public interface Klerk<C : KlerkContext, V> {
@@ -188,7 +189,7 @@ public interface KlerkModels<C : KlerkContext, V> {
 public interface JobManager<C : KlerkContext, V> {
 
     /**
-     * Schedules one job, built with [dev.klerkframework.klerk.job.JobType.schedule].
+     * Schedules one job, built with [dev.klerkframework.klerk.job.JobType.declare].
      *
      * This is the way to schedule a job that no command is responsible for. A job that belongs to a command should be
      * returned from a state machine's `job(...)` executable instead, so that it is persisted in that command's own
@@ -201,7 +202,7 @@ public interface JobManager<C : KlerkContext, V> {
      * @return the id of the scheduled job.
      * @throws IllegalStateException if the job was refused by the admission policy or the hard queue cap.
      */
-    public suspend fun schedule(job: ScheduledJob<C, V>, context: C): JobId
+    public suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobId
 
     /**
      * Everything known about one job.
@@ -292,6 +293,14 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
 
     /** Takes the jobs a committed command scheduled into the in-memory queue. */
     fun jobsWereCommitted(plan: NewJobPlan)
+
+    /**
+     * [JobManager.schedule], with the new job claiming [claim] in the same commit.
+     *
+     * Used when the job exists to work on attached data that nothing references yet: without the claim in the same
+     * transaction, the orphan reaper could take the value between the two writes.
+     */
+    suspend fun scheduleClaiming(job: DeclaredJob<C, V>, context: C, claim: Set<Int>): JobId
 }
 
 /** What [JobManagerInternal.planNewJobs] decided: either rows to write, or the problems that must fail the command. */
@@ -312,6 +321,10 @@ internal sealed class NewJobPlan {
  * Writing happens in two steps since uploading may be slow but updating a model must be quick:
  * 1. [prepare] inserts the data (slow, no lock is held)
  * 2. a command stores the returned ID in a model property (fast)
+ *
+ * A blob is prepared for a particular [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], which decides what it may be
+ * and what must happen to it first. When that declaration declares steps, Klerk runs them in a job and the value
+ * cannot be attached until they have all run — see [awaitProcessing].
  *
  * If no committed command references a prepared ID within one minute, the data is deleted and a later attempt to use
  * that ID will fail the command.
@@ -335,41 +348,121 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * This may take a while, so it is deliberately done outside the command processing. No lock is held while the data
      * is written.
      *
-     * @param visibility whether the data may be read by anyone or only by the actors the `readAttachedData` rules allow.
-     * Chosen here and never changed, so that a [AttachedDataVisibility.Public] value can be cached by e.g. a CDN.
+     * Whether the blob may be read by anyone is *not* decided here: it is declared by the
+     * [dev.klerkframework.klerk.datatypes.AttachedBlobContainer] the value ends up in, and applied when a command attaches it.
+     * Whoever uploads a file cannot know what it will be used for, so it is not their decision to make.
+     *
+     * The [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] [declaration] declares — a virus scan, a
+     * Content Disarm & Reconstruct pass, a check of the contents — are run by a job Klerk schedules here, and this
+     * returns as soon as the bytes are written. A command attaching a value whose steps have not all run is rejected,
+     * so wait for [awaitProcessing] before issuing it. A declaration whose only step is
+     * [dev.klerkframework.klerk.datatypes.noPreAttachProcessing] schedules nothing.
+     *
      * The returned id is unique among *all* attached data, blobs and strings alike.
+     *
+     * @param declaration the property this value is being prepared for. It decides what the value must be and what
+     * must happen to it first, so it is required — a blob is always prepared for somewhere.
      * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
-     * @return the ID to be stored in a model property by a subsequent command. If no command does so within one
-     * minute, the data is deleted.
+     * @param lease how long the data survives without being claimed. Defaults to
+     * [KlerkSettings.unclaimedAttachedDataLifetime] (one minute), which is right when the command follows
+     * immediately. Ask for a longer one when it cannot — an upload that is prepared as its last byte arrives but is
+     * not attached until the user submits a form, say. A lease may not exceed
+     * [KlerkSettings.maxAttachedDataLease], and the `writeAttachedData` rules see it, so who may hold data for a
+     * long time is a decision the application can make.
+     * @return the ID to be stored in a model property by a subsequent command. If no command does so before the lease
+     * runs out, the data is deleted.
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large
+     * @throws IllegalArgumentException if the metadata is too large, if the lease exceeds the maximum, or if
+     * [declaration] cannot be built from an id alone
      */
     public suspend fun prepare(
         value: InputStream,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
     ): AttachedBlobID
+
+    /**
+     * Inserts a blob that is already a file, taking the file over instead of copying it when the blob store can.
+     *
+     * With [dev.klerkframework.klerk.storage.FileBlobStore] on the same filesystem as [file], this is a rename: the
+     * bytes are read once to compute the size and hash, and never written a second time. Anywhere else it behaves
+     * exactly like [prepare] with the file's stream.
+     *
+     * The file is *moved*, so it no longer exists at its old location afterwards — unless the store could not adopt
+     * it, in which case it is copied and left alone.
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws java.io.IOException if the file cannot be read
+     */
+    public suspend fun prepareFromFile(
+        file: Path,
+        declaration: KClass<out AttachedBlobContainer>,
+        context: C,
+        metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
+    ): AttachedBlobID
+
+    /**
+     * Waits for the steps the value's declaration declares — a virus scan, a Content Disarm & Reconstruct pass, a
+     * check that a CSV has the right columns — to finish running.
+     *
+     * ```kotlin
+     * val blob = klerk.attachedData.prepare(bytes, FlowerImage::class, context)
+     * klerk.attachedData.awaitProcessing(blob)
+     * // now the command that attaches it will be accepted
+     * ```
+     *
+     * Klerk runs the steps in a job of its own, so they are retried when a scanner is briefly unreachable and end up
+     * in the dead-letter queue when they are not. This returns immediately for a value whose declaration has no step
+     * to run — [dev.klerkframework.klerk.datatypes.noPreAttachProcessing] — or whose steps have already run.
+     *
+     * A command attaching a value whose declared steps have not all run is rejected, so this is a guarantee rather
+     * than a convention.
+     *
+     * Not subject to authorization: what runs is what the developer declared on the property, not something an actor
+     * chose to do. Who may put a file into the system at all is decided by [prepare], and what may be attached to a
+     * model by the command that attaches it.
+     *
+     * Under [dev.klerkframework.klerk.job.JobExecution.Manual] nothing runs on its own, so this drives the job queue
+     * itself rather than waiting for something that will never happen.
+     *
+     * @param timeout how long to wait. The steps keep running afterwards; only the waiting stops.
+     * @throws BlobRejected if a step refused the file, or if it does not satisfy `accept`/`maxSize`. The value is
+     * deleted, so this is the only place the reason can be read.
+     * @throws kotlinx.coroutines.TimeoutCancellationException if [timeout] passes first.
+     */
+    public suspend fun awaitProcessing(
+        id: AttachedBlobID,
+        timeout: Duration = 5.minutes,
+    ): Unit
 
     /**
      * Inserts a string so that it can be attached to a model.
      *
-     * See [prepare] for blobs; the semantics are identical. A string is stored as its UTF-8 bytes, so the only thing
-     * that distinguishes the two is the type of the id — and thus what the value means and how it may be read back.
+     * See [prepare] for blobs; the semantics are identical, including [declaration] — a string is declared via an
+     * [dev.klerkframework.klerk.datatypes.AttachedStringContainer] the same way a blob is declared via an
+     * [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], and whether it may be read by anyone is decided
+     * there, not here. A string is stored as its UTF-8 bytes, so the only thing that distinguishes the two kinds is
+     * the type of the id — and thus what the value means and how it may be read back. A string has no pre-attach
+     * steps, so nothing here waits for a job the way [awaitProcessing] does for a blob.
      *
      * Note that the whole string is held in memory here. For something big enough that that is a problem, prepare it
      * as a blob instead.
      *
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large
+     * @throws IllegalArgumentException if the metadata is too large, or if [declaration] cannot be built from an id
+     * alone
      */
     public suspend fun prepare(
         value: String,
+        declaration: KClass<out AttachedStringContainer>,
         context: C,
-        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
+        lease: Duration? = null,
     ): AttachedStringID
 
     /**

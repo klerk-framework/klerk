@@ -17,6 +17,8 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
@@ -442,6 +444,23 @@ public data class AttachedDataMetadata(
     val size: Long,
     val hash: String,
     val custom: Map<String, String>,
+
+    /**
+     * What the value actually is, as recognised from its first bytes by Klerk — never what a client claimed it was
+     * uploading. Null when the bytes match no known format, which is the normal state of affairs for CSV and for
+     * anything Klerk does not have a signature for.
+     *
+     * Recognising a format is not the same as vouching for it: a file can satisfy two formats at once, so this says
+     * "plausibly a PNG", never "safe to serve as one". Serve user-supplied values as a download unless you have a
+     * specific reason not to.
+     */
+    val contentType: String? = null,
+
+    /**
+     * The names of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] that have run against this value, in
+     * the order they ran.
+     */
+    val completedSteps: List<String> = emptyList(),
 )
 
 /**
@@ -462,15 +481,21 @@ public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
  * The arguments given to the rules deciding who may prepare attached data (see [KlerkAttachedData.prepare]).
  *
  * Note that there is no model at this point since the data has not been attached to anything yet. The meaningful
- * checks here are the actor in the [context], the [visibility] and the [kind] — a rule can allow uploads in general
- * but restrict who may publish something the whole world can read, or who may upload a blob as opposed to a string.
- * The real gate on *attaching* data to a model is the normal event authorization of the command that claims it.
+ * checks here are the actor in the [context], the [kind] and the [lease] — a rule can allow uploads in general but
+ * restrict who may upload a blob as opposed to a string, or who may keep unclaimed data around for hours. The real
+ * gate on *attaching* data to a model is the normal event authorization of the command that claims it.
  */
 public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val kind: AttachedDataKind,
-    val visibility: AttachedDataVisibility,
+
     val context: C,
     val reader: Reader<C, V>,
+
+    /**
+     * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
+     * the place to decide who may ask for one.
+     */
+    val lease: Duration = 1.minutes,
 )
 
 /**

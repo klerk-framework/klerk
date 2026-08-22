@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.read.Reader
 import kotlin.time.Instant
@@ -69,6 +70,10 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
     /**
      * The arguments of a [JobType.Local] step. [reader] reads the models as they are committed right now; it is valid
      * only for the duration of the step.
+     *
+     * @property klerk the framework itself, for the subsystems a step may need — `attachedData` above all. **Not** for
+     * issuing commands: return the command from the step instead, so that it commits atomically with the checkpoint.
+     * Reading goes through [reader], which is already inside the step's read block.
      */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
@@ -76,6 +81,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
         override val job: JobInfo,
         override val context: C,
         public val reader: Reader<C, V>,
+        public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
         cancellationRequested: Boolean = false,
     ) : JobStepArgs<Cursor, C, V>(cancellationRequested)
@@ -128,6 +134,7 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
     public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
     public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
 
+    /** @property klerk as on [JobStepArgs.Local.klerk]. */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val failedAtCursor: Cursor,
@@ -136,6 +143,7 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
         override val job: JobInfo,
         override val context: C,
         public val reader: Reader<C, V>,
+        public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
     ) : JobEndArgs<Cursor, C, V>()
 

@@ -1,19 +1,30 @@
 package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedStringContainer
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
+import dev.klerkframework.klerk.job.JobExecution
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.currentJobId
 import dev.klerkframework.klerk.misc.AttachedDataIdAllocator
 import dev.klerkframework.klerk.misc.ReadWriteLock
-
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
-import dev.klerkframework.klerk.storage.AttachedDataDelta
-import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.storage.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.reflect.KClass
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
@@ -57,35 +68,272 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val lastReap = AtomicReference(Instant.DISTANT_PAST)
 
     /**
+     * One entry per value whose steps are being run, so that [awaitProcessing] can be told what happened. Completed
+     * with null when every step has run, and with the reason when one refused the file.
+     *
+     * A value nobody waits for leaves an entry behind until it is claimed ([forget]) or reaped ([maybeReap]).
+     */
+    private val waiters = ConcurrentHashMap<Int, CompletableDeferred<String?>>()
+
+    private val jobs: JobManagerInternal<C, V> get() = klerk.impl().jobs
+
+    /** Where blob bytes live when they are not in the database, or null when they are. */
+    private val externalBlobs: AttachedBlobStore.External?
+        get() = config.attachedBlobStore as? AttachedBlobStore.External
+
+    /**
      * Rebuilds the in-memory state from storage. Rows that are unclaimed and already past their expiry are reaped
      * rather than reserved.
      */
     internal fun start() {
         val now = config.now()
-        config.persistence.deleteExpiredAttachedData(now)
+        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
         val rows = config.persistence.readAllAttachedDataMetadata()
         entries.clear()
         rows.forEach { (id, row) ->
             entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires, row.claimedByJob)
         }
         lastReap.set(now)
+        reconcileExternalBlobs()
         logger.info { "Attached data ready (${entries.size} values)" }
+    }
+
+    /**
+     * Compares the rows against what the blob store actually holds.
+     *
+     * Bytes without a row are orphans — a crash between writing them and committing the row, or between deleting the
+     * row and deleting them — and are deleted. A row without bytes means the store was changed under an existing
+     * database, which Klerk cannot repair and will not paper over: the first user to open an old attachment would
+     * otherwise get an unexplained "not found".
+     */
+    private fun reconcileExternalBlobs() {
+        val store = externalBlobs ?: return
+        val stored = store.listIds() ?: return
+        val expected = entries.filterValues { it.metadata?.kind == AttachedDataKind.Blob }.keys
+
+        val missing = expected.minus(stored)
+        if (missing.isNotEmpty()) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.AttachedBlobStoreMissingData,
+                "The configured attachedBlobStore does not have the bytes for ${missing.size} blob(s) that this " +
+                        "database refers to (for example id ${missing.first()}). This happens when the store is " +
+                        "changed after the application already has data — Klerk does not move blobs between stores."
+            )
+        }
+
+        val orphans = stored.minus(expected)
+        if (orphans.isNotEmpty()) {
+            logger.info { "Deleting ${orphans.size} orphaned blob(s) from the blob store" }
+            orphans.forEach { store.delete(it) }
+        }
+    }
+
+    /**
+     * The bytes of [id], without authorization: this is for Klerk's own use inside the command pipeline, where the
+     * question is whether a value may be attached rather than whether somebody may read it.
+     */
+    private fun openValue(id: Int, kind: AttachedDataKind): InputStream {
+        val store = if (kind == AttachedDataKind.Blob) externalBlobs else null
+        return store?.get(id)
+            ?: config.persistence.getAttachedValue(id)
+            ?: throw NoSuchElementException("No data found for id $id")
+    }
+
+    /** Removes the bytes of [ids] from the blob store, if that is where they are. Never throws. */
+    private fun deleteBytes(ids: Set<Int>) {
+        val store = externalBlobs ?: return
+        ids.forEach { id ->
+            // Failing to delete leaves an orphan, which the next startup sweeps. Failing the command would be worse.
+            runCatching { store.delete(id) }
+                .onFailure { logger.error(it) { "Could not delete the bytes of attached data $id" } }
+        }
     }
 
     override suspend fun prepare(
         value: InputStream,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
-    ): AttachedBlobID = AttachedBlobID(insert(value, AttachedDataKind.Blob, context, visibility, metadata))
+        lease: Duration?,
+    ): AttachedBlobID =
+    // Private until a command attaches it: the property it lands in is what decides, and until then nothing can
+        // read it anyway.
+        AttachedBlobID(
+            insert(
+                value,
+                AttachedDataKind.Blob,
+                context,
+                AttachedDataVisibility.Private,
+                metadata,
+                lease,
+                declaration = declaration,
+            )
+        )
+
+    override suspend fun prepareFromFile(
+        file: Path,
+        declaration: KClass<out AttachedBlobContainer>,
+        context: C,
+        metadata: Map<String, String>,
+        lease: Duration?,
+    ): AttachedBlobID = AttachedBlobID(
+        insert(
+            Files.newInputStream(file),
+            AttachedDataKind.Blob,
+            context,
+            AttachedDataVisibility.Private,
+            metadata,
+            lease,
+            adoptFrom = file,
+            declaration = declaration,
+        )
+    )
 
     override suspend fun prepare(
         value: String,
+        declaration: KClass<out AttachedStringContainer>,
         context: C,
-        visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
-    ): AttachedStringID =
-        AttachedStringID(insert(value.byteInputStream(), AttachedDataKind.String, context, visibility, metadata))
+        lease: Duration?,
+    ): AttachedStringID {
+        // Fails fast, the same way the blob overload does: a declaration that cannot be built is a programming error,
+        // and it should be reported here rather than as a puzzling claim-time failure.
+        instantiateDeclaration(declaration, AttachedStringID(0))
+        return AttachedStringID(
+            insert(
+                value.byteInputStream(),
+                AttachedDataKind.String,
+                context,
+                AttachedDataVisibility.Private,
+                metadata,
+                lease,
+            )
+        )
+    }
+
+    /**
+     * Runs the first step [declaration] declares that this value has not been through yet, and records that it has.
+     *
+     * One step at a time, because the job that calls this yields in between: an expensive pipeline then checkpoints
+     * between its stages, and a retry re-runs only the stage that failed. What has already run is read from the value
+     * itself, so a yield, a retry and a restart all resume the same way, and a step that rewrites the bytes cannot
+     * run twice. A step may only rewrite them while the value is unclaimed; once a model owns it, it is immutable.
+     *
+     * Not authorized: what runs here is what the developer declared on the property, not something an actor chose.
+     *
+     * @throws BlobRejected if the step refuses the file, or if it does not satisfy `accept`/`maxSize` — which are
+     * re-checked first, and again after a step that replaces the bytes.
+     * @throws IllegalStateException if the value has already been claimed by a model.
+     */
+    internal suspend fun processNextStep(declaration: AttachedBlobContainer): BlobProcessing {
+        val id = declaration.id.id
+        val entry = entries[id] ?: throw NoSuchElementException("No data found for id ${declaration.id}")
+        check(entry.owner == null) {
+            "The attached data ${declaration.id} is already claimed by model ${entry.owner}, and a claimed value " +
+                    "never changes"
+        }
+        var metadata = checkNotNull(entry.metadata) { "The data ${declaration.id} has not been written yet" }
+
+        // Cheap first: a file the property will not accept anyway should not be scanned or disarmed. The claim
+        // checks this again — this is about failing early, not about being the only check.
+        declaration.reasonToReject(metadata)?.let { throw BlobRejected("The file is not acceptable here: $it") }
+
+        val steps = declaration.stepsToRun
+        val total = steps.size
+        val completed = metadata.completedSteps.toMutableList()
+        // Anything already recorded was done by an earlier step of the job, or before a restart. Running it again
+        // could disarm twice.
+        val next = steps.indexOfFirst { !completed.contains(it.first) }
+        if (next == -1) {
+            processed(id)
+            return BlobProcessing.Done(total)
+        }
+
+        val (name, step) = steps[next]
+        val result = LazyInputStream { openValue(id, metadata.kind) }
+            .use { step(BlobPreAttachStepArgs(it, metadata)) }
+        when (result) {
+            is BlobPreAttachStepResult.Pass -> Unit
+            is BlobPreAttachStepResult.Reject -> throw BlobRejected(result.reason)
+            is BlobPreAttachStepResult.Replace -> {
+                metadata = replaceValue(id, result.value, metadata)
+                // A rewrite can change what the file is and how large it is, so the declaration applies again.
+                declaration.reasonToReject(metadata)?.let {
+                    throw BlobRejected("After '$name' the file is not acceptable here: $it")
+                }
+            }
+        }
+        completed.add(name)
+        record(id, metadata, completed.toList())
+        if (completed.size == total) {
+            processed(id)
+            return BlobProcessing.Done(total)
+        }
+        return BlobProcessing.More(name, completed.size, total)
+    }
+
+    override suspend fun awaitProcessing(id: AttachedBlobID, timeout: Duration) {
+        // No waiter means there is nothing to wait for: the declaration had no steps, or they have already run.
+        val waiter = waiters[id.id] ?: return
+        if (config.jobs.execution == JobExecution.Manual) {
+            // Nothing runs on its own here, so waiting would be waiting for a step nobody is going to take.
+            jobs.runUntilIdle()
+        }
+        val rejection = try {
+            withTimeout(timeout) { waiter.await() }
+        } finally {
+            waiters.remove(id.id)
+        }
+        rejection?.let { throw BlobRejected(it) }
+    }
+
+    /** Tells whoever is waiting that every step has run. */
+    private fun processed(id: Int) {
+        waiters[id]?.complete(null)
+    }
+
+    /**
+     * Throws away a value a step refused, and tells whoever is waiting why.
+     *
+     * Deleted rather than left to expire: nothing may ever attach it, and the reason has already been reported. The
+     * dead-lettered job keeps the reason for anyone looking at the queue afterwards.
+     */
+    internal fun rejected(id: Int, reason: String) {
+        entries.remove(id)
+        runCatching { config.persistence.deleteAttachedData(setOf(id)) }
+            .onFailure { logger.error(it) { "Could not delete the rejected attached data $id" } }
+        deleteBytes(setOf(id))
+        waiters[id]?.complete(reason)
+    }
+
+    /**
+     * Writes new bytes over an unclaimed value, keeping its id.
+     *
+     * Internal on purpose: if the only thing that can change a value's bytes is a step its property declared, the
+     * invariant is easy to state. A public version would let anything holding an id rewrite an unclaimed value.
+     */
+    private fun replaceValue(id: Int, newValue: InputStream, current: AttachedDataMetadata): AttachedDataMetadata {
+        val hashing = HashingInputStream(newValue, settings.contentTypeDetector)
+        val store = if (current.kind == AttachedDataKind.Blob) externalBlobs else null
+        if (store != null) {
+            // put() refuses to overwrite, which is what protects a live value from an id collision.
+            store.delete(id)
+            store.put(id, hashing)
+        }
+        config.persistence.updateAttachedData(id, if (store == null) hashing else null, current.completedSteps) {
+            hashing.digest()
+        }
+        val digest = hashing.digest()
+        return current.copy(size = digest.size, hash = digest.hash, contentType = digest.contentType)
+    }
+
+    /** Records that a step has run, so that an interrupted pipeline resumes rather than starting over. */
+    private fun record(id: Int, metadata: AttachedDataMetadata, completed: List<String>) {
+        config.persistence.updateAttachedData(id, null, completed) {
+            AttachedDataDigest(metadata.size, metadata.hash, metadata.contentType)
+        }
+        entries[id] = entries[id]?.copy(metadata = metadata.copy(completedSteps = completed)) ?: return
+    }
 
     /**
      * The one write path. A string differs from a blob only in its [AttachedDataKind] and in arriving as a stream over
@@ -97,35 +345,99 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         context: C,
         visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
+        lease: Duration? = null,
+        adoptFrom: Path? = null,
+        declaration: KClass<out AttachedBlobContainer>? = null,
     ): Int {
-        authorizeWrite(context, kind, visibility)
+        // Before a byte is written: a declaration that cannot be built, declares no step, or declares one that is not
+        // a named function reference is a programming error, and it should be reported where the mistake is rather
+        // than from inside a job an hour later. The list is empty when the only step is noPreAttachProcessing, and
+        // then there is nothing for a job to do.
+        val steps = declaration?.let { instantiateDeclaration(it, AttachedBlobID(0)).stepNames } ?: emptyList()
+        val requested = lease ?: settings.unclaimedAttachedDataLifetime
+        require(requested <= settings.maxAttachedDataLease) {
+            "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +
+                    "(KlerkSettings.maxAttachedDataLease)"
+        }
+        authorizeWrite(context, kind, requested)
         validateCustomMetadata(metadata)
+        if (kind == AttachedDataKind.Blob && config.attachedBlobStore == AttachedBlobStore.None) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.AttachedBlobStoreIsNone,
+                "The config says attachedBlobStore(None), so this application cannot store blobs."
+            )
+        }
         val createdAt = config.now()
-        val expires = reserveExpiry()
+        val expires = reserveExpiry(requested)
         val id = allocate(expires)
         // A job step often prepares data before any command references it, and the reaper would otherwise delete it a
         // minute later. Claiming it for the running job (if there is one) is recorded here, at insert time, because
         // the job's own commit may be many steps away.
         val claimedByJob = currentJobId()
-        val hashing = HashingInputStream(value)
+        val hashing = HashingInputStream(value, settings.contentTypeDetector)
+        // A blob kept outside the database is written first and the row committed after, so a crash can only leave
+        // bytes nothing refers to. Those are swept at the next startup; the other order would lose the value instead.
+        val store = if (kind == AttachedDataKind.Blob) externalBlobs else null
         try {
-            config.persistence.insertAttachedData(
-                id, hashing, kind, visibility, createdAt, metadata, expires, claimedByJob
-            ) {
-                hashing.sizeAndHash()
+            // Adoption still reads the file — the size and hash have to be known — but it saves writing the bytes a
+            // second time, which is the expensive half.
+            val adopted = adoptFrom != null && store != null && run {
+                // Read (and close) before moving the file: the digest has to be complete, and the stream is open on
+                // the very file that adoption renames.
+                hashing.use { it.copyTo(OutputStream.nullOutputStream()) }
+                store.adopt(id, adoptFrom)
             }
-            val (size, hash) = hashing.sizeAndHash()
+            if (!adopted) {
+                store?.put(id, hashing)
+            }
+            config.persistence.insertAttachedData(
+                id, if (store == null) hashing else null, kind, visibility, createdAt, metadata, expires, claimedByJob
+            ) {
+                hashing.digest()
+            }
+            val digest = hashing.digest()
             entries[id] = AttachedDataEntry(
                 owner = null,
-                metadata = AttachedDataMetadata(kind, visibility, createdAt, size, hash, metadata),
+                metadata = AttachedDataMetadata(
+                    kind, visibility, createdAt, digest.size, digest.hash, metadata, digest.contentType
+                ),
                 expires = expires,
                 claimedByJob = claimedByJob,
             )
         } catch (e: Exception) {
             entries.remove(id)
+            store?.let { runCatching { it.delete(id) } }
             throw e
         }
+        if (steps.isNotEmpty()) {
+            scheduleProcessing(id, checkNotNull(declaration), context)
+        }
         return id
+    }
+
+    /**
+     * Puts the value's declared steps in the hands of a job.
+     *
+     * The job claims the value as it is created, in the same commit, so that the reaper cannot take it while a scan
+     * that outlasts the lease is running. The claim is released when the job finishes.
+     */
+    private suspend fun scheduleProcessing(id: Int, declaration: KClass<out AttachedBlobContainer>, context: C) {
+        val className = requireNotNull(declaration.qualifiedName) {
+            "A blob declaration must be a named class, and $declaration is not"
+        }
+        // Registered before the job can possibly run, or a fast pipeline could finish before anyone can wait for it.
+        waiters[id] = CompletableDeferred()
+        val jobId = try {
+            jobs.scheduleClaiming(
+                job = config.jobs.processAttachedData.declare(ProcessBlobCursor(id, className)),
+                context = context,
+                claim = setOf(id),
+            )
+        } catch (e: Exception) {
+            waiters.remove(id)
+            throw e
+        }
+        entries[id]?.let { entries[id] = it.copy(claimedByJob = jobId) }
     }
 
     /** The attached data [jobId] has claimed, so that its claims can be released when the job's row goes away. */
@@ -160,9 +472,18 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private suspend fun read(id: Int, expected: AttachedDataKind, publicId: Any, context: C): InputStream {
         val entry = authorizeRead(entries[id], publicId, context, "klerk.attachedData.get")
         requireKind(entry, expected, publicId)
-        val row = config.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
+        val row =
+            config.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
         check(entry.owner == row.owner) { "The in-memory state of attached data $publicId does not match the database" }
-        return row.value
+        val store = if (expected == AttachedDataKind.Blob) externalBlobs else null
+        return if (store == null) {
+            config.persistence.getAttachedValue(id)
+                ?: throw NoSuchElementException("No data found for id $publicId")
+        } else {
+            store.get(id) ?: throw NoSuchElementException(
+                "The attached data $publicId has a row but no bytes in the blob store"
+            )
+        }
     }
 
     override suspend fun getMetadata(id: AttachedBlobID, context: C): AttachedDataMetadata =
@@ -209,6 +530,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         if (metadata.isEmpty()) {
             return
         }
+        // Klerk's own findings about a value travel in the same map. Reserving the prefix keeps "what the bytes are"
+        // separate from "what somebody said they are", which is the only reason the former can be trusted.
+        require(metadata.keys.none { it.startsWith("__") }) {
+            "Metadata keys starting with '__' are reserved for Klerk: ${metadata.keys.filter { it.startsWith("__") }}"
+        }
         val length = metadata.entries.sumOf { it.key.length + it.value.length + JSON_OVERHEAD_PER_ENTRY }
         require(length <= MAX_CUSTOM_METADATA_LENGTH) {
             "The metadata is too large ($length characters, at most $MAX_CUSTOM_METADATA_LENGTH are allowed). " +
@@ -222,7 +548,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * Deliberately based on the real clock rather than `context.time`: the context clock is supplied by the caller and
      * must not be able to extend or shorten the claim window.
      */
-    private fun reserveExpiry(): Instant = config.now().plus(settings.unclaimedAttachedDataLifetime)
+    private fun reserveExpiry(lease: Duration): Instant = config.now().plus(lease)
 
     /**
      * Reserves an id. The entry is a placeholder without metadata until the value has been written — see
@@ -250,16 +576,23 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             return
         }
         entries.entries.removeIf { it.value.isExpired(now) }
-        config.persistence.deleteExpiredAttachedData(now)
+        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
+        // Whatever no longer has an entry has nothing left to wait for either — a value that was reaped, or one a
+        // step refused that nobody was waiting for.
+        waiters.keys.removeIf { !entries.containsKey(it) }
     }
 
     // ---------------------------------------------------------------- authorization
 
-    private suspend fun authorizeWrite(context: C, kind: AttachedDataKind, visibility: AttachedDataVisibility) {
+    private suspend fun authorizeWrite(
+        context: C,
+        kind: AttachedDataKind,
+        lease: Duration,
+    ) {
         if (context.actor == SystemIdentity) {
             return
         }
-        val args = ArgsForAttachedDataWrite(kind, visibility, context, ReaderWithoutAuth<C, V>(klerk))
+        val args = ArgsForAttachedDataWrite(kind, context, ReaderWithoutAuth<C, V>(klerk), lease)
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
         readWriteLock.acquireRead()
@@ -348,17 +681,17 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
         val now = config.now()
         val problems = mutableListOf<Problem>()
-        val claimed = mutableMapOf<Int, Int>()
+        val claimed = mutableMapOf<Int, AttachedDataClaim>()
         val deleted = mutableSetOf<Int>()
 
         affected.forEach { modelId ->
             val before = ModelCache.getOrNull(ModelID<Any>(modelId.value))
-                ?.let { collectAttachedDataIds(it.props) } ?: emptySet()
-            val after = if (delta.deletedModels.contains(modelId)) emptySet() else
-                delta.aggregatedModelState[modelId]?.let { collectAttachedDataIds(it.props) } ?: emptySet()
+                ?.let { collectAttachedData(it.props) } ?: emptyMap()
+            val after = if (delta.deletedModels.contains(modelId)) emptyMap() else
+                delta.aggregatedModelState[modelId]?.let { collectAttachedData(it.props) } ?: emptyMap()
 
-            claim(after.minus(before), modelId, claimed, now, problems)
-            deleted.addAll(before.minus(after))
+            claim(after.minus(before.keys).values, modelId, claimed, now, problems)
+            deleted.addAll(before.keys.minus(after.keys))
         }
 
         if (problems.isNotEmpty()) {
@@ -368,13 +701,14 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     }
 
     private fun claim(
-        ids: Set<Int>,
+        references: Collection<AttachedDataReference>,
         modelId: ModelID<out Any>,
-        claims: MutableMap<Int, Int>,
+        claims: MutableMap<Int, AttachedDataClaim>,
         now: Instant,
         problems: MutableList<Problem>
     ) {
-        ids.forEach { id ->
+        references.forEach { reference ->
+            val id = reference.id
             val entry = entries[id]
             if (entry == null || entry.isExpired(now)) {
                 problems.add(
@@ -386,7 +720,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 )
                 return@forEach
             }
-            val currentOwner = entry.owner ?: claims[id]
+            val currentOwner = entry.owner ?: claims[id]?.owner
             if (currentOwner != null && currentOwner != modelId.value) {
                 problems.add(
                     StateProblem(
@@ -397,7 +731,46 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 )
                 return@forEach
             }
-            claims[id] = modelId.value
+
+            // What the property declares, checked against what Klerk found the bytes to be. Metadata only: the value
+            // itself may be gigabytes, and reading it here would put the upload back inside command processing.
+            val declaration = reference.declaration
+            val metadata = entry.metadata
+            if (declaration != null && metadata != null) {
+                // Metadata only. What a step concluded was recorded when it ran; running one here would put a virus
+                // scan or a disarm pass inside command processing, with every other command waiting behind it.
+                val unacceptable = declaration.reasonToReject(metadata)
+                if (unacceptable != null) {
+                    problems.add(
+                        StateProblem(
+                            "The file is not acceptable here: $unacceptable",
+                            "The attached data with id $id cannot be claimed by $modelId: $unacceptable",
+                            KlerkErrorCode.AttachedDataNotAcceptable
+                        )
+                    )
+                    return@forEach
+                }
+                val missing = (declaration as? AttachedBlobContainer)?.stepNames
+                    ?.firstOrNull { !metadata.completedSteps.contains(it) }
+                if (missing != null) {
+                    problems.add(
+                        StateProblem(
+                            "The file has not finished being checked",
+                            "The attached data with id $id cannot be claimed by $modelId: it has not been through " +
+                                    "'$missing'. Wait for klerk.attachedData.awaitProcessing(...) before attaching it.",
+                            KlerkErrorCode.AttachedDataNotProcessed
+                        )
+                    )
+                    return@forEach
+                }
+            }
+
+            claims[id] = AttachedDataClaim(
+                owner = modelId.value,
+                // Declared by the property, since whoever uploaded the value could not have known what it was for.
+                // A bare id declares nothing, so whatever the entry already carries stands.
+                visibility = declaration?.visibility ?: metadata?.visibility ?: AttachedDataVisibility.Private,
+            )
         }
     }
 
@@ -406,11 +779,24 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * the write lock is held.
      */
     internal fun applyToMemory(attachedData: AttachedDataDelta) {
-        attachedData.claimed.forEach { (id, owner) ->
+        attachedData.claimed.forEach { (id, claim) ->
             val entry = entries[id] ?: return@forEach
-            entries[id] = entry.copy(owner = owner, expires = null)
+            entries[id] = entry.copy(
+                owner = claim.owner,
+                expires = null,
+                metadata = entry.metadata?.copy(visibility = claim.visibility),
+            )
         }
         attachedData.deleted.forEach { entries.remove(it) }
+        // After the row is gone, never before: bytes nothing refers to are swept at startup, but a row referring to
+        // bytes that were already deleted would be a hard error on the next read.
+        deleteBytes(attachedData.deleted)
+        forget(attachedData.claimed.keys + attachedData.deleted)
+    }
+
+    /** Drops the waiters of values that are no longer waiting for anything: a model has them, or they are gone. */
+    private fun forget(ids: Set<Int>) {
+        ids.forEach { waiters.remove(it) }
     }
 
 }
@@ -434,17 +820,26 @@ private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
  * Both read overloads must be implemented: [java.io.FilterInputStream.read] with a buffer delegates straight to the
  * wrapped stream, so relying on the inherited one would silently miss almost every byte.
  */
-private class HashingInputStream(private val source: InputStream) : InputStream() {
+private class HashingInputStream(
+    private val source: InputStream,
+    private val contentTypeDetector: ContentTypeDetector,
+) : InputStream() {
 
     private val digest = MessageDigest.getInstance("SHA-256")
     private var size = 0L
-    private var result: Pair<Long, String>? = null
+    private var result: AttachedDataDigest? = null
+
+    // The first bytes, kept so that the value's type can be recognised without reading it a second time.
+    private val head = ByteArrayOutputStream(SNIFF_LENGTH)
 
     override fun read(): Int {
         val b = source.read()
         if (b != -1) {
             digest.update(b.toByte())
             size++
+            if (head.size() < SNIFF_LENGTH) {
+                head.write(b)
+            }
         }
         return b
     }
@@ -454,22 +849,54 @@ private class HashingInputStream(private val source: InputStream) : InputStream(
         if (read > 0) {
             digest.update(b, off, read)
             size += read
+            val wanted = minOf(read, SNIFF_LENGTH - head.size())
+            if (wanted > 0) {
+                head.write(b, off, wanted)
+            }
         }
         return read
     }
+
 
     override fun available(): Int = source.available()
 
     override fun close(): Unit = source.close()
 
     /**
-     * The size and hash of everything read so far. Idempotent: [MessageDigest.digest] resets the digest, so the answer
-     * is computed once and remembered — callers may well ask more than once.
+     * The size, hash and detected type of everything read so far. Idempotent: [MessageDigest.digest] resets the
+     * digest, so the answer is computed once and remembered — callers may well ask more than once.
      */
-    fun sizeAndHash(): Pair<Long, String> = result ?: (size to digest.digest().toHex()).also { result = it }
+    fun digest(): AttachedDataDigest = result ?: AttachedDataDigest(
+        size = size,
+        hash = digest.digest().toHex(),
+        contentType = contentTypeDetector.detect(head.toByteArray()),
+    ).also { result = it }
 }
 
 internal sealed class AttachedDataPlan {
     internal data class Ok(val delta: AttachedDataDelta) : AttachedDataPlan()
     internal data class Rejected(val problems: List<Problem>) : AttachedDataPlan()
+}
+
+/**
+ * A stream that opens the underlying one on the first read, and closes nothing if it never did.
+ *
+ * This is what makes a [dev.klerkframework.klerk.datatypes.BlobPreAttachStep] that decides from the metadata alone free: the
+ * value is fetched from wherever it lives only if the step actually asks for a byte.
+ */
+private class LazyInputStream(private val open: () -> InputStream) : InputStream() {
+
+    private var source: InputStream? = null
+
+    private fun source(): InputStream = source ?: open().also { source = it }
+
+    override fun read(): Int = source().read()
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int = source().read(b, off, len)
+
+    override fun available(): Int = source?.available() ?: 0
+
+    override fun close() {
+        source?.close()
+    }
 }
