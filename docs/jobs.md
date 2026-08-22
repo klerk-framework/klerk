@@ -478,8 +478,10 @@ override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
 ```
 
 A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
-remain the application's decisions. Job names are global, so prefix a plugin's names with the plugin's own —
-registering a name the application already used fails when the config is built.
+remain the application's decisions. Job names are global, so prefix a plugin's names with the plugin's own — registering
+a name the application already used fails when the config is built.
+
+Some of the official Klerk plugins (and Klerk itself) register their own jobs and crons.
 
 ### Attached data
 
@@ -496,18 +498,6 @@ declare:
 A long-running job's working set is therefore safe from the reaper for as long as the job is running, including while
 dead-lettered and awaiting a human. The flip side is that a job that ended without succeeding holds its claim until it
 is deleted, which is what `deadLetterRetention` is for.
-
-### The job Klerk runs itself
-
-One job type is registered in every configuration, whether or not the application declares a `jobs { }` block:
-`klerk-process-attached-data` runs the [steps](attached-data.md#steps-looking-at-the-bytes-and-rewriting-them) a blob
-property declares — a virus scan, a Content Disarm & Reconstruct pass — one step of the job per declared step. It is
-scheduled by `klerk.attachedData.prepare(...)` when the destination declares any real step, and by nothing else: a
-property whose only step is `noPreAttachProcessing` gets no job. The name is
-reserved: `register` refuses it.
-
-A step that *refuses* a file dead-letters the job without retrying and deletes the value, since retrying would reach
-the same conclusion. A step that *fails* is retried like any other.
 
 ### Who can see a job
 
@@ -580,7 +570,14 @@ fun `import emits one CreateBook per file`() = runTest {
 
         while (true) {
             val args =
-                JobStepArgs.Local(cursor, previousResult = null, job = someJobInfo, context = ctx, reader = reader, klerk = klerk)
+                JobStepArgs.Local(
+                    cursor,
+                    previousResult = null,
+                    job = someJobInfo,
+                    context = ctx,
+                    reader = reader,
+                    klerk = klerk
+                )
             when (val result = ImportBooks.step(args)) {
                 is JobResult.Yield -> {
                     result.command?.let(emitted::add); cursor = result.cursor
@@ -628,16 +625,3 @@ klerk.jobs.runUntilIdle()
 ```
 
 See [time.md](time.md) for how this relates to the time a command carries in its `Ctx`.
-
-### Remote workers, and what blocks them
-
-`JobType.Portable` exists so that jobs can later run on worker nodes, possibly written in other languages: a worker
-receives a cursor as JSON, does the work, and returns a command as JSON for the master to apply.
-
-That milestone is **blocked on idempotent command tokens.** Locally, a step's command and cursor commit in one
-transaction, so a resumed job can never re-emit a committed command — no deduplication is needed and none exists. Over a
-network the response can be lost after the master committed, so the worker retries a step the master already applied.
-Detecting that requires `CommandToken` to carry an explicit identity (`jobId` + step number) separate from its freshness
-timestamp, and requires used tokens to be persisted rather than held in memory. Neither exists today.
-
-Until then, jobs run only on the master node.

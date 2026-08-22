@@ -299,7 +299,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * invariant is easy to state. A public version would let anything holding an id rewrite an unclaimed value.
      */
     private fun replaceValue(id: Int, newValue: InputStream, current: AttachedDataMetadata): AttachedDataMetadata {
-        val hashing = HashingInputStream(newValue)
+        val hashing = HashingInputStream(newValue, settings.contentTypeDetector)
         val store = if (current.kind == AttachedDataKind.Blob) externalBlobs else null
         if (store != null) {
             // put() refuses to overwrite, which is what protects a live value from an id collision.
@@ -360,7 +360,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         // minute later. Claiming it for the running job (if there is one) is recorded here, at insert time, because
         // the job's own commit may be many steps away.
         val claimedByJob = currentJobId()
-        val hashing = HashingInputStream(value)
+        val hashing = HashingInputStream(value, settings.contentTypeDetector)
         // A blob kept outside the database is written first and the row committed after, so a crash can only leave
         // bytes nothing refers to. Those are swept at the next startup; the other order would lose the value instead.
         val store = if (kind == AttachedDataKind.Blob) externalBlobs else null
@@ -806,7 +806,10 @@ private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
  * Both read overloads must be implemented: [java.io.FilterInputStream.read] with a buffer delegates straight to the
  * wrapped stream, so relying on the inherited one would silently miss almost every byte.
  */
-private class HashingInputStream(private val source: InputStream) : InputStream() {
+private class HashingInputStream(
+    private val source: InputStream,
+    private val contentTypeDetector: ContentTypeDetector,
+) : InputStream() {
 
     private val digest = MessageDigest.getInstance("SHA-256")
     private var size = 0L
@@ -852,7 +855,7 @@ private class HashingInputStream(private val source: InputStream) : InputStream(
     fun digest(): AttachedDataDigest = result ?: AttachedDataDigest(
         size = size,
         hash = digest.digest().toHex(),
-        contentType = detectContentType(head.toByteArray()),
+        contentType = contentTypeDetector.detect(head.toByteArray()),
     ).also { result = it }
 }
 

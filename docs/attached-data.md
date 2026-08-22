@@ -67,6 +67,12 @@ uploading is the application's own metadata and is never treated as fact.
 JavaScript), so `accept` keeps honest mistakes out, not a determined attacker. What makes serving safe is the response
 headers and the origin the bytes are served from — see [serving through a CDN](#serving-through-a-cdn).
 
+The detector itself is `KlerkSettings.contentTypeDetector`, a `ContentTypeDetector` with one method,
+`detect(head: ByteArray): String?`. The default, `DefaultContentTypeDetector`, is a small dependency-free set of
+magic-byte signatures for the formats an application is likely to declare — not a complete format database. Replace
+it in `KlerkSettings` with something like a wrapper around Apache Tika if an application needs to recognise more
+formats and can afford the extra dependency weight.
+
 ### Steps: looking at the bytes, and rewriting them
 
 Metadata cannot answer everything. A virus scan has to read the file; a Content Disarm & Reconstruct pass reads it and

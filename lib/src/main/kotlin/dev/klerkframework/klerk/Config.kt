@@ -1,11 +1,13 @@
 package dev.klerkframework.klerk
 
 import com.google.gson.Gson
+import dev.klerkframework.klerk.attacheddata.ContentTypeDetector
+import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
-import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.BlobContainer
+import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobsBlock
@@ -28,11 +30,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import mu.KotlinLogging
 import java.util.*
 import kotlin.reflect.*
-import kotlin.reflect.full.createType
-import kotlin.reflect.full.isSubtypeOf
-import kotlin.reflect.full.memberProperties
-import kotlin.reflect.full.starProjectedType
-import kotlin.reflect.full.withNullability
+import kotlin.reflect.full.*
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -56,8 +54,7 @@ public data class Config<C : KlerkContext, V>(
     val managedModels: Set<ManagedModel<*, *, C, V>>,
     val persistence: Persistence,
     /**
-     * Where the bytes of attached blobs are kept. Null means the application never said, which is only allowed when it
-     * declares no [AttachedBlobID] anywhere — see [attachedBlobStoreMustMatchDeclarations].
+     * Where the bytes of attached blobs are kept. If null, the config cannot declare any [AttachedBlobID] anywhere.
      */
     val attachedBlobStore: AttachedBlobStore? = null,
     val migrationSteps: SortedSet<MigrationStep>,
@@ -575,11 +572,6 @@ public data class Config<C : KlerkContext, V>(
     internal fun <T : Any, P> getStateMachineForEvent(event: Event<T, P>): StateMachine<T, out Enum<*>, C, V> =
         getStateMachine(event.id) as StateMachine<T, out Enum<*>, C, V>
 
-    /**
-     * Returns a copy of this config with [plugin] applied, i.e. `plugin.mergeConfig(this)` plus [plugin] itself
-     * appended to [plugins]. Used to install plugins after `ConfigBuilder.build`, e.g.
-     * `Klerk.create(baseConfig.withPlugin(myPlugin))`.
-     */
     /**
      * The same configuration with a plugin's own job types and crons added, for use from
      * [KlerkPlugin.mergeConfig]:
@@ -1390,22 +1382,33 @@ public data class KlerkSettings(
      * currently supported; any other value is rejected on startup.
      */
     val eraseAuditLogAfterModelDeletion: Duration? = null,
+
     /**
      * Gates the "escape hatch" functions on [KlerkModels] ([KlerkModels.unsafeCreate], [KlerkModels.unsafeUpdate],
      * [KlerkModels.unsafeDelete]), which bypass the state machine, validation and authorization entirely. Off by
      * default; enable only if you understand the risk.
      */
     val allowUnsafeOperations: Boolean = false,
+
     /**
      * How long attached data that has been prepared but not yet claimed by a command survives (see
      * [KlerkAttachedData.prepare]). Mainly here so that tests don't have to wait a minute.
      */
     val unclaimedAttachedDataLifetime: Duration = 1.minutes,
+
     /**
      * The longest lease [KlerkAttachedData.prepare] will grant. A lease keeps storage occupied by data that no model
      * refers to, so there is an upper bound; who may ask for a long one is decided by the `writeAttachedData` rules.
      */
     val maxAttachedDataLease: Duration = 24.hours,
+
+    /**
+     * How Klerk recognises the content type of an attached value from its first bytes (see
+     * [dev.klerkframework.klerk.attacheddata.ContentTypeDetector]). Defaults to
+     * [dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector], a small dependency-free set of magic-byte
+     * signatures; replace it to recognise more formats, e.g. with a detector backed by Apache Tika.
+     */
+    val contentTypeDetector: ContentTypeDetector = DefaultContentTypeDetector,
 )
 
 /**

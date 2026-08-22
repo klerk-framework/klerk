@@ -109,6 +109,16 @@ open class AttachedDataTest {
     }
 
     @Test
+    fun `The content type detector is pluggable via KlerkSettings`() = runBlocking {
+        val klerk = start(settings = KlerkSettings(contentTypeDetector = ContentTypeDetector { "application/x-custom" }))
+        val id = klerk.attachedData.prepare(blob("a portrait"), AuthorPicture::class, Ctx.system())
+        createAuthorWithPicture(klerk, id)
+
+        assertEquals("application/x-custom", klerk.attachedData.getMetadata(id, Ctx.system()).contentType)
+        klerk.meta.stop()
+    }
+
+    @Test
     fun `Attaches a blob when the model is updated`() = runBlocking {
         val klerk = start()
         val authorID = createAuthorWithPicture(klerk, null)

@@ -1,27 +1,48 @@
 package dev.klerkframework.klerk.attacheddata
 
 /**
- * How many bytes from the start of a value are enough to recognise it. Every signature below fits well inside this.
+ * How many bytes from the start of a value Klerk keeps for detection, and therefore the most a
+ * [ContentTypeDetector] will ever be given. [DefaultContentTypeDetector]'s signatures all fit well inside this.
  */
-internal const val SNIFF_LENGTH: Int = 512
+public const val SNIFF_LENGTH: Int = 512
 
 /**
- * Works out what a value actually is, from its first bytes.
- *
- * This is the only statement about a value's type that Klerk will make. What a client *said* it was uploading is kept
- * separately and is never treated as fact — the two disagreeing is the ordinary case for a mistake, and the whole
- * point for an attack.
+ * Works out what a value actually is, from its first bytes. Klerk calls this for every attached value as it is
+ * written and reports the result as `metadata.contentType` — the only statement about a value's type Klerk itself
+ * will make. What a client *said* it was uploading is kept separately, as application metadata, and is never
+ * treated as fact.
  *
  * **Detection is not a security boundary.** A file can satisfy two formats at once (a valid PNG that is also valid
  * JavaScript), so a recognised type means "this is plausibly a PNG", never "this is safe to serve as one". What makes
  * serving safe is the response headers and the origin it is served from — see the serving section of the attached-data
  * documentation.
  *
- * @return an IANA media type, or null when the bytes match nothing known. Null is not a verdict: plenty of legitimate
- * values (CSV, an unknown binary format) have no signature at all, so a caller deciding whether to reject has to say
- * what "unrecognised" means for it.
+ * Configure via [dev.klerkframework.klerk.KlerkSettings.contentTypeDetector]; the default is
+ * [DefaultContentTypeDetector], a small set of magic-byte signatures with no external dependencies. Swap it for
+ * something like Apache Tika if an application needs to recognise more formats and can afford the extra dependency
+ * weight.
  */
-internal fun detectContentType(head: ByteArray): String? {
+public fun interface ContentTypeDetector {
+
+    /**
+     * @param head up to [SNIFF_LENGTH] bytes from the start of the value.
+     * @return an IANA media type, or null when the bytes match nothing known. Null is not a verdict: plenty of
+     * legitimate values (CSV, an unknown binary format) have no signature at all, so a caller deciding whether to
+     * reject has to say what "unrecognised" means for it.
+     */
+    public fun detect(head: ByteArray): String?
+}
+
+/**
+ * The default [ContentTypeDetector]: a short list of magic-byte signatures for the formats an application is likely
+ * to declare in a [dev.klerkframework.klerk.datatypes.BlobContainer], not an attempt at a complete format database.
+ * Has no dependencies beyond the JDK.
+ */
+public object DefaultContentTypeDetector : ContentTypeDetector {
+    override fun detect(head: ByteArray): String? = detectContentType(head)
+}
+
+private fun detectContentType(head: ByteArray): String? {
     if (head.isEmpty()) {
         return null
     }

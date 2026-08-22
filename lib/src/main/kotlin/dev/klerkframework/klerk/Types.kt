@@ -444,6 +444,7 @@ public data class AttachedDataMetadata(
     val size: Long,
     val hash: String,
     val custom: Map<String, String>,
+
     /**
      * What the value actually is, as recognised from its first bytes by Klerk — never what a client claimed it was
      * uploading. Null when the bytes match no known format, which is the normal state of affairs for CSV and for
@@ -454,13 +455,10 @@ public data class AttachedDataMetadata(
      * specific reason not to.
      */
     val contentType: String? = null,
+
     /**
      * The names of the [dev.klerkframework.klerk.datatypes.BlobContainer.preAttachSteps] that have run against this value, in
      * the order they ran.
-     *
-     * A command attaching the value checks this against what the property declares, which is what makes a virus scan
-     * or a Content Disarm & Reconstruct pass a guarantee rather than a convention. It is also what lets an
-     * interrupted pipeline resume rather than start over.
      */
     val completedSteps: List<String> = emptyList(),
 )
@@ -489,14 +487,17 @@ public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
  */
 public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val kind: AttachedDataKind,
+
     /**
      * Always [AttachedDataVisibility.Private] for a blob: a blob's visibility is declared by the
      * [dev.klerkframework.klerk.datatypes.BlobContainer] it is attached to, and applied when a command claims it.
      * Only a string is published here, since a string has no container to declare it.
      */
     val visibility: AttachedDataVisibility,
+
     val context: C,
     val reader: Reader<C, V>,
+
     /**
      * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
      * the place to decide who may ask for one.
