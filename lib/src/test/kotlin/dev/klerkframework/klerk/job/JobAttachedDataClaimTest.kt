@@ -199,6 +199,71 @@ class JobAttachedDataClaimTest {
     }
 
     @Test
+    fun `cancelledRetention deletes old cancelled jobs and releases what they claimed`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val clock = MutableClock(start)
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val klerk = Klerk.create(
+            createConfig(collections, storage, clock) {
+                register(Uploader)
+                cancelledRetention = 24.hours
+            }
+        )
+        klerk.meta.start(installShutdownHook = false)
+        Uploader.klerkForTest = klerk
+
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
+        klerk.jobs.step()                       // prepares the blob
+        klerk.jobs.cancel(id, Ctx.system())
+        klerk.jobs.runUntilIdle()
+        assertEquals(JobStatus.Cancelled, klerk.jobs.getJob(id, Ctx.system()).status)
+
+        clock += 1.hours
+        klerk.jobs.runUntilIdle()
+        assertEquals(1, storage.getAllJobs().size, "retention has not elapsed yet")
+        assertEquals(1, storage.readAllAttachedDataMetadata().size, "a cancelled job keeps its claim")
+
+        clock += 25.hours
+        klerk.jobs.runUntilIdle()
+        assertEquals(0, storage.getAllJobs().size, "the cancelled job should have been deleted")
+
+        storage.deleteExpiredAttachedData(clock.now())
+        assertEquals(0, storage.readAllAttachedDataMetadata().size, "its claim should have been released with it")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `succeededRetention deletes old succeeded jobs`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val clock = MutableClock(start)
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val klerk = Klerk.create(
+            createConfig(collections, storage, clock) {
+                register(Uploader)
+                succeededRetention = 24.hours
+            }
+        )
+        klerk.meta.start(installShutdownHook = false)
+        Uploader.klerkForTest = klerk
+
+        val id = klerk.jobs.schedule(Uploader.declare(UploadCursor(attach = true)), Ctx.system())
+        klerk.jobs.runUntilIdle()
+        assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
+        assertEquals(1, storage.getAllJobs().size)
+
+        clock += 1.hours
+        klerk.jobs.runUntilIdle()
+        assertEquals(1, storage.getAllJobs().size, "retention has not elapsed yet")
+
+        clock += 25.hours
+        klerk.jobs.runUntilIdle()
+        assertEquals(0, storage.getAllJobs().size, "the succeeded job should have been deleted")
+        klerk.meta.stop()
+    }
+
+    @Test
     fun `deleting a job that is not terminal is refused`() = runBlocking<Unit> {
         val klerk = start()
         val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())

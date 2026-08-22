@@ -218,7 +218,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     /** One round of housekeeping plus as much dispatching as the concurrency limits allow. */
     private suspend fun tick() {
         fireDueCrons()
-        deleteExpiredDeadLetters()
+        deleteExpiredTerminalJobs()
         val currentScope = scope ?: return
         while (!stopping) {
             val next = claimNext() ?: break
@@ -1087,7 +1087,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     override suspend fun step(): Boolean {
         requireManual()
         fireDueCrons()
-        deleteExpiredDeadLetters()
+        deleteExpiredTerminalJobs()
         val next = claimNext() ?: return false
         runStep(next)
         return true
@@ -1268,12 +1268,20 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     // ------------------------------------------------------------------ retention
 
-    private suspend fun deleteExpiredDeadLetters() {
-        val retention = settings.deadLetterRetention ?: return
+    /** The retention setting that governs a terminal status, or `null` for a non-terminal one. */
+    private fun retentionFor(status: JobStatus): Duration? = when (status) {
+        JobStatus.Succeeded -> settings.succeededRetention
+        JobStatus.Cancelled -> settings.cancelledRetention
+        JobStatus.DeadLettered, JobStatus.CompensationFailed -> settings.deadLetterRetention
+        else -> null
+    }
+
+    private suspend fun deleteExpiredTerminalJobs() {
         val now = config.now()
-        val expired = records.values.filter {
-            (it.status == JobStatus.DeadLettered || it.status == JobStatus.CompensationFailed) &&
-                    it.lastAttemptFinished != null && now - it.lastAttemptFinished > retention
+        val expired = records.values.filter { record ->
+            val finished = record.lastAttemptFinished ?: return@filter false
+            val retention = retentionFor(record.status) ?: return@filter false
+            now - finished > retention
         }
         if (expired.isEmpty()) {
             return

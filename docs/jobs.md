@@ -286,7 +286,19 @@ The log is capped at the most recent 200 entries per job, so a long-running job 
 - `Fail` → `Backoff`, retried with exponential backoff (base 3 s) until `maxRetries`, then **dead-lettered**.
 - `Abort` → dead-lettered immediately.
 - A dead-lettered job keeps its cursor, progress and log, and keeps its claim on any attached data it created.
-- `deadLetterRetention: Duration?` (config) deletes dead letters after that long; `null` keeps them forever.
+
+Terminal jobs are cleaned up automatically. Three config settings, each `Duration` and each defaulting to 30 days,
+delete a terminal job once it has aged past their value:
+
+| Setting              | Governs                              |
+|----------------------|---------------------------------------|
+| `succeededRetention`  | `Succeeded`                          |
+| `cancelledRetention`  | `Cancelled`                          |
+| `deadLetterRetention` | `DeadLettered`, `CompensationFailed` |
+
+A succeeded job has already released its attached-data claims (see below), so its retention is only about bounding
+storage and audit history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings
+also bound how long that data can leak.
 
 The full set of statuses:
 
@@ -494,6 +506,8 @@ declare:
   to being governed by its lease.
 - A job that died or was cancelled keeps them, so that a human can still see what it was working on. Deleting the job
   releases them, but never deletes data a committed command attached to a live model.
+- Deletion normally happens on its own once `cancelledRetention` or `deadLetterRetention`
+  (see [Failure, retries and dead letters](#failure-retries-and-dead-letters)) has elapsed.
 
 A long-running job's working set is therefore safe from the reaper for as long as the job is running, including while
 dead-lettered and awaiting a human. The flip side is that a job that ended without succeeding holds its claim until it

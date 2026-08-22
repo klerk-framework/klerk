@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.attacheddata.PROCESS_ATTACHED_DATA
 import dev.klerkframework.klerk.attacheddata.ProcessAttachedData
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -122,7 +123,9 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
     public val onUnloadableJob: UnloadableJobPolicy,
     public val execution: JobExecution,
     public val admission: (AdmissionArgs<C>) -> AdmissionDecision,
-    public val deadLetterRetention: Duration?,
+    public val succeededRetention: Duration,
+    public val cancelledRetention: Duration,
+    public val deadLetterRetention: Duration,
     public val hardQueueLimit: Int,
     public val maxParallelSteps: Int,
     public val pollInterval: Duration,
@@ -146,7 +149,9 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
             onUnloadableJob = UnloadableJobPolicy.FailToStart,
             execution = JobExecution.Automatic,
             admission = AdmissionPolicy::delayBudget,
-            deadLetterRetention = null,
+            succeededRetention = DEFAULT_TERMINAL_RETENTION,
+            cancelledRetention = DEFAULT_TERMINAL_RETENTION,
+            deadLetterRetention = DEFAULT_TERMINAL_RETENTION,
             hardQueueLimit = DEFAULT_HARD_QUEUE_LIMIT,
             maxParallelSteps = DEFAULT_MAX_PARALLEL_STEPS,
             pollInterval = 1.seconds,
@@ -155,6 +160,9 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
 
         internal const val DEFAULT_HARD_QUEUE_LIMIT: Int = 100_000
         internal const val DEFAULT_MAX_PARALLEL_STEPS: Int = 4
+
+        /** How long a terminal job is kept by default: long enough for a human to notice, short enough to bound storage. */
+        internal val DEFAULT_TERMINAL_RETENTION: Duration = 30.days
     }
 
     /**
@@ -173,6 +181,8 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
         onUnloadableJob = onUnloadableJob,
         execution = execution,
         admission = admission,
+        succeededRetention = succeededRetention,
+        cancelledRetention = cancelledRetention,
         deadLetterRetention = deadLetterRetention,
         hardQueueLimit = hardQueueLimit,
         maxParallelSteps = maxParallelSteps,
@@ -235,8 +245,31 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
     /** Whether jobs run on their own, or only when a test drives them. */
     public var execution: JobExecution = JobExecution.Automatic
 
-    /** How long a dead-lettered job is kept before it is deleted. Null (the default) keeps it forever. */
-    public var deadLetterRetention: Duration? = null
+    /**
+     * How long a succeeded job is kept before it is deleted. Defaults to 30 days.
+     *
+     * A succeeded job has already released its attached-data claims, so this setting is purely about bounding
+     * storage and audit history, not about freeing resources.
+     */
+    public var succeededRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
+
+    /**
+     * How long a cancelled job is kept before it is deleted. Defaults to 30 days.
+     *
+     * A cancelled job keeps its attached-data claims until it is deleted, so this setting also bounds how long that
+     * data can leak.
+     */
+    public var cancelledRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
+
+    /**
+     * How long a dead-lettered (or [JobStatus.CompensationFailed]) job is kept before it is deleted. Defaults to 30
+     * days.
+     *
+     * A dead-lettered job keeps its attached-data claims until it is deleted, so this setting also bounds how long
+     * that data can leak. 30 days is meant to give a human time to notice and act — resume it with
+     * [dev.klerkframework.klerk.JobManager.resume] — before it is discarded.
+     */
+    public var deadLetterRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
 
     /**
      * The hard cap on non-terminal jobs, enforced before the admission policy runs so that a policy which always
@@ -341,9 +374,9 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
         require(maxParallelSteps > 0) { "maxParallelSteps must be positive" }
         require(pollInterval > Duration.ZERO) { "pollInterval must be positive" }
         require(backoffBase > Duration.ZERO) { "backoffBase must be positive" }
-        require(deadLetterRetention?.let { it > Duration.ZERO } != false) {
-            "deadLetterRetention must be positive, or null to keep dead letters forever"
-        }
+        require(succeededRetention > Duration.ZERO) { "succeededRetention must be positive" }
+        require(cancelledRetention > Duration.ZERO) { "cancelledRetention must be positive" }
+        require(deadLetterRetention > Duration.ZERO) { "deadLetterRetention must be positive" }
         require(crons.map { it.id }.toSet().size == crons.size) {
             "Two cron schedules for the same job type cannot have the same expression"
         }
@@ -353,6 +386,8 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
             onUnloadableJob = onUnloadableJob,
             execution = execution,
             admission = admissionPolicy,
+            succeededRetention = succeededRetention,
+            cancelledRetention = cancelledRetention,
             deadLetterRetention = deadLetterRetention,
             hardQueueLimit = hardQueueLimit,
             maxParallelSteps = maxParallelSteps,
