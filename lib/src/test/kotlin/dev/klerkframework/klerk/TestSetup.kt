@@ -72,6 +72,7 @@ fun createConfig(
             model(Author::class, authorStateMachine(collections), collections.authors)
             model(Painting::class, paintingStateMachine(), collections.paintings)
             model(Inventory::class, inventoryStateMachine(), collections.inventories)
+            model(Note::class, noteStateMachine(), collections.notes)
         }
         authorization {
             readModels {
@@ -118,7 +119,6 @@ fun createConfig(
                     rule(::everybodyCanPrepareAttachedData)
                 }
                 negative {
-                    rule(::onlyTheSystemMayPublishStrings)
                     rule(::unauthenticatedCannotPrepareStrings)
                 }
             }
@@ -175,15 +175,7 @@ fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Ctx, Vie
 fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 
-/**
- * Uploading is one thing, publishing something that will be readable by anyone forever is another. This is what the
- * visibility in [ArgsForAttachedDataWrite] is for — and since a blob gets its visibility from the property it is
- * attached to, this can only ever be about a string.
- */
-fun onlyTheSystemMayPublishStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
-    if (args.visibility == AttachedDataVisibility.Public) Deny else Pass
-
-/** A rule that keys on the kind rather than the visibility. Nonsensical as a policy, but that is not the point. */
+/** A rule that keys on the kind. Nonsensical as a policy, but that is not the point. */
 fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
     if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
@@ -265,10 +257,10 @@ data class Book(
     val releasePartyPosition: ReleasePartyPosition,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
     // attached data, see docs/attached-data.md
-    val notes: AttachedStringID? = null,
+    val notes: BookNotes? = null,
     val cover: BookCover? = null,
     val thumbnail: BookThumbnail? = null,
-    val chapters: List<AttachedStringID> = emptyList(),
+    val chapters: List<BookChapter> = emptyList(),
 ) {
     override fun toString() = title.value
 }
@@ -593,8 +585,10 @@ data class Views(
     val authors: AuthorViews<Views>,
     val paintings: ModelViews<Painting, Ctx> = ModelViews(),
     val sketches: ModelViews<Sketch, Ctx> = ModelViews(),
+    val scribbles: ModelViews<Scribble, Ctx> = ModelViews(),
     val doodles: ModelViews<Doodle, Ctx> = ModelViews(),
     val inventories: ModelViews<Inventory, Ctx> = ModelViews(),
+    val notes: ModelViews<Note, Ctx> = ModelViews(),
 ) //, val shops: ModelView<Shop, Context>)
 
 suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
@@ -1006,10 +1000,10 @@ data class CreateBookParams(
     val averageScore: AverageScore,
     val readingTime: ReadingTime,
     val genre: BookGenreContainer = BookGenreContainer(BookGenre.Fiction),
-    val notes: AttachedStringID? = null,
+    val notes: BookNotes? = null,
     val cover: BookCover? = null,
     val thumbnail: BookThumbnail? = null,
-    val chapters: List<AttachedStringID> = emptyList(),
+    val chapters: List<BookChapter> = emptyList(),
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {
@@ -1029,7 +1023,7 @@ class PaintingTitle(value: String) : StringContainer(value) {
 }
 
 /** Images only, published to the world, and small. */
-class PaintingImage(id: AttachedBlobID) : BlobContainer(id) {
+class PaintingImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val accept: Set<String> = setOf("image/png", "image/jpeg")
     override val maxSize: Long = 1000
     override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
@@ -1058,19 +1052,67 @@ fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> =
 private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ctx, Views>): Painting =
     Painting(args.command.params.title, args.command.params.image)
 
-// Blob properties must be declared in a BlobContainer. These three accept anything, which is what the attached-data
+// Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the attached-data
 // tests need; PaintingImage above is the one that declares real constraints.
-class AuthorPicture(id: AttachedBlobID) : BlobContainer(id) {
+class AuthorPicture(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
-class BookCover(id: AttachedBlobID) : BlobContainer(id) {
+class BookCover(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
-class BookThumbnail(id: AttachedBlobID) : BlobContainer(id) {
+class BookThumbnail(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
+
+// String properties must likewise be declared in an AttachedStringContainer. These accept text/plain, which is all
+// the attached-data tests write.
+class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+}
+
+class BookChapter(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+}
+
+// A model whose string property declares what it will accept, so that the checks can be exercised from a command —
+// the string-kind counterpart of Painting/PaintingImage above.
+data class Note(val title: NoteTitle, val body: NoteBody)
+
+enum class NoteStates { Written }
+
+class NoteTitle(value: String) : StringContainer(value) {
+    override val minLength: Int = 1
+    override val maxLength: Int = 100
+    override val maxLines: Int = 1
+}
+
+/** Plain text only, and small. */
+class NoteBody(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+    override val maxSize: Long = 20
+}
+
+data class CreateNoteParams(val title: NoteTitle, val body: NoteBody)
+
+object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(Note::class, EXTERNAL, CreateNoteParams::class)
+
+object DeleteNote : InstanceEventNoParameters<Note>(Note::class, EXTERNAL)
+
+fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachine {
+    event(CreateNote) {}
+    event(DeleteNote) {}
+    voidState {
+        onEvent(CreateNote) { createModel(NoteStates.Written, ::newNote) }
+    }
+    state(NoteStates.Written) {
+        onEvent(DeleteNote) { delete() }
+    }
+}
+
+private fun newNote(args: ArgForVoidEvent<Note, CreateNoteParams, Ctx, Views>): Note =
+    Note(args.command.params.title, args.command.params.body)
 
 // Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
 data class Sketch(val drawing: AttachedBlobID)
@@ -1089,8 +1131,25 @@ fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = state
 
 private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
 
+// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+data class Scribble(val text: AttachedStringID)
+
+enum class ScribbleStates { Written }
+
+object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(Scribble::class, EXTERNAL, Scribble::class)
+
+fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> = stateMachine {
+    event(CreateScribble) {}
+    voidState {
+        onEvent(CreateScribble) { createModel(ScribbleStates.Written, ::newScribble) }
+    }
+    state(ScribbleStates.Written) {}
+}
+
+private fun newScribble(args: ArgForVoidEvent<Scribble, Scribble, Ctx, Views>): Scribble = args.command.params
+
 // A container that declares no step at all, which the config must refuse. Never registered in createConfig.
-class DoodleImage(id: AttachedBlobID) : BlobContainer(id) {
+class DoodleImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = emptyList()
 }
 
@@ -1121,7 +1180,7 @@ class InventoryName(value: String) : StringContainer(value) {
     override val maxLines: Int = 1
 }
 
-class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
+class InventoryCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val accept: Set<String> = setOf("text/plain")
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
 }

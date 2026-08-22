@@ -1,7 +1,8 @@
 package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.BlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedStringContainer
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
 import dev.klerkframework.klerk.job.JobExecution
@@ -150,7 +151,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     override suspend fun prepare(
         value: InputStream,
-        declaration: KClass<out BlobContainer>,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
         metadata: Map<String, String>,
         lease: Duration?,
@@ -171,7 +172,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     override suspend fun prepareFromFile(
         file: Path,
-        declaration: KClass<out BlobContainer>,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
         metadata: Map<String, String>,
         lease: Duration?,
@@ -190,12 +191,25 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     override suspend fun prepare(
         value: String,
+        declaration: KClass<out AttachedStringContainer>,
         context: C,
-        visibility: AttachedDataVisibility,
         metadata: Map<String, String>,
         lease: Duration?,
-    ): AttachedStringID =
-        AttachedStringID(insert(value.byteInputStream(), AttachedDataKind.String, context, visibility, metadata, lease))
+    ): AttachedStringID {
+        // Fails fast, the same way the blob overload does: a declaration that cannot be built is a programming error,
+        // and it should be reported here rather than as a puzzling claim-time failure.
+        instantiateDeclaration(declaration, AttachedStringID(0))
+        return AttachedStringID(
+            insert(
+                value.byteInputStream(),
+                AttachedDataKind.String,
+                context,
+                AttachedDataVisibility.Private,
+                metadata,
+                lease,
+            )
+        )
+    }
 
     /**
      * Runs the first step [declaration] declares that this value has not been through yet, and records that it has.
@@ -211,7 +225,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * re-checked first, and again after a step that replaces the bytes.
      * @throws IllegalStateException if the value has already been claimed by a model.
      */
-    internal suspend fun processNextStep(declaration: BlobContainer): BlobProcessing {
+    internal suspend fun processNextStep(declaration: AttachedBlobContainer): BlobProcessing {
         val id = declaration.id.id
         val entry = entries[id] ?: throw NoSuchElementException("No data found for id ${declaration.id}")
         check(entry.owner == null) {
@@ -333,7 +347,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         metadata: Map<String, String>,
         lease: Duration? = null,
         adoptFrom: Path? = null,
-        declaration: KClass<out BlobContainer>? = null,
+        declaration: KClass<out AttachedBlobContainer>? = null,
     ): Int {
         // Before a byte is written: a declaration that cannot be built, declares no step, or declares one that is not
         // a named function reference is a programming error, and it should be reported where the mistake is rather
@@ -345,7 +359,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +
                     "(KlerkSettings.maxAttachedDataLease)"
         }
-        authorizeWrite(context, kind, visibility, requested)
+        authorizeWrite(context, kind, requested)
         validateCustomMetadata(metadata)
         if (kind == AttachedDataKind.Blob && config.attachedBlobStore == AttachedBlobStore.None) {
             throw IllegalConfigurationException(
@@ -407,7 +421,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * The job claims the value as it is created, in the same commit, so that the reaper cannot take it while a scan
      * that outlasts the lease is running. The claim is released when the job finishes.
      */
-    private suspend fun scheduleProcessing(id: Int, declaration: KClass<out BlobContainer>, context: C) {
+    private suspend fun scheduleProcessing(id: Int, declaration: KClass<out AttachedBlobContainer>, context: C) {
         val className = requireNotNull(declaration.qualifiedName) {
             "A blob declaration must be a named class, and $declaration is not"
         }
@@ -573,13 +587,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private suspend fun authorizeWrite(
         context: C,
         kind: AttachedDataKind,
-        visibility: AttachedDataVisibility,
         lease: Duration,
     ) {
         if (context.actor == SystemIdentity) {
             return
         }
-        val args = ArgsForAttachedDataWrite(kind, visibility, context, ReaderWithoutAuth<C, V>(klerk), lease)
+        val args = ArgsForAttachedDataWrite(kind, context, ReaderWithoutAuth<C, V>(klerk), lease)
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
         readWriteLock.acquireRead()
@@ -737,7 +750,8 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                     )
                     return@forEach
                 }
-                val missing = declaration.stepNames.firstOrNull { !metadata.completedSteps.contains(it) }
+                val missing = (declaration as? AttachedBlobContainer)?.stepNames
+                    ?.firstOrNull { !metadata.completedSteps.contains(it) }
                 if (missing != null) {
                     problems.add(
                         StateProblem(
@@ -753,8 +767,8 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
             claims[id] = AttachedDataClaim(
                 owner = modelId.value,
-                // Declared by the property, since whoever uploaded the bytes could not have known what they were for.
-                // A bare AttachedBlobID declares nothing, so whatever was chosen at prepare time stands.
+                // Declared by the property, since whoever uploaded the value could not have known what it was for.
+                // A bare id declares nothing, so whatever the entry already carries stands.
                 visibility = declaration?.visibility ?: metadata?.visibility ?: AttachedDataVisibility.Private,
             )
         }

@@ -564,8 +564,8 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
 
     if (ktype.isSubtypeOf(AttachedBlobID::class.starProjectedType) ||
         ktype.isSubtypeOf(AttachedStringID::class.starProjectedType) ||
-        // A BlobContainer is a DataContainer, so it has to be recognised before the generic container handling below.
-        ktype.isSubtypeOf(BlobContainer::class.starProjectedType)
+        // An AttachedDataContainer is a DataContainer, so it has to be recognised before the generic container handling below.
+        ktype.isSubtypeOf(AttachedDataContainer::class.starProjectedType)
     ) {
         return PropertyType.AttachedDataRef
     }

@@ -456,32 +456,21 @@ public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
 }
 
 /**
- * A reference to an attached blob, together with what that blob is allowed to be.
+ * A reference to an attached blob or attached string, together with what that value is allowed to be.
  *
- * A blob's bytes are not in the model, so unlike every other container this one does not validate a value it holds —
+ * Attached bytes are not in the model, so unlike every other container this one does not validate a value it holds —
  * it declares what Klerk should check about the value when a command attaches it, and what should happen when it is
- * served afterwards:
- *
- * ```kotlin
- * class FlowerImage(id: AttachedBlobID) : BlobContainer(id) {
- *     override val accept = setOf("image/png", "image/jpeg", "image/webp")
- *     override val maxSize = 5_000_000L
- *     override val visibility = AttachedDataVisibility.Public
- *     override val preAttachSteps = listOf(::stripExif, ::reEncode)
- * }
- *
- * data class Flower(val name: FlowerName, val image: FlowerImage)
- * ```
+ * served afterwards. Application code always extends one of the two concrete subclasses, [AttachedBlobContainer] or
+ * [AttachedStringContainer], never this one directly.
  *
  * The checks run in the command pipeline, against what Klerk itself recognised the bytes to be — so they hold for a
- * command from a web form, from klerk-graphql, from a job or from a test alike. klerk-web additionally renders the
- * declaration as the file input's `accept` attribute, the same way it renders `maxLength` for a string.
+ * command from a web form, from klerk-graphql, from a job or from a test alike.
  *
- * **A declared type is not a promise about safety.** A file can satisfy two formats at once, so `accept` keeps
+ * **A declared type is not a promise about safety.** A value can satisfy two formats at once, so `accept` keeps
  * honest mistakes out, not a determined attacker. What makes serving safe is the response headers and the origin the
  * bytes are served from.
  */
-public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<AttachedBlobID>(id) {
+public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
 
     /**
      * The content types this property accepts, as IANA media types (e.g. `image/png`). Empty means anything.
@@ -503,22 +492,66 @@ public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<Attached
     public open val maxSize: Long = Long.MAX_VALUE
 
     /**
-     * Whether the bytes may be read by anyone, or only by the actors the `readAttachedData` rules allow.
+     * Whether the value may be read by anyone, or only by the actors the `readAttachedData` rules allow.
      *
-     * Applied when a command attaches the blob, and never changed afterwards — which is what makes
+     * Applied when a command attaches the value, and never changed afterwards — which is what makes
      * [AttachedDataVisibility.Public] safe to cache. Declaring it here rather than passing it to `prepare` means the
-     * decision is made where it is known: whoever uploads a file has no idea what it will end up being used for.
+     * decision is made where it is known: whoever uploads a value has no idea what it will end up being used for.
      */
     public open val visibility: AttachedDataVisibility = AttachedDataVisibility.Private
 
-    /** The blob this property refers to. */
-    public val id: AttachedBlobID get() = valueWithoutAuthorization
+    /** The attached value this property refers to. */
+    public val id: ID get() = valueWithoutAuthorization
+
+    /** The id unwrapped to the shared attached-data id space, regardless of whether it is a blob or a string id. */
+    internal abstract val rawId: Int
 
     /**
      * Always valid: there is no value here to check. What this container declares is checked when a command attaches
-     * the blob, against metadata Klerk produced while the bytes were being written.
+     * the value, against metadata Klerk produced while the bytes were being written.
      */
     final override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /**
+     * Whether [metadata] satisfies what this property declares.
+     *
+     * @return null if it does, otherwise a description of what is wrong, for the command's problem.
+     */
+    public fun reasonToReject(metadata: AttachedDataMetadata): String? {
+        if (metadata.size > maxSize) {
+            return "it is ${metadata.size} bytes, and at most $maxSize is allowed"
+        }
+        if (accept.isEmpty()) {
+            return null
+        }
+        val detected = metadata.contentType
+            ?: return if (acceptUnrecognised) null else "its type could not be recognised, and ${describeAccepted()}"
+        return if (accept.contains(detected)) null else "it is $detected, and ${describeAccepted()}"
+    }
+
+    private fun describeAccepted(): String = "only ${accept.sorted().joinToString(", ")} is allowed"
+}
+
+/**
+ * A reference to an attached blob, together with what that blob is allowed to be:
+ *
+ * ```kotlin
+ * class FlowerImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+ *     override val accept = setOf("image/png", "image/jpeg", "image/webp")
+ *     override val maxSize = 5_000_000L
+ *     override val visibility = AttachedDataVisibility.Public
+ *     override val preAttachSteps = listOf(::stripExif, ::reEncode)
+ * }
+ *
+ * data class Flower(val name: FlowerName, val image: FlowerImage)
+ * ```
+ *
+ * klerk-web additionally renders the declaration as the file input's `accept` attribute, the same way it renders
+ * `maxLength` for a string.
+ */
+public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataContainer<AttachedBlobID>(id) {
+
+    override val rawId: Int get() = id.id
 
     /**
      * What has to happen to a file before this property will hold it: looking at the bytes, and where necessary
@@ -581,29 +614,26 @@ public abstract class BlobContainer(id: AttachedBlobID) : DataContainer<Attached
 
     /** The names of the steps that run against a value before this property may hold it, in order. */
     public val stepNames: List<String> get() = stepsToRun.map { it.first }
-
-    /**
-     * Whether [metadata] satisfies what this property declares.
-     *
-     * @return null if it does, otherwise a description of what is wrong, for the command's problem.
-     */
-    public fun reasonToReject(metadata: AttachedDataMetadata): String? {
-        if (metadata.size > maxSize) {
-            return "it is ${metadata.size} bytes, and at most $maxSize is allowed"
-        }
-        if (accept.isEmpty()) {
-            return null
-        }
-        val detected = metadata.contentType
-            ?: return if (acceptUnrecognised) null else "its type could not be recognised, and ${describeAccepted()}"
-        return if (accept.contains(detected)) null else "it is $detected, and ${describeAccepted()}"
-    }
-
-    private fun describeAccepted(): String = "only ${accept.sorted().joinToString(", ")} is allowed"
 }
 
 /**
- * One thing that must happen to a file before a property will hold it — see [BlobContainer.preAttachSteps].
+ * A reference to an attached string, together with what that string is allowed to be — the string-kind counterpart
+ * of [AttachedBlobContainer]. See that class for what each property means; a string has no [AttachedBlobContainer.preAttachSteps]
+ * equivalent, since it is never scanned or rewritten before it is kept.
+ *
+ * ```kotlin
+ * class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {
+ *     override val accept = setOf("text/plain")
+ *     override val maxSize = 10_000L
+ * }
+ * ```
+ */
+public abstract class AttachedStringContainer(id: AttachedStringID) : AttachedDataContainer<AttachedStringID>(id) {
+    override val rawId: Int get() = id.id
+}
+
+/**
+ * One thing that must happen to a file before a property will hold it — see [AttachedBlobContainer.preAttachSteps].
  *
  * Must be a named function reference. It runs outside command processing, so it may take its time.
  */
@@ -619,7 +649,7 @@ public typealias BlobPreAttachStep = suspend (BlobPreAttachStepArgs) -> BlobPreA
 public class BlobPreAttachStepArgs(public val value: InputStream, public val metadata: AttachedDataMetadata)
 
 /**
- * A [BlobPreAttachStep] that does nothing, for a [BlobContainer] that wants the bytes exactly as they arrived:
+ * A [BlobPreAttachStep] that does nothing, for an [AttachedBlobContainer] that wants the bytes exactly as they arrived:
  *
  * ```kotlin
  * override val preAttachSteps = listOf(::noPreAttachProcessing)

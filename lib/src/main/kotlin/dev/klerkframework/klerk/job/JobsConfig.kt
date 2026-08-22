@@ -17,7 +17,7 @@ public enum class UnloadableJobPolicy {
     /**
      * Refuse to start. This is the default to prevent discarding jobs.
      *
-     * It is recommended to control this from an environment variable so that changing it does not require a rebuild.
+     * It is recommended to control this from e.g. an environment variable so that changing it does not require a rebuild.
      */
     FailToStart,
 

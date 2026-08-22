@@ -2,7 +2,8 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.datatypes.BlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedStringContainer
 import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
@@ -321,7 +322,7 @@ internal sealed class NewJobPlan {
  * 1. [prepare] inserts the data (slow, no lock is held)
  * 2. a command stores the returned ID in a model property (fast)
  *
- * A blob is prepared for a particular [dev.klerkframework.klerk.datatypes.BlobContainer], which decides what it may be
+ * A blob is prepared for a particular [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], which decides what it may be
  * and what must happen to it first. When that declaration declares steps, Klerk runs them in a job and the value
  * cannot be attached until they have all run — see [awaitProcessing].
  *
@@ -348,10 +349,10 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * is written.
      *
      * Whether the blob may be read by anyone is *not* decided here: it is declared by the
-     * [dev.klerkframework.klerk.datatypes.BlobContainer] the value ends up in, and applied when a command attaches it.
+     * [dev.klerkframework.klerk.datatypes.AttachedBlobContainer] the value ends up in, and applied when a command attaches it.
      * Whoever uploads a file cannot know what it will be used for, so it is not their decision to make.
      *
-     * The [dev.klerkframework.klerk.datatypes.BlobContainer.preAttachSteps] [declaration] declares — a virus scan, a
+     * The [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] [declaration] declares — a virus scan, a
      * Content Disarm & Reconstruct pass, a check of the contents — are run by a job Klerk schedules here, and this
      * returns as soon as the bytes are written. A command attaching a value whose steps have not all run is rejected,
      * so wait for [awaitProcessing] before issuing it. A declaration whose only step is
@@ -378,7 +379,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      */
     public suspend fun prepare(
         value: InputStream,
-        declaration: KClass<out BlobContainer>,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
         metadata: Map<String, String> = emptyMap(),
         lease: Duration? = null,
@@ -399,7 +400,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      */
     public suspend fun prepareFromFile(
         file: Path,
-        declaration: KClass<out BlobContainer>,
+        declaration: KClass<out AttachedBlobContainer>,
         context: C,
         metadata: Map<String, String> = emptyMap(),
         lease: Duration? = null,
@@ -442,19 +443,24 @@ public interface KlerkAttachedData<C : KlerkContext> {
     /**
      * Inserts a string so that it can be attached to a model.
      *
-     * See [prepare] for blobs; the semantics are identical. A string is stored as its UTF-8 bytes, so the only thing
-     * that distinguishes the two is the type of the id — and thus what the value means and how it may be read back.
+     * See [prepare] for blobs; the semantics are identical, including [declaration] — a string is declared via an
+     * [dev.klerkframework.klerk.datatypes.AttachedStringContainer] the same way a blob is declared via an
+     * [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], and whether it may be read by anyone is decided
+     * there, not here. A string is stored as its UTF-8 bytes, so the only thing that distinguishes the two kinds is
+     * the type of the id — and thus what the value means and how it may be read back. A string has no pre-attach
+     * steps, so nothing here waits for a job the way [awaitProcessing] does for a blob.
      *
      * Note that the whole string is held in memory here. For something big enough that that is a problem, prepare it
      * as a blob instead.
      *
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large
+     * @throws IllegalArgumentException if the metadata is too large, or if [declaration] cannot be built from an id
+     * alone
      */
     public suspend fun prepare(
         value: String,
+        declaration: KClass<out AttachedStringContainer>,
         context: C,
-        visibility: AttachedDataVisibility = AttachedDataVisibility.Private,
         metadata: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedStringID

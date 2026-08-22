@@ -457,7 +457,7 @@ public data class AttachedDataMetadata(
     val contentType: String? = null,
 
     /**
-     * The names of the [dev.klerkframework.klerk.datatypes.BlobContainer.preAttachSteps] that have run against this value, in
+     * The names of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] that have run against this value, in
      * the order they ran.
      */
     val completedSteps: List<String> = emptyList(),
@@ -487,13 +487,6 @@ public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
  */
 public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val kind: AttachedDataKind,
-
-    /**
-     * Always [AttachedDataVisibility.Private] for a blob: a blob's visibility is declared by the
-     * [dev.klerkframework.klerk.datatypes.BlobContainer] it is attached to, and applied when a command claims it.
-     * Only a string is published here, since a string has no container to declare it.
-     */
-    val visibility: AttachedDataVisibility,
 
     val context: C,
     val reader: Reader<C, V>,

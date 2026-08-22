@@ -134,10 +134,10 @@ open class AttachedDataTest {
     @Test
     fun `Attaches a string`() = runBlocking {
         val klerk = start()
-        val id = klerk.attachedData.prepare("""{"some": "json"}""", Ctx.system())
+        val id = klerk.attachedData.prepare("""{"some": "json"}""", BookNotes::class, Ctx.system())
         val bookID = createBookWithNotes(klerk, id)
 
-        assertEquals(id, klerk.read(Ctx.system()) { get(bookID).props.notes })
+        assertEquals(id, klerk.read(Ctx.system()) { get(bookID).props.notes?.id })
         assertEquals("""{"some": "json"}""", klerk.attachedData.get(id, Ctx.system()))
         klerk.meta.stop()
     }
@@ -207,7 +207,7 @@ open class AttachedDataTest {
 
         // the rule in TestSetup denies unauthenticated actors strings, but not blobs
         assertNotNull(klerk.attachedData.prepare(blob("fine"), AuthorPicture::class, context))
-        assertFailsWith<AuthorizationException> { klerk.attachedData.prepare("not fine", context) }
+        assertFailsWith<AuthorizationException> { klerk.attachedData.prepare("not fine", BookChapter::class, context) }
         klerk.meta.stop()
     }
 
@@ -378,7 +378,7 @@ open class AttachedDataTest {
     fun `Concurrent prepare calls never collide`() = runBlocking {
         val klerk = start()
         val prepared = (1..100).map { i ->
-            async { klerk.attachedData.prepare("value $i", Ctx.system()) to i }
+            async { klerk.attachedData.prepare("value $i", BookChapter::class, Ctx.system()) to i }
         }.awaitAll()
 
         assertEquals(100, prepared.map { it.first }.toSet().size, "Two concurrent prepare calls got the same id")
@@ -449,20 +449,6 @@ open class AttachedDataTest {
     }
 
     @Test
-    fun `A write rule can reject a public string`() = runBlocking {
-        val klerk = start()
-        // A string has no container, so it is the one kind whose visibility is still chosen at prepare — and
-        // therefore the one kind a write rule can still decide about.
-        val context = Ctx.authenticationIdentity()
-
-        assertNotNull(klerk.attachedData.prepare("mine", context, AttachedDataVisibility.Private))
-        assertFailsWith<AuthorizationException> {
-            klerk.attachedData.prepare("everyone's", context, AttachedDataVisibility.Public)
-        }
-        klerk.meta.stop()
-    }
-
-    @Test
     fun `The metadata of private data is authorized like the value`() = runBlocking {
         val klerk = start()
         val readable = klerk.attachedData.prepare(blob("readable"), AuthorPicture::class, Ctx.system())
@@ -483,7 +469,7 @@ open class AttachedDataTest {
         val expected = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
         val blobID = klerk.attachedData.prepare(blob("hello"), AuthorPicture::class, Ctx.system())
-        val stringID = klerk.attachedData.prepare("hello", Ctx.system())
+        val stringID = klerk.attachedData.prepare("hello", BookChapter::class, Ctx.system())
         createAuthorWithPicture(klerk, blobID)
         createBookWithChapters(klerk, listOf(stringID))
 
@@ -587,7 +573,7 @@ open class AttachedDataTest {
 
     /** Attaches a string to a book so that its metadata becomes readable. */
     private suspend fun prepareString(klerk: Klerk<Ctx, Views>, content: String): AttachedStringID {
-        val id = klerk.attachedData.prepare(content, Ctx.system())
+        val id = klerk.attachedData.prepare(content, BookChapter::class, Ctx.system())
         createBookWithChapters(klerk, listOf(id))
         return id
     }
@@ -595,15 +581,15 @@ open class AttachedDataTest {
     @Test
     fun `A list of ids is claimed and dropped like a single one`() = runBlocking {
         val klerk = start()
-        val first = klerk.attachedData.prepare("chapter one", Ctx.system())
-        val second = klerk.attachedData.prepare("chapter two", Ctx.system())
+        val first = klerk.attachedData.prepare("chapter one", BookChapter::class, Ctx.system())
+        val second = klerk.attachedData.prepare("chapter two", BookChapter::class, Ctx.system())
         val bookID = createBookWithChapters(klerk, listOf(first, second))
 
         assertEquals("chapter one", klerk.attachedData.get(first, Ctx.system()))
 
         val book = klerk.read(Ctx.system()) { get(bookID) }
         klerk.handle(
-            Command(event = UpdateBook, model = bookID, params = book.props.copy(chapters = listOf(second))),
+            Command(event = UpdateBook, model = bookID, params = book.props.copy(chapters = listOf(BookChapter(second)))),
             Ctx.system(),
             ProcessingOptions(CommandToken.simple()),
         ).orThrow()
@@ -619,7 +605,7 @@ open class AttachedDataTest {
         // see the note on ModelID in Types.kt: a value class can leak its field name into the serialized form
         val klerk = start()
         val picture = klerk.attachedData.prepare(blob("x"), AuthorPicture::class, Ctx.system())
-        val chapter = klerk.attachedData.prepare("y", Ctx.system())
+        val chapter = klerk.attachedData.prepare("y", BookChapter::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
@@ -637,7 +623,7 @@ open class AttachedDataTest {
         val claimed = klerk.attachedData.prepare(blob("kept"), AuthorPicture::class, Ctx.system())
         val unclaimed = klerk.attachedData.prepare(blob("dropped"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, claimed)
-        val chapter = klerk.attachedData.prepare("a chapter", Ctx.system())
+        val chapter = klerk.attachedData.prepare("a chapter", BookChapter::class, Ctx.system())
         val bookID = createBookWithChapters(klerk, listOf(chapter))
         klerk.meta.stop()
 
@@ -645,7 +631,7 @@ open class AttachedDataTest {
         // this also checks that the value classes survive Gson and the database — both the nullable (boxed) property
         // and the one inside a List
         assertEquals(claimed, restarted.read(Ctx.system()) { get(authorID).props.picture?.id })
-        assertEquals(listOf(chapter), restarted.read(Ctx.system()) { get(bookID).props.chapters })
+        assertEquals(listOf(chapter), restarted.read(Ctx.system()) { get(bookID).props.chapters.map { it.id } })
         assertEquals("a chapter", restarted.attachedData.get(chapter, Ctx.system()))
         assertEquals("kept", String(restarted.attachedData.get(claimed, Ctx.system()).readAllBytes()))
         // the unclaimed one is still within its window, so it is reserved rather than reaped
@@ -673,7 +659,7 @@ open class AttachedDataTest {
     }
 
     private suspend fun createBookWithNotes(klerk: Klerk<Ctx, Views>, notes: AttachedStringID) =
-        createBook(klerk) { it.copy(notes = notes) }
+        createBook(klerk) { it.copy(notes = BookNotes(notes)) }
 
     private suspend fun createBookWithCoverAndThumbnail(
         klerk: Klerk<Ctx, Views>,
@@ -684,7 +670,7 @@ open class AttachedDataTest {
     private suspend fun createBookWithChapters(
         klerk: Klerk<Ctx, Views>,
         chapters: List<AttachedStringID>
-    ) = createBook(klerk) { it.copy(chapters = chapters) }
+    ) = createBook(klerk) { it.copy(chapters = chapters.map { c -> BookChapter(c) }) }
 
     private suspend fun createAuthorWithPictureExpectingFailure(
         klerk: Klerk<Ctx, Views>,

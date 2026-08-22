@@ -2,19 +2,14 @@ package dev.klerkframework.klerk.storage
 
 import mu.KotlinLogging
 import java.io.InputStream
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.NoSuchFileException
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.nio.file.StandardOpenOption
+import java.nio.file.*
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 
 private val logger = KotlinLogging.logger {}
 
 /**
- * Where the bytes of attached *blobs* are kept. Configured with `ConfigBuilder.attachedBlobStore(...)`.
+ * Where the bytes of attached blobs are kept.
  *
  * Attached strings always live in the database; only blobs can grow large enough for the choice to matter. The choice
  * decides what a database backup contains, so it is required as soon as the config declares an
@@ -27,14 +22,13 @@ public sealed interface AttachedBlobStore {
 
     /**
      * Blob bytes are a column of the attached-data row, written and deleted in the same transaction as everything
-     * else. Simple and fully transactional, but bounded by what the database can hold in one value — around 1 GB for
-     * SQLite, and materialised in memory on the way in and out.
+     * else. Simple and fully transactional, but bounded by what the database can hold in one value (about 1 GB
+     * depending on the database).
      */
     public data object Database : AttachedBlobStore
 
     /**
-     * This application has no blobs. `ConfigBuilder.build()` refuses a config that declares an
-     * [dev.klerkframework.klerk.AttachedBlobID], and `prepare(InputStream, ...)` throws.
+     * Only allowed if the application has no blobs.
      */
     public data object None : AttachedBlobStore
 

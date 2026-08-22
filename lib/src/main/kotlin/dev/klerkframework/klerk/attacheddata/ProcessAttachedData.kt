@@ -22,7 +22,7 @@ internal const val PROCESS_ATTACHED_DATA: String = "klerk-process-attached-data"
 internal data class ProcessBlobCursor(val blobId: Int, val declaration: String)
 
 /**
- * Runs the steps a [dev.klerkframework.klerk.datatypes.BlobContainer] declares against a prepared blob.
+ * Runs the steps a [dev.klerkframework.klerk.datatypes.AttachedBlobContainer] declares against a prepared blob.
  *
  * Scheduled by `prepare` when the destination declares any step, and by nothing else. One step of the job runs one
  * [dev.klerkframework.klerk.datatypes.BlobPreAttachStep], so an expensive pipeline checkpoints between its stages and a

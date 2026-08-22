@@ -547,9 +547,9 @@ jobs {
 - **A cursor that no longer deserializes** — you changed the cursor type while instances were checkpointed against the
   old shape.
 
-`FailToStart` is the default. It is recommended that you control this setting via an environment variable so that you
-don't have to rebuild the software to change this setting. As an alternative, if you use klerk-web to generate an admin
-UI, you can delete the jobs from there.
+`FailToStart` is the default. It is recommended that you control this setting via e.g. an environment variable so that
+you don't have to rebuild the software to change this setting. As an alternative, if you use klerk-web to generate an
+admin UI, you can delete the jobs from there.
 
 The practical rule: **treat cursor types as a persisted schema.** Add optional fields; do not remove or retype fields
 while jobs may be in flight.

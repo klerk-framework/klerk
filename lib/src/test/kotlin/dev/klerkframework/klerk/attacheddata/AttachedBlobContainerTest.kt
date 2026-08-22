@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.minutes
  * What a blob property declares is enforced where it counts: in the command pipeline, against what Klerk found the
  * bytes to be. A caller that never went through a form — a job, an API, a test — is held to the same declaration.
  */
-class BlobContainerTest {
+class AttachedBlobContainerTest {
 
     private suspend fun start(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
         val bookViews = BookViews()
@@ -66,7 +66,7 @@ class BlobContainerTest {
         val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
         assertEquals(KlerkErrorCode.BlobMustBeDeclaredInAContainer, e.code)
         assertTrue(e.message!!.contains("Sketch.drawing"), e.message!!)
-        assertTrue(e.message!!.contains("BlobContainer"), "the message should say what to write instead")
+        assertTrue(e.message!!.contains("AttachedBlobContainer"), "the message should say what to write instead")
     }
 
     @Test
@@ -435,7 +435,7 @@ class BlobContainerTest {
 }
 
 /** Says both that there is something to do and that there is not. */
-class Confused(id: AttachedBlobID) : BlobContainer(id) {
+class Confused(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing, ::countIt)
 }
 
@@ -444,12 +444,12 @@ private var counted = 0
 private var flaky = 0
 
 /** A container Klerk cannot build on its own, since it wants something the id does not tell it. */
-class NeedsMoreThanAnId(id: AttachedBlobID, val extra: String) : BlobContainer(id) {
+class NeedsMoreThanAnId(id: AttachedBlobID, val extra: String) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 /** A container whose second step fails the first time it is asked, standing in for a scanner that is briefly down. */
-class FlakyDocument(id: AttachedBlobID) : BlobContainer(id) {
+class FlakyDocument(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val acceptUnrecognised: Boolean = true
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::failOnce)
 }

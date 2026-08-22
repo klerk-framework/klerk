@@ -265,6 +265,7 @@ public open class RamStorage : Persistence {
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
+
     // A null value means the bytes are in an external blob store rather than here.
     private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray?>>()
     private val jobs = mutableMapOf<JobId, JobRecord>()
@@ -468,13 +469,13 @@ public open class RamStorage : Persistence {
         val reference = command.model?.value
             ?: result.createdModels.single { true }.value
         return AuditEntry(
-            decode64bitMicroseconds(context.time.to64bitMicroseconds()),
+            context.time,
             command.event.id,
             reference,
             context.actor.type.toByte(),
             context.actor.id?.value,
             context.actor.externalId,
-            if (::gson.isInitialized) gson.toJson(command.params) else "{}",
+            gson.toJson(command.params),
             extra = context.auditExtra
         )
     }

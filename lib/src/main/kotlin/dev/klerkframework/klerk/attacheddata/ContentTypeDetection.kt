@@ -35,7 +35,7 @@ public fun interface ContentTypeDetector {
 
 /**
  * The default [ContentTypeDetector]: a short list of magic-byte signatures for the formats an application is likely
- * to declare in a [dev.klerkframework.klerk.datatypes.BlobContainer], not an attempt at a complete format database.
+ * to declare in a [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], not an attempt at a complete format database.
  * Has no dependencies beyond the JDK.
  */
 public object DefaultContentTypeDetector : ContentTypeDetector {
@@ -71,7 +71,7 @@ private fun asciiOf(value: String): ByteArray = value.toByteArray(Charsets.US_AS
 
 /**
  * Ordered, because a later entry may be a prefix of an earlier one. Deliberately short: these are the formats an
- * application is likely to declare in a [dev.klerkframework.klerk.datatypes.BlobContainer], not an attempt at a
+ * application is likely to declare in a [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], not an attempt at a
  * complete format database.
  */
 private val signatures: List<Pair<Signature, String>> = listOf(

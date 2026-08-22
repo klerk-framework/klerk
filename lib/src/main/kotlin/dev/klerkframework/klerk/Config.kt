@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
-import dev.klerkframework.klerk.datatypes.BlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.job.JobAgent
@@ -115,6 +115,7 @@ public data class Config<C : KlerkContext, V>(
         schedulerJobsMustHaveAJobContextProvider()
         attachedBlobStoreMustMatchDeclarations()
         blobContainersMustDeclareAPreAttachStep()
+        stringsMustBeDeclaredInAContainer()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
     }
 
@@ -143,13 +144,13 @@ public data class Config<C : KlerkContext, V>(
      * that declares a blob anywhere must say; one that declares none needs no store at all.
      */
     private fun attachedBlobStoreMustMatchDeclarations() {
-        val bare = declaredBlobProperties(BlobDeclaration.BareId)
+        val bare = declaredAttachedDataProperties(AttachedDataDeclaration.BareBlobId)
         if (bare.isNotEmpty()) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.BlobMustBeDeclaredInAContainer,
-                "${bare.sorted().joinToString(", ")} is an AttachedBlobID. Declare a BlobContainer subclass for it " +
+                "${bare.sorted().joinToString(", ")} is an AttachedBlobID. Declare an AttachedBlobContainer subclass for it " +
                         "instead, the way every other property has a DataContainer:\n\n" +
-                        "    class Portrait(id: AttachedBlobID) : BlobContainer(id) {\n" +
+                        "    class Portrait(id: AttachedBlobID) : AttachedBlobContainer(id) {\n" +
                         "        override val accept = setOf(\"image/png\", \"image/jpeg\")\n" +
                         "        override val maxSize = 5_000_000L\n" +
                         "        override val preAttachSteps = listOf(::stripExif)\n" +
@@ -160,7 +161,7 @@ public data class Config<C : KlerkContext, V>(
             )
         }
 
-        val declarations = declaredBlobProperties(BlobDeclaration.Container)
+        val declarations = declaredAttachedDataProperties(AttachedDataDeclaration.BlobContainerDeclaration)
         if (declarations.isEmpty()) {
             return
         }
@@ -182,13 +183,13 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    private enum class BlobDeclaration { BareId, Container }
+    private enum class AttachedDataDeclaration { BareBlobId, BareStringId, BlobContainerDeclaration }
 
-    /** Descriptions of every place a blob is declared: model properties and event parameters. */
-    private fun declaredBlobProperties(kind: BlobDeclaration): List<String> {
+    /** Descriptions of every place attached data of [kind] is declared: model properties and event parameters. */
+    private fun declaredAttachedDataProperties(kind: AttachedDataDeclaration): List<String> {
         val found = mutableListOf<String>()
         managedModels.forEach { managed ->
-            blobPropertyNames(managed.kClass, kind).forEach { found.add("${managed.kClass.simpleName}.$it") }
+            attachedDataPropertyNames(managed.kClass, kind).forEach { found.add("${managed.kClass.simpleName}.$it") }
             managed.stateMachine.mutableStates.flatMap { it.getEvents() }.forEach { event ->
                 val parameters = when (event) {
                     is InstanceEventWithParameters<*, *> -> event.parametersClass
@@ -196,22 +197,23 @@ public data class Config<C : KlerkContext, V>(
                     else -> null
                 }
                 parameters?.let { kClass ->
-                    blobPropertyNames(kClass, kind).forEach { found.add("${event.id.eventName}.$it") }
+                    attachedDataPropertyNames(kClass, kind).forEach { found.add("${event.id.eventName}.$it") }
                 }
             }
         }
         return found.distinct()
     }
 
-    private fun blobPropertyNames(kClass: KClass<*>, kind: BlobDeclaration): List<String> {
+    private fun attachedDataPropertyNames(kClass: KClass<*>, kind: AttachedDataDeclaration): List<String> {
         val wanted = when (kind) {
-            BlobDeclaration.BareId -> AttachedBlobID::class
-            BlobDeclaration.Container -> BlobContainer::class
+            AttachedDataDeclaration.BareBlobId -> AttachedBlobID::class
+            AttachedDataDeclaration.BareStringId -> AttachedStringID::class
+            AttachedDataDeclaration.BlobContainerDeclaration -> AttachedBlobContainer::class
         }.starProjectedType
 
         fun matches(type: KType): Boolean {
             val bare = type.withNullability(false)
-            // A BlobContainer is not an AttachedBlobID, so the two kinds never match each other.
+            // A container is not a bare id, so the two kinds never match each other.
             return bare.isSubtypeOf(wanted) ||
                     // a List<...> or Set<...> of them
                     (bare.isSubtypeOf(Collection::class.starProjectedType) &&
@@ -222,13 +224,35 @@ public data class Config<C : KlerkContext, V>(
     }
 
     /**
-     * An uploaded file has to be looked at before it is kept, so a [BlobContainer] must declare at least one
+     * A string, like a blob, has to be declared in a container — the way every other property has a DataContainer —
+     * rather than left as a bare id with nothing saying what it may be or who may read it.
+     */
+    private fun stringsMustBeDeclaredInAContainer() {
+        val bare = declaredAttachedDataProperties(AttachedDataDeclaration.BareStringId)
+        if (bare.isEmpty()) {
+            return
+        }
+        throw IllegalConfigurationException(
+            KlerkErrorCode.StringMustBeDeclaredInAContainer,
+            "${bare.sorted().joinToString(", ")} is an AttachedStringID. Declare an AttachedStringContainer " +
+                    "subclass for it instead, the way every other property has a DataContainer:\n\n" +
+                    "    class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {\n" +
+                    "        override val accept = setOf(\"text/plain\")\n" +
+                    "        override val maxSize = 10_000L\n" +
+                    "    }\n\n" +
+                    "That is what says what is acceptable, how large it may be, and whether it may be read by " +
+                    "anyone — and it is checked when a command attaches the value, whichever caller sent it."
+        )
+    }
+
+    /**
+     * An uploaded file has to be looked at before it is kept, so a [AttachedBlobContainer] must declare at least one
      * preAttachStep — [dev.klerkframework.klerk.datatypes.noPreAttachProcessing] if it truly wants none. Checked here,
      * since a property that is only reached from an upload page would otherwise not complain until someone uploads a
      * file.
      */
     private fun blobContainersMustDeclareAPreAttachStep() {
-        declaredBlobContainers().forEach { (kClass, where) ->
+        declaredAttachedBlobContainers().forEach { (kClass, where) ->
             val container = try {
                 instantiateDeclaration(kClass, AttachedBlobID(0))
             } catch (e: IllegalArgumentException) {
@@ -245,9 +269,9 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    /** Every [BlobContainer] class a model property or event parameter uses, and where it was found. */
-    private fun declaredBlobContainers(): Map<KClass<out BlobContainer>, String> {
-        val found = mutableMapOf<KClass<out BlobContainer>, String>()
+    /** Every [AttachedBlobContainer] class a model property or event parameter uses, and where it was found. */
+    private fun declaredAttachedBlobContainers(): Map<KClass<out AttachedBlobContainer>, String> {
+        val found = mutableMapOf<KClass<out AttachedBlobContainer>, String>()
 
         fun collect(kClass: KClass<*>, describe: (String) -> String) {
             kClass.memberProperties.forEach { property ->
@@ -257,11 +281,11 @@ public data class Config<C : KlerkContext, V>(
                 } else {
                     bare
                 } ?: return@forEach
-                if (!type.isSubtypeOf(BlobContainer::class.starProjectedType)) {
+                if (!type.isSubtypeOf(AttachedBlobContainer::class.starProjectedType)) {
                     return@forEach
                 }
                 @Suppress("UNCHECKED_CAST")
-                val container = type.classifier as? KClass<out BlobContainer> ?: return@forEach
+                val container = type.classifier as? KClass<out AttachedBlobContainer> ?: return@forEach
                 found.putIfAbsent(container, describe(property.name))
             }
         }

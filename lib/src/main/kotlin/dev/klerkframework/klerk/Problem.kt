@@ -165,6 +165,7 @@ public enum class KlerkErrorCode(public val code: String) {
     AttachedBlobStoreMissingData("ERROR-CONFIG-13"),
     BlobMustBeDeclaredInAContainer("ERROR-CONFIG-14"),
     MissingPreAttachStep("ERROR-CONFIG-15"),
+    StringMustBeDeclaredInAContainer("ERROR-CONFIG-16"),
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
     Internal("ERROR-INTERNAL-1"),

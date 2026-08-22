@@ -150,17 +150,16 @@ anyone, and a negative rule here will not stop it — see [visibility](attached-
 ### writeAttachedData
 
 Gates whether an actor can call `klerk.attachedData.prepare(...)`. Rules receive an `ArgsForAttachedDataWrite<C, V>`
-(`kind`, `visibility`, `lease`, `context`, `reader`).
+(`kind`, `lease`, `context`, `reader`).
 
 This category is weak by construction: at `prepare` time the data has not been attached to anything, so there is no
 model and no command. The real gate on *attaching* data to a model is the ordinary `commands` authorization of the
-command that claims it, and what the file may be is declared on the property — see
-[what a blob property declares](attached-data.md#what-a-blob-property-declares).
+command that claims it, and what the value may be — including its `visibility` — is declared on the container the
+property holds, blob or string alike — see
+[what an attached property declares](attached-data.md#what-an-attached-property-declares).
 
-What is left for these rules is the `kind` ("anyone may upload JSON, only editors may upload a blob"), the `lease`
-(who may keep unclaimed data around for hours rather than a minute), and the `visibility` — which for a blob is always
-`Private`, since a blob's visibility comes from the property it is attached to. Only a string can be published at
-`prepare`.
+What is left for these rules is the `kind` ("anyone may upload JSON, only editors may upload a blob") and the `lease`
+(who may keep unclaimed data around for hours rather than a minute).
 
 ## ActorIdentity
 

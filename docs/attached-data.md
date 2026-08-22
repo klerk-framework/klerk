@@ -3,18 +3,24 @@
 Models should be kept small so they fit in the internal cache. Klerk lets you attach large immutable data to a model
 instead of storing it in the model itself. There are two kinds: strings (e.g. JSON) and blobs (images, videos, PDFs).
 
-A string is referenced by a property of type `AttachedStringID`, similar to how a model holds a reference to another
-model via `ModelID`. A blob is referenced by a `BlobContainer`, which is a `DataContainer` like any other property's:
-it holds the reference *and* declares what the value is allowed to be.
+Both are referenced by a container — `AttachedBlobContainer` for a blob, `AttachedStringContainer` for a string —
+which is a `DataContainer` like any other property's: it holds the reference *and* declares what the value is allowed
+to be. Klerk rejects a bare `AttachedBlobID` or `AttachedStringID` property; every attached value is declared this
+way.
 
 ```kotlin
-class Portrait(id: AttachedBlobID) : BlobContainer(id) {
+class Portrait(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val accept = setOf("image/png", "image/jpeg")
     override val maxSize = 5_000_000L
     override val preAttachSteps = listOf(::stripExif)   // required — see below
 }
 
-data class Author(val name: Name, val portrait: Portrait?)
+class Biography(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val accept = setOf("text/plain")
+    override val maxSize = 20_000L
+}
+
+data class Author(val name: Name, val portrait: Portrait?, val biography: Biography?)
 ```
 
 Attached data is **immutable** — you never update a value in place, you attach a new one and drop the reference to the
@@ -38,12 +44,12 @@ So a string is the right choice for text you are going to want as a `String` any
 too large to hold in memory while uploading it, use a blob. (A string that is merely large to *read* is fine: see
 `getStream` below.)
 
-## What a blob property declares
+## What an attached property declares
 
-Everything a `BlobContainer` declares is checked when a command attaches the value, against what Klerk itself found the
-bytes to be. That is the point of declaring it on the property rather than at the upload: the check holds for a command
-from a web form, from klerk-graphql, from a job and from a test alike, and it is still true a year later when somebody
-adds a second way to create the model.
+Everything an `AttachedBlobContainer` or `AttachedStringContainer` declares is checked when a command attaches the
+value, against what Klerk itself found the bytes to be. That is the point of declaring it on the property rather than
+at the upload: the check holds for a command from a web form, from klerk-graphql, from a job and from a test alike,
+and it is still true a year later when somebody adds a second way to create the model.
 
 |                      |                                                                                                              |
 |----------------------|--------------------------------------------------------------------------------------------------------------|
@@ -51,7 +57,7 @@ adds a second way to create the model.
 | `acceptUnrecognised` | whether a value whose type could not be recognised is acceptable. Only consulted when `accept` is non-empty. |
 | `maxSize`            | the largest value, in bytes.                                                                                 |
 | `visibility`         | `Private` (the default) or `Public` — see below.                                                             |
-| `preAttachSteps`     | what has to happen to the file before this property will hold it — required, see below.                      |
+| `preAttachSteps`     | what has to happen to the file before this property will hold it — required for a blob; a string has none, see below. |
 
 `acceptUnrecognised` has to be a decision rather than a default, because "unrecognised" is the normal state of affairs
 for CSV, for plain text and for any format Klerk has no signature for. A property that accepts those must say so; one
@@ -75,11 +81,14 @@ formats and can afford the extra dependency weight.
 
 ### Steps: looking at the bytes, and rewriting them
 
+Blob-only: a string has no `preAttachSteps`, since a value small enough to hold as a `String` needs no scan or
+rewrite before it is kept.
+
 Metadata cannot answer everything. A virus scan has to read the file; a Content Disarm & Reconstruct pass reads it and
 hands back *different bytes*. Both are declared as `preAttachSteps`:
 
 ```kotlin
-class InventoryCsv(id: AttachedBlobID) : BlobContainer(id) {
+class InventoryCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val accept = setOf("text/plain")
     override val acceptUnrecognised = true
     override val preAttachSteps = listOf(::checkTheHeader, ::normaliseLineEndings)
@@ -114,7 +123,7 @@ does not make it safe to keep or to serve — most files should be looked at, an
 re-encoded, its EXIF stripped). A property that genuinely wants the bytes exactly as they arrived has to say so:
 
 ```kotlin
-class CompressedAsset(id: AttachedBlobID) : BlobContainer(id) {
+class CompressedAsset(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps = listOf(::noPreAttachProcessing)
 }
 ```
@@ -336,16 +345,22 @@ fun onlyProjectMembersCanReadAttachments(args: ArgsForAttachedDataRead<Ctx, View
 ```
 
 At `prepare` time there is no model yet — the data has not been attached to anything — so a write rule can only see the
-context and the visibility.
+context and the kind (blob or string).
 
 The read rules apply to private data only. Public data is readable by anyone, as described next.
 
 ## Visibility
 
-Data is either `Private` (the default) or `Public`. For a blob, the property says which:
+Data is either `Private` (the default) or `Public`. A blob or a string declares which on its container — the
+[`AttachedBlobContainer`](#what-an-attached-property-declares) or `AttachedStringContainer` subclass the property holds —
+never at `prepare` time:
 
 ```kotlin
-class FlowerImage(id: AttachedBlobID) : BlobContainer(id) {
+class FlowerImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val visibility = AttachedDataVisibility.Public
+}
+
+class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {
     override val visibility = AttachedDataVisibility.Public
 }
 ```
@@ -358,18 +373,12 @@ at anything in the model graph, an answer today says nothing about tomorrow. `Pu
 that is immutable anyway — so it cannot change later, and that is what makes it safe to cache.
 
 The decision is applied when a command attaches the value, and never again. Declaring it on the property rather than
-passing it to `prepare` puts it where it is known: whoever uploads a file has no idea what it will end up being used
+passing it to `prepare` puts it where it is known: whoever uploads a value has no idea what it will end up being used
 for. It also means "who may publish" is decided by the ordinary command rules — whoever may execute the event that
-attaches a public blob is who may publish one.
+attaches a public value is who may publish one.
 
-A blob is therefore always prepared as `Private` and there is no way to say otherwise — `prepare` does not take a
-visibility for one. An attached *string* has no container, so for a string `prepare` still decides:
-
-```kotlin
-val notesID = klerk.attachedData.prepare(json, context, AttachedDataVisibility.Public)
-```
-
-which is also the only case where the `visibility` in `ArgsForAttachedDataWrite` can be anything but `Private`.
+Both kinds are therefore always prepared as `Private`, and there is no way to say otherwise — `prepare` takes a
+container declaration, not a visibility, for either one.
 
 ## Serving through a CDN
 
