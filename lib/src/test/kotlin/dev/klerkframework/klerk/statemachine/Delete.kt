@@ -11,7 +11,7 @@ class Delete {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections))
+            val klerk = createKlerk(collections)
             klerk.meta.start()
 
             /* TODO

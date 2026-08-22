@@ -44,25 +44,18 @@ var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
 
 /**
- * @param clock what background work (jobs, retries, cron, time triggers) reads the time from.
- * @param configureJobs applied last inside the `jobs` block, so a test can register its own job types, declare crons,
- * or switch to automatic execution.
+ * The specification the tests share. Everything deployment-specific — storage, clock, blob store, how jobs are run —
+ * is in [testSettings] instead.
+ *
+ * @param configureJobs applied last inside the `jobs` block, so a test can register its own job types or declare crons.
  */
 fun createConfig(
     collections: Views,
-    storage: Persistence = RamStorage(),
-    clock: Clock = Clock.System,
-    blobStore: AttachedBlobStore = AttachedBlobStore.Database,
     configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
-): Config<Ctx, Views> {
-    return ConfigBuilder<Ctx, Views>(collections).build {
-        persistence(storage)
-        attachedBlobStore(blobStore)
-        clock(clock)
+): Specification<Ctx, Views> {
+    return SpecificationBuilder<Ctx, Views>(collections).build {
         jobContextProvider(::myJobContextProvider)
         jobs {
-            // Manual by default: a test that wants a job to run says so, and nothing runs behind its back.
-            execution = JobExecution.Manual
             register(MyJob)
             register(MyJob2)
             configureJobs()
@@ -133,6 +126,35 @@ fun createConfig(
         systemContextProvider(::myContextProvider)
     }
 }
+
+/**
+ * The settings the tests share.
+ *
+ * @param clock what background work (jobs, retries, cron, time triggers) reads the time from.
+ * @param jobs manual execution by default: a test that wants a job to run says so, and nothing runs behind its back.
+ */
+fun testSettings(
+    storage: Persistence = RamStorage(),
+    clock: Clock = Clock.System,
+    blobStore: AttachedBlobStore = AttachedBlobStore.Database,
+    jobs: JobSettings = JobSettings(execution = JobExecution.Manual),
+): KlerkSettings = KlerkSettings(
+    persistence = storage,
+    attachedBlobStore = blobStore,
+    clock = clock,
+    jobs = jobs,
+)
+
+/** [createConfig] and [testSettings] in one call, for the many tests that just want a running Klerk. */
+fun createKlerk(
+    collections: Views,
+    storage: Persistence = RamStorage(),
+    clock: Clock = Clock.System,
+    blobStore: AttachedBlobStore = AttachedBlobStore.Database,
+    jobs: JobSettings = JobSettings(execution = JobExecution.Manual),
+    configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
+): Klerk<Ctx, Views> =
+    Klerk.create(createConfig(collections, configureJobs), testSettings(storage, clock, blobStore, jobs))
 
 fun myContextProvider(actorIdentity: dev.klerkframework.klerk.ActorIdentity): Ctx {
     return Ctx(
@@ -758,9 +780,7 @@ class Street(value: String) : StringContainer(value) {
     override val maxLines: Int = 1
 }
 
-fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Ctx, Views>.() -> Unit = {
-    // Author.picture is an AttachedBlobID, so a store is required. Database keeps the tests self-contained.
-    attachedBlobStore(AttachedBlobStore.Database)
+fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Ctx, Views>.() -> Unit = {
     if (auth) {
         authorization {
             readModels {
@@ -795,7 +815,6 @@ fun addStandardTestConfiguration(auth: Boolean = true): ConfigBuilder<Ctx, Views
         jobContextProvider(::myJobContextProvider)
         // The state machines used by the tests schedule these, so they have to be loadable on a restart.
         jobs {
-            execution = JobExecution.Manual
             register(MyJob)
             register(MyJob2)
         }
@@ -1114,7 +1133,7 @@ fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachin
 private fun newNote(args: ArgForVoidEvent<Note, CreateNoteParams, Ctx, Views>): Note =
     Note(args.command.params.title, args.command.params.body)
 
-// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+// Declared the old way, on purpose: the specification must refuse it. Never registered in createConfig.
 data class Sketch(val drawing: AttachedBlobID)
 
 enum class SketchStates { Drawn }
@@ -1131,7 +1150,7 @@ fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = state
 
 private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
 
-// Declared the old way, on purpose: the config must refuse it. Never registered in createConfig.
+// Declared the old way, on purpose: the specification must refuse it. Never registered in createConfig.
 data class Scribble(val text: AttachedStringID)
 
 enum class ScribbleStates { Written }
@@ -1148,7 +1167,7 @@ fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> =
 
 private fun newScribble(args: ArgForVoidEvent<Scribble, Scribble, Ctx, Views>): Scribble = args.command.params
 
-// A container that declares no step at all, which the config must refuse. Never registered in createConfig.
+// A container that declares no step at all, which the specification must refuse. Never registered in createConfig.
 class DoodleImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = emptyList()
 }

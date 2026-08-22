@@ -94,7 +94,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(private val parent: M
     }
 
     /**
-     * Makes Klerk aware of this view: gives it a stable id and adds it to `Config.getCollections()`, so it can be
+     * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.getCollections()`, so it can be
      * looked up by [CollectionId] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
      * that is never registered still works if you hold a reference to it, but can't be looked up by id.
      *

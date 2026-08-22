@@ -21,7 +21,7 @@ class AttachedStringContainerTest {
     private suspend fun start(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, blobStore = AttachedBlobStore.Database))
+        val klerk = createKlerk(collections, storage, blobStore = AttachedBlobStore.Database)
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -44,16 +44,15 @@ class AttachedStringContainerTest {
     fun `a bare AttachedStringID is refused, with the container to write instead`() {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val config = ConfigBuilder<Ctx, Views>(collections).build {
+        val specification = SpecificationBuilder<Ctx, Views>(collections).build {
             managedModels {
                 model(Scribble::class, scribbleStateMachine(), collections.scribbles)
             }
             apply(generousAuthRules())
-            persistence(RamStorage())
             systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
         }
 
-        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }
         assertEquals(KlerkErrorCode.StringMustBeDeclaredInAContainer, e.code)
         assertTrue(e.message!!.contains("Scribble.text"), e.message!!)
         assertTrue(e.message!!.contains("AttachedStringContainer"), "the message should say what to write instead")

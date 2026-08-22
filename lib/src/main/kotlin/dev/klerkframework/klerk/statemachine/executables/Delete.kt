@@ -14,7 +14,7 @@ internal class InstanceNonEventDelete<T : Any, C : KlerkContext, V>(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
         process(args.model, processingDataSoFar, view)
@@ -29,7 +29,7 @@ internal class InstanceEventDelete<T : Any, P, C : KlerkContext, V>(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
         process(args.model, processingDataSoFar, view)

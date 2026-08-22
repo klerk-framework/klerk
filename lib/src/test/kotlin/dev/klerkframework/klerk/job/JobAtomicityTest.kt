@@ -123,13 +123,11 @@ class JobAtomicityTest {
     ): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(
-            createConfig(collections, storage, clock) {
-                register(Writer)
-                register(Spawner)
-                register(Leaf)
-            }
-        )
+        val klerk = createKlerk(collections, storage, clock) {
+            register(Writer)
+            register(Spawner)
+            register(Leaf)
+        }
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -154,7 +152,7 @@ class JobAtomicityTest {
                 klerk = klerkOver(survivor, clock)
                 klerk.jobs.runUntilIdle()
 
-                val authors = klerk.read(Ctx.system()) { list(klerk.config.views.authors.all) }
+                val authors = klerk.read(Ctx.system()) { list(klerk.specification.views.authors.all) }
                 assertEquals(
                     steps - 1,
                     authors.size,

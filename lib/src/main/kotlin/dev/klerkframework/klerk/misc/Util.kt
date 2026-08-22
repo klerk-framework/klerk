@@ -71,7 +71,7 @@ public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): St
         val kFunction = (f as KFunction<*>)
         if (kFunction.name == "execute") {
             return kFunction.toString().split(".execute").first().split(".")
-                .last() // should probably lookup the algorithm in config and use that to find the name (primarily using annotations)
+                .last() // should probably lookup the algorithm in specification and use that to find the name (primarily using annotations)
         }
         return DefaultKlerkTranslation.function(f)
     } catch (e: ClassCastException) {

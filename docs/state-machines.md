@@ -4,7 +4,7 @@ Every managed model has exactly one state machine. It declares every state the m
 happen to it, and what happens when a state is entered, exited, or a certain time passes. This is where the business
 logic of your application lives — Klerk will refuse to change a model in any way that isn't described here.
 
-A state machine is built with the `stateMachine { }` DSL and wired to its model type in the config:
+A state machine is built with the `stateMachine { }` DSL and wired to its model type in the specification:
 
 ```kotlin
 fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
@@ -12,7 +12,7 @@ fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates,
         // ...
     }
 
-ConfigBuilder<Context, MyCollections>(collections).build {
+SpecificationBuilder<Context, MyCollections>(collections).build {
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
         model(Author::class, authorStateMachine(collections), collections.authors)
@@ -140,7 +140,7 @@ and won't be retried. Avoid triggers that create loops (e.g. a state whose time 
 with the same trigger), as this can put continuous load on the system.
 
 A time trigger fires on its own, in the background, with no command and no caller-supplied context — notice
-`ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your config, Klerk needs a
+`ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your specification, Klerk needs a
 way to manufacture a `Ctx` for this situation, which is what `systemContextProvider` is for — see
 [context.md](context.md#systemcontextprovider).
 

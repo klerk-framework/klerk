@@ -35,7 +35,7 @@ public interface CursorCodec<Cursor : Any> {
  * 3. A step's command and the job's new cursor commit together, or not at all — so a resumed job never re-emits a
  *    command that was already applied.
  *
- * Declare the type as an `object`, give it a stable [name], and register it in `ConfigBuilder`:
+ * Declare the type as an `object`, give it a stable [name], and register it in `SpecificationBuilder`:
  *
  * ```
  * object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
@@ -45,7 +45,7 @@ public interface CursorCodec<Cursor : Any> {
  *     override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> { ... }
  * }
  *
- * // in the config
+ * // in the specification
  * jobs { register(ImportBooks) }
  * ```
  *
@@ -131,7 +131,7 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
     internal fun encodeUnknownCursor(cursor: Any): String = encodeCursor(cursor as Cursor)
 
     /**
-     * Forces the cursor codec to resolve, so that a job type with a non-serializable cursor fails at config time.
+     * Forces the cursor codec to resolve, so that a job type with a non-serializable cursor fails at specification time.
      *
      * @throws IllegalArgumentException if no serializer can be derived and no [codec] was supplied.
      */

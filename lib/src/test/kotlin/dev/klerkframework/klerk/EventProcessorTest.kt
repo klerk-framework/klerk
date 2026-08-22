@@ -15,14 +15,14 @@ class EventProcessorTest {
 
     val bc = BookViews()
     var collections = Views(bc, AuthorViews(bc.all))
-    val config = createConfig(collections)
+    val specification = createConfig(collections)
 
     @Test
     fun `Can handle simple commands`() {
         val options = ProcessingOptions(CommandToken.simple())
 
-        val klerk = Klerk.create(config) as KlerkImpl
-        val eventProcessor = EventProcessor(klerk, KlerkSettings(), ReadWriteLock(), MyTimeTriggerManager)
+        val klerk = Klerk.create(specification, testSettings()) as KlerkImpl
+        val eventProcessor = EventProcessor(klerk, testSettings(), ReadWriteLock(), MyTimeTriggerManager)
         val createAuthor = Command(CreateAuthor, null, createAstridParameters)
         val context = Ctx.system()
         val reader = ReaderWithAuth(klerk, context)
@@ -39,7 +39,7 @@ class EventProcessorTest {
     fun `On delete cascade`() {
         runBlocking {
             // first we will populate ModelCache
-            val klerk = Klerk.create(config)
+            val klerk = Klerk.create(specification, testSettings())
             klerk.meta.start()
 
             val context = Ctx.system()

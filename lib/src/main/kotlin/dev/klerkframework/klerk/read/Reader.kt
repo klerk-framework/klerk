@@ -181,12 +181,12 @@ internal sealed class ReadListResult<T : Any> {
 
 internal fun <C : KlerkContext, V> isReadPropertyAuthorized(
     args: ArgsForPropertyAuth<C, V>,
-    config: Config<C, V>
+    specification: Specification<C, V>
 ): Boolean {
-    if (config.authorization.readPropertyPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+    if (specification.authorization.readPropertyPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
         return false
     }
-    if (config.authorization.readPropertyNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+    if (specification.authorization.readPropertyNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
         return false
     }
     return true

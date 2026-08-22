@@ -23,7 +23,7 @@ import org.slf4j.event.Level
 import kotlin.time.Instant
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
-    private val config: Config<C, V>,
+    private val specification: Specification<C, V>,
     private val klerk: KlerkImpl<C, V>,
     private val readWriteLock: ReadWriteLock,
     private val settings: KlerkSettings,
@@ -62,7 +62,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             logger.log(misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)
             val delta = eventProcessor.processPrimaryCommand(command, context, withoutAuth, options)
-            return CommandResult.from(delta, withoutAuth, context, config)
+            return CommandResult.from(delta, withoutAuth, context, specification)
         }
 
         val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
@@ -73,7 +73,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             // contain data that the user is not authorized to access.
             val readerWithoutAuth = ReaderWithoutAuth(klerk)
             val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
-            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
+            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification)) {
                 is Failure -> {
                     logger.log(
                         result,
@@ -141,7 +141,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit,
     ): CommandResult<T, C, V>? = mutex.withLock {
         if (command == null || context == null) {
-            config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+            settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
             return@withLock null
         }
 
@@ -152,7 +152,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)
         val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
-        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, config)) {
+        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification)) {
             is Failure -> {
                 checkpointOnly(jobCommit)
                 commandResult
@@ -187,7 +187,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
     /** Writes the job's checkpoint on its own, for a step whose command was not applied. */
     private fun checkpointOnly(jobCommit: JobCommit) {
-        config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+        settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
     }
 
     private suspend fun <T : Any, P> commit(
@@ -199,9 +199,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         isJobStep: Boolean = false,
     ) {
         if (isJobStep) {
-            config.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
+            settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
         } else {
-            config.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
+            settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
         }
 
         if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
@@ -212,7 +212,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             readWriteLock.releaseWrite()    // mutation is done, reading is now permitted
         }
 
-        maybeEraseAuditLog(config, delta.deletedModels)
+        maybeEraseAuditLog(specification, delta.deletedModels)
         notifySubscribers(delta)
     }
 
@@ -251,13 +251,13 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         readWriteLock.acquireRead()
         try {
             val args = ArgContextReader(context, reader)
-            if (config.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
+            if (specification.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AuditPositiveAuthorizationMissing,
                     "Not allowed to read audit log"
                 )
             }
-            if (config.authorization.eventLogNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
+            if (specification.authorization.eventLogNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AuditNegativeAuthorizationExist,
                     "Not allowed to read audit log"
@@ -267,7 +267,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             readWriteLock.releaseRead()
         }
 
-        return config.persistence.readAuditLog(modelId = id?.value, after, before)
+        return settings.persistence.readAuditLog(modelId = id?.value, after, before)
     }
 
     internal suspend fun start() {
@@ -294,12 +294,12 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
     }
 
-    private fun maybeEraseAuditLog(config: Config<C, V>, deletedModels: List<ModelID<out Any>>) {
-        if (settings.eraseAuditLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
+    private fun maybeEraseAuditLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
+        if (specification.eraseAuditLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
             return
         }
         deletedModels.forEach {
-            config.persistence.modifyEventsInAuditLog(it.value) { null }
+            settings.persistence.modifyEventsInAuditLog(it.value) { null }
         }
     }
 
@@ -338,7 +338,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
         // A time-trigger can schedule jobs too. There is no caller to fail, so a refusal by admission control can only
         // be logged and the jobs dropped — the trigger's own model changes still commit.
-        val systemContext = config.systemContextProvider.invoke(SystemIdentity)
+        val systemContext = specification.systemContextProvider.invoke(SystemIdentity)
         val jobPlan = when (val planned = jobs.planNewJobs(delta.newJobs, systemContext)) {
             is NewJobPlan.Rejected -> {
                 logger.warn {

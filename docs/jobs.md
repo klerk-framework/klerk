@@ -81,7 +81,7 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
 }
 ```
 
-Register the type in `ConfigBuilder` so Klerk can resolve it by name after a restart:
+Register the type in `SpecificationBuilder` so Klerk can resolve it by name after a restart:
 
 ```kotlin
 jobs {
@@ -97,7 +97,7 @@ The persisted record holds `JobName`. Renaming the Kotlin object is safe; changi
 
 The cursor is serialized with `kotlinx.serialization`, so a cursor class must be `@Serializable`. Klerk derives the
 serializer from the type argument you declared, so there is normally nothing to write; a job type whose cursor cannot be
-serialized fails at **config time**, not on its first run.
+serialized fails at **specification build time**, not on its first run.
 
 `ModelID`, `AttachedBlobID` and `AttachedStringID` are serializable out of the box — a model's own props class needs no
 annotation for its id to appear in a cursor. For an `Instant`, use
@@ -287,7 +287,7 @@ The log is capped at the most recent 200 entries per job, so a long-running job 
 - `Abort` → dead-lettered immediately.
 - A dead-lettered job keeps its cursor, progress and log, and keeps its claim on any attached data it created.
 
-Terminal jobs are cleaned up automatically. Three config settings, each `Duration` and each defaulting to 30 days,
+Terminal jobs are cleaned up automatically. Three settings in `KlerkSettings.jobs`, each `Duration` and each defaulting to 30 days,
 delete a terminal job once it has aged past their value:
 
 | Setting              | Governs                              |
@@ -403,7 +403,7 @@ deep queue that is draining fast is healthier than a shallow one that has not mo
 captures both.
 
 The default policy, `AdmissionPolicy.DelayBudget`, sheds a class when its oldest ready job has exceeded the class budget
-continuously for a short interval. You can replace it with a named function in config:
+continuously for a short interval. You can replace it with a named function in the specification:
 
 ```kotlin
 jobs {
@@ -446,7 +446,7 @@ would fail the 51st user's command for reasons they cannot perceive.
 
 ### Recurring jobs
 
-Recurring schedules are **declared statically in config**, next to the job types they run:
+Recurring schedules are **declared statically in the specification**, next to the job types they run:
 
 ```kotlin
 jobs {
@@ -479,10 +479,10 @@ recurring work with no model behind them — "delete expired sessions every nigh
 
 ### Jobs from a plugin
 
-A [plugin](plugins.md) registers its own job types and crons from `mergeConfig`:
+A [plugin](plugins.md) registers its own job types and crons from `mergeSpecification`:
 
 ```kotlin
-override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
+override fun mergeSpecification(previous: Specification<C, V>): Specification<C, V> =
     previous.withJobs {
         register(sweepStagingArea)
         cron(sweepStagingArea, "0 * * * *") { cursor = "" }
@@ -490,8 +490,8 @@ override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
 ```
 
 A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
-remain the application's decisions. Job names are global, so prefix a plugin's names with the plugin's own — registering
-a name the application already used fails when the config is built.
+live in `KlerkSettings.jobs`, which a plugin never sees. Job names are global, so prefix a plugin's names with the plugin's own — registering
+a name the application already used fails when the specification is built.
 
 Some of the official Klerk plugins (and Klerk itself) register their own jobs and crons.
 
@@ -517,12 +517,12 @@ is deleted, which is what `deadLetterRetention` is for.
 
 A job runs as an **agent**, declared on the job type:
 
-- `JobAgent.System` — full authority, and the default. Config is trusted code, so declaring this is a deliberate,
+- `JobAgent.System` — full authority, and the default. Specification is trusted code, so declaring this is a deliberate,
   privileged act.
 - `JobAgent.Scheduler` — the actor that scheduled the job. If that actor loses permission mid-job, subsequent commands
   simply fail; your step sees it in `previousResult` and decides whether to `Success`, `Abort`, or do something else.
 
-`JobAgent.Scheduler` requires `jobContextProvider(...)` in the config, since Klerk cannot construct a context for an
+`JobAgent.Scheduler` requires `jobContextProvider(...)` in the specification, since Klerk cannot construct a context for an
 arbitrary actor of your own context type. Omitting it is a configuration error, caught at startup.
 
 Job metadata (status, progress, log) is authorization-checked. The same rules gate `cancel`, so a user watching their
@@ -551,10 +551,12 @@ identities by id rather than by object, since the actor may have been read back 
 On `klerk.meta.start()` Klerk reloads persisted jobs. Two things can go wrong, both governed by one setting:
 
 ```kotlin
-jobs {
-    onUnloadableJob = UnloadableJobPolicy.FailToStart   // default
-    // or UnloadableJobPolicy.DeadLetter
-}
+KlerkSettings(
+    jobs = JobSettings(
+        onUnloadableJob = UnloadableJobPolicy.FailToStart,   // default
+        // or UnloadableJobPolicy.DeadLetter
+    ),
+)
 ```
 
 - **A job whose `JobName` is no longer registered** — you deleted or renamed a job type while instances were pending.
@@ -609,7 +611,7 @@ fun `import emits one CreateBook per file`() = runTest {
 thread, no sleeping:
 
 ```kotlin
-jobs { execution = JobExecution.Manual }
+KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 klerk.jobs.runUntilIdle(maxSteps = 10_000)   // returns how many steps ran
 klerk.jobs.step()                            // exactly one step; false if nothing was ready
@@ -619,15 +621,19 @@ klerk.jobs.step()                            // exactly one step; false if nothi
 configured clock is not ready, so it returns rather than spinning. Advance the clock and call it again.
 
 **3. Time-travel.** All background work — job scheduling, retry backoff, cron, delay-based admission and state-machine
-time triggers — reads its time from the clock on the config rather than `Clock.System`:
+time triggers — reads its time from `KlerkSettings.clock` rather than `Clock.System`:
 
 ```kotlin
 val clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
 
-val config = ConfigBuilder<Ctx, Views>(views).build {
-    clock(clock)
+val settings = KlerkSettings(
+    persistence = RamStorage(),
+    clock = clock,
+    jobs = JobSettings(execution = JobExecution.Manual),
+)
+
+val specification = SpecificationBuilder<Ctx, Views>(views).build {
     jobContextProvider(::jobContext)     // so a step's own context.time follows the clock too
-    jobs { execution = JobExecution.Manual }
     ...
 }
 

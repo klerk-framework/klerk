@@ -25,17 +25,19 @@ public interface Klerk<C : KlerkContext, V> {
         /**
          * Creates an instance of Klerk.
          *
-         * @param config can be created with [ConfigBuilder]
+         * @param specification what the application is; can be created with [SpecificationBuilder]
+         * @param settings how this instance runs: storage, clock, metrics and job operation
          */
         public fun <C : KlerkContext, V> create(
-            config: Config<C, V>,
-            settings: KlerkSettings = KlerkSettings()
+            specification: Specification<C, V>,
+            settings: KlerkSettings
         ): Klerk<C, V> {
-            return KlerkImpl(config, settings)
+            return KlerkImpl(specification, settings)
         }
     }
 
-    public val config: Config<C, V>
+    public val specification: Specification<C, V>
+    public val settings: KlerkSettings
     public val events: EventsManager<C, V>
     public val jobs: JobManager<C, V>
     public val models: KlerkModels<C, V>

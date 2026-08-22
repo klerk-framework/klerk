@@ -14,9 +14,9 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     private val withoutAuth = ReaderWithoutAuth(klerk)
 
-    private val propertyAuth = PropertyAuthScope(context, klerk.config, withoutAuth)
+    private val propertyAuth = PropertyAuthScope(context, klerk.specification, withoutAuth)
 
-    override val views = klerk.config.views
+    override val views = klerk.specification.views
 
     internal val modelsRead = mutableSetOf<Model<*>>()
 
@@ -47,7 +47,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     ): List<Model<T>> {
         return withoutAuth.list(collection)
             .map { propertyAuth.secure(it) }
-            .filter { isAuthorized(it, context, klerk.config, withoutAuth) }
+            .filter { isAuthorized(it, context, klerk.specification, withoutAuth) }
     }
 
     override fun <T : Any> list(
@@ -78,7 +78,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? =
         propertyAuth.secure(withoutAuth.get(id))
-            .let { if (isAuthorized(it, context, klerk.config, withoutAuth)) it else null }
+            .let { if (isAuthorized(it, context, klerk.specification, withoutAuth)) it else null }
 
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
@@ -86,7 +86,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             return model
         }
         val secured = propertyAuth.secure(model)
-        when (val result = evaluateAuthorization(context, secured, klerk.config, withoutAuth)) {
+        when (val result = evaluateAuthorization(context, secured, klerk.specification, withoutAuth)) {
             is ReadResult.Fail -> throw result.problem.asException()
             is ReadResult.Ok -> return secured
         }
@@ -102,13 +102,13 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
-        klerk.config.getPossibleVoidEvents(clazz, context, visibility)
+        klerk.specification.getPossibleVoidEvents(clazz, context, visibility)
             .filter { klerk.validator.validateWithoutParameters<T>(it, context, null, withoutAuth) }
             .toSet()
 
     override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
         val model = get(id)
-        return klerk.config.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
+        return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
             .filter { klerk.validator.validateWithoutParameters(it, context, model, withoutAuth) }
             .toSet()
     }
@@ -118,21 +118,21 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 internal fun <T : Any, C : KlerkContext, V> isAuthorized(
     model: Model<T>,
     context: C,
-    config: Config<C, V>,
+    specification: Specification<C, V>,
     reader: ReaderWithoutAuth<C, V>
 ): Boolean =
-    evaluateAuthorization(context, model, config, reader) is ReadResult.Ok
+    evaluateAuthorization(context, model, specification, reader) is ReadResult.Ok
 
 internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
     context: C,
     model: Model<T>,
-    config: Config<C, V>,
+    specification: Specification<C, V>,
     reader: ReaderWithoutAuth<C, V>
 ): ReadResult<T> {
     if (context.actor == SystemIdentity) {
         return ReadResult.Ok(model)
     }
-    val brokenRule = config.authorization.readModelNegativeRules
+    val brokenRule = specification.authorization.readModelNegativeRules
         .firstOrNull { it(ArgModelContextReader(model, context, reader)) == NegativeAuthorization.Deny }
 
     if (brokenRule != null) {
@@ -144,7 +144,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         )
     }
 
-    if (config.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
+    if (specification.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
             .none { it == PositiveAuthorization.Allow }) {
         logger.info("No policy explicitly allowed the request")
         return ReadResult.Fail(

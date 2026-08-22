@@ -13,9 +13,9 @@ class DataContainersTest {
 
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
-        val config = createConfig(collections)
+        val specification = createConfig(collections)
 
-        println(config)
+        println(specification)
 
     }
 
@@ -106,8 +106,8 @@ class DataContainersTest {
     fun enumContainerSerialization() {
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
-        val config = createConfig(collections)
-        val gson = createGson(config)
+        val specification = createConfig(collections)
+        val gson = createGson(specification)
 
         val original = BookGenreContainer(BookGenre.Mystery)
         val json = gson.toJson(original, BookGenreContainer::class.java)

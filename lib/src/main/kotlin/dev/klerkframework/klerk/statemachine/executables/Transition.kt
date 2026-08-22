@@ -16,10 +16,10 @@ internal class InstanceNonEventTransition<T : Any, ModelStates : Enum<*>, C : Kl
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
-        process(args.model, args.time, targetState.name, config, view)
+        process(args.model, args.time, targetState.name, specification, view)
 
 }
 
@@ -32,10 +32,10 @@ internal class InstanceEventTransition<T : Any, P, ModelStates : Enum<*>, C : Kl
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
-        process(args.model, args.context.time, targetState.name, config, view)
+        process(args.model, args.context.time, targetState.name, specification, view)
 
 }
 
@@ -44,14 +44,14 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     model: Model<T>?,
     time: Instant,
     targetState: String,
-    config: Config<C, V>,
+    specification: Specification<C, V>,
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     requireNotNull(model)
-    val exitBlock = config.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
+    val exitBlock = specification.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState, lastStateTransitionAt = makeExactSerializable(time))
     val enterBlock =
-        config.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
+        specification.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 
     // note that we will not update modifiedModel now since we must first execute any exit block using the model as it
     // currently is.

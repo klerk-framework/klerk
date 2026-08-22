@@ -211,14 +211,18 @@ class JobManagerImplTest {
         val storage: RamStorage,
     )
 
+    private fun deadLetterUnloadable() =
+        JobSettings(execution = JobExecution.Manual, onUnloadableJob = UnloadableJobPolicy.DeadLetter)
+
     private suspend fun fixture(
         clock: MutableClock = MutableClock(start),
         storage: RamStorage = RamStorage(),
+        jobs: JobSettings = JobSettings(execution = JobExecution.Manual),
         configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
     ): Fixture {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, clock, configureJobs = configureJobs))
+        val klerk = createKlerk(collections, storage, clock, jobs = jobs, configureJobs = configureJobs)
         klerk.meta.start(installShutdownHook = false)
         return Fixture(klerk, clock, storage)
     }
@@ -465,7 +469,7 @@ class JobManagerImplTest {
         val f = fixture { register(Counter) }
         val id = f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
 
-        // The test config only lets the system, or the scheduling actor, see a job.
+        // The test specification only lets the system, or the scheduling actor, see a job.
         assertFailsWith<AuthorizationException> { f.klerk.jobs.getJob(id, Ctx.unauthenticated()) }
         assertTrue(f.klerk.jobs.getAllJobs(Ctx.unauthenticated()).isEmpty())
         assertEquals(id, f.klerk.jobs.getJob(id, Ctx.system()).id)
@@ -481,7 +485,7 @@ class JobManagerImplTest {
         // Counter is no longer registered, so its persisted instance cannot be loaded.
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage))
+        val klerk = createKlerk(collections, storage)
         assertFailsWith<IllegalConfigurationException> { klerk.meta.start(installShutdownHook = false) }
     }
 
@@ -492,7 +496,7 @@ class JobManagerImplTest {
         val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         first.klerk.meta.stop()
 
-        val second = fixture(storage = storage) { onUnloadableJob = UnloadableJobPolicy.DeadLetter }
+        val second = fixture(storage = storage, jobs = deadLetterUnloadable())
         assertEquals(JobStatus.DeadLettered, second.job(id).status)
         // No hook ran: the cursor a hook would need is the very thing that could not be loaded.
         assertTrue(second.job(id).reason!!.contains("no job type registered"))
@@ -531,10 +535,9 @@ class JobManagerImplTest {
 
     @Test
     fun `the hard queue cap is not overridable by a policy`() = runBlocking<Unit> {
-        val f = fixture {
+        val f = fixture(jobs = JobSettings(execution = JobExecution.Manual, hardQueueLimit = 2)) {
             register(Counter)
             admission(::allowEverything)
-            hardQueueLimit = 2
         }
         f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
@@ -587,9 +590,8 @@ class JobManagerImplTest {
 
         Reshaped.decodingBroken = true
         try {
-            val second = fixture(storage = storage) {
+            val second = fixture(storage = storage, jobs = deadLetterUnloadable()) {
                 register(Reshaped)
-                onUnloadableJob = UnloadableJobPolicy.DeadLetter
             }
             assertEquals(JobStatus.DeadLettered, second.job(id).status)
             assertTrue(second.job(id).reason!!.contains("cursor could not be decoded"))

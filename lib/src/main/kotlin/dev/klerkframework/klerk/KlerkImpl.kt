@@ -25,7 +25,10 @@ import kotlin.time.measureTime
  */
 internal fun <C : KlerkContext, V> Klerk<C, V>.impl(): KlerkImpl<C, V> = this as KlerkImpl<C, V>
 
-internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>, val settings: KlerkSettings) :
+internal class KlerkImpl<C : KlerkContext, V>(
+    override val specification: Specification<C, V>,
+    override val settings: KlerkSettings,
+) :
     Klerk<C, V> {
 
     override val jobs = JobManagerImpl<C, V>(this)
@@ -33,14 +36,14 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
     internal val readWriteLock = ReadWriteLock()
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
-    internal val eventsManager = EventsManagerImpl<C, V>(config, this, readWriteLock, settings, jobs, attachedDataImpl)
+    internal val eventsManager = EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
     private val klerkLog = KlerkLogImpl()
     internal val validator = Validator(this)
 
     init {
-        config.initialize()
-        ModelCache.initMetrics(config.meterRegistry)
+        specification.initialize(settings)
+        ModelCache.initMetrics(settings.meterRegistry)
         /*
         SingletonStuff.views = views as Any
         SingletonStuff.readModelPositiveRules = authorizationReadPositiveRules as Set<(UserIdentity, Model<out Any>, Any) -> PositiveAuthorization>
@@ -50,7 +53,7 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
          */
 
-        config.managedModels.forEach { managed ->
+        specification.managedModels.forEach { managed ->
             managed.collections.initialize()
             managed.collections.getCollections().forEach { it.setIdBase(managed.kClass.simpleName) }
             managed.stateMachine.setView(managed.collections)
@@ -60,14 +63,14 @@ internal class KlerkImpl<C : KlerkContext, V>(override val config: Config<C, V>,
 
 
     private fun modelViewProvider(modelType: String): ModelViews<*, C> {
-        return config.managedModels.find { it.kClass.simpleName == modelType }?.collections
+        return specification.managedModels.find { it.kClass.simpleName == modelType }?.collections
             ?: throw RuntimeException("Can't find model view for type '$modelType'")
     }
 
     /*
         intellij gillar inte denna. Men den används inte?
         private inline fun <reified T : Any> getStateMachine(): StateMachine<*, *, V> {
-            return config.managedModels.find { it.kClass == T::class }!!.stateMachine
+            return specification.managedModels.find { it.kClass == T::class }!!.stateMachine
         }
 
      */
@@ -132,8 +135,6 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
 
     override suspend fun start(installShutdownHook: Boolean) {
         if (state.compareAndSet(0, 1)) {
-            require(klerk.settings.eraseAuditLogAfterModelDeletion == null || klerk.settings.eraseAuditLogAfterModelDeletion == Duration.ZERO) { "settings.eraseAuditLogAfterModelDeletion can only be null or zero" }
-
             if (installShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(object : Thread() {
                     override fun run() {
@@ -144,19 +145,19 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
 
             val startTime = measureTime {
                 ModelCache.clear()
-                klerk.config.persistence.setConfig(klerk.config)
+                klerk.settings.persistence.setSpecification(klerk.specification)
 
-                val migrations = klerk.config.migrationSteps.toMutableList()
-                migrations.removeIf { it.migratesToVersion <= klerk.config.persistence.currentModelSchemaVersion }
+                val migrations = klerk.specification.migrationSteps.toMutableList()
+                migrations.removeIf { it.migratesToVersion <= klerk.settings.persistence.currentModelSchemaVersion }
                 if (migrations.isNotEmpty()) {
-                    klerk.config.persistence.migrate(migrations)
+                    klerk.settings.persistence.migrate(migrations)
                 }
 
                 klerk.eventsManager.start()
                 klerk.attachedDataImpl.start()
                 // Jobs start last: reloading them may need models and attached data to be in place already.
                 klerk.jobs.start()
-                klerk.config.plugins.forEach {
+                klerk.specification.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }
                     it.start(klerk)
                 }

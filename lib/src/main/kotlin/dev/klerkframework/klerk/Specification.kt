@@ -10,8 +10,9 @@ import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobSettings
 import dev.klerkframework.klerk.job.JobsBlock
-import dev.klerkframework.klerk.job.JobsConfig
+import dev.klerkframework.klerk.job.JobsSpecification
 import dev.klerkframework.klerk.job.PluginJobsBlock
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
@@ -40,60 +41,53 @@ import kotlin.time.Instant
 internal val logger = KotlinLogging.logger {}
 
 /**
- * The fully-built, immutable configuration of a Klerk instance. Built via [ConfigBuilder.build] (typically through
- * `ConfigBuilder(views).build { ... }`), then passed to [Klerk.Companion.create].
+ * What the application *is*: its models and state machines, the events they accept, who is allowed to do what, the
+ * jobs it runs and how its data evolves. Built via [SpecificationBuilder.build] (typically through
+ * `SpecificationBuilder(views).build { ... }`), then passed to [Klerk.Companion.create] together with a
+ * [KlerkSettings].
+ *
+ * Nothing here varies between deployments: two instances of the same application share a specification and differ
+ * only in their settings. Where the data is stored, what the clock is and how hard the job dispatcher works are
+ * therefore in [KlerkSettings], not here.
  *
  * Most of the functions on this class are introspection helpers used internally by the framework (validation,
  * the JSON serializer, `klerk-web`/`klerk-graphql`) to look up state machines, events and views by reference.
  * Application code normally doesn't need to call them directly.
  */
-public data class Config<C : KlerkContext, V>(
+public data class Specification<C : KlerkContext, V>(
     public val views: V,
     public val authorization: AuthorizationConfig<C, V>,
-    public val meterRegistry: MeterRegistry,
     val managedModels: Set<ManagedModel<*, *, C, V>>,
-    val persistence: Persistence,
-    /**
-     * Where the bytes of attached blobs are kept. If null, the config cannot declare any [AttachedBlobID] anywhere.
-     */
-    val attachedBlobStore: AttachedBlobStore? = null,
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
     val systemContextProvider: ((SystemIdentity) -> C),
-    /**
-     * Where *background* work gets the current time from: job scheduling, retry backoff, cron, delay-based admission
-     * and state-machine time triggers.
-     *
-     * Actor-driven work reads its time from the caller's [KlerkContext.time] instead and is unaffected by this. The
-     * split is deliberate: a test can control actor-driven time simply by constructing a context, and this clock is
-     * how it controls everything else. See [dev.klerkframework.klerk.misc.MutableClock].
-     */
-    val clock: Clock = Clock.System,
-    /** The job module's configuration, built by `ConfigBuilder.jobs { ... }`. */
-    val jobs: JobsConfig<C, V> = JobsConfig.empty(),
+    /** The job types and cron schedules this application declares, built by `SpecificationBuilder.jobs { ... }`. */
+    val jobs: JobsSpecification<C, V> = JobsSpecification.empty(),
     /**
      * Builds the context a job step runs under. Optional; when absent, [systemContextProvider] is used.
      *
      * Configure it if you use [dev.klerkframework.klerk.job.JobAgent.Scheduler] (which needs a context for an actor
-     * other than the system), or if you want a job step's `context.time` to come from [clock] — which is what makes
-     * a job's own view of time controllable in tests.
+     * other than the system), or if you want a job step's `context.time` to come from [KlerkSettings.clock] — which
+     * is what makes a job's own view of time controllable in tests.
      */
     val jobContextProvider: ((JobContextRequest) -> C)? = null,
+    /**
+     * Whether the audit log of a model is erased when the model is deleted. A requirement about the application (a
+     * privacy promise, typically), which is why it lives here and not in [KlerkSettings].
+     *
+     * Only `null` (never erase, the default) and [Duration.ZERO] (erase immediately on model deletion) are
+     * currently supported; any other value is rejected on startup.
+     */
+    val eraseAuditLogAfterModelDeletion: Duration? = null,
 ) {
     internal lateinit var gson: Gson
 
-    internal fun initialize(): Unit {
-        validate()
+    internal fun initialize(settings: KlerkSettings): Unit {
+        validate(settings)
         gson = createGson(this)
         validateMigrations()
         managedModels.map { it.stateMachine.onKlerkStart(this) }
     }
-
-    /**
-     * The current time for background work, at the precision Klerk persists timestamps with (see
-     * [makeExactSerializable]), so that a value read here survives a round-trip through storage unchanged.
-     */
-    internal fun now(): Instant = makeExactSerializable(clock.now())
 
     private fun validateMigrations() {
         migrationSteps.forEach {
@@ -106,14 +100,17 @@ public data class Config<C : KlerkContext, V>(
         }
     }
 
-    private fun validate() {
+    private fun validate(settings: KlerkSettings) {
         modelsMustHavePropertiesOfDataContainer()
         parametersWithReferencesMustHaveCollectionValidation()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
         schedulerJobsMustHaveAJobContextProvider()
-        attachedBlobStoreMustMatchDeclarations()
+        attachedBlobStoreMustMatchDeclarations(settings.attachedBlobStore)
+        require(eraseAuditLogAfterModelDeletion == null || eraseAuditLogAfterModelDeletion == Duration.ZERO) {
+            "eraseAuditLogAfterModelDeletion can only be null or zero"
+        }
         blobContainersMustDeclareAPreAttachStep()
         stringsMustBeDeclaredInAContainer()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
@@ -135,7 +132,7 @@ public data class Config<C : KlerkContext, V>(
             KlerkErrorCode.MissingJobContextProvider,
             "The job type(s) ${needsOne.joinToString(", ") { "'${it.name.value}'" }} run as JobAgent.Scheduler, " +
                     "which means their commands are applied as the actor that scheduled them. Klerk therefore needs " +
-                    "'jobContextProvider(...)' in the config to build a context for that actor."
+                    "'jobContextProvider(...)' in the specification to build a context for that actor."
         )
     }
 
@@ -143,7 +140,7 @@ public data class Config<C : KlerkContext, V>(
      * Where blob bytes are kept decides what a database backup contains, and Klerk cannot guess it. An application
      * that declares a blob anywhere must say; one that declares none needs no store at all.
      */
-    private fun attachedBlobStoreMustMatchDeclarations() {
+    private fun attachedBlobStoreMustMatchDeclarations(attachedBlobStore: AttachedBlobStore?) {
         val bare = declaredAttachedDataProperties(AttachedDataDeclaration.BareBlobId)
         if (bare.isNotEmpty()) {
             throw IllegalConfigurationException(
@@ -169,7 +166,7 @@ public data class Config<C : KlerkContext, V>(
         if (attachedBlobStore == null) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingAttachedBlobStore,
-                "$where holds a blob, so 'attachedBlobStore(...)' is required in the config. Choose " +
+                "$where holds a blob, so 'attachedBlobStore' is required in KlerkSettings. Choose " +
                         "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
                         "keep them on disk. Pick before you have data: Klerk does not move blobs between stores."
             )
@@ -177,7 +174,7 @@ public data class Config<C : KlerkContext, V>(
         if (attachedBlobStore == AttachedBlobStore.None) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.AttachedBlobStoreIsNone,
-                "The config says attachedBlobStore(None), which means this application has no blobs, but $where " +
+                "The settings say attachedBlobStore = None, which means this application has no blobs, but $where " +
                         "holds one."
             )
         }
@@ -415,7 +412,7 @@ public data class Config<C : KlerkContext, V>(
     }
 
     /**
-     * The model classes registered via `managedModels { model(...) }` when the config was built.
+     * The model classes registered via `managedModels { model(...) }` when the specification was built.
      */
     public fun getManagedClasses(): Set<KClass<out Any>> {
         return managedModels.map { it.kClass }.toSet()
@@ -598,10 +595,10 @@ public data class Config<C : KlerkContext, V>(
 
     /**
      * The same configuration with a plugin's own job types and crons added, for use from
-     * [KlerkPlugin.mergeConfig]:
+     * [KlerkPlugin.mergeSpecification]:
      *
      * ```kotlin
-     * override fun mergeConfig(previous: Config<C, V>): Config<C, V> =
+     * override fun mergeSpecification(previous: Specification<C, V>): Specification<C, V> =
      *     previous.withJobs {
      *         register(sweepStagingArea)
      *         cron(sweepStagingArea, "0 * * * *") { cursor = "" }
@@ -613,17 +610,17 @@ public data class Config<C : KlerkContext, V>(
      *
      * @throws IllegalArgumentException if a job name is already registered — prefix names with the plugin's own.
      */
-    public fun withJobs(init: PluginJobsBlock<C, V>.() -> Unit): Config<C, V> {
+    public fun withJobs(init: PluginJobsBlock<C, V>.() -> Unit): Specification<C, V> {
         val block = JobsBlock<C, V>()
         block.seedFrom(jobs)
         PluginJobsBlock(block).init()
         return copy(jobs = jobs.with(block.types(), block.crons()))
     }
 
-    public fun withPlugin(plugin: KlerkPlugin<C, V>): Config<C, V> {
+    public fun withPlugin(plugin: KlerkPlugin<C, V>): Specification<C, V> {
         val updatedPlugins = plugins.toMutableList()
         updatedPlugins.add(plugin)
-        return plugin.mergeConfig(this).copy(plugins = updatedPlugins)
+        return plugin.mergeSpecification(this).copy(plugins = updatedPlugins)
     }
 
     /**
@@ -639,7 +636,7 @@ public data class Config<C : KlerkContext, V>(
 }
 
 /**
- * The assembled authorization rule sets, one property per category. Built by [ConfigBuilder.authorization]; not
+ * The assembled authorization rule sets, one property per category. Built by [SpecificationBuilder.authorization]; not
  * meant to be constructed directly by application code.
  */
 public data class AuthorizationConfig<C : KlerkContext, V>(
@@ -660,54 +657,50 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
 )
 
 @DslMarker
-internal annotation class ConfigMarker
+internal annotation class SpecificationMarker
 
 /**
- * DSL entry point for building a [Config]. Typical usage:
+ * DSL entry point for building a [Specification]. Typical usage:
  * ```
- * val config = ConfigBuilder<MyContext, MyViews>(views).build {
- *     persistence(...)
+ * val specification = SpecificationBuilder<MyContext, MyViews>(views).build {
  *     systemContextProvider { SystemIdentity -> ... }
  *     managedModels { model(MyModel::class, myModelStateMachine, myModelViews) }
  *     authorization { ... }
  * }
  * ```
- * [persistence], [systemContextProvider], [managedModels] and [authorization] are all required; [build] throws
- * [IllegalConfigurationException] if any is missing. [migrations] and [micrometerRegistry] are optional.
+ * [systemContextProvider], [managedModels] and [authorization] are all required; [build] throws
+ * [IllegalConfigurationException] if any is missing. [migrations] and [jobs] are optional.
+ *
+ * Where the data is stored, what the clock is and how the job dispatcher is tuned are not part of the specification
+ * — they go in [KlerkSettings].
  */
-@ConfigMarker
-public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
+@SpecificationMarker
+public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     /**
-     * Runs [init] against this builder and assembles the resulting [Config].
+     * Runs [init] against this builder and assembles the resulting [Specification].
      *
-     * @throws IllegalConfigurationException if [persistence], [systemContextProvider], [authorization] or
-     * [managedModels] was not called inside [init]
+     * @throws IllegalConfigurationException if [systemContextProvider], [authorization] or [managedModels] was not
+     * called inside [init]
      */
-    public fun build(init: ConfigBuilder<C, V>.() -> Unit): Config<C, V> {
+    public fun build(init: SpecificationBuilder<C, V>.() -> Unit): Specification<C, V> {
         this.init()
         runCatching { systemContextProviderValue }.onFailure {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingSystemContextProvider,
-                "'systemContextProvider' is missing in the config"
-            )
-        }
-        runCatching { persistenceValue }.onFailure {
-            throw IllegalConfigurationException(
-                KlerkErrorCode.MissingPersistence,
-                "'persistence' is missing in the config"
+                "'systemContextProvider' is missing in the specification"
             )
         }
         runCatching { authorizationRulesBlock }.onFailure {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingAuthorization,
-                "'authorization' is missing in the config"
+                "'authorization' is missing in the specification"
             )
         }
         runCatching { managedModelsValue }.onFailure {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingManagedModels,
-                "'managedModels' is missing in the config"
+                "'managedModels' is missing in the specification"
             )
         }
 
@@ -722,7 +715,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
          */
 
-        return Config(
+        return Specification(
             views = views,
             authorization = AuthorizationConfig(
                 readModelPositiveRules = authorizationRulesBlock.readModelPositiveRules,
@@ -740,54 +733,34 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
                 jobPositiveRules = authorizationRulesBlock.jobPositiveRules,
                 jobNegativeRules = authorizationRulesBlock.jobNegativeRules,
             ),
-            meterRegistry = registry,
             managedModels = managedModelsValue,
-            persistence = persistenceValue,
-            attachedBlobStore = attachedBlobStoreValue,
             migrationSteps = migrationStepsValue,
             systemContextProvider = systemContextProviderValue,
-            clock = clockValue,
             jobs = jobsValue,
             jobContextProvider = jobContextProviderValue,
+            eraseAuditLogAfterModelDeletion = eraseAuditLogValue,
         )
     }
 
     private var migrationStepsValue: SortedSet<MigrationStep> = sortedSetOf()
-    private var registry: MeterRegistry = SimpleMeterRegistry()
-    private var clockValue: Clock = Clock.System
-    private var jobsValue: JobsConfig<C, V> = JobsConfig.empty()
+    private var jobsValue: JobsSpecification<C, V> = JobsSpecification.empty()
     private var jobContextProviderValue: ((JobContextRequest) -> C)? = null
+    private var eraseAuditLogValue: Duration? = null
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
-    private lateinit var persistenceValue: Persistence
-    private var attachedBlobStoreValue: AttachedBlobStore? = null
     private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
     /**
-     * The storage backend to use (e.g. [dev.klerkframework.klerk.storage.SqlPersistence]). Required.
+     * Erases the audit log of a model when the model is deleted. Only [Duration.ZERO] (erase immediately) is
+     * currently supported; the default is to never erase.
      */
-    public fun persistence(persistence: Persistence) {
-        persistenceValue = persistence
-    }
-
-    /**
-     * Where the bytes of attached blobs are kept: [AttachedBlobStore.Database],
-     * [dev.klerkframework.klerk.storage.FileBlobStore] or [AttachedBlobStore.None].
-     *
-     * Required as soon as any model property or event parameter is an [AttachedBlobID] — the choice decides what a
-     * database backup contains, so Klerk will not pick one for you. Attached *strings* are unaffected; they always
-     * live in the database.
-     *
-     * Choose before the application has data: Klerk does not move blobs between stores, and refuses to start if the
-     * configured store does not have the bytes it expects.
-     */
-    public fun attachedBlobStore(store: AttachedBlobStore) {
-        attachedBlobStoreValue = store
+    public fun eraseAuditLogAfterModelDeletion(after: Duration) {
+        eraseAuditLogValue = after
     }
 
     /**
      * Registers the [MigrationStep]s used to evolve model shapes across schema versions. Steps are reordered by
-     * [MigrationStep.migratesToVersion]; [Config] additionally requires them to form a contiguous chain starting at
+     * [MigrationStep.migratesToVersion]; [Specification] additionally requires them to form a contiguous chain starting at
      * version 2 (version 1 is implicit). Optional — omit if the schema has never changed.
      */
     public fun migrations(migrationSteps: Set<MigrationStep>) {
@@ -842,18 +815,6 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     /**
-     * The clock background work reads the time from — job scheduling, retry backoff, cron, delay-based admission and
-     * state-machine time triggers. Optional; defaults to [Clock.System].
-     *
-     * Set it to a [dev.klerkframework.klerk.misc.MutableClock] in tests to make everything time-dependent
-     * deterministic. Note that it does *not* affect the time seen by commands and reads, which comes from the caller's
-     * [KlerkContext.time].
-     */
-    public fun clock(clock: Clock) {
-        clockValue = clock
-    }
-
-    /**
      * Builds the context each job step runs under, from the job's agent, the configured clock and the job itself.
      * Optional; without it, [systemContextProvider] is used and the job runs as the system.
      *
@@ -870,7 +831,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         jobContextProviderValue = provider
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class ManagedModelsBlock<C : KlerkContext, V> {
 
         internal val value = mutableSetOf<ManagedModel<*, *, C, V>>()
@@ -878,7 +839,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         /**
          * Registers [clazz] as a managed model with its [stateMachine] and [view] (the [ModelViews] holding its
          * collections). [clazz] must be a data class with only `val` properties, each of a [DataContainer] type (or
-         * a collection thereof); every managed model's simple name must be unique within the config.
+         * a collection thereof); every managed model's simple name must be unique within the specification.
          *
          * @throws IllegalArgumentException if [clazz] has a `var` property or a property that isn't a [DataContainer]
          * @throws IllegalArgumentException if another managed model already has the same simple name
@@ -901,7 +862,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
      * pair. A category with no rules denies everything in it. See the "Authorization" doc for how positive/negative
      * rules combine, or [insecureAllowEverything] to disable authorization for development.
      */
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationRulesBlock<C : KlerkContext, V> {
 
         internal val readModelPositiveRules =
@@ -1019,7 +980,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
-         * Returns an `init` block for [ConfigBuilder.authorization] that allows every actor to do everything (read
+         * Returns an `init` block for [SpecificationBuilder.authorization] that allows every actor to do everything (read
          * all models/properties/event log/attached data, trigger all commands). Logs a warning when applied.
          *
          * For development/testing only — never use in production.
@@ -1098,7 +1059,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadRulesBlock<C : KlerkContext, V> {
 
         internal lateinit var positiveBlock: AuthorizationReadPositiveRulesBlock<C, V>
@@ -1116,7 +1077,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
@@ -1126,7 +1087,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
@@ -1137,7 +1098,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     // properties
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadPropertiesRulesBlock<C : KlerkContext, V> {
 
         internal lateinit var positiveBlock: AuthorizationReadPropertyPositiveRulesBlock<C, V>
@@ -1155,7 +1116,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadPropertyPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
@@ -1165,7 +1126,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationReadPropertyNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
@@ -1176,7 +1137,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     // attached data
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataReadRulesBlock<C : KlerkContext, V> {
 
         internal lateinit var positiveBlock: AuthorizationAttachedDataReadPositiveRulesBlock<C, V>
@@ -1193,7 +1154,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataReadPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> PositiveAuthorization>()
 
@@ -1202,7 +1163,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataReadNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization>()
 
@@ -1211,7 +1172,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataWriteRulesBlock<C : KlerkContext, V> {
 
         internal lateinit var positiveBlock: AuthorizationAttachedDataWritePositiveRulesBlock<C, V>
@@ -1228,7 +1189,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataWritePositiveRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization>()
 
@@ -1237,7 +1198,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationAttachedDataWriteNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization>()
 
@@ -1247,7 +1208,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     // jobs
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationJobRulesBlock<C : KlerkContext, V> {
 
         internal lateinit var positiveBlock: AuthorizationJobPositiveRulesBlock<C, V>
@@ -1264,7 +1225,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationJobPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> PositiveAuthorization>()
 
@@ -1273,7 +1234,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationJobNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> NegativeAuthorization>()
 
@@ -1283,7 +1244,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     // events
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventsRulesBlock<C : KlerkContext, V> {
         internal lateinit var positiveBlock: AuthorizationEventsPositiveRulesBlock<C, V>
         internal lateinit var negativeBlock: AuthorizationEventsNegativeRulesBlock<C, V>
@@ -1299,7 +1260,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventsPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
@@ -1310,7 +1271,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
 
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventsNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
@@ -1320,7 +1281,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventLogRulesBlock<C : KlerkContext, V> {
         internal lateinit var positiveBlock: AuthorizationEventLogPositiveRulesBlock<C, V>
         internal lateinit var negativeBlock: AuthorizationEventLogNegativeRulesBlock<C, V>
@@ -1336,7 +1297,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventLogPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
@@ -1346,7 +1307,7 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         }
     }
 
-    @ConfigMarker
+    @SpecificationMarker
     public class AuthorizationEventLogNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
             mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
@@ -1354,14 +1315,6 @@ public class ConfigBuilder<C : KlerkContext, V>(private val views: V) {
         public fun rule(function: (args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
             rules.add(function)
         }
-    }
-
-    /**
-     * The [MeterRegistry] Klerk publishes metrics to. Optional — defaults to a private [SimpleMeterRegistry] that
-     * isn't exported anywhere, so set this to integrate with your application's metrics backend.
-     */
-    public fun micrometerRegistry(registry: MeterRegistry) {
-        this.registry = registry
     }
 
 }
@@ -1397,15 +1350,52 @@ private fun <T : Any> validateModelClass(clazz: KClass<T>) {
 }
 
 /**
- * Runtime settings for a [Klerk] instance, passed to [Klerk.Companion.create] alongside [Config].
+ * How *this instance* runs: where it stores its data, what it reads the time from, where it publishes metrics and how
+ * hard the job dispatcher works. Passed to [Klerk.Companion.create] alongside the [Specification].
+ *
+ * Two deployments of the same application share a [Specification] and differ here. Nothing in this class changes what
+ * the application does, only how it is operated — the one thing that does, whether the audit log is erased on
+ * deletion, is [Specification.eraseAuditLogAfterModelDeletion].
  */
 public data class KlerkSettings(
 
     /**
-     * Only `null` (never erase, the default) and [Duration.ZERO] (erase immediately on model deletion) are
-     * currently supported; any other value is rejected on startup.
+     * The storage backend this instance uses, e.g. [dev.klerkframework.klerk.storage.SqlPersistence] in production
+     * and [dev.klerkframework.klerk.storage.RamStorage] in a test.
      */
-    val eraseAuditLogAfterModelDeletion: Duration? = null,
+    val persistence: Persistence,
+
+    /**
+     * Where the bytes of attached blobs are kept: [AttachedBlobStore.Database],
+     * [dev.klerkframework.klerk.storage.FileBlobStore] or [AttachedBlobStore.None].
+     *
+     * Required as soon as any model property or event parameter is an [AttachedBlobID] — the choice decides what a
+     * database backup contains, so Klerk will not pick one for you. Attached *strings* are unaffected; they always
+     * live in the database.
+     *
+     * Choose before the application has data: Klerk does not move blobs between stores, and refuses to start if the
+     * configured store does not have the bytes it expects.
+     */
+    val attachedBlobStore: AttachedBlobStore? = null,
+
+    /**
+     * Where *background* work gets the current time from: job scheduling, retry backoff, cron, delay-based admission
+     * and state-machine time triggers.
+     *
+     * Actor-driven work reads its time from the caller's [KlerkContext.time] instead and is unaffected by this. The
+     * split is deliberate: a test can control actor-driven time simply by constructing a context, and this clock is
+     * how it controls everything else. See [dev.klerkframework.klerk.misc.MutableClock].
+     */
+    val clock: Clock = Clock.System,
+
+    /**
+     * The [MeterRegistry] Klerk publishes metrics to. Defaults to a private [SimpleMeterRegistry] that isn't exported
+     * anywhere, so set this to integrate with your application's metrics backend.
+     */
+    val meterRegistry: MeterRegistry = SimpleMeterRegistry(),
+
+    /** How the job module is operated: parallelism, polling, retention and retry backoff. */
+    val jobs: JobSettings = JobSettings(),
 
     /**
      * Gates the "escape hatch" functions on [KlerkModels] ([KlerkModels.unsafeCreate], [KlerkModels.unsafeUpdate],
@@ -1433,7 +1423,14 @@ public data class KlerkSettings(
      * signatures; replace it to recognise more formats, e.g. with a detector backed by Apache Tika.
      */
     val contentTypeDetector: ContentTypeDetector = DefaultContentTypeDetector,
-)
+) {
+
+    /**
+     * The current time for background work, at the precision Klerk persists timestamps with (see
+     * [makeExactSerializable]), so that a value read here survives a round-trip through storage unchanged.
+     */
+    internal fun now(): Instant = makeExactSerializable(clock.now())
+}
 
 /**
  * Converts a camelCase identifier (e.g. a validation rule or function name) to a human-readable phrase, e.g.

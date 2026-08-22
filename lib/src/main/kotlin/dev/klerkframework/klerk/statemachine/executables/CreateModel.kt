@@ -19,7 +19,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         args: ArgForVoidEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
         val Any = f(args)
@@ -42,7 +42,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         if (referenceProblem != null) {
             throw referenceProblem.asException()
         }
-        val sm = config.getStateMachine(created)
+        val sm = specification.getStateMachine(created)
         val voidExitBlock = sm.voidState.exitBlock
         val enterBlock = sm.mutableStates.single { it.name == initialState.name }.enterBlock
         return ProcessingData(

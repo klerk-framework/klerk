@@ -130,19 +130,19 @@ class CompressedAsset(id: AttachedBlobID) : AttachedBlobContainer(id) {
 
 `noPreAttachProcessing` must then be the only step, and it costs nothing at all: no job is scheduled, `awaitProcessing`
 returns immediately, and attaching never reads the value. A container that declares an empty list is refused when the
-config is built.
+the specification is built.
 
 ## Where blob bytes are kept
 
 Strings always live in the database. For blobs you choose, because the choice decides what a database backup contains:
 
 ```kotlin
-ConfigBuilder<Ctx, Views>(views).build {
-    persistence(SqlPersistence(dataSource))
-    attachedBlobStore(AttachedBlobStore.Database)          // in the row, alongside everything else
-    // attachedBlobStore(FileBlobStore(Path("/var/lib/myapp/blobs")))
-    // attachedBlobStore(AttachedBlobStore.None)           // this application has no blobs
-}
+KlerkSettings(
+    persistence = SqlPersistence(dataSource),
+    attachedBlobStore = AttachedBlobStore.Database,          // in the row, alongside everything else
+    // attachedBlobStore = FileBlobStore(Path("/var/lib/myapp/blobs")),
+    // attachedBlobStore = AttachedBlobStore.None,           // this application has no blobs
+)
 ```
 
 |                             | `Database`                                                                                            | `FileBlobStore`                     | `None`  |
@@ -331,7 +331,7 @@ deletes the data once no property of that model refers to it any more.
 
 ## Authorization
 
-You declare the rules for reading and writing attached data in the config, as usual — in the `readAttachedData` and
+You declare the rules for reading and writing attached data in the specification, as usual — in the `readAttachedData` and
 `writeAttachedData` blocks of `authorization` (see [authorization](authorization.md)). The rules receive a `Reader`, so
 they can look up whatever they need — including the actor from the context and, when reading, the model that owns the
 data.

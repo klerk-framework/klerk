@@ -16,16 +16,16 @@ internal class InstanceNonEventTransitionWhen<ModelStates : Enum<*>, T : Any, C 
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>
     ): ProcessingData<Primary, C, V> {
         branches.forEach { (condition, targetState) ->
             if (condition.invoke(args)) {
-                return transition(targetState, args.model, args.time, config, view)
+                return transition(targetState, args.model, args.time, specification, view)
             }
         }
         if (otherwise != null) {
-            return transition(otherwise, args.model, args.time, config, view)
+            return transition(otherwise, args.model, args.time, specification, view)
         }
         return ProcessingData()
     }
@@ -43,16 +43,16 @@ internal class InstanceEventTransitionWhen<ModelStates : Enum<*>, T : Any, P, C 
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>
     ): ProcessingData<Primary, C, V> {
         branches.forEach { (condition, targetState) ->
             if (condition.invoke(args)) {
-                return transition(targetState, args.model, args.context.time, config, view)
+                return transition(targetState, args.model, args.context.time, specification, view)
             }
         }
         if (otherwise != null) {
-            return transition(otherwise, args.model, args.context.time, config, view)
+            return transition(otherwise, args.model, args.context.time, specification, view)
         }
         return ProcessingData()
     }
@@ -65,13 +65,13 @@ private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V>
     targetState: ModelStates,
     model: Model<T>,
     time: Instant,
-    config: Config<C, V>,
+    specification: Specification<C, V>,
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
-    val exitBlock = config.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
+    val exitBlock = specification.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = makeExactSerializable(time))
     val enterBlock =
-        config.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
+        specification.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 
     // note that we will not update modifiedModel now since we must first execute any exit block using the model as it
     // currently is.

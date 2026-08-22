@@ -31,7 +31,7 @@ class AttachedBlobStoreTest {
     private suspend fun start(storage: Persistence, store: AttachedBlobStore): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, blobStore = store))
+        val klerk = createKlerk(collections, storage, blobStore = store)
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -56,29 +56,32 @@ class AttachedBlobStoreTest {
     }
 
     @Test
-    fun `A config that declares a blob must say where the bytes go`() {
+    fun `A specification that declares a blob must say where the bytes go`() {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val config = ConfigBuilder<Ctx, Views>(collections).build {
+        val specification = SpecificationBuilder<Ctx, Views>(collections).build {
             managedModels {
                 model(Book::class, bookStateMachine(collections), collections.books)
                 model(Author::class, authorStateMachine(collections), collections.authors)
             }
             apply(generousAuthRules())
-            persistence(RamStorage())
             systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
         }
-        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        val e = assertFailsWith<IllegalConfigurationException> {
+            Klerk.create(specification, KlerkSettings(persistence = RamStorage()))
+        }
         assertEquals(KlerkErrorCode.MissingAttachedBlobStore, e.code)
         assertTrue(e.message!!.contains("Author.picture"), e.message!!)
     }
 
     @Test
-    fun `None is refused when the config declares a blob`() {
+    fun `None is refused when the specification declares a blob`() {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val config = createConfig(collections, RamStorage(), blobStore = AttachedBlobStore.None)
-        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        val specification = createConfig(collections)
+        val e = assertFailsWith<IllegalConfigurationException> {
+            Klerk.create(specification, testSettings(blobStore = AttachedBlobStore.None))
+        }
         assertEquals(KlerkErrorCode.AttachedBlobStoreIsNone, e.code)
     }
 
@@ -125,13 +128,9 @@ class AttachedBlobStoreTest {
     @Test
     fun `A lease keeps data alive longer than the default minute`() = runBlocking {
         val klerk = Klerk.create(
-            createConfig(
-                Views(BookViews(), AuthorViews(BookViews().all)),
-                RamStorage(),
-                blobStore = AttachedBlobStore.Database,
-            ),
+            createConfig(Views(BookViews(), AuthorViews(BookViews().all))),
             // an unclaimed value normally dies almost immediately here
-            KlerkSettings(unclaimedAttachedDataLifetime = 1.milliseconds),
+            testSettings().copy(unclaimedAttachedDataLifetime = 1.milliseconds),
         )
         klerk.meta.start(installShutdownHook = false)
 
@@ -195,7 +194,7 @@ class AttachedBlobStoreTest {
         createAuthorWithPicture(klerk, id)
 
         // read back through the row rather than from the in-memory entry
-        val row = requireNotNull(klerk.config.persistence.readAllAttachedDataMetadata()[id.id])
+        val row = requireNotNull(klerk.settings.persistence.readAllAttachedDataMetadata()[id.id])
         assertEquals("image/png", row.metadata.contentType)
         assertEquals(mapOf("origin" to "camera"), row.metadata.custom)
         klerk.meta.stop()

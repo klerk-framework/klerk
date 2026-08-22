@@ -79,7 +79,7 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
      */
     private suspend fun processQueue(): Boolean {
         // Time triggers are background work, so they follow the configured clock rather than the wall clock.
-        val now = klerk.config.now()
+        val now = klerk.settings.now()
         val next = timeTriggers.peek()
         if (next == null || next.instant > now) {
             return false

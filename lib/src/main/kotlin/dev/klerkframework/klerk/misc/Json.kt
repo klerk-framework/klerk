@@ -10,15 +10,15 @@ import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.jvmErasure
 import kotlin.time.Duration.Companion.microseconds
 
-internal fun <V, C : KlerkContext> createGson(config: Config<C, V>): Gson {
+internal fun <V, C : KlerkContext> createGson(specification: Specification<C, V>): Gson {
 
-    val valueClasses = config.managedModels
+    val valueClasses = specification.managedModels
         .flatMap { it.stateMachine.getAllEvents() }
-        .flatMap { config.getParameters(it)?.all ?: emptyList() }
+        .flatMap { specification.getParameters(it)?.all ?: emptyList() }
         .flatMap { extractValueClasses(it.valueClass) }
         .toMutableSet()
 
-    val fromModels = config.managedModels.map { it.kClass }.flatMap { extractValueClasses(it) }
+    val fromModels = specification.managedModels.map { it.kClass }.flatMap { extractValueClasses(it) }
     valueClasses.addAll(fromModels)
 
     return GsonBuilder()

@@ -83,7 +83,7 @@ public data class AttachedDataClaim(
  * Storage backend SPI: implement this to durably store models, the audit log, jobs and attached data. Klerk owns the
  * schema; implementations only need to persist and retrieve the shapes below. Provided implementations are
  * [dev.klerkframework.klerk.storage.SqlPersistence] and [RamStorage]. Wire an instance in via
- * `ConfigBuilder.persistence(...)`.
+ * `SpecificationBuilder.persistence(...)`.
  */
 public interface Persistence {
     /** The schema version currently stored (see [dev.klerkframework.klerk.migration.MigrationStep]). */
@@ -144,7 +144,7 @@ public interface Persistence {
     ): Iterable<AuditEntry>
 
     public fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit
-    public fun setConfig(config: Config<*, *>): Unit
+    public fun setSpecification(specification: Specification<*, *>): Unit
     public fun migrate(migrations: List<MigrationStep>): Unit
 
     /**
@@ -258,9 +258,9 @@ public interface Persistence {
  * Keeps all data in memory. Should only be used for testing.
  */
 public open class RamStorage : Persistence {
-    // Set by setConfig with the app's configured Gson (which knows how to serialize Klerk's own data types) once
+    // Set by setSpecification with the app's configured Gson (which knows how to serialize Klerk's own data types) once
     // Klerk starts. Left uninitialized when RamStorage is used standalone, e.g. in a test that never calls
-    // setConfig -- createAuditEntry falls back to an empty params string in that case.
+    // setSpecification -- createAuditEntry falls back to an empty params string in that case.
     private lateinit var gson: Gson
     private val auditLog = mutableSetOf<AuditEntry>()
     private val models = mutableMapOf<Int, Model<Any>>()
@@ -364,8 +364,8 @@ public open class RamStorage : Persistence {
         }
     }
 
-    override fun setConfig(config: Config<*, *>) {
-        this.gson = config.gson
+    override fun setSpecification(specification: Specification<*, *>) {
+        this.gson = specification.gson
     }
 
     override fun migrate(migrations: List<MigrationStep>) {

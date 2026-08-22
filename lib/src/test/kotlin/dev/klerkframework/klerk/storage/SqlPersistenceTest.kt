@@ -18,8 +18,8 @@ class SqlPersistenceTest {
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
         val persistence = SQLiteInMemory.create()
-        val config = createConfig(collections, persistence)
-        var klerk = Klerk.create(config)
+        val specification = createConfig(collections)
+        var klerk = Klerk.create(specification, testSettings(persistence))
         runBlocking {
             klerk.meta.start()
 
@@ -39,7 +39,7 @@ class SqlPersistenceTest {
             val authorRef = requireNotNull(result.orThrow().primaryModel)
             val autorFirstRun = klerk.read(Ctx.system()) { get(authorRef) }
             klerk.meta.stop()
-            klerk = Klerk.create(config)
+            klerk = Klerk.create(specification, testSettings(persistence))
             klerk.meta.start()
             val authorSecondRun = klerk.read(Ctx.system()) { get(authorRef) }
             assertEquals(autorFirstRun, authorSecondRun)

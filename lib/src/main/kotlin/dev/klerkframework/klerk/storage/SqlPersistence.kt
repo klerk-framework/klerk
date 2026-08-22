@@ -51,12 +51,12 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private val database: Database
     override var currentModelSchemaVersion: Int = 0
     private val logger = KotlinLogging.logger {}
-    private lateinit var config: Config<*, *>
+    private lateinit var specification: Specification<*, *>
     private lateinit var gson: Gson
     private val mapType = object : TypeToken<Map<String, Any>>() {}.type
 
     // The application's own metadata for attached data is a plain string map, so it needs none of the DataContainer
-    // adapters in config.gson. Keeping it separate also means it does not depend on setConfig having run.
+    // adapters in specification.gson. Keeping it separate also means it does not depend on setSpecification having run.
     private val plainGson = Gson()
     private val stringMapType = object : TypeToken<Map<String, String>>() {}.type
 
@@ -183,7 +183,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit {
         val modelClasses = mutableMapOf<String, KClass<out Any>>()
-        config.managedModels.forEach {
+        specification.managedModels.forEach {
             modelClasses[it.kClass.simpleName!!] = it.kClass
         }
 
@@ -275,9 +275,9 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun setConfig(config: Config<*, *>) {
-        this.config = config
-        this.gson = config.gson
+    override fun setSpecification(specification: Specification<*, *>) {
+        this.specification = specification
+        this.gson = specification.gson
     }
 
     override fun migrate(migrations: List<MigrationStep>) {

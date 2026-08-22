@@ -26,11 +26,14 @@ open class AttachedDataTest {
 
     private suspend fun start(
         storage: Persistence = RamStorage(),
-        settings: KlerkSettings = KlerkSettings()
+        tweakSettings: (KlerkSettings) -> KlerkSettings = { it },
     ): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, blobStore = blobStore), settings)
+        val klerk = Klerk.create(
+            createConfig(collections),
+            tweakSettings(testSettings(storage, blobStore = blobStore)),
+        )
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -110,7 +113,7 @@ open class AttachedDataTest {
 
     @Test
     fun `The content type detector is pluggable via KlerkSettings`() = runBlocking {
-        val klerk = start(settings = KlerkSettings(contentTypeDetector = ContentTypeDetector { "application/x-custom" }))
+        val klerk = start { it.copy(contentTypeDetector = ContentTypeDetector { "application/x-custom" }) }
         val id = klerk.attachedData.prepare(blob("a portrait"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
@@ -321,7 +324,7 @@ open class AttachedDataTest {
 
     @Test
     fun `Unclaimed data disappears when it expires`() = runBlocking {
-        val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 1.milliseconds))
+        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 1.milliseconds) }
         val id = klerk.attachedData.prepare(blob("too slow"), AuthorPicture::class, Ctx.system())
         Thread.sleep(30)
 
@@ -334,7 +337,7 @@ open class AttachedDataTest {
 
     @Test
     fun `A context clock in the future does not extend the claim window`() = runBlocking {
-        val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 1.milliseconds))
+        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 1.milliseconds) }
         val distantFuture = Ctx(SystemIdentity, time = Clock.System.now().plus(365.days))
         val id = klerk.attachedData.prepare(blob("no time travel"), AuthorPicture::class, distantFuture)
         Thread.sleep(30)
@@ -346,7 +349,7 @@ open class AttachedDataTest {
 
     @Test
     fun `A context clock in the past does not shorten the claim window`() = runBlocking {
-        val klerk = start(settings = KlerkSettings(unclaimedAttachedDataLifetime = 10.minutes))
+        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 10.minutes) }
         val distantPast = Ctx(SystemIdentity, time = Clock.System.now().minus(365.days))
         val id = klerk.attachedData.prepare(blob("still here"), AuthorPicture::class, distantPast)
 
@@ -609,9 +612,9 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
-        val authorJson = klerk.config.toJson(klerk.read(Ctx.system()) { get(authorID) }.props)
+        val authorJson = klerk.specification.toJson(klerk.read(Ctx.system()) { get(authorID) }.props)
         assertTrue(authorJson.contains("\"picture\":${picture.id}"), "Unexpected JSON: $authorJson")
-        val bookJson = klerk.config.toJson(klerk.read(Ctx.system()) { get(bookID) }.props)
+        val bookJson = klerk.specification.toJson(klerk.read(Ctx.system()) { get(bookID) }.props)
         assertTrue(bookJson.contains("\"chapters\":[${chapter.id}]"), "Unexpected JSON: $bookJson")
         klerk.meta.stop()
     }

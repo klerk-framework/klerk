@@ -50,7 +50,7 @@ public data class CollectionId(val modelName: String, val shortId: String) {
 
 /**
  * Wires a model's props class to its [StateMachine] and [ModelViews]. Registered via
- * `ConfigBuilder.managedModels { model(...) }`; not normally constructed directly.
+ * `SpecificationBuilder.managedModels { model(...) }`; not normally constructed directly.
  */
 public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     val kClass: KClass<T>,
@@ -507,7 +507,7 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
  * case of "may an actor see their own jobs".
  */
 /**
- * What `ConfigBuilder.jobContextProvider` is given when a job step is about to run.
+ * What `SpecificationBuilder.jobContextProvider` is given when a job step is about to run.
  *
  * @property actor `SystemIdentity` for a [dev.klerkframework.klerk.job.JobAgent.System] job, or the actor that
  * scheduled the job for a [dev.klerkframework.klerk.job.JobAgent.Scheduler] one. Note that the latter is rebuilt from
@@ -719,14 +719,14 @@ public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
 }
 
 /**
- * A packaged extension that contributes config (managed models, events, rules, ...) to a host application.
- * [mergeConfig] should return previous augmented with the plugin's own configuration; [start] is called once
+ * A packaged extension that contributes specification (managed models, events, rules, ...) to a host application.
+ * [mergeSpecification] should return previous augmented with the plugin's own configuration; [start] is called once
  * after [KlerkMeta.start].
  */
 public interface KlerkPlugin<C : KlerkContext, V> {
     public val name: String
     public val description: String
-    public fun mergeConfig(previous: Config<C, V>): Config<C, V>
+    public fun mergeSpecification(previous: Specification<C, V>): Specification<C, V>
     public suspend fun start(klerk: Klerk<C, V>): Unit
 }
 

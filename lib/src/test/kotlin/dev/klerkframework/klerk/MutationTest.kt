@@ -16,7 +16,7 @@ class MutationTest {
 
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val config = ConfigBuilder<Ctx, Views>(collections).build {
+            val specification = SpecificationBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Author::class, authorStateMachine(collections), collections.authors)
                     model(Book::class, bookStateMachine(collections), collections.books)
@@ -44,11 +44,9 @@ class MutationTest {
                         }
                     }
                 }
-                persistence(RamStorage())
-                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
-            val klerk = Klerk.create(config)
+            val klerk = Klerk.create(specification, testSettings())
             klerk.meta.start()
             val jk = createAuthorJKRowling(klerk)
             val astrid = createAuthorAstrid(klerk)

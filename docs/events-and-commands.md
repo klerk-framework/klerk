@@ -194,7 +194,7 @@ throws `AuthorizationException` if the context isn't allowed to see the audit lo
 Every function referenced from the DSL — `event(...)`'s validation rules, `createModel`, `update`, `transitionTo`'s
 `onCondition`, and so on (see [state-machines.md](state-machines.md#the-function-arguments) and
 [validation.md](validation.md)) — is passed in by reference (`::functionName`). Nothing requires the function body
-to be finished for the DSL itself to compile and for `Klerk.create(config)` to build successfully; a stub that
+to be finished for the DSL itself to compile and for `Klerk.create(specification, settings)` to build successfully; a stub that
 throws `TODO()` is enough. This makes it practical to design top-down: sketch the full shape of a state machine
 (states, events, validation rules) first, get it reviewed, and only then fill in each function body — including
 letting an IDE generate the stub's signature from the `::functionName` reference before you've written anything.

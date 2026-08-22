@@ -14,7 +14,7 @@ data class Book(
 )
 ```
 
-You register it as a *managed model* in the config, together with its [state machine](state-machines.md) and its
+You register it as a *managed model* in the specification, together with its [state machine](state-machines.md) and its
 [views](views.md):
 
 ```kotlin
@@ -44,7 +44,7 @@ ModelID<Author>` above is how one model refers to another).
 
 ## Rules for model classes
 
-`ConfigBuilder` validates these at startup and throws `IllegalArgumentException`/`IllegalConfigurationException` if
+`SpecificationBuilder` validates these at startup and throws `IllegalArgumentException`/`IllegalConfigurationException` if
 violated:
 
 * The class must be a `data class`.

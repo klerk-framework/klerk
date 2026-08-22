@@ -18,7 +18,7 @@ internal class VoidEventCreateEvents<T : Any, P, C : KlerkContext, V>(
         args: ArgForVoidEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),
@@ -36,7 +36,7 @@ internal class InstanceNonEventCreateEvents<T : Any, C : KlerkContext, V>(
         args: ArgForInstanceNonEvent<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),
@@ -54,7 +54,7 @@ internal class InstanceEventCreateEvents<T : Any, P, C : KlerkContext, V>(
         args: ArgForInstanceEvent<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
-        config: Config<C, V>,
+        specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),

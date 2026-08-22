@@ -1,6 +1,6 @@
 # Testing
 
-Because a Klerk configuration *is* your business logic, testing it usually means testing your `Config` end-to-end:
+Because a Klerk specification *is* your business logic, testing it usually means testing your `Specification` end-to-end:
 start a real `Klerk` instance backed by in-memory storage, submit commands, and assert on the resulting models and
 `CommandResult`s. There's no need to mock Klerk itself.
 
@@ -10,7 +10,7 @@ start a real `Klerk` instance backed by in-memory storage, submit commands, and 
 runBlocking {
     val bookViews = BookViews()
     val collections = MyCollections(bookViews, AuthorViews(bookViews.all))
-    val klerk = Klerk.create(createConfig(collections, RamStorage()))
+    val klerk = Klerk.create(createSpecification(collections), KlerkSettings(persistence = RamStorage()))
     klerk.meta.start()
 
     // ... submit commands, read data, assert
@@ -18,8 +18,9 @@ runBlocking {
 ```
 
 `RamStorage()` (see [persistence.md](persistence.md)) keeps everything in memory, so each test gets a clean, throwaway
-instance — build your `Config` the same way your application does (typically via a shared `createConfig`
-helper), just pointed at `RamStorage` instead of a real database.
+instance — build your `Specification` the same way your application does (typically via a shared
+`createSpecification` helper) and change only the settings, pointing `persistence` at `RamStorage` instead of a real
+database.
 
 If you specifically need to test persistence/reload behavior, create the instance against a real
 `SqlPersistence`, run some commands, then build a **second** `Klerk` instance around the same underlying database and
@@ -91,26 +92,26 @@ For jobs, do not poll or sleep. Configure manual execution and drive the schedul
 deterministic under repeat runs:
 
 ```kotlin
-jobs { execution = JobExecution.Manual }
+KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 // ... handle the command that schedules the job ...
 klerk.jobs.runUntilIdle()
 assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(result.jobs.single(), Context.system()).status)
 ```
 
-Anything time-dependent — `scheduleAt`, retry backoff, cron — is driven by the config clock, so set a `MutableClock`
+Anything time-dependent — `scheduleAt`, retry backoff, cron — is driven by the settings clock, so set a `MutableClock`
 and advance it rather than waiting. See [jobs.md](jobs.md#testing) and [time.md](time.md).
 
-## Testing configuration mistakes
+## Testing specification mistakes
 
 Misconfigurations (undeclared events used in `onEvent`, a `Ref` parameter missing `validReferences`, a state
-transitioning to itself, model classes with `var` properties, ...) are caught by `ConfigBuilder.build()` itself, so they
+transitioning to itself, model classes with `var` properties, ...) are caught by `SpecificationBuilder.build()` itself, so they
 can be asserted on directly without starting Klerk:
 
 ```kotlin
 assertFailsWith<IllegalConfigurationException> {
-    ConfigBuilder<Context, MyCollections>(collections).build {
-        // ... the invalid configuration
+    SpecificationBuilder<Context, MyCollections>(collections).build {
+        // ... the invalid specification
     }
 }
 ```

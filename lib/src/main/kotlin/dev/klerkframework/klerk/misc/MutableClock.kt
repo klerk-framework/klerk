@@ -6,7 +6,7 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
- * A [Clock] a test can move by hand, for use with `ConfigBuilder.clock(...)`.
+ * A [Clock] a test can move by hand, for use with `SpecificationBuilder.clock(...)`.
  *
  * Everything background in Klerk — job scheduling, retry backoff, cron, delay-based admission, state-machine time
  * triggers — reads its time from the configured clock, so advancing this is how a test travels in time without
@@ -14,7 +14,7 @@ import kotlin.time.Instant
  *
  * ```
  * val clock = MutableClock(Instant.parse("2026-01-01T00:00:00Z"))
- * val config = ConfigBuilder<Ctx, Views>(views).build {
+ * val specification = SpecificationBuilder<Ctx, Views>(views).build {
  *     clock(clock)
  *     jobs { execution = JobExecution.Manual }
  *     ...

@@ -17,7 +17,7 @@ class ModelCollectionsTest {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections, RamStorage()))
+            val klerk = createKlerk(collections, RamStorage())
             klerk.meta.start()
 
             val astrid = createAuthorAstrid(klerk)

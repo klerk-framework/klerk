@@ -10,7 +10,7 @@ import kotlin.reflect.KProperty1
  * Base of the receiver passed to an `event(...) { }` block in the `stateMachine` DSL — where an event's validation
  * rules are attached. See [dev.klerkframework.klerk.statemachine.StateMachine.event].
  */
-@ConfigMarker
+@SpecificationMarker
 public abstract class EventRules<C : KlerkContext> {
     internal val contextValidations: MutableSet<((C) -> PropertyCollectionValidity)> = mutableSetOf()
 
@@ -48,7 +48,7 @@ public class InstanceEventRulesWithParameters<T : Any, P : Any, C : KlerkContext
 
     /**
      * Declares which models [property] (a `ModelID` parameter) may point to. Required for every `ModelID` event
-     * parameter — Klerk rejects the config at startup otherwise. Pass `modelView = null` to allow any existing
+     * parameter — Klerk rejects the specification at startup otherwise. Pass `modelView = null` to allow any existing
      * model id of that type through with no membership check.
      */
     public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>?>, modelView: ModelView<T, C>?) {
@@ -96,7 +96,7 @@ public class VoidEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V>
 
     /**
      * Declares which models [property] (a `ModelID` parameter) may point to. Required for every `ModelID` event
-     * parameter — Klerk rejects the config at startup otherwise.
+     * parameter — Klerk rejects the specification at startup otherwise.
      */
     public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
         //if (collection == null) {

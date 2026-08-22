@@ -20,12 +20,12 @@ public data class MigrationModelV1(
 
 /**
  * One step of migrating already-persisted data to match the current model classes. Register implementations via
- * `ConfigBuilder.migrations(...)`. [migratesToVersion] values across all registered steps must form a contiguous
- * sequence starting at 2 (enforced by `Config.validateMigrations()` when [dev.klerkframework.klerk.Klerk.create] is
+ * `SpecificationBuilder.migrations(...)`. [migratesToVersion] values across all registered steps must form a contiguous
+ * sequence starting at 2 (enforced by `Specification.validateMigrations()` when [dev.klerkframework.klerk.Klerk.create] is
  * called) — a gap throws `IllegalConfigurationException`.
  */
 public interface MigrationStep {
-    /** Must be shorter than 200 characters (enforced at config validation). */
+    /** Must be shorter than 200 characters (enforced at specification validation). */
     public val description: String
 
     /** The schema version this step migrates data *to*. Must be exactly one more than the previous step's, starting at 2. */

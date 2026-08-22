@@ -94,8 +94,8 @@ event(CreateBook) {
   ```
 
 * **`validReferences(property, view)`** — every `ModelID<...>` parameter must be declared here, pointing at the
-  [view](views.md) it must be found in. This is enforced at config build time: if a parameter contains a
-  `ModelID` and you haven't declared `validReferences` for it, `ConfigBuilder.build()` throws
+  [view](views.md) it must be found in. This is enforced at specification build time: if a parameter contains a
+  `ModelID` and you haven't declared `validReferences` for it, `SpecificationBuilder.build()` throws
   `IllegalConfigurationException` (`KlerkErrorCode.MissingValidReferences`) with a message telling you exactly what to
   add. Pass `null` for "any id is accepted, existing or not" (only available for void events).
 

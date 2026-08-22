@@ -25,7 +25,7 @@ class LibraryTest {
             val ramStorage = RamStorage()
             val bc = BookViews()
             var views = Views(bc, AuthorViews(bc.all))
-            var klerk = Klerk.create(createConfig(views, ramStorage))
+            var klerk = createKlerk(views, ramStorage)
             klerk.meta.start()
 
             val context = Ctx.system()
@@ -50,7 +50,7 @@ class LibraryTest {
 
             // restart and now read from database
             views = Views(BookViews(), AuthorViews(bc.all))
-            klerk = Klerk.create(createConfig(views, ramStorage))
+            klerk = createKlerk(views, ramStorage)
             klerk.meta.start()
 
             val somethingNotNullAgain: Model<Book>? = klerk.read(context) {
@@ -68,7 +68,7 @@ class LibraryTest {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections, RamStorage()))
+            val klerk = createKlerk(collections, RamStorage())
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
             klerk.handle(

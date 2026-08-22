@@ -20,7 +20,7 @@ class InstanceNonInstanceEventBlockTest {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
             val persistence = RamStorage()
-            val config = ConfigBuilder<Ctx, Views>(collections).build {
+            val specification = SpecificationBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, createStateMachine(collections.authors), collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
@@ -41,11 +41,9 @@ class InstanceNonInstanceEventBlockTest {
                         }
                     }
                 }
-                persistence(persistence)
-                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
-            val klerk = Klerk.create(config)
+            val klerk = Klerk.create(specification, testSettings(persistence))
             klerk.meta.start()
 
             klerk.read(Ctx.system()) {

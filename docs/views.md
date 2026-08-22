@@ -16,7 +16,7 @@ class BookViews : ModelViews<Book, Context>()
 
 All of an application's view classes are grouped into one top-level data class. This class is the `V` type
 parameter you see everywhere (`Klerk<C, V>`, `StateMachine<T, S, C, V>`, ...), and it's what you pass into
-`ConfigBuilder` and into your state machine builder functions:
+`SpecificationBuilder` and into your state machine builder functions:
 
 ```kotlin
 data class MyCollections(
@@ -24,7 +24,7 @@ data class MyCollections(
     val authors: AuthorViews<MyCollections>,
 )
 
-ConfigBuilder<Context, MyCollections>(collections).build {
+SpecificationBuilder<Context, MyCollections>(collections).build {
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
         model(Author::class, authorStateMachine(collections), collections.authors)
@@ -64,11 +64,11 @@ same purpose.
 
 Every view you want to expose must be registered with `.register("someId")`. Registering does two things: it gives
 the view a stable string id, combined with the owning model's class name into a `CollectionId(modelName, shortId)`
-(rendered as `c.Author.establishedAuthors`); and it adds the view to `Config.getCollections()`, which is how Klerk
-knows the view exists at all. That `CollectionId` is what `Config.getCollection(id)` uses to look a view up by id,
+(rendered as `c.Author.establishedAuthors`); and it adds the view to `Specification.getCollections()`, which is how Klerk
+knows the view exists at all. That `CollectionId` is what `Specification.getCollection(id)` uses to look a view up by id,
 and it's what shows up in the error message when a `validReferences` check rejects a command (`"Did not find 42 in
 c.Author.all for parameter favouriteColleague"`). An unregistered `filter`/`sorted` result still works if
-you hold a reference to it, but it won't show up in `Config.getCollections()` and can't be looked up by id. Ids may
+you hold a reference to it, but it won't show up in `Specification.getCollections()` and can't be looked up by id. Ids may
 not contain `.` or spaces.
 
 ## Views that need more than a property initializer

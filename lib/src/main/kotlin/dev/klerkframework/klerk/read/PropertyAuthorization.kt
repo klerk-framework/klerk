@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.ArgsForPropertyAuth
-import dev.klerkframework.klerk.Config
+import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
@@ -34,7 +34,7 @@ import kotlin.reflect.full.primaryConstructor
  */
 internal class PropertyAuthScope<C : KlerkContext, V>(
     private val context: C,
-    private val config: Config<C, V>,
+    private val specification: Specification<C, V>,
     private val reader: ReaderWithoutAuth<C, V>,
 ) {
 
@@ -80,7 +80,7 @@ internal class PropertyAuthScope<C : KlerkContext, V>(
      */
     private fun isAuthorized(model: Model<out Any>, property: DataContainer<*>): Boolean =
         decisions.getOrPut(DecisionKey(model.id.value, property)) {
-            isReadPropertyAuthorized(ArgsForPropertyAuth(property, model, context, reader), config)
+            isReadPropertyAuthorized(ArgsForPropertyAuth(property, model, context, reader), specification)
         }
 
     private fun secureValue(value: Any?, model: Model<out Any>): Any? = when (value) {

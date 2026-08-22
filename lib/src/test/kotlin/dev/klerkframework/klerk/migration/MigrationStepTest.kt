@@ -15,25 +15,23 @@ class MigrationStepTest {
         val persistence = SQLiteInMemory.create()
 
         runBlocking {
-            var klerk = Klerk.create(createConfigWithMigrations(collections, persistence, emptySet()))
+            var klerk = Klerk.create(createConfigWithMigrations(collections, emptySet()), testSettings(persistence))
             klerk.meta.start()
             generateSampleData(10, 3, klerk)
-            assertEquals(1, klerk.config.persistence.currentModelSchemaVersion)
+            assertEquals(1, klerk.settings.persistence.currentModelSchemaVersion)
             klerk.meta.stop()
 
-            klerk = Klerk.create(createConfigWithMigrations(collections, persistence, setOf(MyMigrationStep)))
+            klerk = Klerk.create(createConfigWithMigrations(collections, setOf(MyMigrationStep)), testSettings(persistence))
             klerk.meta.start()
-            assertEquals(2, klerk.config.persistence.currentModelSchemaVersion)
+            assertEquals(2, klerk.settings.persistence.currentModelSchemaVersion)
         }
     }
 
     private fun createConfigWithMigrations(
         collections: Views,
-        persistence: SqlPersistence,
-        steps: Set<MigrationStep>
-    ): Config<Ctx, Views> {
-        return ConfigBuilder<Ctx, Views>(collections).build {
-            persistence(persistence)
+        steps: Set<MigrationStep>,
+    ): Specification<Ctx, Views> {
+        return SpecificationBuilder<Ctx, Views>(collections).build {
             migrations(steps)
             managedModels {
                 model(Book::class, bookStateMachine(collections), collections.books)

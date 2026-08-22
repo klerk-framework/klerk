@@ -24,7 +24,7 @@ class ReaderTest {
 
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections))
+            val klerk = createKlerk(collections)
             klerk.meta.start()
 
             val rowling = createAuthorJKRowling(klerk)
@@ -87,7 +87,7 @@ class ReaderTest {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections))
+            val klerk = createKlerk(collections)
             klerk.meta.start()
 
             val rowling = createAuthorJKRowling(klerk)
@@ -115,7 +115,7 @@ class ReaderTest {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections))
+            val klerk = createKlerk(collections)
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
             val astrid = createAuthorAstrid(klerk)
@@ -148,7 +148,7 @@ class ReaderTest {
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
-            val klerk = Klerk.create(createConfig(collections))
+            val klerk = createKlerk(collections)
             klerk.meta.start()
             val rowling = createAuthorJKRowling(klerk)
             val astrid = createAuthorAstrid(klerk)

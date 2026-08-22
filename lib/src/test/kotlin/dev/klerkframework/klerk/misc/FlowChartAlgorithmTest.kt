@@ -20,7 +20,7 @@ class FlowChartAlgorithmTest {
 
     private val bc = BookViews()
     private val collections = Views(bc, AuthorViews(bc.all))
-    private val reader = ReaderWithAuth(Klerk.create(createConfig(collections)) as KlerkImpl, Ctx.system())
+    private val reader = ReaderWithAuth(createKlerk(collections) as KlerkImpl, Ctx.system())
     private val model = Model(
         ModelID(10),
         Clock.System.now(),

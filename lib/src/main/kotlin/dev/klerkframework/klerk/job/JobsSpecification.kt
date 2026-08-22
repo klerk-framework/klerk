@@ -72,7 +72,7 @@ public enum class Overlap {
 }
 
 /**
- * A recurring schedule, declared statically in config next to the job type it runs.
+ * A recurring schedule, declared statically in specification next to the job type it runs.
  *
  * Times are **UTC**, deliberately: a daily 02:30 local job does not exist on the spring-forward day and happens twice
  * in autumn, and there is no answer to that which is correct for everyone.
@@ -93,7 +93,7 @@ public class CronSchedule<C : KlerkContext, V> internal constructor(
 }
 
 /** Builder for the optional settings of a [CronSchedule]. */
-@JobsConfigMarker
+@JobsSpecificationMarker
 public class CronBuilder<Cursor : Any> internal constructor(private val defaultCursor: Cursor?) {
     /** What to do about fires missed while the node was down. */
     public var catchUp: CatchUp = CatchUp.RunOnce
@@ -112,24 +112,18 @@ public class CronBuilder<Cursor : Any> internal constructor(private val defaultC
 }
 
 @DslMarker
-internal annotation class JobsConfigMarker
+internal annotation class JobsSpecificationMarker
 
 /**
- * The assembled job-module configuration. Built by `ConfigBuilder.jobs { ... }`.
+ * What jobs the application has: the job types it can run, the schedules it runs them on, and the policy deciding
+ * what may be queued. Built by `SpecificationBuilder.jobs { ... }`.
+ *
+ * How those jobs are *operated* — parallelism, polling, retention, backoff — is [JobSettings] instead.
  */
-public class JobsConfig<C : KlerkContext, V> internal constructor(
+public class JobsSpecification<C : KlerkContext, V> internal constructor(
     types: Map<JobName, JobType<*, C, V>>,
     public val crons: List<CronSchedule<C, V>>,
-    public val onUnloadableJob: UnloadableJobPolicy,
-    public val execution: JobExecution,
     public val admission: (AdmissionArgs<C>) -> AdmissionDecision,
-    public val succeededRetention: Duration,
-    public val cancelledRetention: Duration,
-    public val deadLetterRetention: Duration,
-    public val hardQueueLimit: Int,
-    public val maxParallelSteps: Int,
-    public val pollInterval: Duration,
-    public val backoffBase: Duration,
 ) {
 
     /**
@@ -142,60 +136,109 @@ public class JobsConfig<C : KlerkContext, V> internal constructor(
     public val types: Map<JobName, JobType<*, C, V>> = types + (processAttachedData.name to processAttachedData)
 
     public companion object {
-        /** The default job configuration: no job types, everything else at its default. */
-        public fun <C : KlerkContext, V> empty(): JobsConfig<C, V> = JobsConfig(
+        /** No job types and no crons, with the default admission policy. */
+        public fun <C : KlerkContext, V> empty(): JobsSpecification<C, V> = JobsSpecification(
             types = emptyMap(),
             crons = emptyList(),
-            onUnloadableJob = UnloadableJobPolicy.FailToStart,
-            execution = JobExecution.Automatic,
             admission = AdmissionPolicy::delayBudget,
-            succeededRetention = DEFAULT_TERMINAL_RETENTION,
-            cancelledRetention = DEFAULT_TERMINAL_RETENTION,
-            deadLetterRetention = DEFAULT_TERMINAL_RETENTION,
-            hardQueueLimit = DEFAULT_HARD_QUEUE_LIMIT,
-            maxParallelSteps = DEFAULT_MAX_PARALLEL_STEPS,
-            pollInterval = 1.seconds,
-            backoffBase = 3.seconds,
         )
+    }
 
+    /**
+     * The same specification with more job types and crons in it, and the admission policy untouched.
+     *
+     * Deliberately not a `copy()`: who may queue work is the application's decision, and a plugin quietly replacing
+     * it would be very hard to notice.
+     */
+    internal fun with(
+        types: Map<JobName, JobType<*, C, V>>,
+        crons: List<CronSchedule<C, V>>,
+    ): JobsSpecification<C, V> = JobsSpecification(
+        types = types,
+        crons = crons,
+        admission = admission,
+    )
+}
+
+/**
+ * How the job module is operated on this instance. Part of [dev.klerkframework.klerk.KlerkSettings], because a bigger
+ * node may legitimately run more steps at once than a laptop, and a test wants nothing running behind its back.
+ */
+public data class JobSettings(
+
+    /**
+     * What to do at startup with a job whose name is no longer registered, or whose cursor no longer deserializes.
+     */
+    val onUnloadableJob: UnloadableJobPolicy = UnloadableJobPolicy.FailToStart,
+
+    /** Whether jobs run on their own, or only when a test drives them. */
+    val execution: JobExecution = JobExecution.Automatic,
+
+    /**
+     * How long a succeeded job is kept before it is deleted. Defaults to 30 days.
+     *
+     * A succeeded job has already released its attached-data claims, so this setting is purely about bounding
+     * storage and audit history, not about freeing resources.
+     */
+    val succeededRetention: Duration = DEFAULT_TERMINAL_RETENTION,
+
+    /**
+     * How long a cancelled job is kept before it is deleted. Defaults to 30 days.
+     *
+     * A cancelled job keeps its attached-data claims until it is deleted, so this setting also bounds how long that
+     * data can leak.
+     */
+    val cancelledRetention: Duration = DEFAULT_TERMINAL_RETENTION,
+
+    /**
+     * How long a dead-lettered (or [JobStatus.CompensationFailed]) job is kept before it is deleted. Defaults to 30
+     * days.
+     *
+     * A dead-lettered job keeps its attached-data claims until it is deleted, so this setting also bounds how long
+     * that data can leak. 30 days is meant to give a human time to notice and act — resume it with
+     * [dev.klerkframework.klerk.JobManager.resume] — before it is discarded.
+     */
+    val deadLetterRetention: Duration = DEFAULT_TERMINAL_RETENTION,
+
+    /**
+     * The hard cap on non-terminal jobs, enforced before the admission policy runs so that a policy which always
+     * returns `Allow` still cannot exhaust memory.
+     */
+    val hardQueueLimit: Int = DEFAULT_HARD_QUEUE_LIMIT,
+
+    /** How many job steps may run at the same time. Commits are serialized regardless. */
+    val maxParallelSteps: Int = DEFAULT_MAX_PARALLEL_STEPS,
+
+    /** How often the dispatcher looks for work that has become ready. Ignored in [JobExecution.Manual]. */
+    val pollInterval: Duration = 1.seconds,
+
+    /** The base of the exponential retry backoff: attempt *n* waits `base * 3^(n-1)`. */
+    val backoffBase: Duration = 3.seconds,
+) {
+    init {
+        require(hardQueueLimit > 0) { "hardQueueLimit must be positive" }
+        require(maxParallelSteps > 0) { "maxParallelSteps must be positive" }
+        require(pollInterval > Duration.ZERO) { "pollInterval must be positive" }
+        require(backoffBase > Duration.ZERO) { "backoffBase must be positive" }
+        require(succeededRetention > Duration.ZERO) { "succeededRetention must be positive" }
+        require(cancelledRetention > Duration.ZERO) { "cancelledRetention must be positive" }
+        require(deadLetterRetention > Duration.ZERO) { "deadLetterRetention must be positive" }
+    }
+
+    public companion object {
         internal const val DEFAULT_HARD_QUEUE_LIMIT: Int = 100_000
         internal const val DEFAULT_MAX_PARALLEL_STEPS: Int = 4
 
         /** How long a terminal job is kept by default: long enough for a human to notice, short enough to bound storage. */
         internal val DEFAULT_TERMINAL_RETENTION: Duration = 30.days
     }
-
-    /**
-     * The same configuration with more job types and crons in it, and everything else untouched.
-     *
-     * Deliberately not a `copy()`: how many steps run at once, how often the dispatcher polls and what happens to an
-     * unloadable job are the application's operational choices, and a plugin quietly changing one of them would be
-     * very hard to notice.
-     */
-    internal fun with(
-        types: Map<JobName, JobType<*, C, V>>,
-        crons: List<CronSchedule<C, V>>,
-    ): JobsConfig<C, V> = JobsConfig(
-        types = types,
-        crons = crons,
-        onUnloadableJob = onUnloadableJob,
-        execution = execution,
-        admission = admission,
-        succeededRetention = succeededRetention,
-        cancelledRetention = cancelledRetention,
-        deadLetterRetention = deadLetterRetention,
-        hardQueueLimit = hardQueueLimit,
-        maxParallelSteps = maxParallelSteps,
-        pollInterval = pollInterval,
-        backoffBase = backoffBase,
-    )
 }
 
 /**
  * What a [dev.klerkframework.klerk.KlerkPlugin] may add to the job module: its own job types and crons, and nothing
- * else. See `Config.withJobs`.
+ * else. See `Specification.withJobs`.
  */
-@JobsConfigMarker
+@JobsSpecificationMarker
 public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private val delegate: JobsBlock<C, V>) {
 
     /**
@@ -215,7 +258,7 @@ public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private v
 }
 
 /**
- * The `jobs { ... }` block of [dev.klerkframework.klerk.ConfigBuilder].
+ * The `jobs { ... }` block of [dev.klerkframework.klerk.SpecificationBuilder].
  *
  * ```
  * jobs {
@@ -226,11 +269,13 @@ public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private v
  *         jitter = 5.minutes
  *         cursor = CleanupCursor(olderThan = 30.days)
  *     }
- *     onUnloadableJob = UnloadableJobPolicy.DeadLetter
  * }
  * ```
+ *
+ * Operational knobs (parallelism, polling, retention, what happens to an unloadable job) are in
+ * [dev.klerkframework.klerk.KlerkSettings.jobs] instead.
  */
-@JobsConfigMarker
+@JobsSpecificationMarker
 public class JobsBlock<C : KlerkContext, V> internal constructor() {
 
     private val types = mutableMapOf<JobName, JobType<*, C, V>>()
@@ -238,57 +283,8 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
     private var admissionPolicy: (AdmissionArgs<C>) -> AdmissionDecision = AdmissionPolicy::delayBudget
 
     /**
-     * What to do at startup with a job whose name is no longer registered, or whose cursor no longer deserializes.
-     */
-    public var onUnloadableJob: UnloadableJobPolicy = UnloadableJobPolicy.FailToStart
-
-    /** Whether jobs run on their own, or only when a test drives them. */
-    public var execution: JobExecution = JobExecution.Automatic
-
-    /**
-     * How long a succeeded job is kept before it is deleted. Defaults to 30 days.
-     *
-     * A succeeded job has already released its attached-data claims, so this setting is purely about bounding
-     * storage and audit history, not about freeing resources.
-     */
-    public var succeededRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
-
-    /**
-     * How long a cancelled job is kept before it is deleted. Defaults to 30 days.
-     *
-     * A cancelled job keeps its attached-data claims until it is deleted, so this setting also bounds how long that
-     * data can leak.
-     */
-    public var cancelledRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
-
-    /**
-     * How long a dead-lettered (or [JobStatus.CompensationFailed]) job is kept before it is deleted. Defaults to 30
-     * days.
-     *
-     * A dead-lettered job keeps its attached-data claims until it is deleted, so this setting also bounds how long
-     * that data can leak. 30 days is meant to give a human time to notice and act — resume it with
-     * [dev.klerkframework.klerk.JobManager.resume] — before it is discarded.
-     */
-    public var deadLetterRetention: Duration = JobsConfig.DEFAULT_TERMINAL_RETENTION
-
-    /**
-     * The hard cap on non-terminal jobs, enforced before the admission policy runs so that a policy which always
-     * returns `Allow` still cannot exhaust memory.
-     */
-    public var hardQueueLimit: Int = JobsConfig.DEFAULT_HARD_QUEUE_LIMIT
-
-    /** How many job steps may run at the same time. Commits are serialized regardless. */
-    public var maxParallelSteps: Int = JobsConfig.DEFAULT_MAX_PARALLEL_STEPS
-
-    /** How often the dispatcher looks for work that has become ready. Ignored in [JobExecution.Manual]. */
-    public var pollInterval: Duration = 1.seconds
-
-    /** The base of the exponential retry backoff: attempt *n* waits `base * 3^(n-1)`. */
-    public var backoffBase: Duration = 3.seconds
-
-    /**
      * Makes a job type loadable by name. A persisted job whose name is not registered here cannot be run — see
-     * [onUnloadableJob].
+     * [JobSettings.onUnloadableJob].
      *
      * @throws IllegalArgumentException if another type with the same [JobName] is already registered, or if the
      * type's cursor cannot be serialized.
@@ -355,7 +351,7 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
         admissionPolicy = policy
     }
 
-    /** The types registered so far. Used when a plugin's registrations are merged into an existing config. */
+    /** The types registered so far. Used when a plugin's registrations are merged into an existing specification. */
     internal fun types(): Map<JobName, JobType<*, C, V>> = types.toMap()
 
     internal fun crons(): List<CronSchedule<C, V>> = crons.toList()
@@ -364,35 +360,19 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
      * Starts from what an application already configured, so that a plugin's `register` sees existing names (and
      * rejects a collision) and its `cron` can refer to a type either of them registered.
      */
-    internal fun seedFrom(existing: JobsConfig<C, V>) {
+    internal fun seedFrom(existing: JobsSpecification<C, V>) {
         types.putAll(existing.types)
         crons.addAll(existing.crons)
     }
 
-    internal fun build(): JobsConfig<C, V> {
-        require(hardQueueLimit > 0) { "hardQueueLimit must be positive" }
-        require(maxParallelSteps > 0) { "maxParallelSteps must be positive" }
-        require(pollInterval > Duration.ZERO) { "pollInterval must be positive" }
-        require(backoffBase > Duration.ZERO) { "backoffBase must be positive" }
-        require(succeededRetention > Duration.ZERO) { "succeededRetention must be positive" }
-        require(cancelledRetention > Duration.ZERO) { "cancelledRetention must be positive" }
-        require(deadLetterRetention > Duration.ZERO) { "deadLetterRetention must be positive" }
+    internal fun build(): JobsSpecification<C, V> {
         require(crons.map { it.id }.toSet().size == crons.size) {
             "Two cron schedules for the same job type cannot have the same expression"
         }
-        return JobsConfig(
+        return JobsSpecification(
             types = types.toMap(),
             crons = crons.toList(),
-            onUnloadableJob = onUnloadableJob,
-            execution = execution,
             admission = admissionPolicy,
-            succeededRetention = succeededRetention,
-            cancelledRetention = cancelledRetention,
-            deadLetterRetention = deadLetterRetention,
-            hardQueueLimit = hardQueueLimit,
-            maxParallelSteps = maxParallelSteps,
-            pollInterval = pollInterval,
-            backoffBase = backoffBase,
         )
     }
 }

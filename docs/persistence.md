@@ -1,7 +1,7 @@
 # Persistence & migrations
 
 Klerk owns persistence itself — you don't write SQL or design a schema. You choose (or implement) a `Persistence`
-backend, hand it to `ConfigBuilder`, and Klerk uses it to durably store models, the audit log, jobs, and
+backend, put it in `KlerkSettings`, and Klerk uses it to durably store models, the audit log, jobs, and
 [attached data](attached-data.md).
 
 There are two implementations in the framework today.
@@ -9,8 +9,7 @@ There are two implementations in the framework today.
 ## SqlPersistence
 
 ```kotlin
-val persistence = SqlPersistence(myDataSource)
-persistence(persistence)
+KlerkSettings(persistence = SqlPersistence(myDataSource))
 ```
 
 Backed by a SQL database via a `javax.sql.DataSource`, using [Exposed](https://github.com/JetBrains/Exposed) as the SQL
@@ -37,26 +36,27 @@ private fun createPersistence(): Persistence {
 ## RamStorage
 
 ```kotlin
-persistence(RamStorage())
+KlerkSettings(persistence = RamStorage())
 ```
 
 Keeps everything in a set of in-memory maps. It is explicitly documented as "should only be used for testing" — nothing
 survives a restart, and `migrate()` is a no-op because a fresh `RamStorage` is always empty on startup. This is the
-default in the test suite (`createConfig(collections, storage: Persistence = RamStorage())`).
+default in the test suite (`testSettings(storage: Persistence = RamStorage())`).
 
-## Wiring persistence into config
+## Wiring persistence into settings
 
 ```kotlin
-ConfigBuilder<Context, MyCollections>(collections).build {
-    persistence(myPersistence)
-    // ...
-}
+Klerk.create(
+    specification,
+    KlerkSettings(persistence = myPersistence),
+)
 ```
 
-`persistence(...)` is mandatory — `ConfigBuilder.build()` throws `IllegalConfigurationException` with
-`KlerkErrorCode.MissingPersistence` if you never call it.
+Which backend an instance uses is not part of the [specification](../README.md) — the same specification runs on
+`RamStorage` in a test and on `SqlPersistence` in production. `persistence` is the one `KlerkSettings` parameter
+without a default, so it cannot be forgotten.
 
-Attached blobs are configured separately with `attachedBlobStore(...)`, and required as soon as the config declares
+Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`, and required as soon as the specification declares
 a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back up its directory as
 well. See [attached data](attached-data.md).
 
@@ -95,11 +95,11 @@ object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
 }
 ```
 
-Wire steps into config alongside the persistence backend, e.g. an end-to-end setup with `SqlPersistence`:
+Migration steps describe how the application evolves, so they belong in the specification; the backend they run
+against is a setting:
 
 ```kotlin
-val config = ConfigBuilder<Context, MyCollections>(collections).build {
-    persistence(SqlPersistence(myDataSource))
+val specification = SpecificationBuilder<Context, MyCollections>(collections).build {
     migrations(setOf(RenameCoAuthorsToCoWriters))
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
@@ -107,13 +107,15 @@ val config = ConfigBuilder<Context, MyCollections>(collections).build {
     }
     // authorization, systemContextProvider, ...
 }
+
+val klerk = Klerk.create(specification, KlerkSettings(persistence = SqlPersistence(myDataSource)))
 ```
 
 ### Versioning rules
 
 `migratesToVersion` values must form a contiguous sequence starting at 2 (version 1 is the implicit starting schema —
-there is no explicit step to reach it). `Config.validateMigrations()` enforces this when
-`Klerk.create(config)` initializes the config (before `klerk.meta.start()` is even called):
+there is no explicit step to reach it). `Specification.validateMigrations()` enforces this when
+`Klerk.create(specification, settings)` initializes the specification (before `klerk.meta.start()` is even called):
 
 - every step's `migratesToVersion` must be `> 1`
 - every step's `description` must be shorter than 200 characters

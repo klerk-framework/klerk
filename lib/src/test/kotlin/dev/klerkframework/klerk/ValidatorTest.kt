@@ -19,8 +19,8 @@ class ValidatorTest {
     init {
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
-        val config = createConfig(collections, RamStorage())
-        klerk = Klerk.create(config)
+        val specification = createConfig(collections)
+        klerk = Klerk.create(specification, testSettings())
     }
 
     @BeforeTest
@@ -147,17 +147,15 @@ class ValidatorTest {
                     onEvent(DeleteBook) { delete() }
                 }
             }
-            val config = ConfigBuilder<Ctx, Views>(collections).build {
+            val specification = SpecificationBuilder<Ctx, Views>(collections).build {
                 managedModels {
                     model(Book::class, restrictedSm, collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 apply(generousAuthRules())
-                persistence(RamStorage())
-                attachedBlobStore(AttachedBlobStore.Database)
                 systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
             }
-            val restrictedKlerk = Klerk.create(config)
+            val restrictedKlerk = Klerk.create(specification, testSettings())
             restrictedKlerk.meta.start()
             val author = createAuthorJKRowling(restrictedKlerk)
 

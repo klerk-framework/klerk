@@ -57,7 +57,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val settings: KlerkSettings,
 ) : KlerkAttachedData<C> {
 
-    private val config get() = klerk.config
+    private val specification get() = klerk.specification
 
     // Rebuilt from storage at startup, like ModelCache. Read and written from prepare (which deliberately runs outside
     // the serialized command path) as well as from commit, hence Concurrent. Blobs and strings share it, and thus
@@ -79,16 +79,16 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     /** Where blob bytes live when they are not in the database, or null when they are. */
     private val externalBlobs: AttachedBlobStore.External?
-        get() = config.attachedBlobStore as? AttachedBlobStore.External
+        get() = settings.attachedBlobStore as? AttachedBlobStore.External
 
     /**
      * Rebuilds the in-memory state from storage. Rows that are unclaimed and already past their expiry are reaped
      * rather than reserved.
      */
     internal fun start() {
-        val now = config.now()
-        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
-        val rows = config.persistence.readAllAttachedDataMetadata()
+        val now = settings.now()
+        deleteBytes(settings.persistence.deleteExpiredAttachedData(now))
+        val rows = settings.persistence.readAllAttachedDataMetadata()
         entries.clear()
         rows.forEach { (id, row) ->
             entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires, row.claimedByJob)
@@ -135,7 +135,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private fun openValue(id: Int, kind: AttachedDataKind): InputStream {
         val store = if (kind == AttachedDataKind.Blob) externalBlobs else null
         return store?.get(id)
-            ?: config.persistence.getAttachedValue(id)
+            ?: settings.persistence.getAttachedValue(id)
             ?: throw NoSuchElementException("No data found for id $id")
     }
 
@@ -275,7 +275,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     override suspend fun awaitProcessing(id: AttachedBlobID, timeout: Duration) {
         // No waiter means there is nothing to wait for: the declaration had no steps, or they have already run.
         val waiter = waiters[id.id] ?: return
-        if (config.jobs.execution == JobExecution.Manual) {
+        if (klerk.settings.jobs.execution == JobExecution.Manual) {
             // Nothing runs on its own here, so waiting would be waiting for a step nobody is going to take.
             jobs.runUntilIdle()
         }
@@ -300,7 +300,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      */
     internal fun rejected(id: Int, reason: String) {
         entries.remove(id)
-        runCatching { config.persistence.deleteAttachedData(setOf(id)) }
+        runCatching { settings.persistence.deleteAttachedData(setOf(id)) }
             .onFailure { logger.error(it) { "Could not delete the rejected attached data $id" } }
         deleteBytes(setOf(id))
         waiters[id]?.complete(reason)
@@ -320,7 +320,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             store.delete(id)
             store.put(id, hashing)
         }
-        config.persistence.updateAttachedData(id, if (store == null) hashing else null, current.completedSteps) {
+        settings.persistence.updateAttachedData(id, if (store == null) hashing else null, current.completedSteps) {
             hashing.digest()
         }
         val digest = hashing.digest()
@@ -329,7 +329,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     /** Records that a step has run, so that an interrupted pipeline resumes rather than starting over. */
     private fun record(id: Int, metadata: AttachedDataMetadata, completed: List<String>) {
-        config.persistence.updateAttachedData(id, null, completed) {
+        settings.persistence.updateAttachedData(id, null, completed) {
             AttachedDataDigest(metadata.size, metadata.hash, metadata.contentType)
         }
         entries[id] = entries[id]?.copy(metadata = metadata.copy(completedSteps = completed)) ?: return
@@ -361,13 +361,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         }
         authorizeWrite(context, kind, requested)
         validateCustomMetadata(metadata)
-        if (kind == AttachedDataKind.Blob && config.attachedBlobStore == AttachedBlobStore.None) {
+        if (kind == AttachedDataKind.Blob && settings.attachedBlobStore == AttachedBlobStore.None) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.AttachedBlobStoreIsNone,
-                "The config says attachedBlobStore(None), so this application cannot store blobs."
+                "The specification says attachedBlobStore(None), so this application cannot store blobs."
             )
         }
-        val createdAt = config.now()
+        val createdAt = settings.now()
         val expires = reserveExpiry(requested)
         val id = allocate(expires)
         // A job step often prepares data before any command references it, and the reaper would otherwise delete it a
@@ -390,7 +390,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             if (!adopted) {
                 store?.put(id, hashing)
             }
-            config.persistence.insertAttachedData(
+            settings.persistence.insertAttachedData(
                 id, if (store == null) hashing else null, kind, visibility, createdAt, metadata, expires, claimedByJob
             ) {
                 hashing.digest()
@@ -429,7 +429,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         waiters[id] = CompletableDeferred()
         val jobId = try {
             jobs.scheduleClaiming(
-                job = config.jobs.processAttachedData.declare(ProcessBlobCursor(id, className)),
+                job = specification.jobs.processAttachedData.declare(ProcessBlobCursor(id, className)),
                 context = context,
                 claim = setOf(id),
             )
@@ -473,11 +473,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val entry = authorizeRead(entries[id], publicId, context, "klerk.attachedData.get")
         requireKind(entry, expected, publicId)
         val row =
-            config.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
+            settings.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
         check(entry.owner == row.owner) { "The in-memory state of attached data $publicId does not match the database" }
         val store = if (expected == AttachedDataKind.Blob) externalBlobs else null
         return if (store == null) {
-            config.persistence.getAttachedValue(id)
+            settings.persistence.getAttachedValue(id)
                 ?: throw NoSuchElementException("No data found for id $publicId")
         } else {
             store.get(id) ?: throw NoSuchElementException(
@@ -548,7 +548,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * Deliberately based on the real clock rather than `context.time`: the context clock is supplied by the caller and
      * must not be able to extend or shorten the claim window.
      */
-    private fun reserveExpiry(lease: Duration): Instant = config.now().plus(lease)
+    private fun reserveExpiry(lease: Duration): Instant = settings.now().plus(lease)
 
     /**
      * Reserves an id. The entry is a placeholder without metadata until the value has been written — see
@@ -567,7 +567,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * than once per lifetime window.
      */
     private fun maybeReap() {
-        val now = config.now()
+        val now = settings.now()
         val previous = lastReap.get()
         if (now < previous.plus(settings.unclaimedAttachedDataLifetime)) {
             return
@@ -576,7 +576,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             return
         }
         entries.entries.removeIf { it.value.isExpired(now) }
-        deleteBytes(config.persistence.deleteExpiredAttachedData(now))
+        deleteBytes(settings.persistence.deleteExpiredAttachedData(now))
         // Whatever no longer has an entry has nothing left to wait for either — a value that was reaped, or one a
         // step refused that nobody was waiting for.
         waiters.keys.removeIf { !entries.containsKey(it) }
@@ -597,13 +597,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         // the upload.
         readWriteLock.acquireRead()
         try {
-            if (config.authorization.attachedDataWritePositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+            if (specification.authorization.attachedDataWritePositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AttachedDataWritePositiveAuthorizationMissing,
                     "Not allowed to prepare attached data"
                 )
             }
-            if (config.authorization.attachedDataWriteNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+            if (specification.authorization.attachedDataWriteNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AttachedDataWriteNegativeAuthorizationExist,
                     "Not allowed to prepare attached data"
@@ -627,7 +627,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         caller: String
     ): AttachedDataEntry {
         ReadBlockGuard.checkNotInsideReadBlock(caller)
-        if (entry == null || entry.isExpired(config.now())) {
+        if (entry == null || entry.isExpired(settings.now())) {
             throw NoSuchElementException("No data found for id $id")
         }
         // Unclaimed data is not reachable: attached data is always read through the model that owns it.
@@ -642,13 +642,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
                 ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
             val args = ArgsForAttachedDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
-            if (config.authorization.attachedDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+            if (specification.authorization.attachedDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AttachedDataReadPositiveAuthorizationMissing,
                     "Not allowed to read attached data"
                 )
             }
-            if (config.authorization.attachedDataReadNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+            if (specification.authorization.attachedDataReadNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AttachedDataReadNegativeAuthorizationExist,
                     "Not allowed to read attached data"
@@ -679,7 +679,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             return AttachedDataPlan.Ok(AttachedDataDelta())
         }
 
-        val now = config.now()
+        val now = settings.now()
         val problems = mutableListOf<Problem>()
         val claimed = mutableMapOf<Int, AttachedDataClaim>()
         val deleted = mutableSetOf<Int>()

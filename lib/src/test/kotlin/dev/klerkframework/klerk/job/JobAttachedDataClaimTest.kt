@@ -78,7 +78,7 @@ class JobAttachedDataClaimTest {
     ): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, clock) { register(Uploader) })
+        val klerk = createKlerk(collections, storage, clock) { register(Uploader) }
         klerk.meta.start(installShutdownHook = false)
         Uploader.klerkForTest = klerk
         return klerk
@@ -105,7 +105,7 @@ class JobAttachedDataClaimTest {
         assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
 
         // The command attached it to a model, so now it is owned as well as claimed.
-        val author = klerk.read(Ctx.system()) { list(klerk.config.views.authors.all) }.single()
+        val author = klerk.read(Ctx.system()) { list(klerk.specification.views.authors.all) }.single()
         assertNotNull(author.props.picture)
         klerk.meta.stop()
     }
@@ -166,12 +166,9 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(
-            createConfig(collections, storage, clock) {
-                register(Uploader)
-                deadLetterRetention = 24.hours
-            }
-        )
+        val klerk = createKlerk(collections, storage, clock, jobs = JobSettings(execution = JobExecution.Manual, deadLetterRetention = 24.hours)) {
+            register(Uploader)
+        }
         klerk.meta.start(installShutdownHook = false)
         Uploader.klerkForTest = klerk
         Uploader.abortAfterPreparing = true
@@ -204,12 +201,9 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(
-            createConfig(collections, storage, clock) {
-                register(Uploader)
-                cancelledRetention = 24.hours
-            }
-        )
+        val klerk = createKlerk(collections, storage, clock, jobs = JobSettings(execution = JobExecution.Manual, cancelledRetention = 24.hours)) {
+            register(Uploader)
+        }
         klerk.meta.start(installShutdownHook = false)
         Uploader.klerkForTest = klerk
 
@@ -239,12 +233,9 @@ class JobAttachedDataClaimTest {
         val clock = MutableClock(start)
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(
-            createConfig(collections, storage, clock) {
-                register(Uploader)
-                succeededRetention = 24.hours
-            }
-        )
+        val klerk = createKlerk(collections, storage, clock, jobs = JobSettings(execution = JobExecution.Manual, succeededRetention = 24.hours)) {
+            register(Uploader)
+        }
         klerk.meta.start(installShutdownHook = false)
         Uploader.klerkForTest = klerk
 

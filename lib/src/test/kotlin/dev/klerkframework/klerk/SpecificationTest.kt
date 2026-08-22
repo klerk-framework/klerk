@@ -8,28 +8,27 @@ import kotlin.test.Test
 import kotlin.test.fail
 
 
-class ConfigTest {
+class SpecificationTest {
 
     @Test
     fun `Can combine configs`() {
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
-        val config = createConfig(collections, RamStorage())
-        val newManagedModels = config.managedModels.toMutableSet()
+        val specification = createConfig(collections)
+        val newManagedModels = specification.managedModels.toMutableSet()
         newManagedModels.drop(1)
-        config.copy(managedModels = newManagedModels)
+        specification.copy(managedModels = newManagedModels)
     }
 
     @Test
     fun `Model can not contain abstract properties`() {
         val views = ViewWithIllegal(ModelViews())
         try {
-            ConfigBuilder<Ctx, ViewWithIllegal>(views).build {
+            SpecificationBuilder<Ctx, ViewWithIllegal>(views).build {
                 managedModels {
                     model(IllegalModel::class, illegalStateMachine, views.x)
                 }
                 authorization { }
-                persistence(RamStorage())
             }
         } catch (e: Exception) {
             return

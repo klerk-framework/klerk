@@ -136,7 +136,7 @@ class PropertyAuthorizationTest {
     private suspend fun startKlerk(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createPropertyAuthConfig(collections, storage))
+        val klerk = Klerk.create(createPropertyAuthConfig(collections), testSettings(storage))
         klerk.meta.start()
         return klerk
     }
@@ -147,13 +147,8 @@ class PropertyAuthorizationTest {
  */
 internal var propertyRuleEvaluations: Int = 0
 
-fun createPropertyAuthConfig(
-    collections: Views,
-    storage: Persistence = RamStorage()
-): Config<Ctx, Views> {
-    return ConfigBuilder<Ctx, Views>(collections).build {
-        persistence(storage)
-        attachedBlobStore(AttachedBlobStore.Database)
+fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> {
+    return SpecificationBuilder<Ctx, Views>(collections).build {
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)

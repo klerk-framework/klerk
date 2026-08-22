@@ -46,14 +46,15 @@ internal suspend fun currentJobId(): JobId? = coroutineContext[RunningJobElement
  *
  * The whole in-memory picture of every non-deleted job lives here, mirroring what is persisted. That is what makes the
  * queue snapshot the admission policy needs a pure lookup rather than a query, and it is affordable because the number
- * of live jobs is bounded by [JobsConfig.hardQueueLimit].
+ * of live jobs is bounded by [JobSettings.hardQueueLimit].
  *
  * Klerk is single-writer, so there is exactly one of these and it is permanently the master.
  */
 internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) : JobManagerInternal<C, V> {
 
-    private val config get() = klerk.config
-    private val settings get() = config.jobs
+    private val specification get() = klerk.specification
+    private val jobSpec get() = specification.jobs
+    private val jobSettings get() = klerk.settings.jobs
 
     /**
      * Serializes the *compound* updates — claiming a job, applying a commit — so that two of them cannot interleave.
@@ -104,9 +105,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         check(!started) { "The job manager has already been started" }
         started = true
 
-        val now = config.now()
+        val now = klerk.settings.now()
         val unloadable = mutableListOf<Pair<JobRecord, String>>()
-        config.persistence.getAllJobs().forEach { record ->
+        klerk.settings.persistence.getAllJobs().forEach { record ->
             when (val problem = whyUnloadable(record)) {
                 null -> records[record.id] = recoverAfterRestart(record, now)
                 else -> unloadable.add(record to problem)
@@ -114,9 +115,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
         handleUnloadable(unloadable, now)
         initialiseCronState(now)
-        logger.info { "Jobs ready (${records.size} jobs, ${settings.types.size} registered types)" }
+        logger.info { "Jobs ready (${records.size} jobs, ${jobSpec.types.size} registered types)" }
 
-        if (settings.execution == JobExecution.Automatic) {
+        if (jobSettings.execution == JobExecution.Automatic) {
             val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             scope = newScope
             dispatcher = newScope.launch { dispatchLoop() }
@@ -146,7 +147,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun whyUnloadable(record: JobRecord): String? {
-        val type = settings.types[record.name]
+        val type = jobSpec.types[record.name]
             ?: return "there is no job type registered under the name '${record.name.value}'"
         return try {
             type.decodeCursor(record.activeCursor)
@@ -171,7 +172,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
         val described = unloadable.joinToString("\n") { (record, why) -> "  job ${record.id} (${record.name}): $why" }
-        when (settings.onUnloadableJob) {
+        when (jobSettings.onUnloadableJob) {
             UnloadableJobPolicy.FailToStart -> throw IllegalConfigurationException(
                 KlerkErrorCode.UnregisteredJobName,
                 "${unloadable.size} persisted job(s) cannot be loaded:\n$described\n" +
@@ -193,7 +194,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     )
                 }
                 dead.forEach { records[it.id] = it }
-                config.persistence.commitJobStep<Any, Nothing, C, V>(
+                klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
                     null, null, null, jobs = JobCommit(upserted = dead)
                 )
             }
@@ -211,7 +212,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             } catch (e: Exception) {
                 logger.error(e) { "Bug in Klerk: the job dispatcher threw" }
             }
-            withTimeoutOrNull(settings.pollInterval) { wakeup.receive() }
+            withTimeoutOrNull(jobSettings.pollInterval) { wakeup.receive() }
         }
     }
 
@@ -245,12 +246,12 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * interrupted mid-step committed nothing, and [recoverAfterRestart] puts it back in the queue either way.
      */
     private suspend fun claimNext(): JobRecord? = lock.withLock {
-        val now = config.now()
+        val now = klerk.settings.now()
         promoteReady(now)
         updateQueueOrder(now)
         updateBudgetTracking(now)
 
-        if (running.size >= settings.maxParallelSteps) {
+        if (running.size >= jobSettings.maxParallelSteps) {
             return@withLock null
         }
         val perType = running.mapNotNull { records[it]?.name }.groupingBy { it }.eachCount()
@@ -301,7 +302,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun hasConcurrencySlot(record: JobRecord, perType: Map<JobName, Int>): Boolean {
-        val max = settings.types[record.name]?.maxConcurrent ?: return true
+        val max = jobSpec.types[record.name]?.maxConcurrent ?: return true
         return (perType[record.name] ?: 0) < max
     }
 
@@ -311,7 +312,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      */
     private fun isQueuedBehindEarlierCronRun(record: JobRecord): Boolean {
         val scheduleId = record.cronScheduleId ?: return false
-        val schedule = settings.crons.firstOrNull { it.id == scheduleId } ?: return false
+        val schedule = jobSpec.crons.firstOrNull { it.id == scheduleId } ?: return false
         if (schedule.overlap != Overlap.Queue) {
             return false
         }
@@ -336,7 +337,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     // ------------------------------------------------------------------ running one step
 
     private suspend fun runStep(record: JobRecord) {
-        val type = settings.types[record.name]
+        val type = jobSpec.types[record.name]
         if (type == null) {
             // Only reachable if the registry changed after startup, which it cannot; treated as a bug, not a job error.
             logger.error { "Job ${record.id} has the unregistered name '${record.name}'" }
@@ -344,7 +345,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
 
-        val now = config.now()
+        val now = klerk.settings.now()
         val started = record.copy(
             lastAttemptStarted = now,
             firstAttemptStarted = record.firstAttemptStarted ?: now,
@@ -463,8 +464,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun buildContext(record: JobRecord, info: JobInfo, now: Instant): C {
-        val provider = config.jobContextProvider
-            ?: return config.systemContextProvider.invoke(SystemIdentity)
+        val provider = specification.jobContextProvider
+            ?: return specification.systemContextProvider.invoke(SystemIdentity)
         val actor = when (record.agent) {
             JobAgent.System -> SystemIdentity
             JobAgent.Scheduler -> rebuildActor(record)
@@ -491,7 +492,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             // already exhausted by the time a hook runs.
             return null
         }
-        val type = settings.types[record.name] ?: return null
+        val type = jobSpec.types[record.name] ?: return null
         type.maxSteps?.let { if (record.stepNumber >= it) return "Reached maxSteps ($it)" }
         type.maxDuration?.let { max ->
             val since = record.firstAttemptStarted ?: return@let
@@ -515,7 +516,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         result: JobResult<Any>,
         context: C?,
     ) {
-        val now = config.now()
+        val now = klerk.settings.now()
         val transition = try {
             planTransition(refreshControlFlags(record), type, result, now)
         } catch (e: Exception) {
@@ -792,7 +793,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     )
 
     private fun backoffFor(attempt: Int): Duration =
-        settings.backoffBase * 3.0.pow(attempt - 1)
+        jobSettings.backoffBase * 3.0.pow(attempt - 1)
 
     /** Bookkeeping for the rows one commit touches, so that a row updated twice is written once. */
     private inner class RowSet(private val current: Map<JobId, JobRecord>) {
@@ -827,7 +828,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         if (pending.isEmpty()) {
             return NewJobPlan.Ok(emptyList())
         }
-        val now = config.now()
+        val now = klerk.settings.now()
         val snapshot = queueSnapshot(now)
         val problems = mutableListOf<Problem>()
         val accepted = mutableListOf<JobRecord>()
@@ -837,11 +838,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             val basePriority = scheduled.priority ?: scheduled.type.priority ?: JobPriority.Normal
             // The hard cap comes first and is not overridable: a policy that always says Allow must still not be able
             // to exhaust memory.
-            if (records.size + accepted.size >= settings.hardQueueLimit) {
+            if (records.size + accepted.size >= jobSettings.hardQueueLimit) {
                 problems.add(
                     StateProblem(
                         "The system is busy. Please try again shortly.",
-                        "The job queue is at its hard limit of ${settings.hardQueueLimit} jobs",
+                        "The job queue is at its hard limit of ${jobSettings.hardQueueLimit} jobs",
                         KlerkErrorCode.JobQueueOverloaded,
                     )
                 )
@@ -849,7 +850,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             }
             val candidate = JobCandidate(scheduled.name, basePriority, scheduled.scheduleAt)
             val decision = try {
-                settings.admission(AdmissionArgs(snapshot, candidate, context, now))
+                jobSpec.admission(AdmissionArgs(snapshot, candidate, context, now))
             } catch (e: Exception) {
                 logger.error(e) { "The admission policy threw; admitting the job unchanged" }
                 AdmissionDecision.Allow
@@ -962,7 +963,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
             is NewJobPlan.Ok -> {
                 val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
-                config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
+                klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
                 lock.withLock { jobsWereCommitted(plan) }
             }
         }
@@ -1005,7 +1006,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         if (record.status.isTerminal) {
             return
         }
-        val now = config.now()
+        val now = klerk.settings.now()
         // The whole subtree is marked, and children are cancelled first: a parent's onCancelled runs only once every
         // descendant is terminal (see isUnwindable).
         val subtree = descendantsOf(id) + record
@@ -1036,7 +1037,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         check(record.status == JobStatus.DeadLettered || record.status == JobStatus.CompensationFailed) {
             "Only a dead-lettered job can be resumed, but job $id is ${record.status}"
         }
-        val now = config.now()
+        val now = klerk.settings.now()
         // From the checkpoint, never from step 0: the commands of steps 1..n have already been applied and Klerk has
         // no way to recognise re-emitted ones.
         val resumed = record.copy(
@@ -1061,7 +1062,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private suspend fun commitControlChange(commit: JobCommit) {
-        config.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
+        klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
         lock.withLock {
             commit.upserted.forEach { records[it.id] = it }
             commit.deleted.forEach { records.remove(it); previousResults.remove(it) }
@@ -1109,7 +1110,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun requireManual() {
-        check(settings.execution == JobExecution.Manual) {
+        check(jobSettings.execution == JobExecution.Manual) {
             "step()/runUntilIdle() are only available with 'jobs { execution = JobExecution.Manual }'. With " +
                     "JobExecution.Automatic, Klerk runs jobs on its own."
         }
@@ -1134,8 +1135,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         // The reader handed to a rule is only sound while the read lock is held, exactly as for the other rule sets.
         klerk.readWriteLock.acquireRead()
         try {
-            return config.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
-                    config.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
+            return specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
+                    specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
         } finally {
             klerk.readWriteLock.releaseRead()
         }
@@ -1172,7 +1173,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             running = running.mapNotNull { records[it]?.priority }.groupingBy { it }.eachCount(),
             overBudgetSince = overBudgetSince.toMap(),
             total = queued.size,
-            hardLimit = settings.hardQueueLimit,
+            hardLimit = jobSettings.hardQueueLimit,
             now = now,
         )
     }
@@ -1182,18 +1183,18 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private var cronLastFired = mutableMapOf<String, Instant>()
 
     private fun initialiseCronState(now: Instant) {
-        cronLastFired = config.persistence.getCronState().toMutableMap()
+        cronLastFired = klerk.settings.persistence.getCronState().toMutableMap()
         // A schedule that has never fired starts from now, so adding a cron to an existing system does not
         // immediately fire every occurrence since the epoch.
-        settings.crons.forEach { cronLastFired.putIfAbsent(it.id, now) }
+        jobSpec.crons.forEach { cronLastFired.putIfAbsent(it.id, now) }
     }
 
     private suspend fun fireDueCrons() {
-        if (settings.crons.isEmpty()) {
+        if (jobSpec.crons.isEmpty()) {
             return
         }
-        val now = config.now()
-        settings.crons.forEach { schedule ->
+        val now = klerk.settings.now()
+        jobSpec.crons.forEach { schedule ->
             try {
                 fireIfDue(schedule, now)
             } catch (e: Exception) {
@@ -1209,7 +1210,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
         cronLastFired[schedule.id] = missed.last()
-        config.persistence.setCronFired(schedule.id, missed.last())
+        klerk.settings.persistence.setCronFired(schedule.id, missed.last())
 
         val fires = when (schedule.catchUp) {
             CatchUp.RunAll -> missed.size
@@ -1225,7 +1226,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
 
-        val context = config.systemContextProvider.invoke(SystemIdentity)
+        val context = specification.systemContextProvider.invoke(SystemIdentity)
         repeat(fires) {
             val id = lock.withLock { allocateId() }
             // Jitter spreads the fire over a random window, so that many nodes (or many schedules on the same
@@ -1244,7 +1245,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
                 is NewJobPlan.Ok -> {
                     val admitted = plan.records.map { it.copy(cronScheduleId = schedule.id) }
-                    config.persistence.commitJobStep<Any, Nothing, C, V>(
+                    klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
                         null, null, null, jobs = JobCommit(upserted = admitted)
                     )
                     lock.withLock { admitted.forEach { records[it.id] = it } }
@@ -1264,20 +1265,20 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         else schedule.jitter * random.nextDouble()
 
     /** How late an occurrence may be and still count as "now" rather than "missed". */
-    private fun missedThreshold(): Duration = maxOf(settings.pollInterval * 5, 1.minutes)
+    private fun missedThreshold(): Duration = maxOf(jobSettings.pollInterval * 5, 1.minutes)
 
     // ------------------------------------------------------------------ retention
 
     /** The retention setting that governs a terminal status, or `null` for a non-terminal one. */
     private fun retentionFor(status: JobStatus): Duration? = when (status) {
-        JobStatus.Succeeded -> settings.succeededRetention
-        JobStatus.Cancelled -> settings.cancelledRetention
-        JobStatus.DeadLettered, JobStatus.CompensationFailed -> settings.deadLetterRetention
+        JobStatus.Succeeded -> jobSettings.succeededRetention
+        JobStatus.Cancelled -> jobSettings.cancelledRetention
+        JobStatus.DeadLettered, JobStatus.CompensationFailed -> jobSettings.deadLetterRetention
         else -> null
     }
 
     private suspend fun deleteExpiredTerminalJobs() {
-        val now = config.now()
+        val now = klerk.settings.now()
         val expired = records.values.filter { record ->
             val finished = record.lastAttemptFinished ?: return@filter false
             val retention = retentionFor(record.status) ?: return@filter false

@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.statemachine.BlockType.*
 import kotlin.time.Duration
 import kotlin.time.Instant
 
-@ConfigMarker
+@SpecificationMarker
 public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     public val name: String, internal val modelName: String
 ) {
@@ -17,7 +17,7 @@ public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
     internal fun canHandle(eventReference: EventReference): Boolean = getEvents().map { it.id }.contains(eventReference)
 
-    internal fun onKlerkStart(config: Config<C, V>) {
+    internal fun onKlerkStart(specification: Specification<C, V>) {
 
     }
 

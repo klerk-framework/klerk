@@ -60,12 +60,9 @@ class JobAutomaticExecutionTest {
         Ticker.stepsRun.set(0)
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(
-            createConfig(collections, RamStorage()) {
-                execution = JobExecution.Automatic
-                register(Ticker)
-            }
-        )
+        val klerk = createKlerk(collections, RamStorage(), jobs = JobSettings(execution = JobExecution.Automatic)) {
+            register(Ticker)
+        }
         klerk.meta.start(installShutdownHook = false)
 
         val id = klerk.jobs.schedule(Ticker.declare(TickCursor(remaining = 25)), Ctx.system())
@@ -82,12 +79,9 @@ class JobAutomaticExecutionTest {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val storage = RamStorage()
-        val klerk = Klerk.create(
-            createConfig(collections, storage) {
-                execution = JobExecution.Automatic
-                register(Ticker)
-            }
-        )
+        val klerk = createKlerk(collections, storage, jobs = JobSettings(execution = JobExecution.Automatic)) {
+            register(Ticker)
+        }
         klerk.meta.start(installShutdownHook = false)
 
         val id = klerk.jobs.schedule(Ticker.declare(TickCursor(remaining = 10_000)), Ctx.system())

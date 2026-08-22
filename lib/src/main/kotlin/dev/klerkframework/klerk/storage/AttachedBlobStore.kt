@@ -12,7 +12,7 @@ private val logger = KotlinLogging.logger {}
  * Where the bytes of attached blobs are kept.
  *
  * Attached strings always live in the database; only blobs can grow large enough for the choice to matter. The choice
- * decides what a database backup contains, so it is required as soon as the config declares an
+ * decides what a database backup contains, so it is required as soon as the specification declares an
  * [dev.klerkframework.klerk.AttachedBlobID] anywhere.
  *
  * **Pick the store before you have data in it.** Klerk does not move existing blobs, and refuses to start if the

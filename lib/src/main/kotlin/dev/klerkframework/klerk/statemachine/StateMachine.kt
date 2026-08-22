@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlin.reflect.KClass
 
-@ConfigMarker
+@SpecificationMarker
 public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val type: KClass<T>
 ) {
@@ -131,8 +131,8 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         mutableStates.add(state)
     }
 
-    internal fun onKlerkStart(config: Config<C, V>) {
-        mutableStates.forEach { it.onKlerkStart(config) }
+    internal fun onKlerkStart(specification: Specification<C, V>) {
+        mutableStates.forEach { it.onKlerkStart(specification) }
     }
 
     /**

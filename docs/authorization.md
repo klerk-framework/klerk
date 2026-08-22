@@ -1,10 +1,10 @@
 # Authorization
 
-Klerk enforces authorization. You declare rules once, in the config, and Klerk applies them everywhere: on every model
+Klerk enforces authorization. You declare rules once, in the specification, and Klerk applies them everywhere: on every model
 read, every individual property read, every command, and the event log.
 
 ```kotlin
-ConfigBuilder<Ctx, Views>(views).build {
+SpecificationBuilder<Ctx, Views>(views).build {
     authorization {
         readModels {
             positive { rule(::everybodyCanRead) }
@@ -31,7 +31,7 @@ ConfigBuilder<Ctx, Views>(views).build {
             negative { }
         }
     }
-    // other config
+    // other specification
 }
 ```
 

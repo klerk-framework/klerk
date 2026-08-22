@@ -27,7 +27,7 @@ class AttachedBlobContainerTest {
     private suspend fun start(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, storage, blobStore = AttachedBlobStore.Database))
+        val klerk = createKlerk(collections, storage, blobStore = AttachedBlobStore.Database)
         klerk.meta.start(installShutdownHook = false)
         return klerk
     }
@@ -53,17 +53,15 @@ class AttachedBlobContainerTest {
     fun `a bare AttachedBlobID is refused, with the container to write instead`() {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val config = ConfigBuilder<Ctx, Views>(collections).build {
+        val specification = SpecificationBuilder<Ctx, Views>(collections).build {
             managedModels {
                 model(Sketch::class, sketchStateMachine(), collections.sketches)
             }
             apply(generousAuthRules())
-            persistence(RamStorage())
-            attachedBlobStore(AttachedBlobStore.Database)
             systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
         }
 
-        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }
         assertEquals(KlerkErrorCode.BlobMustBeDeclaredInAContainer, e.code)
         assertTrue(e.message!!.contains("Sketch.drawing"), e.message!!)
         assertTrue(e.message!!.contains("AttachedBlobContainer"), "the message should say what to write instead")
@@ -263,7 +261,7 @@ class AttachedBlobContainerTest {
         val clock = MutableClock(Clock.System.now())
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, RamStorage(), clock = clock))
+        val klerk = createKlerk(collections, RamStorage(), clock = clock)
         klerk.meta.start(installShutdownHook = false)
         val id = klerk.attachedData.prepare("anything".byteInputStream(), FlakyDocument::class, Ctx.system())
 
@@ -332,7 +330,7 @@ class AttachedBlobContainerTest {
         val store = CountingBlobStore(Files.createTempDirectory("klerk-steps"))
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createConfig(collections, RamStorage(), blobStore = store))
+        val klerk = createKlerk(collections, RamStorage(), blobStore = store)
         klerk.meta.start(installShutdownHook = false)
 
         val image = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
@@ -365,7 +363,7 @@ class AttachedBlobContainerTest {
         val id = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
         hang(klerk, id).orThrow()
 
-        // the read rules in this config deny unauthenticated actors, but they are not consulted for public data
+        // the read rules in this specification deny unauthenticated actors, but they are not consulted for public data
         assertEquals(24, klerk.attachedData.get(id, Ctx.unauthenticated()).readAllBytes().size)
         klerk.meta.stop()
     }
@@ -394,20 +392,18 @@ class AttachedBlobContainerTest {
     }
 
     @Test
-    fun `a container that declares no step at all is refused by the config`() {
+    fun `a container that declares no step at all is refused by the specification`() {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val config = ConfigBuilder<Ctx, Views>(collections).build {
+        val specification = SpecificationBuilder<Ctx, Views>(collections).build {
             managedModels {
                 model(Doodle::class, doodleStateMachine(), collections.doodles)
             }
             apply(generousAuthRules())
-            persistence(RamStorage())
-            attachedBlobStore(AttachedBlobStore.Database)
             systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
         }
 
-        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(config) }
+        val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }
         assertEquals(KlerkErrorCode.MissingPreAttachStep, e.code)
         assertTrue(e.message!!.contains("Doodle.drawing"), e.message!!)
         assertTrue(e.message!!.contains("noPreAttachProcessing"), "the message should say what to write instead")

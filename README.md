@@ -36,18 +36,18 @@ Make sure you have configured the project to use Java 17 or later.
 
 When developing a system using Klerk, we must:
 
-__1. Build a configuration__: This is where you declare all rules.
+__1. Write a specification__: This is where you declare all rules.
 
 ```
-val config = ConfigBuilder<Ctx, Data>(collections).build {
+val specification = SpecificationBuilder<Ctx, Data>(collections).build {
     // lots of stuff here
 }
 ```
 
-__2. Start Klerk__
+__2. Start Klerk__: the settings say how this particular instance runs — where it stores its data, and so on.
 
 ```
-val klerk = Klerk.create(config)
+val klerk = Klerk.create(specification, KlerkSettings(persistence = SqlPersistence(dataSource)))
 klerk.meta.start()
 ```
 
@@ -59,6 +59,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 
 ## Documentation
 
+* [Specification & settings](docs/specification-and-settings.md) — what the application is, versus how this instance runs
 * [Models](docs/models.md) — defining model classes and `DataContainer` properties
 * [State machines](docs/state-machines.md) — states, transitions, time triggers
 * [Events and commands](docs/events-and-commands.md) — declaring events and calling `klerk.handle`
@@ -72,7 +73,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Persistence & migrations](docs/persistence.md) — storage backends and evolving model shapes
 * [Attached data](docs/attached-data.md) — large blobs and strings attached to a model
 * [Translation](docs/translation.md) — localizing validation and UI text
-* [Testing](docs/testing.md) — testing a Klerk configuration
+* [Testing](docs/testing.md) — testing a Klerk specification
 * [Concurrency](docs/concurrency.md) — how commands and reads are serialized, and what that means for your code
 * [Security](docs/security.md) — how authorization, concurrency, and the audit log combine into Klerk's security model
 * [Performance](docs/performance.md) — what's fast by default, and what to do if it isn't enough

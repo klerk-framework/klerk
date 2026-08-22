@@ -85,16 +85,16 @@ history (e.g. "imported from legacy system", a support ticket id, ...).
 
 Klerk sometimes needs to act without an actor supplying a context — most notably when a state machine's time trigger
 (`after(...)`, `atTime(...)`) fires in the background, or when a job runs. For these cases you must register a function
-in the config that builds a `Ctx` from a `SystemIdentity`:
+in the specification that builds a `Ctx` from a `SystemIdentity`:
 
 ```kotlin
-ConfigBuilder<Context, MyCollections>(collections).build {
+SpecificationBuilder<Context, MyCollections>(collections).build {
     systemContextProvider { systemIdentity -> Context(systemIdentity) }
     // ...
 }
 ```
 
-This is mandatory — `ConfigBuilder.build()` throws `IllegalConfigurationException` if it's missing.
+This is mandatory — `SpecificationBuilder.build()` throws `IllegalConfigurationException` if it's missing.
 
 ## Getting a context for reading
 
