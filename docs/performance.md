@@ -7,10 +7,10 @@ looking if you actually hit a bottleneck.
 
 ## Keep read locks short
 
-A read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as long as it runs. `readSuspend` is the usual way
-this gets expensive — a slow suspending call (e.g. an HTTP request) inside the block holds up everything else meanwhile.
-See [concurrency.md](concurrency.md#keep-read-locks-short) for how to structure this: read what you need, release the
-lock, then do the slow work.
+Reads run concurrently with each other, but a read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as
+long as it runs. `readSuspend` is the usual way this gets expensive — a slow suspending call (e.g. an HTTP request)
+inside the block holds up every command meanwhile. See [concurrency.md](concurrency.md#keep-read-locks-short) for how
+to structure this: read what you need, release the lock, then do the slow work.
 
 ## Slow queries: build a custom view instead of filtering at read time
 

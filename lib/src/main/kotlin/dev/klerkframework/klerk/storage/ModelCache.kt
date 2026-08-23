@@ -22,8 +22,9 @@ internal object ModelCache {
 
     private val log = KotlinLogging.logger {}
 
-    // These (models and relationsTo) are only accessed using a ReadWriteLock which prevents concurrent modification
-    // and gives us a happens-before guarantee
+    // These (models and relationsTo) are only accessed while holding a ReadWriteLock. Readers run concurrently but
+    // only read, and a writer excludes every reader, so plain HashMaps are safe and we get a happens-before guarantee.
+    // Note that this stops holding as soon as a read is allowed to mutate them (e.g. populating a cache miss).
     private val models: MutableMap<Int, Model<out Any>> = HashMap()
     private val relationsTo: MutableMap<Int, MutableSet<Int>> = HashMap()
 

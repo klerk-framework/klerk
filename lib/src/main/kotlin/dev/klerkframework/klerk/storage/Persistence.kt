@@ -8,6 +8,7 @@ import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobRecord
 import dev.klerkframework.klerk.migration.MigrationStep
 import java.io.InputStream
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
 
 /** One persisted entry in the audit log: the record of a single committed command against a single model. */
@@ -136,7 +137,19 @@ public interface Persistence {
         jobs: JobCommit,
     ): Unit
 
+    /** Reads every stored model. Used once at startup to populate the model cache. */
     public fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit
+
+    /**
+     * Reads a single model, or null if no model has that id.
+     *
+     * Called on the read path when a model is not resident in memory, so it must be a keyed lookup rather than a scan,
+     * and it must be safe to call concurrently from several threads.
+     *
+     * @param id the [ModelID.value] of the wanted model
+     */
+    public fun readModel(id: Int): Model<out Any>?
+
     public fun readAuditLog(
         modelId: Int? = null,
         from: Instant = Instant.DISTANT_PAST,
@@ -263,7 +276,11 @@ public open class RamStorage : Persistence {
     // setSpecification -- createAuditEntry falls back to an empty params string in that case.
     private lateinit var gson: Gson
     private val auditLog = mutableSetOf<AuditEntry>()
-    private val models = mutableMapOf<Int, Model<Any>>()
+
+    // Concurrent because readModel is called by readers that do not hold the write lock, while a commit writes here
+    // (writes are serialized against each other, but not against readers, since a commit persists before it takes the
+    // write lock).
+    private val models = ConcurrentHashMap<Int, Model<Any>>()
     override val currentModelSchemaVersion: Int = 1
 
     // A null value means the bytes are in an external blob store rather than here.
@@ -339,6 +356,8 @@ public open class RamStorage : Persistence {
     override fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit {
         return models.values.forEach { lambda(it) }
     }
+
+    override fun readModel(id: Int): Model<out Any>? = models[id]
 
     override fun readAuditLog(modelId: Int?, from: Instant, until: Instant): Iterable<AuditEntry> {
         return auditLog

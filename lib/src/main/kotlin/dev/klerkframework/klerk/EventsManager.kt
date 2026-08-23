@@ -205,11 +205,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
-            readWriteLock.acquireWrite()    // make sure nobody is reading while we mutate
-            ModelCache.handleDelta(delta)
-            attachedData.applyToMemory(attachedDataDelta)
-            updateViews(delta)
-            readWriteLock.releaseWrite()    // mutation is done, reading is now permitted
+            readWriteLock.withWrite {    // make sure nobody is reading while we mutate
+                ModelCache.handleDelta(delta)
+                attachedData.applyToMemory(attachedDataDelta)
+                updateViews(delta)
+            }
         }
 
         maybeEraseAuditLog(specification, delta.deletedModels)
@@ -248,8 +248,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         before: Instant
     ): Iterable<AuditEntry> {
         val reader = ReaderWithoutAuth<C, V>(klerk)
-        readWriteLock.acquireRead()
-        try {
+        readWriteLock.withRead {
             val args = ArgContextReader(context, reader)
             if (specification.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
@@ -263,8 +262,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     "Not allowed to read audit log"
                 )
             }
-        } finally {
-            readWriteLock.releaseRead()
         }
 
         return settings.persistence.readAuditLog(modelId = id?.value, after, before)

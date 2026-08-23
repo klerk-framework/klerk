@@ -9,6 +9,9 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 
 class SqlPersistenceTest {
@@ -46,6 +49,61 @@ class SqlPersistenceTest {
             assertEquals(151, ModelCache.count)
             val difference = autorFirstRun.copy(props = autorFirstRun.props.copy(lastName = LastName("Other name")))
             assertNotEquals(difference, authorSecondRun)
+        }
+    }
+
+    @Test
+    fun `readModel returns the same model that readAllModels does`() {
+        val bc = BookViews()
+        val collections = Views(bc, AuthorViews(bc.all))
+        val persistence = SQLiteInMemory.create()
+        val klerk = Klerk.create(createConfig(collections), testSettings(persistence))
+        runBlocking {
+            klerk.meta.start()
+            generateSampleData(10, 2, klerk)
+
+            val all = mutableMapOf<Int, Model<out Any>>()
+            persistence.readAllModels { all[it.id.value] = it }
+            assertTrue(all.size > 1)
+
+            all.forEach { (id, expected) ->
+                assertEquals(expected, persistence.readModel(id), "readModel disagreed with readAllModels for $id")
+            }
+            assertNull(persistence.readModel(all.keys.max() + 1_000))
+            klerk.meta.stop()
+        }
+    }
+
+    @Test
+    fun `readModel reflects deletions`() {
+        val bc = BookViews()
+        val collections = Views(bc, AuthorViews(bc.all))
+        val persistence = SQLiteInMemory.create()
+        val klerk = Klerk.create(createConfig(collections), testSettings(persistence))
+        runBlocking {
+            klerk.meta.start()
+            val command = Command(
+                event = CreateAuthor,
+                model = null,
+                params = CreateAuthorParams(
+                    firstName = FirstName("Pelle"),
+                    lastName = LastName("Andersson"),
+                    phone = PhoneNumber("345"),
+                    secretToken = SecretPasscode(99)
+                )
+            )
+            val authorRef = requireNotNull(
+                klerk.handle(command, Ctx.system(), ProcessingOptions(CommandToken.simple())).orThrow().primaryModel
+            )
+            assertNotNull(persistence.readModel(authorRef.value))
+
+            klerk.handle(
+                Command(event = DeleteAuthor, model = authorRef, params = null),
+                Ctx.system(),
+                ProcessingOptions(CommandToken.simple())
+            ).orThrow()
+            assertNull(persistence.readModel(authorRef.value))
+            klerk.meta.stop()
         }
     }
 

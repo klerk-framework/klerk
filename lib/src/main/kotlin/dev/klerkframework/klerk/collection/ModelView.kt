@@ -19,8 +19,8 @@ public abstract class ModelView<T : Any, C : KlerkContext>(private val parent: M
     private var idBase: String? = null
     protected var _id: String? = null
 
-    // These are only accessed using a ReadWriteLock which prevents concurrent modification and gives us
-    // a happens-before guarantee
+    // These are only accessed while holding a ReadWriteLock. Readers run concurrently but only read; view content is
+    // replaced under the write lock during a commit, which excludes every reader.
 
     /*
     - mutex så att inte alla gör get samtidigt ?

@@ -6,6 +6,16 @@ backend, put it in `KlerkSettings`, and Klerk uses it to durably store models, t
 
 There are two implementations in the framework today.
 
+## Reading models
+
+Klerk reads models from a `Persistence` backend in two ways:
+
+- `readAllModels(lambda)` — every stored model, called once at startup to populate the model cache.
+- `readModel(id)` — a single model by id, or null if there is none.
+
+An implementation must make `readModel` a keyed lookup rather than a scan, and safe to call from several threads at
+once, because it is on the read path: it is how a model that is not resident in memory gets loaded.
+
 ## SqlPersistence
 
 ```kotlin
