@@ -16,7 +16,7 @@ import kotlin.time.Instant
  */
 internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
 
-    override val views = klerk.specification.views
+    override val views = klerk.spec.views
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
 

@@ -9,11 +9,7 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
-import dev.klerkframework.klerk.job.JobAgent
-import dev.klerkframework.klerk.job.JobSettings
-import dev.klerkframework.klerk.job.JobsBlock
-import dev.klerkframework.klerk.job.JobsSpecification
-import dev.klerkframework.klerk.job.PluginJobsBlock
+import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
 import dev.klerkframework.klerk.statemachine.Block
@@ -146,7 +142,9 @@ public data class Specification<C : KlerkContext, V>(
         if (bare.isNotEmpty()) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.BlobMustBeDeclaredInAContainer,
-                "${bare.sorted().joinToString(", ")} is an AttachedBlobID. Declare an AttachedBlobContainer subclass for it " +
+                "${
+                    bare.sorted().joinToString(", ")
+                } is an AttachedBlobID. Declare an AttachedBlobContainer subclass for it " +
                         "instead, the way every other property has a DataContainer:\n\n" +
                         "    class Portrait(id: AttachedBlobID) : AttachedBlobContainer(id) {\n" +
                         "        override val accept = setOf(\"image/png\", \"image/jpeg\")\n" +
@@ -1399,9 +1397,7 @@ public data class KlerkSettings(
     val jobs: JobSettings = JobSettings(),
 
     /**
-     * How much model data is kept in memory. Defaults to all of it; lower it when the models no longer fit
-     * comfortably, at the cost of reading evicted ones back from [persistence] when they are next used. See
-     * docs/eviction.md.
+     * How much model data is kept in memory.
      */
     val modelCache: ModelCacheSettings = ModelCacheSettings(),
 

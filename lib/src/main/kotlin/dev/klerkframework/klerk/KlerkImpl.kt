@@ -15,7 +15,6 @@ import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.validation.Validator
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.time.Duration
 import kotlin.time.measureTime
 
 
@@ -26,7 +25,7 @@ import kotlin.time.measureTime
 internal fun <C : KlerkContext, V> Klerk<C, V>.impl(): KlerkImpl<C, V> = this as KlerkImpl<C, V>
 
 internal class KlerkImpl<C : KlerkContext, V>(
-    override val specification: Specification<C, V>,
+    override val spec: Specification<C, V>,
     override val settings: KlerkSettings,
 ) :
     Klerk<C, V> {
@@ -36,13 +35,13 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val readWriteLock = ReadWriteLock()
     private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
-    internal val eventsManager = EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
+    internal val eventsManager = EventsManagerImpl<C, V>(spec, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
     private val klerkLog = KlerkLogImpl()
     internal val validator = Validator(this)
 
     init {
-        specification.initialize(settings)
+        spec.initialize(settings)
         ModelCache.initialize(settings.persistence, settings.modelCache)
         ModelCache.initMetrics(settings.meterRegistry)
         /*
@@ -54,7 +53,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
          */
 
-        specification.managedModels.forEach { managed ->
+        spec.managedModels.forEach { managed ->
             managed.collections.initialize()
             managed.collections.getCollections().forEach { it.setIdBase(managed.kClass.simpleName) }
             managed.stateMachine.setView(managed.collections)
@@ -64,7 +63,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
 
     private fun modelViewProvider(modelType: String): ModelViews<*, C> {
-        return specification.managedModels.find { it.kClass.simpleName == modelType }?.collections
+        return spec.managedModels.find { it.kClass.simpleName == modelType }?.collections
             ?: throw RuntimeException("Can't find model view for type '$modelType'")
     }
 
@@ -146,9 +145,9 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
 
             val startTime = measureTime {
                 ModelCache.clear()
-                klerk.settings.persistence.setSpecification(klerk.specification)
+                klerk.settings.persistence.setSpecification(klerk.spec)
 
-                val migrations = klerk.specification.migrationSteps.toMutableList()
+                val migrations = klerk.spec.migrationSteps.toMutableList()
                 migrations.removeIf { it.migratesToVersion <= klerk.settings.persistence.currentModelSchemaVersion }
                 if (migrations.isNotEmpty()) {
                     klerk.settings.persistence.migrate(migrations)
@@ -158,7 +157,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 klerk.attachedDataImpl.start()
                 // Jobs start last: reloading them may need models and attached data to be in place already.
                 klerk.jobs.start()
-                klerk.specification.plugins.forEach {
+                klerk.spec.plugins.forEach {
                     logger.info { "Initializing plugin: ${it.name}" }
                     it.start(klerk)
                 }

@@ -57,7 +57,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val settings: KlerkSettings,
 ) : KlerkAttachedData<C> {
 
-    private val specification get() = klerk.specification
+    private val specification get() = klerk.spec
 
     // Rebuilt from storage at startup, like ModelCache. Read and written from prepare (which deliberately runs outside
     // the serialized command path) as well as from commit, hence Concurrent. Blobs and strings share it, and thus

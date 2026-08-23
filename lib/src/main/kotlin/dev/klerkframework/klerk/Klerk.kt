@@ -36,7 +36,7 @@ public interface Klerk<C : KlerkContext, V> {
         }
     }
 
-    public val specification: Specification<C, V>
+    public val spec: Specification<C, V>
     public val settings: KlerkSettings
     public val events: EventsManager<C, V>
     public val jobs: JobManager<C, V>
@@ -94,8 +94,8 @@ public interface Klerk<C : KlerkContext, V> {
      * calls) while the read lock is held.
      *
      * Doing so blocks every other command and read in the system for the duration, so use with care. In particular,
-     * never submit a command from within [readFunction] — that deadlocks the application. Prefer [read] unless you
-     * specifically need to suspend inside the read.
+     * never submit a command from within [readFunction] — that deadlocks the application. [readSuspend] is generally
+     * discouraged, prefer [read] unless you have a good reason to suspend inside the read.
      *
      * @param context including the actorIdentity on whose behalf the read happens. This actor can be overridden inside
      * readFunction (see [Reader]).

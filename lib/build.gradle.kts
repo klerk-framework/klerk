@@ -19,7 +19,7 @@ val kotlinLoggingVersion = "2.1.21"
 val slf4jVersion = "2.0.3"
 val sqliteJdbcVersion = "3.44.1.0"
 val gsonVersion = "2.9.0"
-val caffeineVersion = "3.2.0"
+val caffeineVersion = "3.2.4"
 
 group = "dev.klerkframework"
 version = "1.0.0-beta.7-SNAPSHOT"
@@ -31,8 +31,6 @@ repositories {
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
-    // 'api' rather than 'implementation': KSerializer appears in Klerk's public API (JobType.cursorSerializer), and
-    // job authors annotate their own cursor classes with @Serializable.
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
@@ -40,8 +38,6 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
     implementation("io.micrometer:micrometer-core:$micrometerVersion")
     implementation("com.google.code.gson:gson:$gsonVersion")
-    // 'implementation', not 'api': the cache is an internal detail and Caffeine types must not reach Klerk's public
-    // API. The model cache is configured with plain values in ModelCacheSettings.
     implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")

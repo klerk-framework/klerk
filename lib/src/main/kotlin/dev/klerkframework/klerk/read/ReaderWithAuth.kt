@@ -14,9 +14,9 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     private val withoutAuth = ReaderWithoutAuth(klerk)
 
-    private val propertyAuth = PropertyAuthScope(context, klerk.specification, withoutAuth)
+    private val propertyAuth = PropertyAuthScope(context, klerk.spec, withoutAuth)
 
-    override val views = klerk.specification.views
+    override val views = klerk.spec.views
 
     internal val modelsRead = mutableSetOf<Model<*>>()
 
@@ -47,7 +47,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     ): List<Model<T>> {
         return withoutAuth.list(collection)
             .map { propertyAuth.secure(it) }
-            .filter { isAuthorized(it, context, klerk.specification, withoutAuth) }
+            .filter { isAuthorized(it, context, klerk.spec, withoutAuth) }
     }
 
     override fun <T : Any> list(
@@ -78,7 +78,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? =
         propertyAuth.secure(withoutAuth.get(id))
-            .let { if (isAuthorized(it, context, klerk.specification, withoutAuth)) it else null }
+            .let { if (isAuthorized(it, context, klerk.spec, withoutAuth)) it else null }
 
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
@@ -86,7 +86,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             return model
         }
         val secured = propertyAuth.secure(model)
-        when (val result = evaluateAuthorization(context, secured, klerk.specification, withoutAuth)) {
+        when (val result = evaluateAuthorization(context, secured, klerk.spec, withoutAuth)) {
             is ReadResult.Fail -> throw result.problem.asException()
             is ReadResult.Ok -> return secured
         }
@@ -102,13 +102,13 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
-        klerk.specification.getPossibleVoidEvents(clazz, context, visibility)
+        klerk.spec.getPossibleVoidEvents(clazz, context, visibility)
             .filter { klerk.validator.validateWithoutParameters<T>(it, context, null, withoutAuth) }
             .toSet()
 
     override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
         val model = get(id)
-        return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
+        return klerk.spec.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
             .filter { klerk.validator.validateWithoutParameters(it, context, model, withoutAuth) }
             .toSet()
     }

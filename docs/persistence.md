@@ -6,17 +6,6 @@ backend, put it in `KlerkSettings`, and Klerk uses it to durably store models, t
 
 There are two implementations in the framework today.
 
-## Reading models
-
-Klerk reads models from a `Persistence` backend in two ways:
-
-- `readAllModels(lambda)` — every stored model, called once at startup to populate the model cache.
-- `readModel(id)` — a single model by id, or null if there is none.
-
-An implementation must make `readModel` a keyed lookup rather than a scan, and safe to call from several threads at
-once, because it is on the read path: it is how a model that is not resident in memory gets loaded. How much is kept
-resident is configured with `KlerkSettings.modelCache` — see [eviction.md](eviction.md).
-
 ## SqlPersistence
 
 ```kotlin
@@ -64,12 +53,12 @@ Klerk.create(
 ```
 
 Which backend an instance uses is not part of the [specification](../README.md) — the same specification runs on
-`RamStorage` in a test and on `SqlPersistence` in production. `persistence` is the one `KlerkSettings` parameter
-without a default, so it cannot be forgotten.
+`RamStorage` in a test and on `SqlPersistence` in production. `persistence` is the one `KlerkSettings` parameter without
+a default, so it cannot be forgotten.
 
-Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`, and required as soon as the specification declares
-a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back up its directory as
-well. See [attached data](attached-data.md).
+Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`, and required as soon as the
+specification declares a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back
+up its directory as well. See [attached data](attached-data.md).
 
 ## Migrations
 
@@ -106,8 +95,8 @@ object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
 }
 ```
 
-Migration steps describe how the application evolves, so they belong in the specification; the backend they run
-against is a setting:
+Migration steps describe how the application evolves, so they belong in the specification; the backend they run against
+is a setting:
 
 ```kotlin
 val specification = SpecificationBuilder<Context, MyCollections>(collections).build {

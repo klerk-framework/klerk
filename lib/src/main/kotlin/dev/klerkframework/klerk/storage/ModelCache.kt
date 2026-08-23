@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.read.ReadResult
 import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.storage.ModelCache.persistence
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
@@ -18,17 +19,16 @@ import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.memberProperties
 
 /**
- * How much model data Klerk keeps in memory. See docs/eviction.md.
+ * How much model data Klerk keeps in memory. See docs/performance.md.
  *
  * @property maxResidentModels the largest number of model bodies held in memory at once. Beyond this, the least
- * valuable are evicted and re-read from [Persistence] when they are next needed. The default keeps everything
- * resident, which is the right choice unless the data no longer fits comfortably in memory.
+ * valuable are evicted and re-read from [Persistence] when they are next needed. The default is 10 million.
  */
 public data class ModelCacheSettings(
-    val maxResidentModels: Int = Int.MAX_VALUE,
+    val maxResidentModels: Int = 10_000_000,
 ) {
     init {
-        require(maxResidentModels > 0) { "maxResidentModels must be at least 1, was $maxResidentModels" }
+        require(maxResidentModels > 1000) { "maxResidentModels must be at least 1000, was $maxResidentModels" }
     }
 }
 
@@ -136,11 +136,6 @@ internal object ModelCache {
 
     /**
      * Reads the given models into memory if they are not already there.
-     *
-     * A commit writes to storage before it applies to memory. In between, a reader that missed on one of the models
-     * the commit touches would fetch the *new* version from storage while the rest of its read block still sees the
-     * old one — a half-committed command, which reads are guaranteed never to observe. Making those models resident
-     * first means such a reader is served from memory during that window.
      */
     internal fun ensureResident(modelIds: Collection<ModelID<out Any>>) {
         modelIds.forEach { getBody(it.value) }

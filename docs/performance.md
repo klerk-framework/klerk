@@ -1,17 +1,25 @@
 # Performance
 
-Klerk keeps all model data in memory by default (see [persistence.md](persistence.md) — the database backend is only
-for durability, not for querying), so reads are typically fast without any tuning: no query planner, no round trip, no
-serialization on the read path. If the data no longer fits, [eviction.md](eviction.md) covers keeping only part of it
-resident, and what that costs. Favor clear code over premature optimization; the places below are where it's worth
-looking if you actually hit a bottleneck.
+Klerk is designed to be fast, so you rarely have to think about performance. Favor clear code over premature
+optimization; the places below are where it's worth looking if you actually hit a bottleneck.
+
+## Caching
+
+Klerk caches model data in memory. Klerk is designed to have a cache that fits all models in memory. If models have to
+be fetched from the database, you will likely see dramatic performance reductions. The default setting is to keep 10
+million models in memory. The bound counts models, not bytes, and it is a target rather than a hard cap — eviction
+happens shortly after the limit is passed, not at the instant it is. Klerk evicts the models it judges least likely to
+be used again.
+
+Some indexes are always kept in memory, so Klerk's memory usage will grow with the number of models even if they are
+evicted.
 
 ## Keep read locks short
 
-Reads run concurrently with each other, but a read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as
-long as it runs. `readSuspend` is the usual way this gets expensive — a slow suspending call (e.g. an HTTP request)
-inside the block holds up every command meanwhile. See [concurrency.md](concurrency.md#keep-read-locks-short) for how
-to structure this: read what you need, release the lock, then do the slow work.
+Reads run concurrently with each other, but a read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as long
+as it runs. `readSuspend` is the usual way this gets expensive — a slow suspending call (e.g. an HTTP request)
+inside the block holds up every command meanwhile. See [concurrency.md](concurrency.md#keep-read-locks-short) for how to
+structure this: read what you need, release the lock, then do the slow work.
 
 ## Slow queries: reach for `filter` first, a custom view second
 

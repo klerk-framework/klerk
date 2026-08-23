@@ -210,7 +210,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
-            readWriteLock.withWrite {    // make sure nobody is reading while we mutate
+            readWriteLock.withWrite {
                 ModelCache.handleDelta(delta)
                 attachedData.applyToMemory(attachedDataDelta)
                 updateViews(delta)

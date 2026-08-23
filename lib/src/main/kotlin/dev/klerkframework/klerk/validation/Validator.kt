@@ -41,7 +41,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         currentCommand: Command<out Any, *>,
         reader: Reader<C, V>
     ): Problem? {
-        val sm = klerk.specification.getStateMachineForEvent(currentCommand.event)
+        val sm = klerk.spec.getStateMachineForEvent(currentCommand.event)
         if (currentCommand.model == null) {
             val smState = sm.voidState
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
@@ -125,7 +125,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     }
 
     private fun validateWithContext(context: C, eventReference: EventReference): Collection<Problem> {
-        return klerk.specification.getEvent(eventReference).getContextRules<C>().mapNotNull {
+        return klerk.spec.getEvent(eventReference).getContextRules<C>().mapNotNull {
             val result = it.invoke(context)
             if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
                 endUserTranslatedMessage = result.endUserTranslatedMessage ?: it::class.simpleName
@@ -145,7 +145,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         parameters::class.primaryConstructor!!.parameters.forEach { parameter ->
             if (parameter.type.isSubtypeOf(EnumContainer::class.starProjectedType)) {
                 val p = EventParameter(parameter)
-                val validValues = klerk.specification.getValidEnumsFor(eventReference, p)
+                val validValues = klerk.spec.getValidEnumsFor(eventReference, p)
                 if (validValues != null) {
                     val prop = parameters::class.memberProperties.single { it.name == parameter.name }
                     val container = prop.getter.call(parameters) as EnumContainer<*>
@@ -170,7 +170,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             if (parameter.type.isSubtypeOf(ModelID::class.starProjectedType)) {
                 val reader = ReaderWithoutAuth<C, V>(klerk)
                 val p = EventParameter(parameter)
-                val collection = klerk.specification.getValidationCollectionFor(eventReference, p)
+                val collection = klerk.spec.getValidationCollectionFor(eventReference, p)
                 val prop = parameters::class.memberProperties.single { it.name == parameter.name }
                 val value = prop.getter.call(parameters) as ModelID<*>
                 if (collection != null && !collection.contains(value, reader)) {
@@ -230,7 +230,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         context: C
     ): Problem? {
         val negativeAuthProblem =
-            klerk.specification.authorization.eventNegativeRules.firstOrNull {
+            klerk.spec.authorization.eventNegativeRules.firstOrNull {
                 it(
                     ArgCommandContextReader(
                         command,
@@ -245,7 +245,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 KlerkErrorCode.CommandNegativeAuthorizationExist
             )
         }
-        if (klerk.specification.authorization.eventPositiveRules.none {
+        if (klerk.spec.authorization.eventPositiveRules.none {
                 it(
                     ArgCommandContextReader(
                         command,
@@ -286,7 +286,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         reader: Reader<C, V>
     ): List<Problem> {
         val problems = mutableListOf<Problem>()
-        val stateMachine = getStateMachine(command, klerk.specification.managedModels)
+        val stateMachine = getStateMachine(command, klerk.spec.managedModels)
         if (command.model != null) {
             val model = ModelCache.read(command.model).getOrThrow()
             if (model.props::class != stateMachine.type) {
@@ -337,7 +337,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
         @Suppress("UNCHECKED_CAST")
         return validateEventRulesWithoutParams(
-            klerk.specification.getEvent(eventRef) as Event<T, Any?>,
+            klerk.spec.getEvent(eventRef) as Event<T, Any?>,
             context,
             model,
             readerWithoutAuth

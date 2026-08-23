@@ -52,7 +52,7 @@ internal suspend fun currentJobId(): JobId? = coroutineContext[RunningJobElement
  */
 internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) : JobManagerInternal<C, V> {
 
-    private val specification get() = klerk.specification
+    private val specification get() = klerk.spec
     private val jobSpec get() = specification.jobs
     private val jobSettings get() = klerk.settings.jobs
 

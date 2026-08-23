@@ -1,8 +1,7 @@
 # Klerk Framework
 
-Klerk is a Kotlin framework for developing information systems. It replaces the database and
-business-logic code in a traditional system. You are free to use other backend components to build whatever you want on
-top of Klerk, such as
+Klerk is a Kotlin framework for developing information systems. It replaces the database and business-logic code in a
+traditional system. You are free to use other backend components to build whatever you want on top of Klerk, such as
 
 * an API (JSON, REST, GraphQL) serving your frontend
 * a web app using server generated HTML
@@ -59,7 +58,8 @@ val myBook = klerk.read(context) { get(myBookId) }
 
 ## Documentation
 
-* [Specification & settings](docs/specification-and-settings.md) — what the application is, versus how this instance runs
+* [Specification & settings](docs/specification-and-settings.md) — what the application is, versus how this instance
+  runs
 * [Models](docs/models.md) — defining model classes and `DataContainer` properties
 * [State machines](docs/state-machines.md) — states, transitions, time triggers
 * [Events and commands](docs/events-and-commands.md) — declaring events and calling `klerk.handle`
@@ -71,7 +71,6 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Jobs](docs/jobs.md) — background work, managed and unmanaged
 * [Time](docs/time.md) — where "now" comes from, and choosing between time triggers, `scheduleAt` and cron
 * [Persistence & migrations](docs/persistence.md) — storage backends and evolving model shapes
-* [Eviction](docs/eviction.md) — keeping only part of the model data in memory
 * [Attached data](docs/attached-data.md) — large blobs and strings attached to a model
 * [Translation](docs/translation.md) — localizing validation and UI text
 * [Testing](docs/testing.md) — testing a Klerk specification
