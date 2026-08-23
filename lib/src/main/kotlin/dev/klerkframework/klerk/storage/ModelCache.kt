@@ -28,7 +28,11 @@ public data class ModelCacheSettings(
     val maxResidentModels: Int = 10_000_000,
 ) {
     init {
-        require(maxResidentModels > 1000) { "maxResidentModels must be at least 1000, was $maxResidentModels" }
+        if (maxResidentModels < 1000) {
+            // strange things can happen if the cache is too small, e.g. ModelCache.ensureResident may not really
+            // ensure that the requested models are in memory
+            logger.warn { "maxResidentModels should be at least 1000, was $maxResidentModels" }
+        }
     }
 }
 
