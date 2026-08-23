@@ -19,6 +19,7 @@ val kotlinLoggingVersion = "2.1.21"
 val slf4jVersion = "2.0.3"
 val sqliteJdbcVersion = "3.44.1.0"
 val gsonVersion = "2.9.0"
+val caffeineVersion = "3.2.0"
 
 group = "dev.klerkframework"
 version = "1.0.0-beta.7-SNAPSHOT"
@@ -39,6 +40,9 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
     implementation("io.micrometer:micrometer-core:$micrometerVersion")
     implementation("com.google.code.gson:gson:$gsonVersion")
+    // 'implementation', not 'api': the cache is an internal detail and Caffeine types must not reach Klerk's public
+    // API. The model cache is configured with plain values in ModelCacheSettings.
+    implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
     testImplementation("org.slf4j:slf4j-simple:$slf4jVersion")

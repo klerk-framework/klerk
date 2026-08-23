@@ -25,6 +25,7 @@ import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransitionWhen
 import dev.klerkframework.klerk.storage.AttachedBlobStore
+import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.Persistence
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -1396,6 +1397,13 @@ public data class KlerkSettings(
 
     /** How the job module is operated: parallelism, polling, retention and retry backoff. */
     val jobs: JobSettings = JobSettings(),
+
+    /**
+     * How much model data is kept in memory. Defaults to all of it; lower it when the models no longer fit
+     * comfortably, at the cost of reading evicted ones back from [persistence] when they are next used. See
+     * docs/eviction.md.
+     */
+    val modelCache: ModelCacheSettings = ModelCacheSettings(),
 
     /**
      * Gates the "escape hatch" functions on [KlerkModels] ([KlerkModels.unsafeCreate], [KlerkModels.unsafeUpdate],

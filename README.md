@@ -71,6 +71,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Jobs](docs/jobs.md) — background work, managed and unmanaged
 * [Time](docs/time.md) — where "now" comes from, and choosing between time triggers, `scheduleAt` and cron
 * [Persistence & migrations](docs/persistence.md) — storage backends and evolving model shapes
+* [Eviction](docs/eviction.md) — keeping only part of the model data in memory
 * [Attached data](docs/attached-data.md) — large blobs and strings attached to a model
 * [Translation](docs/translation.md) — localizing validation and UI text
 * [Testing](docs/testing.md) — testing a Klerk specification

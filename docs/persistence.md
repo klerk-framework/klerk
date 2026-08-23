@@ -14,7 +14,8 @@ Klerk reads models from a `Persistence` backend in two ways:
 - `readModel(id)` — a single model by id, or null if there is none.
 
 An implementation must make `readModel` a keyed lookup rather than a scan, and safe to call from several threads at
-once, because it is on the read path: it is how a model that is not resident in memory gets loaded.
+once, because it is on the read path: it is how a model that is not resident in memory gets loaded. How much is kept
+resident is configured with `KlerkSettings.modelCache` — see [eviction.md](eviction.md).
 
 ## SqlPersistence
 

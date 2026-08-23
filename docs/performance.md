@@ -1,8 +1,9 @@
 # Performance
 
-Klerk keeps all model data in memory (see [persistence.md](persistence.md) — the database backend is only for
-durability, not for querying), so reads are typically fast without any tuning: no query planner, no round trip, no
-serialization on the read path. Favor clear code over premature optimization; the places below are where it's worth
+Klerk keeps all model data in memory by default (see [persistence.md](persistence.md) — the database backend is only
+for durability, not for querying), so reads are typically fast without any tuning: no query planner, no round trip, no
+serialization on the read path. If the data no longer fits, [eviction.md](eviction.md) covers keeping only part of it
+resident, and what that costs. Favor clear code over premature optimization; the places below are where it's worth
 looking if you actually hit a bottleneck.
 
 ## Keep read locks short

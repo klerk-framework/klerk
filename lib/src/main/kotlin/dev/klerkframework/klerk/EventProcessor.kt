@@ -83,11 +83,6 @@ internal class EventProcessor<C : KlerkContext, V>(
             logger.info { "Read ${ModelCache.count} models in ${readModelsMilliS / 1000} s $modelsPerSecondString" }
         }
 
-        val relationsTime = measureTime {
-            ModelCache.initRelations()
-        }
-        logger.info { "Built relations map in ${relationsTime.inWholeMilliseconds} ms" }
-
         val timeTriggerTime = measureTime {
             updateTimeTriggerOnAllModels()
         }
@@ -105,7 +100,10 @@ internal class EventProcessor<C : KlerkContext, V>(
      */
     private fun updateTimeTriggerOnAllModels() {
         val reader = ReaderWithoutAuth<C, V>(klerk)
-        processTriggerTimeForModels(ModelCache.getAll(reader).map { it.value }, reader)
+        // Goes through the ids rather than what happens to be resident: every model must be checked, and with a
+        // bounded cache some of them will already have been evicted by the time the startup read finishes.
+        val models = ModelCache.allIds(reader).mapNotNull { ModelCache.getOrNull<Any>(ModelID(it)) }
+        processTriggerTimeForModels(models, reader)
     }
 
     private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: Reader<C, V>) {

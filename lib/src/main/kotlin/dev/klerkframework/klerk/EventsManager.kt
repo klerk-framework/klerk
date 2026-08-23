@@ -198,6 +198,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
     ) {
+        // The models this command changes must be in memory before storage is written, or a read that misses on one of
+        // them in the window between the two would fetch the new version while seeing the old version of everything
+        // else. Created models cannot be missed (nothing knows their ids yet).
+        ModelCache.ensureResident(delta.updatedModels + delta.transitions + delta.deletedModels)
+
         if (isJobStep) {
             settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
         } else {

@@ -27,6 +27,7 @@ The rule of thumb: *could two deployments of the same product legitimately diffe
 | plugins (`withPlugin`)                                | `allowUnsafeOperations`                                 |
 | `eraseAuditLogAfterModelDeletion`                     | `unclaimedAttachedDataLifetime`, `maxAttachedDataLease` |
 |                                                       | `contentTypeDetector`                                   |
+|                                                       | `modelCache` (a [`ModelCacheSettings`](eviction.md))    |
 
 Two placements are worth explaining:
 
@@ -72,6 +73,7 @@ val klerk = Klerk.create(
 ## Related
 
 - [Persistence & migrations](persistence.md) — the storage backends
+- [Eviction](eviction.md) — `modelCache`, and what it costs to keep less in memory
 - [Jobs](jobs.md) — `JobsSpecification` and `JobSettings` in detail
 - [Time](time.md) — the settings clock
 - [Testing](testing.md) — the full testing story

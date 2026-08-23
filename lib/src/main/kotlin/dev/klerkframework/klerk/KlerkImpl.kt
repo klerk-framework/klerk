@@ -43,6 +43,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
     init {
         specification.initialize(settings)
+        ModelCache.initialize(settings.persistence, settings.modelCache)
         ModelCache.initMetrics(settings.meterRegistry)
         /*
         SingletonStuff.views = views as Any
