@@ -61,6 +61,9 @@ bound is too low.
 
 ## Interaction with views
 
-A `filter`/`sorted` view evaluates its predicate on every model of the type (see [views.md](views.md)), which under
-eviction means reading each of them back. Views like that are the wrong tool once eviction is on; use a custom
-`ModelView` that narrows by id first, as described in [performance.md](performance.md).
+`filter` and `filterStates` views are indexed (see [views.md](views.md#how-views-are-kept)), so querying one reads back
+only the models it contains — which is what makes them usable at all under eviction. Their index is built the first
+time they are queried, and that first build does read every model in the parent view.
+
+Two things still read a whole view: `sorted`, which must see every model to order them, and a custom `ModelView`, which
+is evaluated on every query.

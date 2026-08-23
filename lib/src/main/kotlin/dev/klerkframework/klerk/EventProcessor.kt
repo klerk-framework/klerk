@@ -57,6 +57,7 @@ internal class EventProcessor<C : KlerkContext, V>(
 
         val allLists = mutableMapOf<String, MutableList<Int>>()
         klerk.specification.managedModels.forEach {
+            it.collections.prepareForLoad()
             allLists[it.kClass.simpleName!!] = it.collections._all
         }
 
@@ -83,10 +84,16 @@ internal class EventProcessor<C : KlerkContext, V>(
             logger.info { "Read ${ModelCache.count} models in ${readModelsMilliS / 1000} s $modelsPerSecondString" }
         }
 
+        // The load filled the 'all' lists directly, so the matching id sets have to catch up.
+        klerk.specification.managedModels.forEach { it.collections.indexLoadedModels() }
+
         val timeTriggerTime = measureTime {
             updateTimeTriggerOnAllModels()
         }
         logger.info { "Checked timeTriggers in ${timeTriggerTime.inWholeMilliseconds} ms" }
+
+        // From here on the set of views is fixed. Views derived later are not indexed and not retained.
+        klerk.specification.managedModels.forEach { it.collections.freeze() }
 
         timerStartup.record(readModelsMilliS, TimeUnit.MILLISECONDS)
     }
