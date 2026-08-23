@@ -16,7 +16,7 @@ import kotlin.time.Instant
  */
 internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
 
-    override val views = klerk.specification.views
+    override val views = klerk.spec.views
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
 
@@ -44,8 +44,10 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
             cursor = null   // a tiny optimization
         }
 
-        // We will request one or two extra items so we know if there are previous/next. To do this, we will treat the instant as including.
-        cursor?.including = true
+        // We will request one or two extra items so we know if there are previous/next. To do this, we will treat the
+        // instant as including. The cursor is copied first because the caller may hand us a shared one
+        // (QueryListCursor.first and .last are singletons) and concurrent reads must not write to it.
+        cursor = cursor?.copy()?.also { it.including = true }
         val desiredNumberOfItems = options?.maxItems ?: QueryListCursor.DEFAULT_ITEMS_PER_PAGE
         val itemsToTake = desiredNumberOfItems + if (cursor == null) 1 else 2
 

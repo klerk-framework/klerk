@@ -1,8 +1,11 @@
 package dev.klerkframework.klerk.storage
 
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.read.ReadResult
 import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.storage.ModelCache.persistence
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
@@ -15,56 +18,138 @@ import kotlin.reflect.full.createType
 import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.full.memberProperties
 
+/**
+ * How much model data Klerk keeps in memory. See docs/performance.md.
+ *
+ * @property maxResidentModels the largest number of model bodies held in memory at once. Beyond this, the least
+ * valuable are evicted and re-read from [Persistence] when they are next needed. The default is 10 million.
+ */
+public data class ModelCacheSettings(
+    val maxResidentModels: Int = 10_000_000,
+) {
+    init {
+        if (maxResidentModels < 1000) {
+            // strange things can happen if the cache is too small, e.g. ModelCache.ensureResident may not really
+            // ensure that the requested models are in memory
+            logger.warn { "maxResidentModels should be at least 1000, was $maxResidentModels" }
+        }
+    }
+}
+
 internal object ModelCache {
 
+    /** The number of models that exist, whether or not their bodies are in memory. */
     internal val count: Int
-        get() = models.count()
+        get() = ids.size
+
+    /** The number of model bodies currently in memory. Never larger than [count]. */
+    internal val residentCount: Long
+        get() = bodies.estimatedSize()
 
     private val log = KotlinLogging.logger {}
 
-    // These (models and relationsTo) are only accessed using a ReadWriteLock which prevents concurrent modification
-    // and gives us a happens-before guarantee
-    private val models: MutableMap<Int, Model<out Any>> = HashMap()
+    /**
+     * Every id that exists. Always complete — eviction removes bodies, never ids — so this is what tells "no such
+     * model" apart from "not in memory right now".
+     *
+     * Mutated only under the write lock, but concurrent because it is read by concurrent readers.
+     */
+    private val ids: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * Which models refer to a given model. Always resident: it holds nothing but ids, and correctness elsewhere
+     * depends on it being complete. Only accessed while holding the ReadWriteLock, and only mutated under its write
+     * side, so a plain HashMap is safe.
+     */
     private val relationsTo: MutableMap<Int, MutableSet<Int>> = HashMap()
 
+    /**
+     * The evictable part. A miss is repaired from [persistence] by the reader that hit it; Caffeine makes that
+     * single-flight per key, so concurrent readers of the same missing id share one fetch.
+     */
+    private var bodies: Cache<Int, Model<out Any>> = buildCache(ModelCacheSettings())
+
+    private lateinit var persistence: Persistence
+
+    /**
+     * Points the cache at the storage it reloads evicted models from, and sizes it. Must be called before any read.
+     */
+    internal fun initialize(persistence: Persistence, settings: ModelCacheSettings) {
+        this.persistence = persistence
+        this.bodies = buildCache(settings)
+    }
+
+    private fun buildCache(settings: ModelCacheSettings): Cache<Int, Model<out Any>> =
+        Caffeine.newBuilder()
+            .maximumSize(settings.maxResidentModels.toLong())
+            .build()
+
     internal fun initMetrics(registry: MeterRegistry) {
-        Gauge.builder("klerk.models.count", models::size)
+        Gauge.builder("klerk.models.count") { count }
             .description("The current number of models")
+            .baseUnit("models")
+            .register(registry)
+        Gauge.builder("klerk.models.resident") { residentCount }
+            .description("The number of model bodies currently held in memory")
             .baseUnit("models")
             .register(registry)
     }
 
-    internal fun <T : Any> read(id: ModelID<T>): ReadResult<T> {
-        val model = models[id.value]
-        return if (model == null) {
-            ReadResult.Fail(NotFoundProblem("Could not find item with id=${id.value}"))
-        } else {
-            @Suppress("UNCHECKED_CAST")
-            ReadResult.Ok(model.copy() as Model<T>)
+    /**
+     * The model body, reading it from persistence if it is not resident. Returns null only if the model does not
+     * exist — the id set is checked first, so a miss never turns into a pointless storage lookup.
+     */
+    private fun getBody(id: Int): Model<out Any>? {
+        if (!ids.contains(id)) {
+            return null
         }
+        // computeIfAbsent rather than a get/put pair: it is atomic per key, so concurrent readers that miss the same id
+        // share one fetch instead of all going to storage. A null from the loader records no mapping, which is what
+        // makes "deleted while a reader was looking for it" an ordinary miss rather than an error.
+        return bodies.asMap().computeIfAbsent(id) { persistence.readModel(it) }
+    }
+
+    internal fun <T : Any> read(id: ModelID<T>): ReadResult<T> {
+        val model = getBody(id.value)
+            ?: return ReadResult.Fail(NotFoundProblem("Could not find item with id=${id.value}"))
+        @Suppress("UNCHECKED_CAST")
+        return ReadResult.Ok(model.copy() as Model<T>)
     }
 
     internal fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
         @Suppress("UNCHECKED_CAST")
-        return models[id.value]?.copy() as? Model<T>
+        return getBody(id.value)?.copy() as? Model<T>
     }
 
     internal fun <T : Any> store(model: Model<T>): Unit {
         updateRelations(model, relationsTo, true)
-        models[model.id.value] = model.copy()
+        ids.add(model.id.value)
+        bodies.put(model.id.value, model.copy())
     }
 
     /**
-     * This is used at startup when reading all models. Note that relations are not calculated here.
+     * This is used at startup when reading all models.
      */
     internal fun storeFromPersistence(model: Model<out Any>) {
-        models[model.id.value] = model
+        ids.add(model.id.value)
+        bodies.put(model.id.value, model)
+        // Relations are built as models arrive rather than in a pass afterwards, which would have to read every body
+        // again -- and with eviction most of them would no longer be resident by then.
+        updateRelations(model, relationsTo, klerkHasStarted = false)
+    }
+
+    /**
+     * Reads the given models into memory if they are not already there.
+     */
+    internal fun ensureResident(modelIds: Collection<ModelID<out Any>>) {
+        modelIds.forEach { getBody(it.value) }
     }
 
     internal fun <T : Any> delete(modelId: ModelID<T>): Unit {
         relationsTo.forEach { (_, relationSet) -> relationSet.remove(modelId.value) }
         relationsTo.remove(modelId.value)
-        models.remove(modelId.value)
+        ids.remove(modelId.value)
+        bodies.invalidate(modelId.value)
     }
 
     /**
@@ -77,8 +162,8 @@ internal object ModelCache {
 
     internal fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
         return getAllRelated(id).map {
-            val model = models[it.value]
-            if (model!!.props::class.qualifiedName!! == clazz.qualifiedName) {
+            val model = getBody(it.value) ?: return@map null
+            if (model.props::class.qualifiedName!! == clazz.qualifiedName) {
                 @Suppress("UNCHECKED_CAST")
                 return@map model.copy() as Model<T>
             }
@@ -91,11 +176,11 @@ internal object ModelCache {
         id: ModelID<*>
     ): Set<Model<T>> {
         val result = mutableSetOf<Model<T>>()
-        if (models[id.value] == null) throw NoSuchElementException("Could not find model with id $id")
+        if (!ids.contains(id.value)) throw NoSuchElementException("Could not find model with id $id")
         getAllRelated(id).forEach { relatedId ->
             try {
                 val related =
-                    models[relatedId.value]?.copy()
+                    getBody(relatedId.value)?.copy()
                         ?: throw NoSuchElementException("Could not find model with id $relatedId")
                 val relatedProperty =
                     related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
@@ -123,7 +208,7 @@ internal object ModelCache {
         getAllRelated(id).forEach { relatedId ->
             try {
                 val related =
-                    models[relatedId.value]?.copy()
+                    getBody(relatedId.value)?.copy()
                         ?: throw NoSuchElementException("Could not find model with id $relatedId")
                 val relatedProperty =
                     related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
@@ -165,7 +250,9 @@ internal object ModelCache {
         // optimization: do this before write lock
         val fromId = model.id.value
 
-        if (klerkHasStarted && models[model.id.value] != null) {   // we don't have to do this for new models
+        // we don't have to do this for new models. Note that this asks the id set rather than the body cache, so an
+        // evicted model still counts as existing.
+        if (klerkHasStarted && ids.contains(fromId)) {
             // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations for this model
             relationsMap.forEach { (_, relationSet) -> relationSet.remove(fromId) }
         }
@@ -206,14 +293,15 @@ internal object ModelCache {
         relationsMap[toId] = relationSet
     }
 
-    fun isEmpty(): Boolean = models.isEmpty()
+    fun isEmpty(): Boolean = ids.isEmpty()
 
     fun isIdAvailable(uInt: Int): Boolean {
-        return !models.containsKey(uInt)
+        return !ids.contains(uInt)
     }
 
     fun clear() {
-        models.clear()
+        ids.clear()
+        bodies.invalidateAll()
         relationsTo.clear()
     }
 
@@ -228,24 +316,9 @@ internal object ModelCache {
     }
 
     /**
-     * Calculates the relations. This must be done when models have been added using #storeFromPersistence.
-     */
-    internal fun initRelations() {
-        val concurrentMap = ConcurrentHashMap<Int, MutableSet<Int>>()
-        models.values.parallelStream().forEach { model ->
-            updateRelations(model, concurrentMap, false)
-        }
-        relationsTo.clear()
-        relationsTo.putAll(concurrentMap)
-    }
-
-    /**
-     * Returns all models (no copy).
+     * The id of every model that exists.
      * @param reader is not used but must be provided to prove that there will be no concurrent modification
      */
-    internal fun getAll(reader: Reader<*, *>): Map<Int, Model<out Any>> {
-        return models
-    }
-
+    internal fun allIds(reader: Reader<*, *>): Set<Int> = ids.toSet()
 
 }

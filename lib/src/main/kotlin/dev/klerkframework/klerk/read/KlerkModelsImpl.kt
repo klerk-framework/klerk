@@ -24,59 +24,50 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
 
     override suspend fun <T : Any> unsafeCreate(context: C, model: Model<T>) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
-        readWriteLock.acquireWrite()
-        try {
+        readWriteLock.withWrite {
             check(ModelCache.read(model.id).getOrNull() == null) { "There already exists a model with that ID" }
             ModelCache.store(model)
-        } finally {
-            readWriteLock.releaseWrite()
         }
     }
 
     override suspend fun <T : Any> unsafeUpdate(context: C, model: Model<T>) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
-        readWriteLock.acquireWrite()
-        try {
+        readWriteLock.withWrite {
             checkNotNull(ModelCache.read(model.id).getOrNull()) { "There is no model with that ID" }
             ModelCache.store(model)
-        } finally {
-            readWriteLock.releaseWrite()
         }
     }
 
     override suspend fun <T : Any> unsafeDelete(context: C, id: ModelID<T>) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
-        readWriteLock.acquireWrite()
-        try {
+        readWriteLock.withWrite {
             val original = ModelCache.read(id).getOrNull()
             checkNotNull(original) { "There is no model with that ID" }
             ModelCache.delete(original.id)
-        } finally {
-            readWriteLock.releaseWrite()
         }
     }
 
     internal suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T {
         val reader = ReaderWithAuth(klerk, context)
-        readWriteLock.acquireRead()
-        try {
-            val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
-            klerk.log.addReads(reader.modelsRead.distinctBy { it.id }, context)
-            return result
-        } finally {
-            reader.finishRead()
-            readWriteLock.releaseRead()
+        return readWriteLock.withRead {
+            try {
+                val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
+                klerk.log.addReads(reader.modelsRead.distinctBy { it.id }, context)
+                result
+            } finally {
+                reader.finishRead()
+            }
         }
     }
 
     internal suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T {
         val reader = ReaderWithAuth(klerk, context)
-        readWriteLock.acquireRead()
-        try {
-            return withContext(ReadBlockGuard.Marker()) { reader.readFunction() }
-        } finally {
-            reader.finishRead()
-            readWriteLock.releaseRead()
+        return readWriteLock.withRead {
+            try {
+                withContext(ReadBlockGuard.Marker()) { reader.readFunction() }
+            } finally {
+                reader.finishRead()
+            }
         }
     }
 

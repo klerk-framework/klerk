@@ -6,8 +6,8 @@ To read data managed by Klerk, you first have to get a Reader instance.
 
 ### When providing functions to the Klerk configuration (DSL)
 
-In this case, many functions has a reader in the argument which is ready to be used.
-As an example: if you have provided the function updateBook to describe how a Book model should be modified on an event:
+In this case, many functions has a reader in the argument which is ready to be used. As an example: if you have provided
+the function updateBook to describe how a Book model should be modified on an event:
 
 ```kotlin
 fun updateBook(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
@@ -43,10 +43,3 @@ klerk.readSuspend(context) {
 ```
 
 Note that readSuspend may impact performance if you call slow suspending functions.
-
-## See also
-
-* [Models](models.md) — what you get back from `get`/`list` (`Model<T>`, `DataContainer` properties).
-* [Views](views.md) — how the collections you pass to `list`/`firstOrNull` (e.g. `views.authors.all`) are declared.
-* [Context](context.md) — the `context` argument used to obtain a `Reader`.
-* [Authorization](authorization.md) — the rules that determine what a given `Reader` is allowed to see.

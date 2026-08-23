@@ -9,9 +9,9 @@ import dev.klerkframework.klerk.storage.FileBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.async
-import java.nio.file.Files
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import java.nio.file.Files
 import kotlin.test.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -70,7 +70,11 @@ open class AttachedDataTest {
     ): CommandResult<Author, Ctx, Views> {
         val author = klerk.read(context) { get(authorID) }
         return klerk.handle(
-            Command(event = UpdateAuthor, model = authorID, params = author.props.copy(picture = picture?.let { AuthorPicture(it) })),
+            Command(
+                event = UpdateAuthor,
+                model = authorID,
+                params = author.props.copy(picture = picture?.let { AuthorPicture(it) })
+            ),
             context,
             ProcessingOptions(CommandToken.simple()),
         )
@@ -539,7 +543,12 @@ open class AttachedDataTest {
     fun `Custom metadata that would bloat the cache is rejected`() = runBlocking {
         val klerk = start()
         assertFailsWith<IllegalArgumentException> {
-            klerk.attachedData.prepare(blob("x"), AuthorPicture::class, Ctx.system(), metadata = mapOf("big" to "y".repeat(1000)))
+            klerk.attachedData.prepare(
+                blob("x"),
+                AuthorPicture::class,
+                Ctx.system(),
+                metadata = mapOf("big" to "y".repeat(1000))
+            )
         }
         klerk.meta.stop()
     }
@@ -592,7 +601,11 @@ open class AttachedDataTest {
 
         val book = klerk.read(Ctx.system()) { get(bookID) }
         klerk.handle(
-            Command(event = UpdateBook, model = bookID, params = book.props.copy(chapters = listOf(BookChapter(second)))),
+            Command(
+                event = UpdateBook,
+                model = bookID,
+                params = book.props.copy(chapters = listOf(BookChapter(second)))
+            ),
             Ctx.system(),
             ProcessingOptions(CommandToken.simple()),
         ).orThrow()
@@ -612,9 +625,9 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
-        val authorJson = klerk.specification.toJson(klerk.read(Ctx.system()) { get(authorID) }.props)
+        val authorJson = klerk.spec.toJson(klerk.read(Ctx.system()) { get(authorID) }.props)
         assertTrue(authorJson.contains("\"picture\":${picture.id}"), "Unexpected JSON: $authorJson")
-        val bookJson = klerk.specification.toJson(klerk.read(Ctx.system()) { get(bookID) }.props)
+        val bookJson = klerk.spec.toJson(klerk.read(Ctx.system()) { get(bookID) }.props)
         assertTrue(bookJson.contains("\"chapters\":[${chapter.id}]"), "Unexpected JSON: $bookJson")
         klerk.meta.stop()
     }
@@ -668,7 +681,11 @@ open class AttachedDataTest {
         klerk: Klerk<Ctx, Views>,
         cover: AttachedBlobID,
         thumbnail: AttachedBlobID
-    ) = createBook(klerk) { it.copy(cover = cover?.let { c -> BookCover(c) }, thumbnail = thumbnail?.let { t -> BookThumbnail(t) }) }
+    ) = createBook(klerk) {
+        it.copy(
+            cover = cover?.let { c -> BookCover(c) },
+            thumbnail = thumbnail?.let { t -> BookThumbnail(t) })
+    }
 
     private suspend fun createBookWithChapters(
         klerk: Klerk<Ctx, Views>,

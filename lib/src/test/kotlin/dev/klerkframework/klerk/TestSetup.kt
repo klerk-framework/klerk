@@ -21,6 +21,7 @@ import dev.klerkframework.klerk.misc.ShouldSendNotificationAlgorithm
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.AttachedBlobStore
+import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
@@ -138,11 +139,13 @@ fun testSettings(
     clock: Clock = Clock.System,
     blobStore: AttachedBlobStore = AttachedBlobStore.Database,
     jobs: JobSettings = JobSettings(execution = JobExecution.Manual),
+    modelCache: ModelCacheSettings = ModelCacheSettings(),
 ): KlerkSettings = KlerkSettings(
     persistence = storage,
     attachedBlobStore = blobStore,
     clock = clock,
     jobs = jobs,
+    modelCache = modelCache,
 )
 
 /** [createConfig] and [testSettings] in one call, for the many tests that just want a running Klerk. */

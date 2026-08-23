@@ -198,6 +198,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
     ) {
+        // The models this command changes must be in memory before storage is written, or a read that misses on one of
+        // them in the window between the two would fetch the new version while seeing the old version of everything
+        // else. Created models cannot be missed (nothing knows their ids yet).
+        ModelCache.ensureResident(delta.updatedModels + delta.transitions + delta.deletedModels)
+
         if (isJobStep) {
             settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
         } else {
@@ -205,11 +210,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
-            readWriteLock.acquireWrite()    // make sure nobody is reading while we mutate
-            ModelCache.handleDelta(delta)
-            attachedData.applyToMemory(attachedDataDelta)
-            updateViews(delta)
-            readWriteLock.releaseWrite()    // mutation is done, reading is now permitted
+            readWriteLock.withWrite {
+                ModelCache.handleDelta(delta)
+                attachedData.applyToMemory(attachedDataDelta)
+                updateViews(delta)
+            }
         }
 
         maybeEraseAuditLog(specification, delta.deletedModels)
@@ -248,8 +253,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         before: Instant
     ): Iterable<AuditEntry> {
         val reader = ReaderWithoutAuth<C, V>(klerk)
-        readWriteLock.acquireRead()
-        try {
+        readWriteLock.withRead {
             val args = ArgContextReader(context, reader)
             if (specification.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
@@ -263,8 +267,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     "Not allowed to read audit log"
                 )
             }
-        } finally {
-            readWriteLock.releaseRead()
         }
 
         return settings.persistence.readAuditLog(modelId = id?.value, after, before)

@@ -52,7 +52,7 @@ internal suspend fun currentJobId(): JobId? = coroutineContext[RunningJobElement
  */
 internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) : JobManagerInternal<C, V> {
 
-    private val specification get() = klerk.specification
+    private val specification get() = klerk.spec
     private val jobSpec get() = specification.jobs
     private val jobSettings get() = klerk.settings.jobs
 
@@ -1133,12 +1133,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
         val args = ArgsForJobRead(job, context, ReaderWithoutAuth<C, V>(klerk))
         // The reader handed to a rule is only sound while the read lock is held, exactly as for the other rule sets.
-        klerk.readWriteLock.acquireRead()
-        try {
-            return specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
+        return klerk.readWriteLock.withRead {
+            specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
                     specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
-        } finally {
-            klerk.readWriteLock.releaseRead()
         }
     }
 

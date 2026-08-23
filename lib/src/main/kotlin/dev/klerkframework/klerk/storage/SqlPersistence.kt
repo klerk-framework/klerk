@@ -53,6 +53,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private val logger = KotlinLogging.logger {}
     private lateinit var specification: Specification<*, *>
     private lateinit var gson: Gson
+
+    /** The model classes by the simple name stored in the `type` column. Kept ready rather than built per read. */
+    @Volatile
+    private var modelClasses: Map<String, KClass<out Any>> = emptyMap()
     private val mapType = object : TypeToken<Map<String, Any>>() {}.type
 
     // The application's own metadata for attached data is a plain string map, so it needs none of the DataContainer
@@ -182,42 +186,38 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     override fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit {
-        val modelClasses = mutableMapOf<String, KClass<out Any>>()
-        specification.managedModels.forEach {
-            modelClasses[it.kClass.simpleName!!] = it.kClass
-        }
-
         transaction(database) {
-            Models.selectAll().forEach { row ->
-                val modelId = row[Models.id]
-                try {
-                    val type = row[Models.type]
-                    val props = gson.fromJson(
-                        row[Models.properties], modelClasses[type]?.javaObjectType ?: throw NoSuchElementException(
-                            "Type is $type in database but the code only has these types: ${
-                                modelClasses.keys.joinToString(
-                                    ", "
-                                )
-                            }"
-                        )
-                    )
+            Models.selectAll().forEach { row -> lambda(toModel(row)) }
+        }
+    }
 
-                    lambda(
-                        Model(
-                            id = ModelID(modelId),
-                            createdAt = decode64bitMicroseconds(row[Models.createdAt]),
-                            lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
-                            lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
-                            state = row[Models.state],
-                            timeTrigger = row[Models.timeTrigger]?.let { decode64bitMicroseconds(it) },
-                            props = props
-                        )
-                    )
-                } catch (e: Exception) {
-                    logger.error { "Error while reading model $modelId from database" }
-                    throw e
-                }
-            }
+    override fun readModel(id: Int): Model<out Any>? {
+        return transaction(database) {
+            Models.selectAll().where { Models.id eq id }.singleOrNull()?.let { toModel(it) }
+        }
+    }
+
+    private fun toModel(row: ResultRow): Model<out Any> {
+        val modelId = row[Models.id]
+        try {
+            val type = row[Models.type]
+            val props = gson.fromJson(
+                row[Models.properties], modelClasses[type]?.javaObjectType ?: throw NoSuchElementException(
+                    "Type is $type in database but the code only has these types: ${modelClasses.keys.joinToString(", ")}"
+                )
+            )
+            return Model(
+                id = ModelID(modelId),
+                createdAt = decode64bitMicroseconds(row[Models.createdAt]),
+                lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
+                lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
+                state = row[Models.state],
+                timeTrigger = row[Models.timeTrigger]?.let { decode64bitMicroseconds(it) },
+                props = props
+            )
+        } catch (e: Exception) {
+            logger.error { "Error while reading model $modelId from database" }
+            throw e
         }
     }
 
@@ -278,6 +278,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override fun setSpecification(specification: Specification<*, *>) {
         this.specification = specification
         this.gson = specification.gson
+        this.modelClasses = specification.managedModels.associate { it.kClass.simpleName!! to it.kClass }
     }
 
     override fun migrate(migrations: List<MigrationStep>) {

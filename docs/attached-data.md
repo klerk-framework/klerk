@@ -253,8 +253,8 @@ val image: InputStream = klerk.attachedData.get(blobID, context)
 ```
 
 `get` **must be called outside a read block**. Calling it inside `klerk.read { }` or `klerk.readSuspend { }` throws —
-attached data is often large, and holding the read lock while streaming it would block every command and every read in
-the application. `get` acquires the lock briefly on its own to make the authorization decision, releases it, and then
+attached data is often large, and holding the read lock while streaming it would block every command in the
+application. `get` acquires the lock briefly on its own to make the authorization decision, releases it, and then
 returns the stream.
 
 `get` throws `NoSuchElementException` if there is no data for that ID, or if the ID refers to the other kind (a blob

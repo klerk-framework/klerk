@@ -57,7 +57,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val settings: KlerkSettings,
 ) : KlerkAttachedData<C> {
 
-    private val specification get() = klerk.specification
+    private val specification get() = klerk.spec
 
     // Rebuilt from storage at startup, like ModelCache. Read and written from prepare (which deliberately runs outside
     // the serialized command path) as well as from commit, hence Concurrent. Blobs and strings share it, and thus
@@ -595,8 +595,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val args = ArgsForAttachedDataWrite(kind, context, ReaderWithoutAuth<C, V>(klerk), lease)
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
-        readWriteLock.acquireRead()
-        try {
+        readWriteLock.withRead {
             if (specification.authorization.attachedDataWritePositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
                 throw AuthorizationException(
                     KlerkErrorCode.AttachedDataWritePositiveAuthorizationMissing,
@@ -609,8 +608,6 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                     "Not allowed to prepare attached data"
                 )
             }
-        } finally {
-            readWriteLock.releaseRead()
         }
     }
 
@@ -637,8 +634,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         if (context.actor == SystemIdentity || entry.metadata?.visibility == AttachedDataVisibility.Public) {
             return entry
         }
-        readWriteLock.acquireRead()
-        try {
+        readWriteLock.withRead {
             val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
                 ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
             val args = ArgsForAttachedDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
@@ -654,8 +650,6 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                     "Not allowed to read attached data"
                 )
             }
-        } finally {
-            readWriteLock.releaseRead()
         }
         return entry
     }

@@ -152,7 +152,7 @@ class JobAtomicityTest {
                 klerk = klerkOver(survivor, clock)
                 klerk.jobs.runUntilIdle()
 
-                val authors = klerk.read(Ctx.system()) { list(klerk.specification.views.authors.all) }
+                val authors = klerk.read(Ctx.system()) { list(klerk.spec.views.authors.all) }
                 assertEquals(
                     steps - 1,
                     authors.size,

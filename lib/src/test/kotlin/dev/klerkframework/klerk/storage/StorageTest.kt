@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 
@@ -89,6 +90,14 @@ class StorageTest {
         var modelsRead = 0
         storage.readAllModels { modelsRead++ }
         assertEquals(2, modelsRead)
+
+        assertEquals(author, storage.readModel(author.id.value))
+        assertEquals(book, storage.readModel(book.id.value))
+        assertNull(storage.readModel(999), "readModel must return null for an id that does not exist")
+
+        val deletion = ProcessingData<Book, Ctx, Views>(deletedModels = listOf(book.id))
+        storage.store<Book, Nothing, Ctx, Views>(deletion, null, null)
+        assertNull(storage.readModel(book.id.value), "readModel must not return a deleted model")
     }
 
 }

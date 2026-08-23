@@ -53,12 +53,12 @@ Klerk.create(
 ```
 
 Which backend an instance uses is not part of the [specification](../README.md) — the same specification runs on
-`RamStorage` in a test and on `SqlPersistence` in production. `persistence` is the one `KlerkSettings` parameter
-without a default, so it cannot be forgotten.
+`RamStorage` in a test and on `SqlPersistence` in production. `persistence` is the one `KlerkSettings` parameter without
+a default, so it cannot be forgotten.
 
-Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`, and required as soon as the specification declares
-a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back up its directory as
-well. See [attached data](attached-data.md).
+Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`, and required as soon as the
+specification declares a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back
+up its directory as well. See [attached data](attached-data.md).
 
 ## Migrations
 
@@ -95,8 +95,8 @@ object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
 }
 ```
 
-Migration steps describe how the application evolves, so they belong in the specification; the backend they run
-against is a setting:
+Migration steps describe how the application evolves, so they belong in the specification; the backend they run against
+is a setting:
 
 ```kotlin
 val specification = SpecificationBuilder<Context, MyCollections>(collections).build {

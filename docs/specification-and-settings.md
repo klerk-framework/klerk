@@ -1,6 +1,6 @@
 # Specification & settings
 
-A Klerk application is described by two objects, and `Klerk.create` takes both:
+A Klerk application is described by two objects:
 
 ```kotlin
 val klerk = Klerk.create(specification, settings)
@@ -12,29 +12,6 @@ changed the product.
 
 **`KlerkSettings`** is how *this instance* runs: where it stores its data, what it reads the time from, where it
 publishes metrics, and how hard the job dispatcher works.
-
-The rule of thumb: *could two deployments of the same product legitimately differ on this?* If yes, it is a setting.
-
-## What goes where
-
-| Specification                                         | KlerkSettings                                           |
-|-------------------------------------------------------|---------------------------------------------------------|
-| `managedModels` (models + state machines + views)     | `persistence`                                           |
-| `authorization`                                       | `attachedBlobStore`                                     |
-| `jobs { register(...) / cron(...) / admission(...) }` | `clock`                                                 |
-| `migrations`                                          | `meterRegistry`                                         |
-| `systemContextProvider`, `jobContextProvider`         | `jobs` (a [`JobSettings`](jobs.md))                     |
-| plugins (`withPlugin`)                                | `allowUnsafeOperations`                                 |
-| `eraseAuditLogAfterModelDeletion`                     | `unclaimedAttachedDataLifetime`, `maxAttachedDataLease` |
-|                                                       | `contentTypeDetector`                                   |
-
-Two placements are worth explaining:
-
-- **Jobs are split.** *Which* jobs exist and who may queue them is the application (`JobsSpecification`); parallelism,
-  polling, retention, retry backoff and whether jobs run at all are operational (`JobSettings`). A plugin can add job
-  types and crons, and by construction cannot touch the operational half.
-- **`eraseAuditLogAfterModelDeletion` is in the specification**, not the settings. "We erase the audit trail when a user
-  is deleted" is a privacy promise about the application, and it must not vary per deployment.
 
 ## Building them
 
@@ -68,10 +45,3 @@ val klerk = Klerk.create(
     ),
 )
 ```
-
-## Related
-
-- [Persistence & migrations](persistence.md) — the storage backends
-- [Jobs](jobs.md) — `JobsSpecification` and `JobSettings` in detail
-- [Time](time.md) — the settings clock
-- [Testing](testing.md) — the full testing story

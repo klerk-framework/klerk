@@ -5,11 +5,15 @@ the first has fully committed (or failed) before it starts — there is no inter
 guarantees as serializable isolation without having to reason about it: business logic can assume nothing else changes
 the data mid-command.
 
-Reads (`klerk.read`/`klerk.readSuspend`, see [reading.md](reading.md)) are serialized against this too — a command's
-mutations are applied to the model cache and views under the same lock reads use, so a read never observes a
-half-committed command. Reads themselves are cheap (everything lives in memory), so this doesn't cost you much in
-practice, but it does mean **the lock is held for the whole duration of your read block**, not just for a single
-`get`/`list` call.
+Reads (`klerk.read`/`klerk.readSuspend`, see [reading.md](reading.md)) use a readers-writer lock:
+
+- **Reads run concurrently with each other.** Any number of read blocks can be in progress at the same time.
+- **A command commit excludes every read.** A command's mutations are applied to the model cache and views while
+  holding the lock exclusively, so a read never observes a half-committed command.
+- **Writers are preferred.** Once a command is waiting to commit, no further read blocks are admitted until it is done.
+  A steady stream of reads therefore cannot starve a command.
+
+The lock is held for the whole duration of your read block, not just for a single `get`/`list` call.
 
 ## Multiple reads that must be consistent with each other
 
@@ -30,18 +34,27 @@ processed between them.
 Models returned from a read are snapshots, so they remain perfectly usable after the lock is released — they just may
 already be stale by the time you look at them again, since another command could have been processed in the meantime.
 
+## Read blocks must not be nested
+
+Calling `klerk.read` (or `readSuspend`) from inside another read block is a bug and will deadlock: the inner read
+queues behind any command that started waiting in the meantime, while the outer read holds the lock that command is
+waiting for. Klerk detects the common cases and fails with an explanatory message instead.
+
+Read what you need in one block rather than nesting. This also applies indirectly — a function called from inside a
+read block must not itself open one.
+
 ## Keep read locks short
 
 `readSuspend` lets you call suspending functions (e.g. a network request) while still holding the reader, but the lock
-is held for as long as your block runs — including any `await`. A slow suspending call inside `readSuspend`
-blocks every other read and every command commit until it returns. Prefer reading everything you need first, then
-releasing the lock before doing slow work:
+is held for as long as your block runs — including any `await`. Other reads can proceed meanwhile, but a slow
+suspending call inside `readSuspend` delays every command commit until it returns. Prefer reading everything you need
+first, then releasing the lock before doing slow work:
 
 ```kotlin
 // Avoid: holds the lock for the duration of the HTTP call
 klerk.readSuspend(context) {
     val book = get(bookId)
-    httpClient.post(book.props.title.value) // blocks all other reads/writes meanwhile
+    httpClient.post(book.props.title.value) // blocks all commands meanwhile
 }
 
 // Prefer: read, release, then do the slow work with a possibly-stale snapshot

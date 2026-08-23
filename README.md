@@ -1,8 +1,7 @@
 # Klerk Framework
 
-Klerk is a Kotlin framework for developing information systems. It replaces the database and
-business-logic code in a traditional system. You are free to use other backend components to build whatever you want on
-top of Klerk, such as
+Klerk is a Kotlin framework for developing information systems. It replaces the database and business-logic code in a
+traditional system. You are free to use other backend components to build whatever you want on top of Klerk, such as
 
 * an API (JSON, REST, GraphQL) serving your frontend
 * a web app using server generated HTML
@@ -59,7 +58,8 @@ val myBook = klerk.read(context) { get(myBookId) }
 
 ## Documentation
 
-* [Specification & settings](docs/specification-and-settings.md) — what the application is, versus how this instance runs
+* [Specification & settings](docs/specification-and-settings.md) — what the application is, versus how this instance
+  runs
 * [Models](docs/models.md) — defining model classes and `DataContainer` properties
 * [State machines](docs/state-machines.md) — states, transitions, time triggers
 * [Events and commands](docs/events-and-commands.md) — declaring events and calling `klerk.handle`
