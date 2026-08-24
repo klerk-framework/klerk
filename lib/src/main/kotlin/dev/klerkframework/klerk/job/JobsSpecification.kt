@@ -3,6 +3,9 @@ package dev.klerkframework.klerk.job
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.attacheddata.PROCESS_ATTACHED_DATA
 import dev.klerkframework.klerk.attacheddata.ProcessAttachedData
+import dev.klerkframework.klerk.misc.envDuration
+import dev.klerkframework.klerk.misc.envEnum
+import dev.klerkframework.klerk.misc.envInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
@@ -231,6 +234,28 @@ public data class JobSettings(
 
         /** How long a terminal job is kept by default: long enough for a human to notice, short enough to bound storage. */
         internal val DEFAULT_TERMINAL_RETENTION: Duration = 30.days
+
+        /**
+         * Builds a [JobSettings] from environment variables, falling back to the regular default for any variable
+         * that is unset. Variable names are [prefix] plus the property name in `SCREAMING_SNAKE_CASE`, e.g.
+         * [hardQueueLimit] from `KLERK_JOBS_HARD_QUEUE_LIMIT`. [onUnloadableJob] and [execution] are read by their
+         * enum constant name (e.g. `KLERK_JOBS_EXECUTION=Manual`); durations accept both [Duration] syntax
+         * (`"24h"`) and ISO-8601 (`"PT24H"`).
+         */
+        public fun fromEnvVars(prefix: String = "KLERK_JOBS_"): JobSettings {
+            val defaults = JobSettings()
+            return JobSettings(
+                onUnloadableJob = envEnum<UnloadableJobPolicy>("${prefix}ON_UNLOADABLE_JOB") ?: defaults.onUnloadableJob,
+                execution = envEnum<JobExecution>("${prefix}EXECUTION") ?: defaults.execution,
+                succeededRetention = envDuration("${prefix}SUCCEEDED_RETENTION") ?: defaults.succeededRetention,
+                cancelledRetention = envDuration("${prefix}CANCELLED_RETENTION") ?: defaults.cancelledRetention,
+                deadLetterRetention = envDuration("${prefix}DEAD_LETTER_RETENTION") ?: defaults.deadLetterRetention,
+                hardQueueLimit = envInt("${prefix}HARD_QUEUE_LIMIT") ?: defaults.hardQueueLimit,
+                maxParallelSteps = envInt("${prefix}MAX_PARALLEL_STEPS") ?: defaults.maxParallelSteps,
+                pollInterval = envDuration("${prefix}POLL_INTERVAL") ?: defaults.pollInterval,
+                backoffBase = envDuration("${prefix}BACKOFF_BASE") ?: defaults.backoffBase,
+            )
+        }
     }
 }
 

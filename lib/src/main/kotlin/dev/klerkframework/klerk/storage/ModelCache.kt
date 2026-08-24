@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.read.ReadResult
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache.persistence
+import dev.klerkframework.klerk.misc.envInt
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
@@ -32,6 +33,20 @@ public data class ModelCacheSettings(
             // strange things can happen if the cache is too small, e.g. ModelCache.ensureResident may not really
             // ensure that the requested models are in memory
             logger.warn { "maxResidentModels should be at least 1000, was $maxResidentModels" }
+        }
+    }
+
+    public companion object {
+        /**
+         * Builds a [ModelCacheSettings] from environment variables, falling back to the regular default for any
+         * variable that is unset. Variable names are [prefix] plus the property name in `SCREAMING_SNAKE_CASE`,
+         * e.g. [maxResidentModels] from `KLERK_MODEL_CACHE_MAX_RESIDENT_MODELS`.
+         */
+        public fun fromEnvVars(prefix: String = "KLERK_MODEL_CACHE_"): ModelCacheSettings {
+            val defaults = ModelCacheSettings()
+            return ModelCacheSettings(
+                maxResidentModels = envInt("${prefix}MAX_RESIDENT_MODELS") ?: defaults.maxResidentModels,
+            )
         }
     }
 }

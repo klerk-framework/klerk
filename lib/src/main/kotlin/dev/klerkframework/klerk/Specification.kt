@@ -1434,6 +1434,46 @@ public data class KlerkSettings(
      * [makeExactSerializable]), so that a value read here survives a round-trip through storage unchanged.
      */
     internal fun now(): Instant = makeExactSerializable(clock.now())
+
+    public companion object {
+
+        /**
+         * Builds a [KlerkSettings] from environment variables, falling back to the regular default for any variable
+         * that is unset. Only the settings with simple (boolean/[Duration]) types are read this way — `KLERK_` plus
+         * the property name in `SCREAMING_SNAKE_CASE`, e.g. [maxAttachedDataLease] from `KLERK_MAX_ATTACHED_DATA_LEASE`.
+         * A [Duration] variable is parsed with [Duration.parse], so both `"24h"` and `"PT24H"` work. [jobs] and
+         * [modelCache] default to [JobSettings.fromEnvVars] and [ModelCacheSettings.fromEnvVars], so their settings
+         * are read from `KLERK_JOBS_`- and `KLERK_MODEL_CACHE_`-prefixed variables unless passed explicitly.
+         *
+         * The remaining settings ([persistence], [attachedBlobStore], [clock], [meterRegistry],
+         * [contentTypeDetector]) are not derived from the environment, since they carry objects rather than
+         * primitive values; pass them as ordinary parameters.
+         */
+        public fun fromEnvVars(
+            persistence: Persistence,
+            attachedBlobStore: AttachedBlobStore? = null,
+            clock: Clock = Clock.System,
+            meterRegistry: MeterRegistry = SimpleMeterRegistry(),
+            jobs: JobSettings = JobSettings.fromEnvVars(),
+            modelCache: ModelCacheSettings = ModelCacheSettings.fromEnvVars(),
+            contentTypeDetector: ContentTypeDetector = DefaultContentTypeDetector,
+        ): KlerkSettings {
+            val defaults = KlerkSettings(persistence = persistence)
+            return KlerkSettings(
+                persistence = persistence,
+                attachedBlobStore = attachedBlobStore,
+                clock = clock,
+                meterRegistry = meterRegistry,
+                jobs = jobs,
+                modelCache = modelCache,
+                allowUnsafeOperations = envBoolean("KLERK_ALLOW_UNSAFE_OPERATIONS") ?: defaults.allowUnsafeOperations,
+                unclaimedAttachedDataLifetime = envDuration("KLERK_UNCLAIMED_ATTACHED_DATA_LIFETIME")
+                    ?: defaults.unclaimedAttachedDataLifetime,
+                maxAttachedDataLease = envDuration("KLERK_MAX_ATTACHED_DATA_LEASE") ?: defaults.maxAttachedDataLease,
+                contentTypeDetector = contentTypeDetector,
+            )
+        }
+    }
 }
 
 /**
