@@ -519,8 +519,11 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
             if (clazz.isSubclassOf(BooleanContainer::class)) {
                 return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
             }
-            if (clazz.isSubclassOf(Enum::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
+            if (clazz.isSubclassOf(EnumContainer::class)) {
+                val ctor = clazz.constructors.single { it.parameters.size == 1 }
+                val enumClass = ctor.parameters.single().type.classifier as KClass<*>
+                val dummyValue = value ?: enumClass.java.enumConstants.first()
+                return ctor.call(dummyValue) as DataContainer<*>
             }
             if (clazz.isSubclassOf(ModelID::class)) {
                 val idValue = (value as? Int) ?: 0
