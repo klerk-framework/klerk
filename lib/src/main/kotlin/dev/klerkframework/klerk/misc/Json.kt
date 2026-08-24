@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.misc
 import com.google.gson.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.*
+import java.time.LocalDate
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
 import kotlin.reflect.KClass
@@ -30,6 +31,7 @@ internal fun <V, C : KlerkContext> createGson(specification: Specification<C, V>
         .registerTypeHierarchyAdapter(BooleanContainer::class.java, BooleanValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(EnumContainer::class.java, EnumValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(InstantContainer::class.java, InstantValueSerializer(valueClasses))
+        .registerTypeHierarchyAdapter(DateContainer::class.java, DateValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(DurationContainer::class.java, DurationValueSerializer(valueClasses))
         .registerTypeHierarchyAdapter(AttachedDataContainer::class.java, AttachedDataContainerSerializer(valueClasses))
         .registerTypeAdapter(AttachedBlobID::class.java, AttachedBlobIDSerializer())
@@ -201,6 +203,28 @@ internal class InstantValueSerializer(private val valueClasses: Set<KClass<*>>) 
         requireNotNull(typeOfT)
         val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
         return paramClass.primaryConstructor!!.call(decode64bitMicroseconds(json.asLong)) as InstantContainer
+    }
+}
+
+internal class DateValueSerializer(private val valueClasses: Set<KClass<*>>) : JsonSerializer<DateContainer>,
+    JsonDeserializer<DateContainer> {
+    override fun serialize(
+        src: DateContainer?,
+        typeOfSrc: Type?,
+        context: JsonSerializationContext?
+    ): JsonElement {
+        return JsonPrimitive(src?.valueWithoutAuthorization)
+    }
+
+    override fun deserialize(
+        json: JsonElement?,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): DateContainer {
+        requireNotNull(json)
+        requireNotNull(typeOfT)
+        val paramClass = valueClasses.first { it.qualifiedName == typeOfT.typeName }
+        return paramClass.primaryConstructor!!.call(LocalDate.ofEpochDay(json.asInt.toLong())) as DateContainer
     }
 }
 

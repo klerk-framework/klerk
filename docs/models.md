@@ -94,6 +94,7 @@ Built-in containers:
 | `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
 | `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
 | `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
+| `DateContainer`        | `java.time.LocalDate`  | none — a calendar date with no time of day or time zone                                                             |
 | `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
 | `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 

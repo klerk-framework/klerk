@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.read.Reader
+import java.time.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
@@ -233,7 +234,10 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
     }
 
     val all: List<EventParameter>
-        get() = raw.primaryConstructor!!.parameters.map { EventParameter(it) }
+        get() {
+            val constructor = raw.primaryConstructor!!
+            return constructor.parameters.map { EventParameter(it, constructor) }
+        }
 
     val requiredParameters: List<EventParameter>
         get() = all.filter { it.isRequired }
@@ -246,8 +250,11 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 /**
  * Reflects a single constructor parameter of an event's parameters class. The parameter's type must be a
  * [DataContainer] subtype (or a List/Set thereof) or a [ModelID]; validated in [validate].
+ *
+ * @param owner the parameters class's primary constructor [raw] is one of the parameters of, if known. Needed to
+ * compute [kotlinDefaultInstance].
  */
-public data class EventParameter(public val raw: KParameter) {
+public data class EventParameter(public val raw: KParameter, internal val owner: KFunction<*>? = null) {
     val name: String =
         requireNotNull(raw.name) { "No qualified name. Model and parameter classes must be concrete classes" }
     val qualifiedName: String =
@@ -328,6 +335,14 @@ public data class EventParameter(public val raw: KParameter) {
                     recommendedDefaultValue = s.recommendedDefault
                 }
 
+                PropertyType.Date -> {
+                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
+                        .call(LocalDate.ofEpochDay(0)) as DateContainer)
+                    validationRulesDescriptionsTemp["validator"] =
+                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
+                    recommendedDefaultValue = s.recommendedDefault
+                }
+
                 PropertyType.Duration -> {
                     val s =
                         ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
@@ -374,6 +389,34 @@ public data class EventParameter(public val raw: KParameter) {
     }
 
     public val valueClass: KClass<*> = findValueClass()      // TODO: internal?
+
+    /**
+     * The actual value this parameter's own Kotlin default expression evaluates to (e.g. `= Score(0)` or
+     * `= AvtalStartDatum(today())`), or null if it has none, [owner] is unknown, or evaluating it failed.
+     *
+     * Works by calling [owner] with every other required parameter filled by a dummy value and this one left out,
+     * so Kotlin substitutes its own default for it — the same mechanism the compiler uses. Takes precedence over
+     * [DataContainer.recommendedDefault] (a per-container-type default) when both exist, since this one is specific
+     * to this parameter of this event.
+     */
+    public val kotlinDefaultInstance: DataContainer<*>? by lazy {
+        if (raw.isOptional && owner != null) {
+            try {
+                val args = owner.parameters
+                    .filter { it != raw && !it.isOptional }
+                    .associateWith { EventParameter(it).getDummyInstance() }
+                val instance = owner.callBy(args) ?: return@lazy null
+                instance::class.memberProperties
+                    .single { it.name == name }
+                    .getter.call(instance) as? DataContainer<*>
+            } catch (e: Exception) {
+                logger.warn(e) { "Could not evaluate the Kotlin default value of '$name'" }
+                null
+            }
+        } else {
+            null
+        }
+    }
 
     /**
      * @throws IllegalConfigurationException if this parameter's type is not a [DataContainer] (or List/Set thereof),
@@ -488,6 +531,10 @@ public data class EventParameter(public val raw: KParameter) {
                 return clazz.constructors.single { it.parameters.size == 1 }
                     .call(value ?: Instant.fromEpochMilliseconds(0)) as DataContainer<*>
             }
+            if (clazz.isSubclassOf(DateContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }
+                    .call(value ?: LocalDate.ofEpochDay(0)) as DataContainer<*>
+            }
             if (clazz.isSubclassOf(DurationContainer::class)) {
                 return clazz.constructors.single { it.parameters.size == 1 }
                     .call(value ?: Duration.ZERO) as DataContainer<*>
@@ -557,6 +604,7 @@ public enum class PropertyType {
 
     Enum,
     Instant,
+    Date,
     Duration,
     Geo,
 }
@@ -595,6 +643,9 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
     }
     if (ktype.isSubtypeOf(InstantContainer::class.starProjectedType)) {
         return PropertyType.Instant
+    }
+    if (ktype.isSubtypeOf(DateContainer::class.starProjectedType)) {
+        return PropertyType.Date
     }
     if (ktype.isSubtypeOf(DurationContainer::class.starProjectedType)) {
         return PropertyType.Duration
