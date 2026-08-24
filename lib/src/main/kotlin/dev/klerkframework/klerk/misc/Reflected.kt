@@ -484,6 +484,14 @@ public data class EventParameter(public val raw: KParameter) {
                 return clazz.constructors.single { it.parameters.size == 1 }
                     .call(ModelID<Any>(idValue)) as DataContainer<*>
             }
+            if (clazz.isSubclassOf(InstantContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }
+                    .call(value ?: Instant.fromEpochMilliseconds(0)) as DataContainer<*>
+            }
+            if (clazz.isSubclassOf(DurationContainer::class)) {
+                return clazz.constructors.single { it.parameters.size == 1 }
+                    .call(value ?: Duration.ZERO) as DataContainer<*>
+            }
             TODO("cannot handle $clazz")
         } catch (e: InstantiationException) {
             log.error(
