@@ -223,6 +223,10 @@ override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): Jo
 `ChildOutcome` carries the child's id, terminal status, and the `result` value from its `Success` — so fan-in reads the
 children's own report rather than reconstructing what happened from model state.
 
+`args.children` is read from the children's own rows every time a step runs, so it lists every child of the job that
+has finished — not only the ones that finished since its previous step. A finishing child therefore writes nothing but
+its own row, which is what makes siblings finishing at the same instant safe.
+
 Four rules keep this from becoming a footgun:
 
 - **A job may only await children it spawned.** Awaiting an arbitrary `JobId` would let two jobs await each other and

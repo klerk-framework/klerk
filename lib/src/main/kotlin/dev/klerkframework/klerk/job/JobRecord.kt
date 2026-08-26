@@ -14,9 +14,6 @@ import kotlin.time.Instant
  * @property readyAt the earliest time the job may be dispatched: the `scheduleAt` while [JobStatus.Scheduled], the
  * end of the backoff while [JobStatus.Backoff], and the time it became ready otherwise. Null while the job is not
  * dispatchable at all (running, waiting for children, terminal).
- * @property awaitedChildren how many spawned children have not yet reached a terminal status. Decremented in the
- * child's own commit, so the parent's wake-up is transactional and needs no scan.
- * @property childOutcomes what the awaited children reported, appended in each child's own commit.
  * @property rootId the top of this job's spawn tree — itself, for a job nobody spawned. Together with [depth] it makes
  * the `maxDescendants`/`maxDepth` budgets a counter update rather than a tree walk.
  * @property descendants how many jobs the tree rooted here has spawned in total. Only meaningful on the root record.
@@ -50,9 +47,7 @@ public data class JobRecord(
     val parentId: JobId?,
     val rootId: JobId,
     val depth: Int,
-    val awaitedChildren: Int,
     val descendants: Int,
-    val childOutcomes: List<ChildOutcome>,
     val result: String?,
     val failedAtCursor: String?,
     val hookCursor: String?,
@@ -127,8 +122,8 @@ public class PendingJob<C : KlerkContext, V> internal constructor(
  * [dev.klerkframework.klerk.storage.Persistence.commitJobStep].
  *
  * @property upserted job rows to insert or replace. One commit may touch several: the stepping job itself, any
- * children it spawned, and — when the stepping job becomes terminal — its parent, whose `awaitedChildren` count and
- * `childOutcomes` are updated here rather than by a later scan.
+ * children it spawned. A finishing child writes only its own row: whether its parent may now run is derived from the
+ * children when the question is asked, not tracked on the parent.
  * @property deleted job rows to remove, e.g. an expired dead letter.
  * @property attachedDataClaimed attached-data ids that this job now claims, so that the orphan reaper leaves them
  * alone for as long as the job lives.

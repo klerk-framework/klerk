@@ -326,7 +326,16 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      */
     private suspend fun promoteReady(now: Instant) {
         val due = records.values
-            .filter { it.status == JobStatus.Scheduled || it.status == JobStatus.Backoff }
+            .filter {
+                when (it.status) {
+                    JobStatus.Scheduled, JobStatus.Backoff -> true
+                    // A parent wakes as soon as nothing it spawned is still running. Deriving that here, rather than
+                    // having each finishing child decrement a counter, is what makes concurrent siblings safe: this
+                    // reads the children and writes only the parent, so there is no shared value to lose.
+                    JobStatus.Waiting -> !awaitedChildrenRemain(it.id)
+                    else -> false
+                }
+            }
             .filter { it.readyAt == null || it.readyAt <= now }
         if (due.isEmpty()) {
             return
@@ -426,7 +435,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     ): JobResult<Any> = try {
         val cursor = type.decodeCursor(record.activeCursor)
         val previous = previousResults[record.id]
-        val outcomes = record.childOutcomes
+        val outcomes = childOutcomesOf(record.id)
         when (type) {
             is JobType.Local<*, C, V> -> {
                 val local = type as JobType.Local<Any, C, V>
@@ -645,7 +654,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                         stepNumber = record.stepNumber + 1,
                         attempt = 0,
                         noProgressStreak = if (madeProgress) 0 else record.noProgressStreak + 1,
-                        childOutcomes = emptyList(),
                     )
                 val awaiting = result.awaitSpawned && children.isNotEmpty()
                 rows.put(
@@ -653,7 +661,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                         awaiting -> next.copy(
                             status = JobStatus.Waiting,
                             readyAt = null,
-                            awaitedChildren = next.awaitedChildren + children.size,
                         )
 
                         record.cancellationRequested && record.hookKind == null ->
@@ -670,7 +677,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     stepNumber = record.stepNumber + 1,
                     attempt = 0,
                     result = result.result ?: logged.result,
-                    childOutcomes = emptyList(),
                 )
                 // A step that returns Success while cancellation is pending has stopped early because it was asked
                 // to, so it still unwinds through onCancelled rather than being reported as having simply succeeded.
@@ -744,7 +750,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 attempt = 0,
                 readyAt = now,
                 noProgressStreak = 0,
-                childOutcomes = emptyList(),
             )
         )
         return rows.toCommit()
@@ -759,16 +764,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         attempt = 0,
         readyAt = now,
         noProgressStreak = 0,
-        childOutcomes = emptyList(),
     )
 
     /**
-     * Writes a job's terminal row and, in the same commit, wakes its parent: the parent's outstanding-children count
-     * and the child's outcome are updated here, in the *child's* transaction, so the last child's completion can
-     * never be lost.
-     */
-    /**
-     * Writes a job's terminal row, wakes a parent that was awaiting it, and lets go of the attached data it claimed.
+     * Writes a job's terminal row and lets go of the attached data it claimed. A parent awaiting this job is not
+     * touched: it notices on its own, see [awaitedChildrenRemain].
      *
      * A job that ran to completion has no working set any more, so its claims are released and whatever it prepared
      * but never attached goes back to being governed by its lease. A job that died or was stopped keeps them: the
@@ -780,27 +780,27 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             readyAt = null,
             hookKind = null,
             lastAttemptFinished = now,
-            awaitedChildren = 0,
         )
         rows.put(terminal)
-
-        val parentId = terminal.parentId
-        if (parentId != null) {
-            rows.update(parentId) { parent ->
-                val outstanding = (parent.awaitedChildren - 1).coerceAtLeast(0)
-                val wakes = parent.status == JobStatus.Waiting && outstanding == 0
-                val unwinds = parent.status == JobStatus.Cancelling
-                parent.copy(
-                    awaitedChildren = outstanding,
-                    childOutcomes = parent.childOutcomes + terminal.toChildOutcome(),
-                    status = if (wakes) JobStatus.Ready else parent.status,
-                    readyAt = if (wakes || unwinds) now else parent.readyAt,
-                )
-            }
-        }
+        // A finishing child writes nothing but its own row. Whether its parent may now run is derived from the
+        // children whenever the question is asked — see [awaitedChildrenRemain] — rather than tracked in a counter on
+        // the parent. A counter has to be read, decremented and written, and siblings finishing at the same time all
+        // read the same value before any of them writes, so all but one of the decrements is lost and the parent
+        // waits forever.
         val released = if (status == JobStatus.Succeeded) klerk.attachedDataImpl.claimedBy(record.id) else emptySet()
         return rows.toCommit().copy(attachedDataReleased = released)
     }
+
+    /** True while any child of [id] has yet to reach a terminal status. */
+    private fun awaitedChildrenRemain(id: JobId): Boolean =
+        records.values.any { it.parentId == id && !it.status.isTerminal }
+
+    /** What the children of [id] reported, read from their own rows at the moment the parent asks. */
+    private fun childOutcomesOf(id: JobId): List<ChildOutcome> =
+        records.values
+            .filter { it.parentId == id && it.status.isTerminal }
+            .sortedBy { it.created }
+            .map { it.toChildOutcome() }
 
     /**
      * The spawn budgets. Children bypass admission control — refusing them would strand the parent mid-job — so this
@@ -1014,9 +1014,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             parentId = parentId,
             rootId = rootId ?: id,
             depth = depth,
-            awaitedChildren = 0,
             descendants = 0,
-            childOutcomes = emptyList(),
             result = null,
             failedAtCursor = null,
             hookCursor = null,

@@ -40,8 +40,13 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
     public abstract val context: C
 
     /**
-     * The outcomes of awaited children, populated on the step that follows a `JobResult.Yield(awaitSpawned = true)`
-     * and empty otherwise.
+     * What this job's children reported: every child of it that has reached a terminal status, oldest first. Empty
+     * for a job that never spawned any.
+     *
+     * Read from the children's own rows each time a step runs, rather than accumulated on this job, so it is the
+     * whole picture rather than only what finished since the previous step. After a
+     * `JobResult.Yield(awaitSpawned = true)` the next step is guaranteed to see all of them, because that is what it
+     * waited for.
      */
     public abstract val children: List<ChildOutcome>
 
