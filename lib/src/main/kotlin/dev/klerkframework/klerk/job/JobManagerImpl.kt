@@ -66,6 +66,15 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private val lock = Mutex()
     private val records = ConcurrentHashMap<JobId, JobRecord>()
     private val running = ConcurrentHashMap.newKeySet<JobId>()
+
+    /**
+     * Ids [allocateId] has handed out that are not in [records] yet.
+     *
+     * An id only reaches [records] when its commit lands, which is many steps after it was chosen, so the choice
+     * needs somewhere else to be recorded meanwhile or two allocations pick the same free id. Holding [lock] across
+     * the choice does not help: the window is between choosing and committing, not inside [allocateId].
+     */
+    private val reservedIds = ConcurrentHashMap.newKeySet<JobId>()
     private val overBudgetSince = ConcurrentHashMap<JobPriority, Instant>()
 
     /** Position in the dispatch queue, oldest first. See [updateQueueOrder] for why `readyAt` alone will not do. */
@@ -81,6 +90,12 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private val previousResults = ConcurrentHashMap<JobId, CommandResult<*, C, V>>()
 
     private val random = SecureRandom()
+
+    /**
+     * Where [allocateId] draws candidates from. Overridable only so that a test can shrink the space to where
+     * collisions are likely — over the full range they never happen, so a concurrency test against it proves nothing.
+     */
+    internal var idCandidates: () -> Int = { random.nextInt(Int.MAX_VALUE) }
     private val changes = MutableSharedFlow<JobRecord>(extraBufferCapacity = 256)
     private val wakeup = Channel<Unit>(Channel.CONFLATED)
 
@@ -536,6 +551,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             // The transaction failed, so nothing was written. Put the job back and let the retry machinery see it as a
             // failed attempt, rather than losing the step silently.
             logger.error(e) { "Could not commit the step of job ${record.id}" }
+            // Any child this step planned to spawn was never written, so its id goes back in the pool.
+            releaseReservations(transition.commit.upserted.map { it.id })
             releaseWithoutCommit(record.id)
             return
         }
@@ -547,6 +564,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             if (commandResult == null) previousResults.remove(record.id)
             else previousResults[record.id] = commandResult
         }
+        // Spawned children are in records now, so they no longer need reserving.
+        releaseReservations(transition.commit.upserted.map { it.id })
         klerk.attachedDataImpl.releaseJobClaims(transition.commit.attachedDataReleased)
         transition.commit.upserted.forEach { changes.tryEmit(it) }
         wakeup.trySend(Unit)
@@ -817,11 +836,20 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun allocateId(): JobId {
         while (true) {
-            val candidate = JobId(random.nextInt(Int.MAX_VALUE))
-            if (!records.containsKey(candidate)) {
+            val candidate = JobId(idCandidates())
+            // add() is the atomic step: whichever caller wins it owns the id until its row is committed.
+            if (!records.containsKey(candidate) && reservedIds.add(candidate)) {
                 return candidate
             }
         }
+    }
+
+    /**
+     * Ends the reservations [allocateId] made, once the rows are in [records] — or once the plan that chose them was
+     * abandoned. Ids that were never reserved are ignored, so a whole commit's worth of rows can be passed in.
+     */
+    private fun releaseReservations(ids: Iterable<JobId>) {
+        ids.forEach { reservedIds.remove(it) }
     }
 
     override fun planNewJobs(pending: List<PendingJob<C, V>>, context: C): NewJobPlan {
@@ -958,14 +986,19 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun scheduleClaiming(job: DeclaredJob<C, V>, context: C, claim: Set<Int>): JobId {
         check(started) { "Klerk has not been started" }
-        val id = lock.withLock { allocateId() }
-        when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
-            is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
-            is NewJobPlan.Ok -> {
-                val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
-                klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
-                lock.withLock { jobsWereCommitted(plan) }
+        val id = allocateId()
+        try {
+            when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
+                is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
+                is NewJobPlan.Ok -> {
+                    val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
+                    klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
+                    lock.withLock { jobsWereCommitted(plan) }
+                }
             }
+        } finally {
+            // Either the row is in records now, or the job was refused and the id was never used.
+            releaseReservations(listOf(id))
         }
         return id
     }
@@ -1225,7 +1258,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
         val context = specification.systemContextProvider.invoke(SystemIdentity)
         repeat(fires) {
-            val id = lock.withLock { allocateId() }
+            val id = allocateId()
             // Jitter spreads the fire over a random window, so that many nodes (or many schedules on the same
             // expression) do not all start at the same instant.
             val scheduled = DeclaredJob(
@@ -1235,21 +1268,25 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 priority = null,
             )
             // Cron fires are new work, so they go through admission control like anything else.
-            when (val plan = planNewJobs(listOf(PendingJob(id, scheduled)), context)) {
-                is NewJobPlan.Rejected -> logger.warn {
-                    "$schedule was refused: ${plan.problems.joinToString(", ") { p -> p.toString() }}"
-                }
+            try {
+                when (val plan = planNewJobs(listOf(PendingJob(id, scheduled)), context)) {
+                    is NewJobPlan.Rejected -> logger.warn {
+                        "$schedule was refused: ${plan.problems.joinToString(", ") { p -> p.toString() }}"
+                    }
 
-                is NewJobPlan.Ok -> {
-                    val admitted = plan.records.map { it.copy(cronScheduleId = schedule.id) }
-                    klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
-                        null, null, null, jobs = JobCommit(upserted = admitted)
-                    )
-                    lock.withLock { admitted.forEach { records[it.id] = it } }
-                    admitted.forEach { changes.tryEmit(it) }
-                    wakeup.trySend(Unit)
-                    logger.debug { "Fired $schedule as job $id" }
+                    is NewJobPlan.Ok -> {
+                        val admitted = plan.records.map { it.copy(cronScheduleId = schedule.id) }
+                        klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
+                            null, null, null, jobs = JobCommit(upserted = admitted)
+                        )
+                        lock.withLock { admitted.forEach { records[it.id] = it } }
+                        admitted.forEach { changes.tryEmit(it) }
+                        wakeup.trySend(Unit)
+                        logger.debug { "Fired $schedule as job $id" }
+                    }
                 }
+            } finally {
+                releaseReservations(listOf(id))
             }
         }
     }
