@@ -8,12 +8,25 @@ to reason about it: business logic can assume nothing else changes the data mid-
 Reads (`klerk.read`/`klerk.readSuspend`, see [reading.md](reading.md)) use a readers-writer lock:
 
 - **Reads run concurrently with each other.** Any number of read blocks can be in progress at the same time.
-- **A command commit excludes every read.** A command's mutations are applied to the model cache and views while holding
-  the lock exclusively, so a read never observes a half-committed command.
+- **A command commit excludes every read.** A command's mutations are applied to the model cache, views and job state
+  while holding the lock exclusively, so a read never observes a half-committed command.
 - **Writers are preferred.** Once a command is waiting to commit, no further read blocks are admitted until it is done.
   A steady stream of reads therefore cannot starve a command.
 
 The lock is held for the whole duration of your read block, not just for a single `get`/`list` call.
+
+Job state is part of the same snapshot, read through `jobs` on the reader:
+
+```kotlin
+klerk.read(context) {
+    val order = get(orderId)
+    val jobs = jobs.all()   // consistent with `order`, including the jobs that command scheduled
+}
+```
+
+`klerk.jobs.getJob(...)` and `klerk.jobs.getAllJobs(...)` take the read lock themselves, so they are for use
+*outside* a read block and fail with an explanatory error if called inside one. Because the dispatcher has to take
+the write lock to claim a job, a long read block delays job dispatch in the same way it delays a command.
 
 ## Multiple reads that must be consistent with each other
 

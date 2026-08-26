@@ -623,7 +623,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         context: C,
         caller: String
     ): AttachedDataEntry {
-        ReadBlockGuard.checkNotInsideReadBlock(caller)
+        ReadBlockGuard.checkNotInsideReadBlock(
+            caller,
+            "Reading large data under it would block the application. Read the id inside the read block and call " +
+                    "$caller after it.",
+        )
         if (entry == null || entry.isExpired(settings.now())) {
             throw NoSuchElementException("No data found for id $id")
         }

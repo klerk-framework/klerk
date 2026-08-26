@@ -4,6 +4,8 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.read.AuthorizingJobReader
+import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -283,12 +285,20 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             .sortedWith(compareBy({ it.priority.ordinal }, { queueOrder[it.id] ?: Long.MAX_VALUE }))
             .firstOrNull() ?: return@withLock null
 
-        // Dropping the queue position here is what makes dispatch round-robin: when the job comes back ready after
-        // this step it goes to the tail. Otherwise a job that yields immediately would be picked again and again,
-        // starving everything that happened to tie with it.
-        queueOrder.remove(candidate.id)
-        running.add(candidate.id)
-        candidate
+        // The candidate came out of a scan taken without the write lock, so it may already be stale — a commit could
+        // have finished, cancelled or deleted it in between. Re-read it under the lock and only claim what is still
+        // exactly what was selected; anything else is left for the next dispatch attempt.
+        klerk.readWriteLock.withWrite {
+            if (records[candidate.id] != candidate) {
+                return@withWrite null
+            }
+            // Dropping the queue position here is what makes dispatch round-robin: when the job comes back ready
+            // after this step it goes to the tail. Otherwise a job that yields immediately would be picked again and
+            // again, starving everything that happened to tie with it.
+            queueOrder.remove(candidate.id)
+            running.add(candidate.id)
+            candidate
+        }
     }
 
     private fun isDispatchableStatus(record: JobRecord): Boolean =
@@ -308,12 +318,23 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             .forEach { queueOrder[it.id] = queueCounter++ }
     }
 
-    /** Moves jobs whose `scheduleAt` or backoff has arrived into [JobStatus.Ready]. */
-    private fun promoteReady(now: Instant) {
-        records.values
+    /**
+     * Moves jobs whose `scheduleAt` or backoff has arrived into [JobStatus.Ready].
+     *
+     * The scan stays off the write lock — it is O(all jobs) and runs constantly — so the rows it produces are applied
+     * conditionally: a job someone cancelled in between keeps the newer state instead of being promoted over.
+     */
+    private suspend fun promoteReady(now: Instant) {
+        val due = records.values
             .filter { it.status == JobStatus.Scheduled || it.status == JobStatus.Backoff }
             .filter { it.readyAt == null || it.readyAt <= now }
-            .forEach { records[it.id] = it.copy(status = JobStatus.Ready, readyAt = it.readyAt ?: now) }
+        if (due.isEmpty()) {
+            return
+        }
+        val promoted = due.map { it.copy(status = JobStatus.Ready, readyAt = it.readyAt ?: now) }
+        klerk.readWriteLock.withWrite {
+            applyToMemory(JobCommit(upserted = promoted), due.associateBy { it.id })
+        }
     }
 
     private fun hasConcurrencySlot(record: JobRecord, perType: Map<JobName, Int>): Boolean {
@@ -347,7 +368,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return records.values.none { it.parentId == record.id && !it.status.isTerminal }
     }
 
-    private suspend fun releaseWithoutCommit(id: JobId) = lock.withLock { running.remove(id) }
+    private suspend fun releaseWithoutCommit(id: JobId) =
+        lock.withLock { klerk.readWriteLock.withWrite { running.remove(id) } }
 
     // ------------------------------------------------------------------ running one step
 
@@ -557,10 +579,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
 
+        // The rows themselves were applied inside the commit's own write-locked section, so all that is left here is
+        // the state readers do not see (previousResults) and the Running overlay, which they do.
         lock.withLock {
-            running.remove(record.id)
-            transition.commit.upserted.forEach { records[it.id] = it }
-            transition.commit.deleted.forEach { records.remove(it) }
+            klerk.readWriteLock.withWrite { running.remove(record.id) }
             if (commandResult == null) previousResults.remove(record.id)
             else previousResults[record.id] = commandResult
         }
@@ -899,12 +921,37 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return if (problems.isEmpty()) NewJobPlan.Ok(accepted) else NewJobPlan.Rejected(problems)
     }
 
-    override fun jobsWereCommitted(plan: NewJobPlan) {
-        if (plan !is NewJobPlan.Ok || plan.records.isEmpty()) {
+    /**
+     * See [JobManagerInternal.applyToMemory]: write lock held, job mutex not.
+     *
+     * @param expected rows the plan was computed from, for the callers that planned outside the write lock. Such a
+     * row is only written if it has not changed since, so a stale plan is dropped rather than clobbering whatever
+     * happened in between. A row the planner owns exclusively — a brand new job, or the checkpoint of the job that is
+     * mid-step — needs no entry here and is written unconditionally.
+     */
+    override fun applyToMemory(commit: JobCommit) = applyToMemory(commit, emptyMap())
+
+    internal fun applyToMemory(commit: JobCommit, expected: Map<JobId, JobRecord>) {
+        commit.upserted.forEach { row ->
+            when (val was = expected[row.id]) {
+                null -> records[row.id] = row
+                else -> records.computeIfPresent(row.id) { _, current -> if (current == was) row else current }
+            }
+        }
+        commit.deleted.forEach { id ->
+            when (val was = expected[id]) {
+                null -> records.remove(id)
+                else -> records.remove(id, was)
+            }
+        }
+    }
+
+    /** See [JobManagerInternal.notifyCommitted]: never called with the write lock held. */
+    override fun notifyCommitted(commit: JobCommit) {
+        if (commit.upserted.isEmpty() && commit.deleted.isEmpty()) {
             return
         }
-        plan.records.forEach { records[it.id] = it }
-        plan.records.forEach { changes.tryEmit(it) }
+        commit.upserted.forEach { changes.tryEmit(it) }
         wakeup.trySend(Unit)
     }
 
@@ -993,7 +1040,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 is NewJobPlan.Ok -> {
                     val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
                     klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
-                    lock.withLock { jobsWereCommitted(plan) }
+                    lock.withLock { klerk.readWriteLock.withWrite { applyToMemory(plan.commit) } }
+                    notifyCommitted(plan.commit)
                 }
             }
         } finally {
@@ -1016,17 +1064,29 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return if (id in running) info.copy(status = JobStatus.Running) else info
     }
 
-    override suspend fun getJob(id: JobId, context: C): JobInfo {
-        val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
-        val info = record.toJobInfoWithRunningOverlay()
-        authorize(info, context)
-        return info
+    /**
+     * The job's committed state plus the live `Running` overlay, without authorization.
+     *
+     * Only sound while the read lock is held — that is what stops the record changing under the caller — so this is
+     * for `Reader.jobs` and for the lock-taking wrappers below, not for general use.
+     */
+    internal fun jobInfoOrNull(id: JobId): JobInfo? = records[id]?.toJobInfoWithRunningOverlay()
+
+    /** Every job that exists, newest first, without authorization. Same locking requirement as [jobInfoOrNull]. */
+    internal fun allJobInfo(): List<JobInfo> =
+        records.values.sortedByDescending { it.created }.map { it.toJobInfoWithRunningOverlay() }
+
+    /** What both read entry points share: one read lock for the whole call, and the same rules as `Reader.jobs`. */
+    private suspend fun <T> reading(context: C, block: (JobReader) -> T): T {
+        ReadBlockGuard.checkNotInsideReadBlock("klerk.jobs", "Use reader.jobs inside a read block instead.")
+        return klerk.readWriteLock.withRead {
+            block(AuthorizingJobReader(klerk, context, ReaderWithoutAuth(klerk)))
+        }
     }
 
-    override suspend fun getAllJobs(context: C): List<JobInfo> {
-        val all = records.values.sortedByDescending { it.created }.map { it.toJobInfoWithRunningOverlay() }
-        return all.filter { isAuthorized(it, context) }
-    }
+    override suspend fun getJob(id: JobId, context: C): JobInfo = reading(context) { it.get(id) }
+
+    override suspend fun getAllJobs(context: C): List<JobInfo> = reading(context) { it.all() }
 
     override fun subscribe(context: C, id: JobId?): Flow<JobInfo> = changes
         .filter { id == null || it.id == id }
@@ -1094,15 +1154,19 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
     }
 
-    private suspend fun commitControlChange(commit: JobCommit) {
+    /**
+     * @param expected the rows the change was planned from, so a plan that a step or another control change has
+     * overtaken is dropped rather than applied over the newer state. This is what stops a retention sweep deleting a
+     * job that was resumed after the sweep decided it was terminal.
+     */
+    private suspend fun commitControlChange(commit: JobCommit, expected: Map<JobId, JobRecord> = emptyMap()) {
         klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
         lock.withLock {
-            commit.upserted.forEach { records[it.id] = it }
-            commit.deleted.forEach { records.remove(it); previousResults.remove(it) }
+            klerk.readWriteLock.withWrite { applyToMemory(commit, expected) }
+            commit.deleted.forEach { previousResults.remove(it) }
         }
         klerk.attachedDataImpl.releaseJobClaims(commit.attachedDataReleased)
-        commit.upserted.forEach { changes.tryEmit(it) }
-        wakeup.trySend(Unit)
+        notifyCommitted(commit)
     }
 
     private fun descendantsOf(id: JobId): List<JobRecord> {
@@ -1160,15 +1224,17 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
     }
 
+    /**
+     * Takes the read lock for the decision, so it can be called from outside a read block. Inside one the lock is
+     * already held; use [isJobAuthorized] directly there.
+     */
     private suspend fun isAuthorized(job: JobInfo, context: C): Boolean {
         if (context.actor == SystemIdentity) {
             return true
         }
-        val args = ArgsForJobRead(job, context, ReaderWithoutAuth<C, V>(klerk))
         // The reader handed to a rule is only sound while the read lock is held, exactly as for the other rule sets.
         return klerk.readWriteLock.withRead {
-            specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
-                    specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
+            isJobAuthorized(job, context, specification, ReaderWithoutAuth(klerk))
         }
     }
 
@@ -1279,7 +1345,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                         klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
                             null, null, null, jobs = JobCommit(upserted = admitted)
                         )
-                        lock.withLock { admitted.forEach { records[it.id] = it } }
+                        lock.withLock {
+                            klerk.readWriteLock.withWrite { applyToMemory(JobCommit(upserted = admitted)) }
+                        }
                         admitted.forEach { changes.tryEmit(it) }
                         wakeup.trySend(Unit)
                         logger.debug { "Fired $schedule as job $id" }
@@ -1322,7 +1390,12 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
         val released = expired.flatMap { klerk.attachedDataImpl.claimedBy(it.id) }.toSet()
-        commitControlChange(JobCommit(deleted = expired.map { it.id }.toSet(), attachedDataReleased = released))
+        // Conditional on the rows still being the terminal ones this scan saw: a job resumed in between is no longer
+        // expired, and deleting it would take a live job with it.
+        commitControlChange(
+            JobCommit(deleted = expired.map { it.id }.toSet(), attachedDataReleased = released),
+            expired.associateBy { it.id },
+        )
     }
 
     private companion object {

@@ -24,6 +24,12 @@ public interface Reader<C : KlerkContext, V> {
     public val views: V
 
     /**
+     * Job state, as part of this block's snapshot. This is how jobs are read inside a read block —
+     * `klerk.jobs.getJob(...)` takes the read lock itself and refuses to run inside one.
+     */
+    public val jobs: JobReader
+
+    /**
      * @throws AuthorizationException if the model is not found or the actor is not allowed to read it.
      */
     public fun <T : Any> get(id: ModelID<T>): Model<T>

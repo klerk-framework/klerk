@@ -186,6 +186,28 @@ public interface KlerkModels<C : KlerkContext, V> {
 }
 
 /**
+ * Reads job state from inside a read block, as [dev.klerkframework.klerk.read.Reader.jobs].
+ *
+ * What is returned is part of the block's snapshot, exactly like a model: no command and no job step can change it
+ * while the block runs, so reading the same job twice always gives the same answer. Use [JobManager] instead outside
+ * a read block — its methods take the read lock themselves and refuse to run inside one.
+ */
+public interface JobReader {
+
+    /**
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     * @throws AuthorizationException if the actor is not allowed to see it.
+     */
+    public fun get(id: JobId): JobInfo
+
+    /** Null if there is no such job, or the actor is not allowed to see it. */
+    public fun getOrNull(id: JobId): JobInfo?
+
+    /** Every job the actor is allowed to see, newest first. */
+    public fun all(): List<JobInfo>
+}
+
+/**
  * Schedules, inspects and controls managed background jobs. See the "Jobs" documentation for the whole model.
  */
 public interface JobManager<C : KlerkContext, V> {
@@ -293,8 +315,22 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
      */
     fun planNewJobs(pending: List<PendingJob<C, V>>, context: C): NewJobPlan
 
-    /** Takes the jobs a committed command scheduled into the in-memory queue. */
-    fun jobsWereCommitted(plan: NewJobPlan)
+    /**
+     * Applies a committed job commit to the in-memory queue.
+     *
+     * **Must be called while holding the write lock, and must never take the job manager's own mutex** — job state is
+     * part of what a read block sees, so it has to flip in the same critical section as models and views, and taking
+     * the mutex underneath the write lock would invert the lock order and deadlock.
+     */
+    fun applyToMemory(commit: JobCommit)
+
+    /**
+     * Tells subscribers and the dispatcher about rows [applyToMemory] has already applied.
+     *
+     * **Must be called after the write lock is released.** Emitting can resume a collector inline, and a collector
+     * reading job state takes the read lock — which would deadlock against the writer emitting to it.
+     */
+    fun notifyCommitted(commit: JobCommit)
 
     /**
      * [JobManager.schedule], with the new job claiming [claim] in the same commit.

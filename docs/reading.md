@@ -43,3 +43,18 @@ klerk.readSuspend(context) {
 ```
 
 Note that readSuspend may impact performance if you call slow suspending functions.
+
+## What a reader can read
+
+Models and views, plus job state through `jobs`:
+
+```kotlin
+klerk.read(context) {
+    val order = get(orderId)
+    val itsJobs = jobs.all().filter { it.name.value == "ship-order" }
+}
+```
+
+Everything read in one block is consistent with everything else in it — see
+[concurrency.md](concurrency.md). Attached data is the exception: its values are fetched from storage, so
+`klerk.attachedData.get(...)` is called outside the block, with the id read inside it.

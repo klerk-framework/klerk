@@ -18,6 +18,10 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override val views = klerk.spec.views
 
+    private val jobReader = AuthorizingJobReader(klerk, context, withoutAuth)
+
+    override val jobs: JobReader get() = jobReader
+
     internal val modelsRead = mutableSetOf<Model<*>>()
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.getAllRelatedIds(id)
@@ -99,6 +103,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
      */
     internal fun finishRead() {
         propertyAuth.finish()
+        jobReader.finish()
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =

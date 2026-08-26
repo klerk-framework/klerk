@@ -18,6 +18,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
     override val views = klerk.spec.views
 
+    override val jobs: JobReader = UnauthorizedJobReader(klerk)
+
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
 
     override fun <T : Any, U : Any> getRelatedInCollection(

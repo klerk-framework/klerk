@@ -108,7 +108,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                 is NewJobPlan.Ok -> {
                                     processedCommandTokens.add(options.token)
                                     commit(delta, command, context, plan.delta, jobPlan.commit)
-                                    jobs.jobsWereCommitted(jobPlan)
                                     logger.log(result, options) { "Command ${command.event} succeeded" }
                                     timeTriggerManager.handle(delta)
                                     commandResult
@@ -141,7 +140,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit,
     ): CommandResult<T, C, V>? = mutex.withLock {
         if (command == null || context == null) {
-            settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+            commitJobsOnly(jobCommit)
             return@withLock null
         }
 
@@ -176,7 +175,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         processedCommandTokens.add(options.token)
                         val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
                         commit(delta, command, context, plan.delta, merged, isJobStep = true)
-                        jobs.jobsWereCommitted(jobPlan)
                         timeTriggerManager.handle(delta)
                         commandResult
                     }
@@ -186,8 +184,18 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     /** Writes the job's checkpoint on its own, for a step whose command was not applied. */
-    private fun checkpointOnly(jobCommit: JobCommit) {
+    private suspend fun checkpointOnly(jobCommit: JobCommit) = commitJobsOnly(jobCommit)
+
+    /**
+     * Persists a commit that touches jobs but no models, and applies it to memory under the write lock.
+     *
+     * These paths never reach [commit], so without this they would write storage and leave the in-memory queue
+     * behind — which is the whole failure this change exists to prevent.
+     */
+    private suspend fun commitJobsOnly(jobCommit: JobCommit) {
         settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+        readWriteLock.withWrite { jobs.applyToMemory(jobCommit) }
+        jobs.notifyCommitted(jobCommit)
     }
 
     private suspend fun <T : Any, P> commit(
@@ -220,12 +228,18 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             readWriteLock.withWrite {
                 ModelCache.handleDelta(delta)
                 attachedData.applyToMemory(attachedDataDelta)
+                // Job rows land in the same critical section as the models, which is what makes a read block see a
+                // command and the jobs it scheduled together, exactly as they were written to storage.
+                jobs.applyToMemory(jobCommit)
                 updateViews(delta)
                 // Inside the lock, not after it: the pins still answer with the pre-commit bodies until this runs, so
                 // dropping them once the lock is released would leave a window where a read can see a model listed in
                 // a view it has only just entered, and then read a body that has not entered it yet.
                 ModelCache.endCommit()
             }
+            // Outside the lock: emitting can resume a collector inline, and a collector that reads job state takes
+            // the read lock.
+            jobs.notifyCommitted(jobCommit)
         } finally {
             // Idempotent. Only does anything when persistence threw, where without it the pins would go on shadowing
             // the real bodies until some later commit happened to clear them.
@@ -368,7 +382,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             is NewJobPlan.Ok -> planned
         }
         commit<Any, Nothing>(delta, null, null, attachedDataDelta, jobPlan.commit)
-        jobs.jobsWereCommitted(jobPlan)
 
         try {
             delta.unmanagedJobs.forEach { it.f.invoke() }

@@ -269,7 +269,24 @@ JobProgress(
 Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.getJob(id, context)`
 subject to [authorization](#who-can-see-a-job).
 
-`message` is a plain string without any speciffic meaning. It will typically not be shown to the user, but may appear in
+### Reading jobs inside a read block
+
+`klerk.jobs.getJob(id, context)` and `klerk.jobs.getAllJobs(context)` take the read lock themselves, so they are for
+use *outside* a read block and fail with an explanatory error if called inside one. Inside a read block, use `jobs` on
+the reader:
+
+```kotlin
+klerk.read(context) {
+    val job = jobs.get(id)
+    val all = jobs.all()
+}
+```
+
+What you read there is part of the block's snapshot, exactly like a model: nothing can change it while the block runs,
+so a command and the jobs it scheduled are always seen together. The cost is that a long read block delays job
+dispatch, since the dispatcher takes the write lock to claim a job.
+
+`message` is a plain string without any specific meaning. It will typically not be shown to the user, but may appear in
 an admin UI.
 
 `log` is separate and is for diagnostics, not for progress. Build entries with the helpers on the step's args, which
