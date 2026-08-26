@@ -535,7 +535,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.parentId] = record.parentId?.value
         this[Jobs.rootId] = record.rootId.value
         this[Jobs.depth] = record.depth
-        this[Jobs.descendants] = record.descendants
         this[Jobs.result] = record.result
         this[Jobs.failedAtCursor] = record.failedAtCursor
         this[Jobs.hookCursor] = record.hookCursor
@@ -573,7 +572,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     parentId = row[Jobs.parentId]?.let { JobId(it) },
                     rootId = JobId(row[Jobs.rootId]),
                     depth = row[Jobs.depth],
-                    descendants = row[Jobs.descendants],
                     result = row[Jobs.result],
                     failedAtCursor = row[Jobs.failedAtCursor],
                     hookCursor = row[Jobs.hookCursor],
@@ -698,7 +696,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val parentId = integer("parent_id").nullable()
         val rootId = integer("root_id")
         val depth = integer("depth")
-        val descendants = integer("descendants")
         val result = text("result").nullable()
         val failedAtCursor = text("failed_at_cursor").nullable()
         val hookCursor = text("hook_cursor").nullable()

@@ -613,6 +613,41 @@ class JobManagerImplTest {
             JobResult.Yield(cursor = CountCursor(args.cursor.remaining + 1))
     }
 
+    /** Spawns one child per step, forever, which is what the descendant budget exists to stop. */
+    object Breeder : JobType.Local<CountCursor, Ctx, Views>() {
+        override val name = JobName("breeder")
+        override val agent: JobAgent = JobAgent.System
+        override val maxDescendants = 3
+
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+            JobResult.Yield(
+                cursor = CountCursor(args.cursor.remaining + 1),
+                spawn = listOf(Child.declare(CountCursor(0))),
+                progress = JobProgress(completed = args.cursor.remaining + 1),
+            )
+    }
+
+    /**
+     * The budget had no coverage at all before it stopped being a counter, so this pins the behaviour: a job that
+     * spawns in a loop is stopped rather than being allowed to fill the queue.
+     */
+    @Test
+    fun `a job that keeps spawning is dead lettered once it exhausts its descendant budget`() = runBlocking {
+        val f = fixture { register(Breeder); register(Child) }
+        val id = f.klerk.jobs.schedule(Breeder.declare(CountCursor(0)), Ctx.system())
+        f.klerk.jobs.runUntilIdle()
+
+        val breeder = f.job(id)
+        assertEquals(JobStatus.DeadLettered, breeder.status)
+        assertTrue(
+            breeder.reason!!.contains("maxDescendants"),
+            "should say why it was stopped, was: ${breeder.reason}"
+        )
+        // The budget is what it was configured to be, not one more because two spawns raced.
+        val spawned = f.klerk.jobs.getAllJobs(Ctx.system()).count { it.parent == id }
+        assertEquals(3, spawned)
+    }
+
     object Serial : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("serial")
         override val agent: JobAgent = JobAgent.System

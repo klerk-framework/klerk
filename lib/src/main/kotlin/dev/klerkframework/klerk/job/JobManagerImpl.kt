@@ -639,7 +639,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 val children = result.spawn.map { spawnRecord(record, it as DeclaredJob<C, V>, now) }
                 children.forEach { rows.put(it) }
                 if (children.isNotEmpty()) {
-                    rows.update(record.rootId) { it.copy(descendants = it.descendants + children.size) }
                 }
 
                 // Progress means "the cursor or the progress changed". A job reporting "file 312 of 500" is by
@@ -813,12 +812,21 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         if (record.depth + 1 > type.maxDepth) {
             return "Spawning would exceed maxDepth (${type.maxDepth})"
         }
-        val root = records[record.rootId] ?: record
-        if (root.descendants + count > type.maxDescendants) {
+        if (descendantCountOf(record.rootId) + count > type.maxDescendants) {
             return "Spawning $count would exceed maxDescendants (${type.maxDescendants})"
         }
         return null
     }
+
+    /**
+     * How many jobs the tree rooted at [rootId] currently consists of, not counting the root.
+     *
+     * Counted from the tree rather than tracked on the root, for the same reason the parent's children are: a counter
+     * has to be read and written, and two jobs spawning at the same instant both read it before either writes, so one
+     * of the increments is lost and the budget is quietly larger than configured.
+     */
+    private fun descendantCountOf(rootId: JobId): Int =
+        records.values.count { it.rootId == rootId && it.id != rootId }
 
     private fun spawnRecord(parent: JobRecord, child: DeclaredJob<C, V>, now: Instant): JobRecord = newRecord(
         id = allocateId(),
@@ -1014,7 +1022,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             parentId = parentId,
             rootId = rootId ?: id,
             depth = depth,
-            descendants = 0,
             result = null,
             failedAtCursor = null,
             hookCursor = null,

@@ -84,7 +84,13 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
     /** Aborts the job once this long has passed since its first attempt started. Null (the default) means no limit. */
     public open val maxDuration: Duration? get() = null
 
-    /** The total number of descendants any one root job of this type may spawn before a step is aborted. */
+    /**
+     * How many jobs the tree below any one root job of this type may consist of before a step is aborted.
+     *
+     * Counted from the jobs that currently exist, so a tree that outlives the retention of its finished children
+     * regains room as they are deleted. That does not weaken what this is for — a job spawning in a loop hits the
+     * limit long before anything is old enough to be reaped.
+     */
     public open val maxDescendants: Int get() = 10_000
 
     /** How deep the spawn tree below a root job of this type may get before a step is aborted. */

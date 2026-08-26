@@ -14,9 +14,8 @@ import kotlin.time.Instant
  * @property readyAt the earliest time the job may be dispatched: the `scheduleAt` while [JobStatus.Scheduled], the
  * end of the backoff while [JobStatus.Backoff], and the time it became ready otherwise. Null while the job is not
  * dispatchable at all (running, waiting for children, terminal).
- * @property rootId the top of this job's spawn tree — itself, for a job nobody spawned. Together with [depth] it makes
- * the `maxDescendants`/`maxDepth` budgets a counter update rather than a tree walk.
- * @property descendants how many jobs the tree rooted here has spawned in total. Only meaningful on the root record.
+ * @property rootId the top of this job's spawn tree — itself, for a job nobody spawned. Together with [depth] it is
+ * what the `maxDescendants`/`maxDepth` budgets are measured against.
  * @property failedAtCursor the cursor as it was when the job died, preserved read-only for an end-of-life hook.
  * @property hookCursor the hook's own cursor, checkpointed separately so unwinding never destroys [failedAtCursor].
  * @property noProgressStreak how many consecutive steps changed neither the cursor nor the progress. Three means
@@ -47,7 +46,6 @@ public data class JobRecord(
     val parentId: JobId?,
     val rootId: JobId,
     val depth: Int,
-    val descendants: Int,
     val result: String?,
     val failedAtCursor: String?,
     val hookCursor: String?,
