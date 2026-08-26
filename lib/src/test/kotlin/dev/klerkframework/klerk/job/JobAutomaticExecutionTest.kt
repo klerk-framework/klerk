@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -101,5 +102,76 @@ class JobAutomaticExecutionTest {
         val after = persisted.stepNumber
         kotlinx.coroutines.delay(200)
         assertEquals(after, storage.getAllJobs().single { it.id == id }.stepNumber)
+    }
+
+    @Serializable
+    data class FanCursor(val children: Int, val awaiting: Boolean = false)
+
+    object Leaf : JobType.Local<FanCursor, Ctx, Views>() {
+        override val name = JobName("fan-leaf")
+        override val agent: JobAgent = JobAgent.System
+
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> =
+            JobResult.Success(result = "leaf")
+    }
+
+    object Fan : JobType.Local<FanCursor, Ctx, Views>() {
+        override val name = JobName("fan-parent")
+        override val agent: JobAgent = JobAgent.System
+
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> {
+            if (!args.cursor.awaiting) {
+                return JobResult.Yield(
+                    cursor = args.cursor.copy(awaiting = true),
+                    spawn = (1..args.cursor.children).map { Leaf.declare(FanCursor(0)) },
+                    awaitSpawned = true,
+                )
+            }
+            return JobResult.Success(result = "saw ${args.children.size} children")
+        }
+    }
+
+    /**
+     * KNOWN BUG — ignored until the parent-wake mechanism is redesigned.
+     *
+     * The existing fan-out coverage runs on manual execution, which steps one job at a time and so never has two
+     * siblings finishing at once. With the real dispatcher and `maxParallelSteps > 1` they do: every sibling reads the
+     * parent's `awaitedChildren` in `planTransition`, which runs before any of their commits are applied, so all of
+     * them compute the same decrement. Four children take the count from 4 to 3, the parent never reaches 0, and it
+     * waits forever.
+     *
+     * Passes with `maxParallelSteps = 1`. `childOutcomes` is accumulated the same way and is lost the same way.
+     *
+     * Fixing it means deciding whether the parent's wake can stay part of the child's own transaction, since the
+     * count as an absolute value planned outside the lock is what cannot be made safe.
+     */
+    @Ignore("Known bug: concurrent siblings each lose the others' decrement of awaitedChildren")
+    @Test
+    fun `a parent wakes when its last child finishes, even with siblings finishing concurrently`() = runBlocking {
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val store = RamStorage()
+        val klerk = createKlerk(
+            collections,
+            store,
+            jobs = JobSettings(execution = JobExecution.Automatic, maxParallelSteps = 4),
+        ) {
+            register(Fan)
+            register(Leaf)
+        }
+        klerk.meta.start(installShutdownHook = false)
+
+        val id = klerk.jobs.schedule(Fan.declare(FanCursor(children = 4)), Ctx.system())
+        // If a sibling's decrement is lost, awaitedChildren never reaches zero and this times out.
+        awaitStatus(klerk, id, JobStatus.Succeeded)
+
+        val parent = store.getAllJobs().single { it.id == id }
+        assertEquals(0, parent.awaitedChildren)
+        assertEquals(4, parent.childOutcomes.size, "every child's outcome should have reached the parent")
+
+        val children = klerk.jobs.getAllJobs(Ctx.system()).filter { it.parent == id }
+        assertEquals(4, children.size)
+        assertTrue(children.all { it.status == JobStatus.Succeeded })
+        klerk.meta.stop()
     }
 }

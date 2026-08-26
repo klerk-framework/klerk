@@ -103,10 +103,11 @@ class JobSnapshotTest {
 
         val torn = java.util.concurrent.atomic.AtomicInteger(0)
         val observed = java.util.concurrent.ConcurrentHashMap.newKeySet<Boolean>()
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
         withTimeout(120.seconds) {
             val readers = (1..8).map {
                 launch(Dispatchers.Default) {
-                    repeat(400) {
+                    while (!stop.get()) {
                         klerk.read(Ctx.system()) {
                             val renamed = get(author).props.firstName.value == "Renamed"
                             val scheduled = jobs.all().any { j -> j.name.value == "my-job-2" }
@@ -116,11 +117,15 @@ class JobSnapshotTest {
                     }
                 }
             }
+            // Readers keep going either side of the command, so the run straddles it rather than racing it.
+            kotlinx.coroutines.delay(50)
             klerk.handle(
                 Command(ChangeName, author, ChangeNameParams(FirstName("Renamed"), LastName("Author"))),
                 Ctx.system(),
                 ProcessingOptions(CommandToken.simple()),
             ).orThrow()
+            kotlinx.coroutines.delay(50)
+            stop.set(true)
             readers.joinAll()
         }
 
