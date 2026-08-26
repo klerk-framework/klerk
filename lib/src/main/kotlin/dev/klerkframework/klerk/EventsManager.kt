@@ -198,23 +198,38 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
     ) {
-        // The models this command changes must be in memory before storage is written, or a read that misses on one of
-        // them in the window between the two would fetch the new version while seeing the old version of everything
-        // else. Created models cannot be missed (nothing knows their ids yet).
-        ModelCache.ensureResident(delta.updatedModels + delta.transitions + delta.deletedModels)
 
-        if (isJobStep) {
-            settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
-        } else {
-            settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
-        }
+        // Persisting to the database can take several milliseconds, and reads keep running throughout: the write lock
+        // is taken only for the in-memory flip at the end.
+        //
+        // What makes that safe is that the sole storage read a reader performs while holding the read lock is
+        // ModelCache.getBody's repair of an evicted model. beginCommit pins the pre-commit body of every model this
+        // command changes, so that repair is answered from the pin instead of from storage, which may already hold
+        // the new state. Everything else a read touches -- views, relations, attached-data metadata -- is in memory
+        // and flips under the write lock. A read therefore sees either all of the commit or none of it. Created
+        // models need no pin: nothing knows their ids yet, so nobody can be reading them.
+        val touchedIds = delta.updatedModels + delta.transitions + delta.deletedModels
+        ModelCache.beginCommit(touchedIds)
+        try {
+            if (isJobStep) {
+                settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
+            } else {
+                settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
+            }
 
-        if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
             readWriteLock.withWrite {
                 ModelCache.handleDelta(delta)
                 attachedData.applyToMemory(attachedDataDelta)
                 updateViews(delta)
+                // Inside the lock, not after it: the pins still answer with the pre-commit bodies until this runs, so
+                // dropping them once the lock is released would leave a window where a read can see a model listed in
+                // a view it has only just entered, and then read a body that has not entered it yet.
+                ModelCache.endCommit()
             }
+        } finally {
+            // Idempotent. Only does anything when persistence threw, where without it the pins would go on shadowing
+            // the real bodies until some later commit happened to clear them.
+            ModelCache.endCommit()
         }
 
         maybeEraseAuditLog(specification, delta.deletedModels)

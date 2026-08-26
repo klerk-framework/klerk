@@ -30,8 +30,6 @@ public data class ModelCacheSettings(
 ) {
     init {
         if (maxResidentModels < 1000) {
-            // strange things can happen if the cache is too small, e.g. ModelCache.ensureResident may not really
-            // ensure that the requested models are in memory
             logger.warn { "maxResidentModels should be at least 1000, was $maxResidentModels" }
         }
     }
@@ -61,6 +59,9 @@ internal object ModelCache {
     internal val residentCount: Long
         get() = bodies.estimatedSize()
 
+    /** Whether this model's body is in memory right now. For tests that need to act on an actual cache miss. */
+    internal fun isResident(id: Int): Boolean = bodies.asMap().containsKey(id)
+
     private val log = KotlinLogging.logger {}
 
     /**
@@ -85,6 +86,20 @@ internal object ModelCache {
     private var bodies: Cache<Int, Model<out Any>> = buildCache(ModelCacheSettings())
 
     private lateinit var persistence: Persistence
+
+    /**
+     * The pre-commit body of every model the commit in flight touches, held strongly so it cannot be evicted; see
+     * [beginCommit].
+     *
+     * While a commit is in flight, storage may already hold the new state while [bodies] still holds the old one, so
+     * a miss on one of these ids must not be repaired from storage — it would return the new value while every other
+     * model in the same read still shows the old one. This map is what such a miss is answered from instead, which
+     * keeps the whole window serving one consistent (old) version.
+     *
+     * Commits are serialized by [dev.klerkframework.klerk.EventsManagerImpl], so this only ever holds one commit's
+     * worth of models.
+     */
+    private val preCommitBodies: MutableMap<Int, Model<out Any>> = ConcurrentHashMap()
 
     /**
      * Points the cache at the storage it reloads evicted models from, and sizes it. Must be called before any read.
@@ -118,6 +133,10 @@ internal object ModelCache {
         if (!ids.contains(id)) {
             return null
         }
+        // Answered before consulting storage: a model the commit in flight touches may already be written there, so
+        // repairing a miss from storage would mix its new state into a read that sees every other model as it was
+        // before the commit. See [preCommitBodies].
+        preCommitBodies[id]?.let { return it }
         // computeIfAbsent rather than a get/put pair: it is atomic per key, so concurrent readers that miss the same id
         // share one fetch instead of all going to storage. A null from the loader records no mapping, which is what
         // makes "deleted while a reader was looking for it" an ordinary miss rather than an error.
@@ -154,10 +173,32 @@ internal object ModelCache {
     }
 
     /**
-     * Reads the given models into memory if they are not already there.
+     * Pins the current (pre-commit) body of every model in [modelIds]. Persistence is written without the write lock
+     * held, so until [endCommit] a read that misses on one of these ids is answered from the pinned body rather than
+     * from storage, which may already hold the new state.
+     *
+     * Call before writing to persistence, and pair with [endCommit] — including on failure, or the pinned bodies
+     * shadow the real ones indefinitely.
      */
-    internal fun ensureResident(modelIds: Collection<ModelID<out Any>>) {
-        modelIds.forEach { getBody(it.value) }
+    internal fun beginCommit(modelIds: Collection<ModelID<out Any>>) {
+        modelIds.forEach { id ->
+            // getBody, not bodies[..], so an already-evicted model is fetched from storage -- which is still the
+            // pre-commit state, since this runs before persistence is written.
+            getBody(id.value)?.let { preCommitBodies[id.value] = it }
+        }
+    }
+
+    /**
+     * Unpins the bodies [beginCommit] pinned, which is what makes the commit visible to readers.
+     *
+     * Must be called while holding the write lock, in the same critical section that applied the commit to the cache:
+     * until this runs, reads are answered with the pinned pre-commit bodies, so releasing the lock first would expose
+     * a window where views and relations already reflect the commit but the bodies do not.
+     *
+     * Idempotent, so it is safe to call again on a failure path.
+     */
+    internal fun endCommit() {
+        preCommitBodies.clear()
     }
 
     internal fun <T : Any> delete(modelId: ModelID<T>): Unit {

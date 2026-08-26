@@ -1,15 +1,15 @@
 # Concurrency
 
-Klerk processes one command at a time. If two callers call `klerk.handle(...)` concurrently, the second call waits until
-the first has fully committed (or failed) before it starts — there is no interleaving. This gives you the same
-guarantees as serializable isolation without having to reason about it: business logic can assume nothing else changes
-the data mid-command.
+Klerk values consistency and "no surprises" over performance. Commands are therefore processed one at a time. If two
+callers call `klerk.handle(...)` concurrently, the second call waits until the first has fully committed (or failed)
+before it starts — there is no interleaving. This gives you the same guarantees as serializable isolation without having
+to reason about it: business logic can assume nothing else changes the data mid-command.
 
 Reads (`klerk.read`/`klerk.readSuspend`, see [reading.md](reading.md)) use a readers-writer lock:
 
 - **Reads run concurrently with each other.** Any number of read blocks can be in progress at the same time.
-- **A command commit excludes every read.** A command's mutations are applied to the model cache and views while
-  holding the lock exclusively, so a read never observes a half-committed command.
+- **A command commit excludes every read.** A command's mutations are applied to the model cache and views while holding
+  the lock exclusively, so a read never observes a half-committed command.
 - **Writers are preferred.** Once a command is waiting to commit, no further read blocks are admitted until it is done.
   A steady stream of reads therefore cannot starve a command.
 
@@ -21,10 +21,9 @@ Because the lock is held for the whole block, reading several things inside one 
 command can be processed in between:
 
 ```kotlin
-val (book, author) = klerk.read(context) {
+val author = klerk.read(context) {
     val book = get(bookId)
-    val author = get(book.props.author) // guaranteed to still be the same book/author pair
-    book to author
+    get(book.props.author) // guaranteed to still be the same book/author pair
 }
 ```
 
@@ -36,19 +35,19 @@ already be stale by the time you look at them again, since another command could
 
 ## Read blocks must not be nested
 
-Calling `klerk.read` (or `readSuspend`) from inside another read block is a bug and will deadlock: the inner read
-queues behind any command that started waiting in the meantime, while the outer read holds the lock that command is
-waiting for. Klerk detects the common cases and fails with an explanatory message instead.
+Calling `klerk.read` (or `readSuspend`) from inside another read block is a bug and will deadlock: the inner read queues
+behind any command that started waiting in the meantime, while the outer read holds the lock that command is waiting
+for. Klerk detects the common cases and fails with an explanatory message instead.
 
-Read what you need in one block rather than nesting. This also applies indirectly — a function called from inside a
-read block must not itself open one.
+Read what you need in one block rather than nesting. This also applies indirectly — a function called from inside a read
+block must not itself open one.
 
 ## Keep read locks short
 
 `readSuspend` lets you call suspending functions (e.g. a network request) while still holding the reader, but the lock
-is held for as long as your block runs — including any `await`. Other reads can proceed meanwhile, but a slow
-suspending call inside `readSuspend` delays every command commit until it returns. Prefer reading everything you need
-first, then releasing the lock before doing slow work:
+is held for as long as your block runs — including any `await`. Other reads can proceed meanwhile, but a slow suspending
+call inside `readSuspend` delays every command commit until it returns. Prefer reading everything you need first, then
+releasing the lock before doing slow work:
 
 ```kotlin
 // Avoid: holds the lock for the duration of the HTTP call
