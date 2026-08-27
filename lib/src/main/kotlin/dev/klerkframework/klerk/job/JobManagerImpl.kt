@@ -212,7 +212,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 }
                 dead.forEach { records[it.id] = it }
                 klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
-                    null, null, null, jobs = JobCommit(upserted = dead)
+                    null, null, null, jobs = JobCommit(upserted = dead), sequenceNumber = 0
                 )
             }
         }
@@ -1044,7 +1044,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
                 is NewJobPlan.Ok -> {
                     val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
-                    klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
+                    klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit, sequenceNumber = 0)
                     lock.withLock { klerk.readWriteLock.withWrite { applyToMemory(plan.commit) } }
                     notifyCommitted(plan.commit)
                 }
@@ -1165,7 +1165,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * job that was resumed after the sweep decided it was terminal.
      */
     private suspend fun commitControlChange(commit: JobCommit, expected: Map<JobId, JobRecord> = emptyMap()) {
-        klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit)
+        klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit, sequenceNumber = 0)
         lock.withLock {
             klerk.readWriteLock.withWrite { applyToMemory(commit, expected) }
             commit.deleted.forEach { previousResults.remove(it) }
@@ -1348,7 +1348,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     is NewJobPlan.Ok -> {
                         val admitted = plan.records.map { it.copy(cronScheduleId = schedule.id) }
                         klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(
-                            null, null, null, jobs = JobCommit(upserted = admitted)
+                            null, null, null, jobs = JobCommit(upserted = admitted), sequenceNumber = 0
                         )
                         lock.withLock {
                             klerk.readWriteLock.withWrite { applyToMemory(JobCommit(upserted = admitted)) }

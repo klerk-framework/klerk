@@ -924,7 +924,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
-         * Rules deciding who may read the audit log, i.e. [EventsManager.getEventsInAuditLog].
+         * Rules deciding who may read the audit log, i.e. [dev.klerkframework.klerk.read.Reader.auditLog].
          */
         public fun eventLog(init: AuthorizationEventLogRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationEventLogRulesBlock<C, V>()

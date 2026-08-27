@@ -49,10 +49,12 @@ var onEnterImprovingStateActionCallback: (() -> Unit)? = null
  * is in [testSettings] instead.
  *
  * @param configureJobs applied last inside the `jobs` block, so a test can register its own job types or declare crons.
+ * @param configureAuthorization applied last inside the `authorization` block, so a test can add rules of its own.
  */
 fun createConfig(
     collections: Views,
     configureJobs: JobsBlock<Ctx, Views>.() -> Unit = {},
+    configureAuthorization: SpecificationBuilder.AuthorizationRulesBlock<Ctx, Views>.() -> Unit = {},
 ): Specification<Ctx, Views> {
     return SpecificationBuilder<Ctx, Views>(collections).build {
         jobContextProvider(::myJobContextProvider)
@@ -123,6 +125,7 @@ fun createConfig(
                 }
                 negative {}
             }
+            configureAuthorization()
         }
         systemContextProvider(::myContextProvider)
     }

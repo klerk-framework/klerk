@@ -44,7 +44,7 @@ without risking a duplicate effect.
 
 ## Audit log
 
-Every successfully processed command is durably recorded and can be read back via `klerk.events` (see
+Every successfully processed command is durably recorded and can be read back via `auditLog(...)` in a read block (see
 [events-and-commands.md](events-and-commands.md#the-audit-log)), gated by its own `eventLog` authorization rules. This
 is what you reach for during an incident or a compliance review — "what happened, and who did it" is answered by the
 framework itself rather than by whatever ad hoc logging individual code paths happened to include.

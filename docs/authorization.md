@@ -121,7 +121,7 @@ passed — so a command that's both invalid and unauthorized is reported as inva
 
 ### eventLog
 
-Gates whether an actor can read entries from the audit log (`klerk.events.getEventsInAuditLog(...)`, see
+Gates whether an actor can read entries from the audit log (`auditLog(...)` inside a read block, see
 [events and commands](events-and-commands.md)). Rules receive an `ArgContextReader<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
 

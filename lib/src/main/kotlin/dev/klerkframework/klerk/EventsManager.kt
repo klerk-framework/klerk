@@ -16,6 +16,7 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.AuditEntry
 import dev.klerkframework.klerk.storage.ModelCache
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
@@ -29,9 +30,21 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val settings: KlerkSettings,
     private val jobs: JobManagerInternal<C, V>,
     private val attachedData: AttachedDataImpl<C, V>
-) : EventsManager<C, V> {
+) {
 
     private val mutex = Mutex()
+
+    /** The number handed to the most recently started commit. Only ever read under [mutex]. */
+    private val assignedSequenceNumber = AtomicLong()
+
+    /**
+     * The highest audit-log sequence number a reader may see. Raised under the write lock, in the same critical
+     * section that makes the commit visible to reads, so the log never runs ahead of the models.
+     */
+    @Volatile
+    internal var visibleSequenceNumber: Long = 0
+        private set
+
     private val processedCommandTokens = mutableSetOf<CommandToken>()
     private val timeTriggerManager = TriggerTimeManagerImpl(this, readWriteLock, klerk)
     private val eventProcessor = EventProcessor<C, V>(klerk, settings, readWriteLock, timeTriggerManager)
@@ -193,7 +206,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      * behind — which is the whole failure this change exists to prevent.
      */
     private suspend fun commitJobsOnly(jobCommit: JobCommit) {
-        settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+        // No command, so no audit entry and no sequence number is consumed.
+        settings.persistence.commitJobStep<Any, Nothing, C, V>(
+            null, null, null, AttachedDataDelta(), jobCommit, sequenceNumber = 0
+        )
         readWriteLock.withWrite { jobs.applyToMemory(jobCommit) }
         jobs.notifyCommitted(jobCommit)
     }
@@ -216,13 +232,18 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         // the new state. Everything else a read touches -- views, relations, attached-data metadata -- is in memory
         // and flips under the write lock. A read therefore sees either all of the commit or none of it. Created
         // models need no pin: nothing knows their ids yet, so nobody can be reading them.
+        //
+        // The audit log is read from storage rather than from memory, so it cannot be pinned the same way. Instead the
+        // entry carries this commit's sequence number, and a reader only sees entries at or below
+        // [visibleSequenceNumber] — which is raised below, in the same critical section that flips the cache.
         val touchedIds = delta.updatedModels + delta.transitions + delta.deletedModels
+        val sequenceNumber = assignedSequenceNumber.incrementAndGet()
         ModelCache.beginCommit(touchedIds)
         try {
             if (isJobStep) {
-                settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
+                settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
             } else {
-                settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
+                settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
             }
         } catch (e: Exception) {
             ModelCache.endCommit()
@@ -234,6 +255,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             attachedData.applyToMemory(attachedDataDelta)
             jobs.applyToMemory(jobCommit)
             updateViews(delta)
+            visibleSequenceNumber = sequenceNumber
             ModelCache.endCommit()
         }
         jobs.notifyCommitted(jobCommit)
@@ -266,33 +288,10 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         return null
     }
 
-    override suspend fun getEventsInAuditLog(
-        context: C,
-        id: ModelID<Any>?,
-        after: Instant,
-        before: Instant
-    ): Iterable<AuditEntry> {
-        val reader = ReaderWithoutAuth<C, V>(klerk)
-        readWriteLock.withRead {
-            val args = ArgContextReader(context, reader)
-            if (specification.authorization.eventLogPositiveRules.none { it.invoke(args) == dev.klerkframework.klerk.PositiveAuthorization.Allow }) {
-                throw AuthorizationException(
-                    KlerkErrorCode.AuditPositiveAuthorizationMissing,
-                    "Not allowed to read audit log"
-                )
-            }
-            if (specification.authorization.eventLogNegativeRules.any { it.invoke(args) == dev.klerkframework.klerk.NegativeAuthorization.Deny }) {
-                throw AuthorizationException(
-                    KlerkErrorCode.AuditNegativeAuthorizationExist,
-                    "Not allowed to read audit log"
-                )
-            }
-        }
-
-        return settings.persistence.readAuditLog(modelId = id?.value, after, before)
-    }
-
     internal suspend fun start() {
+        val lastPersisted = settings.persistence.lastAuditSequenceNumber()
+        assignedSequenceNumber.set(lastPersisted)
+        visibleSequenceNumber = lastPersisted
         eventProcessor.readAllModelsFromDisk()
         timeTriggerManager.start()
     }

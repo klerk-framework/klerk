@@ -214,8 +214,9 @@ class EvictionTest {
             context: C?,
             attachedData: AttachedDataDelta,
             jobs: JobCommit,
+            sequenceNumber: Long,
         ) {
-            delegate.store(delta, command, context, attachedData, jobs)
+            delegate.store(delta, command, context, attachedData, jobs, sequenceNumber)
             if (block) {
                 entered.countDown()
                 release.await()

@@ -97,12 +97,13 @@ class JobAtomicityTest {
             context: C?,
             attachedData: dev.klerkframework.klerk.storage.AttachedDataDelta,
             jobs: JobCommit,
+            sequenceNumber: Long,
         ) {
             commits++
             if (commits == crashOnCommit) {
                 throw SimulatedCrash()
             }
-            super.commitJobStep(delta, command, context, attachedData, jobs)
+            super.commitJobStep(delta, command, context, attachedData, jobs, sequenceNumber)
         }
 
         /** Arms the crash for the nth commit from now, so that scheduling the job itself is not the one that dies. */

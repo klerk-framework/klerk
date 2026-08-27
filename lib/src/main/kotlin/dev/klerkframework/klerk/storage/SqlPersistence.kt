@@ -97,9 +97,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobs: JobCommit,
+        sequenceNumber: Long,
     ) {
         transaction(database) {
-            writeAll(delta, command, context, attachedData, jobs)
+            writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
         }
     }
 
@@ -109,11 +110,12 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobs: JobCommit,
+        sequenceNumber: Long,
     ) {
         // One Exposed transaction, so the whole contract on Persistence.commitJobStep holds: models, audit entry,
         // attached data and every job row either land together or not at all.
         transaction(database) {
-            writeAll(delta, command, context, attachedData, jobs)
+            writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
         }
     }
 
@@ -126,6 +128,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobCommit: JobCommit,
+        sequenceNumber: Long,
     ) {
         run {
             applyAttachedDataDelta(attachedData)
@@ -139,6 +142,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 requireNotNull(context)
                 val reference = command.model?.value ?: delta.primaryModel?.value ?: 0
                 AuditLog.insert {
+                    it[AuditLog.sequenceNumber] = sequenceNumber
                     it[timestamp] = context.time.to64bitMicroseconds()
                     it[event] = command.event.id.toString()
                     it[modelId] = reference
@@ -220,55 +224,77 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun readAuditLog(modelId: Int?, from: Instant, until: Instant): Iterable<AuditEntry> {
+    override fun readAuditLog(
+        modelId: Int?,
+        from: Instant,
+        until: Instant,
+        upToSequenceNumber: Long,
+        sequenceNumber: Long?,
+    ): Iterable<AuditEntry> {
         return transaction(database) {
             val query = AuditLog.selectAll()
                 .where(timestamp greaterEq from.to64bitMicroseconds())
                 .andWhere { timestamp lessEq until.to64bitMicroseconds() }
+                .andWhere { AuditLog.sequenceNumber lessEq upToSequenceNumber }
 
             if (modelId != null) {
                 query.andWhere { AuditLog.modelId eq modelId }
             }
-
-            return@transaction query.map { row ->
-                val time = decode64bitMicroseconds(row[timestamp])
-                val eventReference = EventReference.from(row[event])
-                val actorType = row[actorIdentityType]
-                val actorReference = row[actorIdentityReference]
-                val actorExternalId = row[actorIdentityExternalId]
-                val reference = row[AuditLog.modelId]
-                val params = row[AuditLog.params]
-                val extra = row[AuditLog.extra]
-                AuditEntry(time, eventReference, reference, actorType, actorReference, actorExternalId, params, extra)
+            if (sequenceNumber != null) {
+                query.andWhere { AuditLog.sequenceNumber eq sequenceNumber }
             }
+
+            return@transaction query.orderBy(AuditLog.sequenceNumber).map { row -> toAuditEntry(row) }
         }
     }
 
+    override fun lastAuditSequenceNumber(): Long = transaction(database) {
+        AuditLog.select(AuditLog.sequenceNumber)
+            .orderBy(AuditLog.sequenceNumber, SortOrder.DESC)
+            .limit(1)
+            .firstOrNull()
+            ?.get(AuditLog.sequenceNumber) ?: 0L
+    }
+
+    private fun toAuditEntry(row: ResultRow): AuditEntry = AuditEntry(
+        sequenceNumber = row[AuditLog.sequenceNumber],
+        time = decode64bitMicroseconds(row[timestamp]),
+        eventReference = EventReference.from(row[event]),
+        reference = row[AuditLog.modelId],
+        actorType = row[actorIdentityType],
+        actorReference = row[actorIdentityReference],
+        actorExternalId = row[actorIdentityExternalId],
+        params = row[AuditLog.params],
+        extra = row[AuditLog.extra],
+    )
+
     override fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit {
         val updatedEntries = mutableSetOf<AuditEntry>()
-        val deletedEntries = mutableSetOf<Int>()
-        readAuditLog(modelId).map { original ->
+        val deletedEntries = mutableSetOf<Long>()
+        readAuditLog(modelId).forEach { original ->
             val updated = transformer(original)
             if (updated == null) {
-                deletedEntries.add(original.reference)
-                return@map
+                deletedEntries.add(original.sequenceNumber)
+                return@forEach
             }
             require(updated.reference == original.reference) { "Updating of ID is not supported" }
+            require(updated.sequenceNumber == original.sequenceNumber) { "Updating of sequenceNumber is not supported" }
             updatedEntries.add(updated)
         }
 
         transaction(database) {
-            deletedEntries.forEach { id ->
-                AuditLog.deleteWhere { AuditLog.modelId eq id }
+            deletedEntries.forEach { seq ->
+                AuditLog.deleteWhere { AuditLog.sequenceNumber eq seq }
             }
             updatedEntries.forEach { updated ->
-                AuditLog.update({ AuditLog.modelId eq updated.reference }) {
+                AuditLog.update({ AuditLog.sequenceNumber eq updated.sequenceNumber }) {
                     it[timestamp] = updated.time.to64bitMicroseconds()
                     it[event] = updated.eventReference.id()
-                    it[params] = gson.toJson(updated.params)
+                    it[params] = updated.params
                     it[actorIdentityType] = updated.actorType
                     it[actorIdentityReference] = updated.actorReference
                     it[actorIdentityExternalId] = updated.actorExternalId
+                    it[extra] = updated.extra
                 }
             }
         }
@@ -605,15 +631,16 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     }
 
     internal object AuditLog : Table("\"klerk_audit_log\"") {
+        val sequenceNumber = long("sequence_number")
         val timestamp = long("timestamp")   // microseconds since 1970
         val event = varchar("event_id", length = 100)
-        val modelId = integer("model_id")
+        val modelId = integer("model_id").index()
         val params = varchar("params", length = 100000)
         val actorIdentityType = byte("actor_identity_type")
         val actorIdentityReference = integer("actor_identity_reference").nullable()
         val actorIdentityExternalId = long("actor_identity_externalId").nullable()
         val extra = varchar("extra", length = 1000).nullable()
-        override val primaryKey = PrimaryKey(timestamp)
+        override val primaryKey = PrimaryKey(sequenceNumber)
     }
 
     internal object Models : Table("\"klerk_models\"") {

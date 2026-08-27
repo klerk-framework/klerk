@@ -45,7 +45,7 @@ class StorageTest {
             aggregatedModelState = mapOf(author.id to author)
         )
 
-        storage.store(result1, command1, context)
+        storage.store(result1, command1, context, sequenceNumber = 1)
 
         val command2 = Command(
             event = CreateBook,
@@ -85,7 +85,7 @@ class StorageTest {
             createdModels = listOf(ModelID(123)),
             aggregatedModelState = mapOf(book.id to book)
         )
-        storage.store(result2, command2, context)
+        storage.store(result2, command2, context, sequenceNumber = 2)
 
         var modelsRead = 0
         storage.readAllModels { modelsRead++ }
@@ -96,7 +96,7 @@ class StorageTest {
         assertNull(storage.readModel(999), "readModel must return null for an id that does not exist")
 
         val deletion = ProcessingData<Book, Ctx, Views>(deletedModels = listOf(book.id))
-        storage.store<Book, Nothing, Ctx, Views>(deletion, null, null)
+        storage.store<Book, Nothing, Ctx, Views>(deletion, null, null, sequenceNumber = 3)
         assertNull(storage.readModel(book.id.value), "readModel must not return a deleted model")
     }
 

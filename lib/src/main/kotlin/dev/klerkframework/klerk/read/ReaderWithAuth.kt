@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
 import kotlin.reflect.KClass
+import kotlin.time.Instant
 import kotlin.reflect.KProperty1
 
 internal class ReaderWithAuth<C : KlerkContext, V>(
@@ -21,6 +22,16 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     private val jobReader = AuthorizingJobReader(klerk, context, withoutAuth)
 
     override val jobs: JobReader get() = jobReader
+
+    override fun auditLog(
+        id: ModelID<out Any>?,
+        after: Instant,
+        before: Instant,
+        sequenceNumber: Long?,
+    ): AuditLogQuery {
+        checkAuditLogAuthorization(klerk, context, withoutAuth)
+        return auditLogQuery(klerk, id, after, before, sequenceNumber)
+    }
 
     internal val modelsRead = mutableSetOf<Model<*>>()
 

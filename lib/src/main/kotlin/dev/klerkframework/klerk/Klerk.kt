@@ -38,7 +38,6 @@ public interface Klerk<C : KlerkContext, V> {
 
     public val spec: Specification<C, V>
     public val settings: KlerkSettings
-    public val events: EventsManager<C, V>
     public val jobs: JobManager<C, V>
     public val models: KlerkModels<C, V>
 
@@ -122,26 +121,22 @@ public interface Klerk<C : KlerkContext, V> {
 
 }
 
-public interface EventsManager<C : KlerkContext, V> {
+/**
+ * A snapshot of the audit log, obtained from [Reader.auditLog] inside a read block. The entries themselves are read
+ * from storage by [get], after the read lock has been released.
+ */
+public interface AuditLogQuery {
 
     /**
-     * Queries the audit log of previously processed commands.
+     * Reads the matching entries, ordered by [AuditEntry.sequenceNumber], oldest first.
      *
-     * @param context the actor must satisfy the configured event-log authorization rules, or this throws
-     * @param id if provided, restricts the result to entries for this model. If null, entries for all models are returned.
-     * @param after only entries at or after this instant are returned
-     * @param before only entries at or before this instant are returned
-     * @return the matching audit entries
-     * @throws AuthorizationException if the actor is not allowed to read the audit log
+     * Only entries whose command was already visible in the read block that created this query are returned, so the
+     * log never shows an event that has not happened yet. Can be called repeatedly; the result is always as of that
+     * read block.
+     *
+     * @throws IllegalStateException if called from inside a read block
      */
-    public suspend fun getEventsInAuditLog(
-        context: C,
-        id: ModelID<Any>? = null,
-        after: Instant = Instant.DISTANT_PAST,
-        before: Instant = Instant.DISTANT_FUTURE
-    ): Iterable<AuditEntry>
-
-
+    public suspend fun get(): List<AuditEntry>
 }
 
 public interface KlerkModels<C : KlerkContext, V> {

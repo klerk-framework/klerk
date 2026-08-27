@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.collection.QueryResponse
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.read.Reader
 import kotlin.reflect.KClass
+import kotlin.time.Instant
 import kotlin.reflect.KProperty1
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,6 +41,10 @@ object DummyReader : Reader<Ctx, Views> {
 
     override val jobs: JobReader
         get() = throw exception
+
+    override fun auditLog(id: ModelID<out Any>?, after: Instant, before: Instant, sequenceNumber: Long?): AuditLogQuery {
+        throw exception
+    }
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> {
         throw exception

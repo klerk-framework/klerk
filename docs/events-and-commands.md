@@ -177,16 +177,41 @@ when (val result = klerk.handle(command, context, ProcessingOptions(CommandToken
 
 ## The audit log
 
-Every successfully processed command is recorded. You can read it back through `klerk.events`:
+Every successfully processed command is recorded. Reading it takes two steps: `auditLog(...)` inside a read block
+gives you a query, and `get()` on that query — after the block — reads the entries from storage.
 
 ```kotlin
-val entries = klerk.events.getEventsInAuditLog(
-    context = context,
-    id = bookId,   // omit (or pass null) to get entries for all models
+val query = klerk.read(context) {
+    auditLog(id = bookId)   // omit (or pass null) to get entries for all models
+}
+val entries = query.get()
+```
+
+The query is a snapshot of the read block that created it: it only ever returns entries whose command was already
+visible there, so the log never shows an event that hasn't happened yet. Because the database is queried by `get()`,
+outside the block, nothing is read while the read lock is held — calling `get()` inside a read block is an error.
+
+`auditLog` also takes `after`/`before` to limit the [time](context.md) range, and `sequenceNumber` to fetch one
+specific entry:
+
+```kotlin
+public data class AuditEntry(
+    val sequenceNumber: Long,   // identifies the entry and orders the log
+    val time: Instant,          // the context.time of the command
+    val eventReference: EventReference,
+    val reference: Int,         // the model the command acted on
+    val actorType: Byte,
+    val actorReference: Int?,
+    val actorExternalId: Long?,
+    val params: String,
+    val extra: String?,         // context.auditExtra
 )
 ```
 
-This is subject to its own authorization rules (`eventLog` in [authorization.md](authorization.md)) — reading it
+Entries come back ordered by `sequenceNumber`, oldest first. Use it, not `time`, to order or identify an entry —
+`time` comes from the command's context and is neither unique nor necessarily increasing.
+
+Reading is subject to its own authorization rules (`eventLog` in [authorization.md](authorization.md)) — `auditLog(...)`
 throws `AuthorizationException` if the context isn't allowed to see the audit log.
 
 ## Declaring the DSL before writing the functions

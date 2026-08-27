@@ -11,8 +11,16 @@ import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
 
-/** One persisted entry in the audit log: the record of a single committed command against a single model. */
+/**
+ * One persisted entry in the audit log: the record of a single committed command against a single model.
+ *
+ * @property sequenceNumber identifies the entry and orders the log. Assigned by Klerk, one per committed command, in
+ * commit order. Unlike [time], which is whatever the command's context said, it is monotonic and unique.
+ * @property time the [KlerkContext.time] of the command, i.e. when the application considered it to happen.
+ * @property reference the id of the model the command acted on.
+ */
 public data class AuditEntry(
+    val sequenceNumber: Long,
     val time: Instant,
     val eventReference: EventReference,
     val reference: Int,
@@ -93,6 +101,8 @@ public interface Persistence {
     /**
      * Commits everything one command implies: the model delta, its audit-log entry, the attached-data delta, and any
      * jobs the command scheduled. All of it in a single transaction.
+     *
+     * @param sequenceNumber the number to store on the audit-log entry, see [AuditEntry.sequenceNumber].
      */
     public fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
@@ -100,6 +110,7 @@ public interface Persistence {
         context: C?,
         attachedData: AttachedDataDelta = AttachedDataDelta(),
         jobs: JobCommit = JobCommit(),
+        sequenceNumber: Long,
     ): Unit
 
     /**
@@ -124,6 +135,9 @@ public interface Persistence {
      *
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**
+     *
+     * @param sequenceNumber the number to store on the audit-log entry, see [AuditEntry.sequenceNumber]. Irrelevant
+     * when [command] is null, since then there is no entry to write.
      */
     public fun <T : Any, P, C : KlerkContext, V> commitJobStep(
         delta: ProcessingData<out T, C, V>?,
@@ -131,6 +145,7 @@ public interface Persistence {
         context: C?,
         attachedData: AttachedDataDelta = AttachedDataDelta(),
         jobs: JobCommit,
+        sequenceNumber: Long,
     ): Unit
 
     /** Reads every stored model. Used once at startup to populate the model cache. */
@@ -146,11 +161,26 @@ public interface Persistence {
      */
     public fun readModel(id: Int): Model<out Any>?
 
+    /**
+     * Reads audit-log entries, ordered by [AuditEntry.sequenceNumber], oldest first.
+     *
+     * @param modelId if given, only entries for that model
+     * @param from only entries whose [AuditEntry.time] is at or after this
+     * @param until only entries whose [AuditEntry.time] is at or before this
+     * @param upToSequenceNumber only entries at or below this number. Klerk uses it to hide a commit that is written
+     * to storage but not yet visible to readers, so an implementation must honour it.
+     * @param sequenceNumber if given, only the entry with exactly this number
+     */
     public fun readAuditLog(
         modelId: Int? = null,
         from: Instant = Instant.DISTANT_PAST,
-        until: Instant = Instant.DISTANT_FUTURE
+        until: Instant = Instant.DISTANT_FUTURE,
+        upToSequenceNumber: Long = Long.MAX_VALUE,
+        sequenceNumber: Long? = null,
     ): Iterable<AuditEntry>
+
+    /** The highest [AuditEntry.sequenceNumber] in storage, or 0 if the log is empty. Read once at startup. */
+    public fun lastAuditSequenceNumber(): Long
 
     public fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit
     public fun setSpecification(specification: Specification<*, *>): Unit
@@ -297,8 +327,9 @@ public open class RamStorage : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobs: JobCommit,
+        sequenceNumber: Long,
     ): Unit = synchronized(lock) {
-        writeAll(delta, command, context, attachedData, jobs)
+        writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
     }
 
     override fun <T : Any, P, C : KlerkContext, V> commitJobStep(
@@ -307,8 +338,9 @@ public open class RamStorage : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobs: JobCommit,
+        sequenceNumber: Long,
     ): Unit = synchronized(lock) {
-        writeAll(delta, command, context, attachedData, jobs)
+        writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
     }
 
     private fun <T : Any, P, C : KlerkContext, V> writeAll(
@@ -317,6 +349,7 @@ public open class RamStorage : Persistence {
         context: C?,
         attachedData: AttachedDataDelta,
         jobCommit: JobCommit,
+        sequenceNumber: Long,
     ) {
         applyAttachedDataDelta(attachedData)
         applyJobCommit(jobCommit)
@@ -324,7 +357,7 @@ public open class RamStorage : Persistence {
             return
         }
         if (command != null && context != null) {
-            auditLog.add(createAuditEntry(command, delta, context))
+            auditLog.add(createAuditEntry(command, delta, context, sequenceNumber))
         }
         delta.createdModels
             .union(delta.aggregatedModelState.keys)
@@ -355,18 +388,23 @@ public open class RamStorage : Persistence {
 
     override fun readModel(id: Int): Model<out Any>? = models[id]
 
-    override fun readAuditLog(modelId: Int?, from: Instant, until: Instant): Iterable<AuditEntry> {
+    override fun readAuditLog(
+        modelId: Int?,
+        from: Instant,
+        until: Instant,
+        upToSequenceNumber: Long,
+        sequenceNumber: Long?,
+    ): Iterable<AuditEntry> = synchronized(lock) {
         return auditLog
-            .filter {
-                return@filter if (modelId == null) {
-                    true
-                } else {
-                    modelId == it.reference
-                }
-            }
-            .filter { it.time > from || it.time == from }
-            .filter { it.time < until || it.time == from }
-            .sortedBy { it.time }
+            .filter { modelId == null || modelId == it.reference }
+            .filter { it.time >= from && it.time <= until }
+            .filter { it.sequenceNumber <= upToSequenceNumber }
+            .filter { sequenceNumber == null || it.sequenceNumber == sequenceNumber }
+            .sortedBy { it.sequenceNumber }
+    }
+
+    override fun lastAuditSequenceNumber(): Long = synchronized(lock) {
+        auditLog.maxOfOrNull { it.sequenceNumber } ?: 0L
     }
 
     override fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?) {
@@ -479,11 +517,13 @@ public open class RamStorage : Persistence {
     public fun <T : Any, P, C : KlerkContext, V> createAuditEntry(
         command: Command<T, P>,
         result: ProcessingData<out T, C, V>,
-        context: C
+        context: C,
+        sequenceNumber: Long,
     ): AuditEntry {
         val reference = command.model?.value
             ?: result.createdModels.single { true }.value
         return AuditEntry(
+            sequenceNumber,
             context.time,
             command.event.id,
             reference,
