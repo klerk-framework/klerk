@@ -1,6 +1,6 @@
 # Concurrency
 
-Klerk values consistency and "no surprises" over performance. Commands are therefore processed one at a time. If two
+Klerk values consistency and predictability over performance. Commands are therefore processed one at a time. If two
 callers call `klerk.handle(...)` concurrently, the second call waits until the first has fully committed (or failed)
 before it starts — there is no interleaving. This gives you the same guarantees as serializable isolation without having
 to reason about it: business logic can assume nothing else changes the data mid-command.
@@ -24,9 +24,9 @@ klerk.read(context) {
 }
 ```
 
-`klerk.jobs.getJob(...)` and `klerk.jobs.getAllJobs(...)` take the read lock themselves, so they are for use
-*outside* a read block and fail with an explanatory error if called inside one. Because the dispatcher has to take
-the write lock to claim a job, a long read block delays job dispatch in the same way it delays a command.
+`klerk.jobs.getJob(...)` and `klerk.jobs.getAllJobs(...)` take the read lock themselves, so they are for use *outside* a
+read block and fail with an explanatory error if called inside one. Because the dispatcher has to take the write lock to
+claim a job, a long read block delays job dispatch in the same way it delays a command.
 
 ## Multiple reads that must be consistent with each other
 
