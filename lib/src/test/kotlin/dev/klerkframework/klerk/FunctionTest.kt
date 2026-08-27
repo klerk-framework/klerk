@@ -42,7 +42,7 @@ object DummyReader : Reader<Ctx, Views> {
     override val jobs: JobReader
         get() = throw exception
 
-    override fun auditLog(id: ModelID<out Any>?, after: Instant, before: Instant, sequenceNumber: Long?): AuditLogQuery {
+    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant, sequenceNumber: Long?): EventLogQuery {
         throw exception
     }
 

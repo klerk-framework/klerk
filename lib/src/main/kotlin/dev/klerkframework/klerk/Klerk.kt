@@ -8,7 +8,7 @@ import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
-import dev.klerkframework.klerk.storage.AuditEntry
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
@@ -122,13 +122,13 @@ public interface Klerk<C : KlerkContext, V> {
 }
 
 /**
- * A snapshot of the audit log, obtained from [Reader.auditLog] inside a read block. The entries themselves are read
+ * A snapshot of the event log, obtained from [Reader.eventLog] inside a read block. The entries themselves are read
  * from storage by [get], after the read lock has been released.
  */
-public interface AuditLogQuery {
+public interface EventLogQuery {
 
     /**
-     * Reads the matching entries, ordered by [AuditEntry.sequenceNumber], oldest first.
+     * Reads the matching entries, ordered by [EventLogEntry.sequenceNumber], oldest first.
      *
      * Only entries whose command was already visible in the read block that created this query are returned, so the
      * log never shows an event that has not happened yet. Can be called repeatedly; the result is always as of that
@@ -136,7 +136,7 @@ public interface AuditLogQuery {
      *
      * @throws IllegalStateException if called from inside a read block
      */
-    public suspend fun get(): List<AuditEntry>
+    public suspend fun get(): List<EventLogEntry>
 }
 
 public interface KlerkModels<C : KlerkContext, V> {

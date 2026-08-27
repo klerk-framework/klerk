@@ -31,24 +31,24 @@ public interface Reader<C : KlerkContext, V> {
     public val jobs: JobReader
 
     /**
-     * A snapshot of the audit log as of this read block. Nothing is read from storage here — call
-     * [AuditLogQuery.get] once the read block has ended, so that the database is never queried while the read lock
+     * A snapshot of the event log as of this read block. Nothing is read from storage here — call
+     * [EventLogQuery.get] once the read block has ended, so that the database is never queried while the read lock
      * is held. The returned entries are limited to commands that were visible in this block.
      *
      * @param id if given, only entries for that model. If null, entries for all models.
-     * @param after only entries whose [dev.klerkframework.klerk.storage.AuditEntry.time] is at or after this
-     * @param before only entries whose [dev.klerkframework.klerk.storage.AuditEntry.time] is at or before this
+     * @param after only entries whose [dev.klerkframework.klerk.storage.EventLogEntry.time] is at or after this
+     * @param before only entries whose [dev.klerkframework.klerk.storage.EventLogEntry.time] is at or before this
      * @param sequenceNumber if given, only the entry with exactly this
-     * [dev.klerkframework.klerk.storage.AuditEntry.sequenceNumber]. Use it to look up a single entry, e.g. for a
+     * [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber]. Use it to look up a single entry, e.g. for a
      * permalink.
-     * @throws AuthorizationException if the actor is not allowed to read the audit log
+     * @throws AuthorizationException if the actor is not allowed to read the event log
      */
-    public fun auditLog(
+    public fun eventLog(
         id: ModelID<out Any>? = null,
         after: Instant = Instant.DISTANT_PAST,
         before: Instant = Instant.DISTANT_FUTURE,
         sequenceNumber: Long? = null,
-    ): AuditLogQuery
+    ): EventLogQuery
 
     /**
      * @throws AuthorizationException if the model is not found or the actor is not allowed to read it.

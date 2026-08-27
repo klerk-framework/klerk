@@ -20,12 +20,12 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
     override val jobs: JobReader = UnauthorizedJobReader(klerk)
 
-    override fun auditLog(
+    override fun eventLog(
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
         sequenceNumber: Long?,
-    ): AuditLogQuery = auditLogQuery(klerk, id, after, before, sequenceNumber)
+    ): EventLogQuery = eventLogQuery(klerk, id, after, before, sequenceNumber)
 
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
 

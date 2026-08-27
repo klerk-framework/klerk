@@ -181,7 +181,7 @@ public data class JobSettings(
      * How long a succeeded job is kept before it is deleted. Defaults to 30 days.
      *
      * A succeeded job has already released its attached-data claims, so this setting is purely about bounding
-     * storage and audit history, not about freeing resources.
+     * storage and event log history, not about freeing resources.
      */
     val succeededRetention: Duration = DEFAULT_TERMINAL_RETENTION,
 

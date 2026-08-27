@@ -14,7 +14,7 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.AttachedDataDelta
-import dev.klerkframework.klerk.storage.AuditEntry
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Mutex
@@ -38,7 +38,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val assignedSequenceNumber = AtomicLong()
 
     /**
-     * The highest audit-log sequence number a reader may see. Raised under the write lock, in the same critical
+     * The highest event-log sequence number a reader may see. Raised under the write lock, in the same critical
      * section that makes the commit visible to reads, so the log never runs ahead of the models.
      */
     @Volatile
@@ -206,7 +206,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      * behind — which is the whole failure this change exists to prevent.
      */
     private suspend fun commitJobsOnly(jobCommit: JobCommit) {
-        // No command, so no audit entry and no sequence number is consumed.
+        // No command, so no event log entry and no sequence number is consumed.
         settings.persistence.commitJobStep<Any, Nothing, C, V>(
             null, null, null, AttachedDataDelta(), jobCommit, sequenceNumber = 0
         )
@@ -233,7 +233,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         // and flips under the write lock. A read therefore sees either all of the commit or none of it. Created
         // models need no pin: nothing knows their ids yet, so nobody can be reading them.
         //
-        // The audit log is read from storage rather than from memory, so it cannot be pinned the same way. Instead the
+        // The event log is read from storage rather than from memory, so it cannot be pinned the same way. Instead the
         // entry carries this commit's sequence number, and a reader only sees entries at or below
         // [visibleSequenceNumber] — which is raised below, in the same critical section that flips the cache.
         val touchedIds = delta.updatedModels + delta.transitions + delta.deletedModels
@@ -260,7 +260,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
         jobs.notifyCommitted(jobCommit)
         notifySubscribers(delta)
-        maybeEraseAuditLog(specification, delta.deletedModels)
+        maybeEraseEventLog(specification, delta.deletedModels)
     }
 
     private fun <T : Any> updateViews(delta: ProcessingData<T, C, V>) {
@@ -289,7 +289,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     internal suspend fun start() {
-        val lastPersisted = settings.persistence.lastAuditSequenceNumber()
+        val lastPersisted = settings.persistence.lastEventLogSequenceNumber()
         assignedSequenceNumber.set(lastPersisted)
         visibleSequenceNumber = lastPersisted
         eventProcessor.readAllModelsFromDisk()
@@ -315,12 +315,12 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
     }
 
-    private fun maybeEraseAuditLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
-        if (specification.eraseAuditLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
+    private fun maybeEraseEventLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
+        if (specification.eraseEventLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
             return
         }
         deletedModels.forEach {
-            settings.persistence.modifyEventsInAuditLog(it.value) { null }
+            settings.persistence.modifyEventLog(it.value) { null }
         }
     }
 

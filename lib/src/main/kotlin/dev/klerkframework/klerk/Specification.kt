@@ -69,13 +69,13 @@ public data class Specification<C : KlerkContext, V>(
      */
     val jobContextProvider: ((JobContextRequest) -> C)? = null,
     /**
-     * Whether the audit log of a model is erased when the model is deleted. A requirement about the application (a
+     * Whether the event log of a model is erased when the model is deleted. A requirement about the application (a
      * privacy promise, typically), which is why it lives here and not in [KlerkSettings].
      *
      * Only `null` (never erase, the default) and [Duration.ZERO] (erase immediately on model deletion) are
      * currently supported; any other value is rejected on startup.
      */
-    val eraseAuditLogAfterModelDeletion: Duration? = null,
+    val eraseEventLogAfterModelDeletion: Duration? = null,
 ) {
     internal lateinit var gson: Gson
 
@@ -105,8 +105,8 @@ public data class Specification<C : KlerkContext, V>(
         checkContextProviderExistIfConfigContainsTimeTriggers()
         schedulerJobsMustHaveAJobContextProvider()
         attachedBlobStoreMustMatchDeclarations(settings.attachedBlobStore)
-        require(eraseAuditLogAfterModelDeletion == null || eraseAuditLogAfterModelDeletion == Duration.ZERO) {
-            "eraseAuditLogAfterModelDeletion can only be null or zero"
+        require(eraseEventLogAfterModelDeletion == null || eraseEventLogAfterModelDeletion == Duration.ZERO) {
+            "eraseEventLogAfterModelDeletion can only be null or zero"
         }
         blobContainersMustDeclareAPreAttachStep()
         stringsMustBeDeclaredInAContainer()
@@ -737,24 +737,24 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             systemContextProvider = systemContextProviderValue,
             jobs = jobsValue,
             jobContextProvider = jobContextProviderValue,
-            eraseAuditLogAfterModelDeletion = eraseAuditLogValue,
+            eraseEventLogAfterModelDeletion = eraseEventLogValue,
         )
     }
 
     private var migrationStepsValue: SortedSet<MigrationStep> = sortedSetOf()
     private var jobsValue: JobsSpecification<C, V> = JobsSpecification.empty()
     private var jobContextProviderValue: ((JobContextRequest) -> C)? = null
-    private var eraseAuditLogValue: Duration? = null
+    private var eraseEventLogValue: Duration? = null
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
     private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
 
     /**
-     * Erases the audit log of a model when the model is deleted. Only [Duration.ZERO] (erase immediately) is
+     * Erases the event log of a model when the model is deleted. Only [Duration.ZERO] (erase immediately) is
      * currently supported; the default is to never erase.
      */
-    public fun eraseAuditLogAfterModelDeletion(after: Duration) {
-        eraseAuditLogValue = after
+    public fun eraseEventLogAfterModelDeletion(after: Duration) {
+        eraseEventLogValue = after
     }
 
     /**
@@ -924,7 +924,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
-         * Rules deciding who may read the audit log, i.e. [dev.klerkframework.klerk.read.Reader.auditLog].
+         * Rules deciding who may read the event log, i.e. [dev.klerkframework.klerk.read.Reader.eventLog].
          */
         public fun eventLog(init: AuthorizationEventLogRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationEventLogRulesBlock<C, V>()
@@ -1061,16 +1061,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadRulesBlock<C : KlerkContext, V> {
 
-        internal lateinit var positiveBlock: AuthorizationReadPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationReadNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationReadPositiveRulesBlock<C, V> = AuthorizationReadPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationReadNegativeRulesBlock<C, V> = AuthorizationReadNegativeRulesBlock()
 
         public fun positive(init: AuthorizationReadPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationReadPositiveRulesBlock<C, V>()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationReadNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationReadNegativeRulesBlock()
             negativeBlock.init()
         }
 
@@ -1100,16 +1098,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadPropertiesRulesBlock<C : KlerkContext, V> {
 
-        internal lateinit var positiveBlock: AuthorizationReadPropertyPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationReadPropertyNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationReadPropertyPositiveRulesBlock<C, V> = AuthorizationReadPropertyPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationReadPropertyNegativeRulesBlock<C, V> = AuthorizationReadPropertyNegativeRulesBlock()
 
         public fun positive(init: AuthorizationReadPropertyPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationReadPropertyPositiveRulesBlock<C, V>()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationReadPropertyNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationReadPropertyNegativeRulesBlock()
             negativeBlock.init()
         }
 
@@ -1139,16 +1135,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationAttachedDataReadRulesBlock<C : KlerkContext, V> {
 
-        internal lateinit var positiveBlock: AuthorizationAttachedDataReadPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationAttachedDataReadNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationAttachedDataReadPositiveRulesBlock<C, V> = AuthorizationAttachedDataReadPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationAttachedDataReadNegativeRulesBlock<C, V> = AuthorizationAttachedDataReadNegativeRulesBlock()
 
         public fun positive(init: AuthorizationAttachedDataReadPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationAttachedDataReadPositiveRulesBlock()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationAttachedDataReadNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationAttachedDataReadNegativeRulesBlock()
             negativeBlock.init()
         }
     }
@@ -1174,16 +1168,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationAttachedDataWriteRulesBlock<C : KlerkContext, V> {
 
-        internal lateinit var positiveBlock: AuthorizationAttachedDataWritePositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationAttachedDataWriteNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationAttachedDataWritePositiveRulesBlock<C, V> = AuthorizationAttachedDataWritePositiveRulesBlock()
+        internal val negativeBlock: AuthorizationAttachedDataWriteNegativeRulesBlock<C, V> = AuthorizationAttachedDataWriteNegativeRulesBlock()
 
         public fun positive(init: AuthorizationAttachedDataWritePositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationAttachedDataWritePositiveRulesBlock()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationAttachedDataWriteNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationAttachedDataWriteNegativeRulesBlock()
             negativeBlock.init()
         }
     }
@@ -1210,16 +1202,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationJobRulesBlock<C : KlerkContext, V> {
 
-        internal lateinit var positiveBlock: AuthorizationJobPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationJobNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationJobPositiveRulesBlock<C, V> = AuthorizationJobPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationJobNegativeRulesBlock<C, V> = AuthorizationJobNegativeRulesBlock()
 
         public fun positive(init: AuthorizationJobPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationJobPositiveRulesBlock()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationJobNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationJobNegativeRulesBlock()
             negativeBlock.init()
         }
     }
@@ -1245,16 +1235,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     // events
     @SpecificationMarker
     public class AuthorizationEventsRulesBlock<C : KlerkContext, V> {
-        internal lateinit var positiveBlock: AuthorizationEventsPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationEventsNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationEventsPositiveRulesBlock<C, V> = AuthorizationEventsPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationEventsNegativeRulesBlock<C, V> = AuthorizationEventsNegativeRulesBlock()
 
         public fun positive(init: AuthorizationEventsPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationEventsPositiveRulesBlock()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationEventsNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationEventsNegativeRulesBlock()
             negativeBlock.init()
         }
     }
@@ -1282,16 +1270,14 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     @SpecificationMarker
     public class AuthorizationEventLogRulesBlock<C : KlerkContext, V> {
-        internal lateinit var positiveBlock: AuthorizationEventLogPositiveRulesBlock<C, V>
-        internal lateinit var negativeBlock: AuthorizationEventLogNegativeRulesBlock<C, V>
+        internal val positiveBlock: AuthorizationEventLogPositiveRulesBlock<C, V> = AuthorizationEventLogPositiveRulesBlock()
+        internal val negativeBlock: AuthorizationEventLogNegativeRulesBlock<C, V> = AuthorizationEventLogNegativeRulesBlock()
 
         public fun positive(init: AuthorizationEventLogPositiveRulesBlock<C, V>.() -> Unit) {
-            positiveBlock = AuthorizationEventLogPositiveRulesBlock()
             positiveBlock.init()
         }
 
         public fun negative(init: AuthorizationEventLogNegativeRulesBlock<C, V>.() -> Unit) {
-            negativeBlock = AuthorizationEventLogNegativeRulesBlock()
             negativeBlock.init()
         }
     }
@@ -1353,8 +1339,8 @@ private fun <T : Any> validateModelClass(clazz: KClass<T>) {
  * hard the job dispatcher works. Passed to [Klerk.Companion.create] alongside the [Specification].
  *
  * Two deployments of the same application share a [Specification] and differ here. Nothing in this class changes what
- * the application does, only how it is operated — the one thing that does, whether the audit log is erased on
- * deletion, is [Specification.eraseAuditLogAfterModelDeletion].
+ * the application does, only how it is operated — the one thing that does, whether the event log is erased on
+ * deletion, is [Specification.eraseEventLogAfterModelDeletion].
  */
 public data class KlerkSettings(
 

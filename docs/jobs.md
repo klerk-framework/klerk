@@ -301,7 +301,7 @@ to 30 days, delete a terminal job once it has aged past their value:
 | `deadLetterRetention` | `DeadLettered`, `CompensationFailed` |
 
 A succeeded job has already released its attached-data claims (see below), so its retention is only about bounding
-storage and audit history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings also
+storage and event log history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings also
 bound how long that data can leak.
 
 The full set of statuses:
@@ -341,8 +341,8 @@ survives a restart halfway through, which matters because compensation is exactl
 `args.failedAtCursor` is the job's cursor at the moment it died, preserved read-only for the life of the job. The hook
 checkpoints its own progress separately, so unwinding never destroys the record of where the job got to.
 
-**Use the cursor, not the audit log**, to decide what needs undoing. The cursor is a record your own code designed; the
-audit log is authorization-gated and may have been erased by retention rules long before anyone looks at the dead
+**Use the cursor, not the event log**, to decide what needs undoing. The cursor is a record your own code designed; the
+event log is authorization-gated and may have been erased by retention rules long before anyone looks at the dead
 letter.
 
 If a hook only needs to hand off to something bigger, it can spawn a compensation job like any other step

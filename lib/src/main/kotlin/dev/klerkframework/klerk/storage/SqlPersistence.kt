@@ -8,11 +8,11 @@ import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.MigrationStepV1toV1
-import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.actorIdentityExternalId
-import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.actorIdentityReference
-import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.actorIdentityType
-import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.event
-import dev.klerkframework.klerk.storage.SqlPersistence.AuditLog.timestamp
+import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityExternalId
+import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityReference
+import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityType
+import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.event
+import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.timestamp
 import dev.klerkframework.klerk.storage.SqlPersistence.ModelSchemaMigrations.toVersion
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -41,7 +41,7 @@ private val logSerializer = ListSerializer(JobLogEntry.serializer())
 
 /**
  * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
- * On construction, connects and creates its tables if missing (audit log, models, schema-migration tracking,
+ * On construction, connects and creates its tables if missing (event log, models, schema-migration tracking,
  * attached data, jobs), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
  * Model `props` and command `params` are stored as JSON (via Gson).
  */
@@ -69,7 +69,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
         transaction(database) {
             try {
-                SchemaUtils.create(AuditLog)
+                SchemaUtils.create(EventLog)
                 SchemaUtils.create(Models)
                 SchemaUtils.create(ModelSchemaMigrations)
                 SchemaUtils.create(AttachedData)
@@ -112,7 +112,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         jobs: JobCommit,
         sequenceNumber: Long,
     ) {
-        // One Exposed transaction, so the whole contract on Persistence.commitJobStep holds: models, audit entry,
+        // One Exposed transaction, so the whole contract on Persistence.commitJobStep holds: models, event log entry,
         // attached data and every job row either land together or not at all.
         transaction(database) {
             writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
@@ -141,8 +141,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             if (command != null) {
                 requireNotNull(context)
                 val reference = command.model?.value ?: delta.primaryModel?.value ?: 0
-                AuditLog.insert {
-                    it[AuditLog.sequenceNumber] = sequenceNumber
+                EventLog.insert {
+                    it[EventLog.sequenceNumber] = sequenceNumber
                     it[timestamp] = context.time.to64bitMicroseconds()
                     it[event] = command.event.id.toString()
                     it[modelId] = reference
@@ -150,7 +150,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[actorIdentityType] = context.actor.type.toByte()
                     it[actorIdentityReference] = context.actor.id?.value
                     it[actorIdentityExternalId] = context.actor.externalId
-                    it[extra] = context.auditExtra
+                    it[extra] = context.eventLogExtra
                 }
             }
 
@@ -224,54 +224,54 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun readAuditLog(
+    override fun readEventLog(
         modelId: Int?,
         from: Instant,
         until: Instant,
         upToSequenceNumber: Long,
         sequenceNumber: Long?,
-    ): Iterable<AuditEntry> {
+    ): Iterable<EventLogEntry> {
         return transaction(database) {
-            val query = AuditLog.selectAll()
+            val query = EventLog.selectAll()
                 .where(timestamp greaterEq from.to64bitMicroseconds())
                 .andWhere { timestamp lessEq until.to64bitMicroseconds() }
-                .andWhere { AuditLog.sequenceNumber lessEq upToSequenceNumber }
+                .andWhere { EventLog.sequenceNumber lessEq upToSequenceNumber }
 
             if (modelId != null) {
-                query.andWhere { AuditLog.modelId eq modelId }
+                query.andWhere { EventLog.modelId eq modelId }
             }
             if (sequenceNumber != null) {
-                query.andWhere { AuditLog.sequenceNumber eq sequenceNumber }
+                query.andWhere { EventLog.sequenceNumber eq sequenceNumber }
             }
 
-            return@transaction query.orderBy(AuditLog.sequenceNumber).map { row -> toAuditEntry(row) }
+            return@transaction query.orderBy(EventLog.sequenceNumber).map { row -> toEventLogEntry(row) }
         }
     }
 
-    override fun lastAuditSequenceNumber(): Long = transaction(database) {
-        AuditLog.select(AuditLog.sequenceNumber)
-            .orderBy(AuditLog.sequenceNumber, SortOrder.DESC)
+    override fun lastEventLogSequenceNumber(): Long = transaction(database) {
+        EventLog.select(EventLog.sequenceNumber)
+            .orderBy(EventLog.sequenceNumber, SortOrder.DESC)
             .limit(1)
             .firstOrNull()
-            ?.get(AuditLog.sequenceNumber) ?: 0L
+            ?.get(EventLog.sequenceNumber) ?: 0L
     }
 
-    private fun toAuditEntry(row: ResultRow): AuditEntry = AuditEntry(
-        sequenceNumber = row[AuditLog.sequenceNumber],
+    private fun toEventLogEntry(row: ResultRow): EventLogEntry = EventLogEntry(
+        sequenceNumber = row[EventLog.sequenceNumber],
         time = decode64bitMicroseconds(row[timestamp]),
         eventReference = EventReference.from(row[event]),
-        reference = row[AuditLog.modelId],
+        reference = row[EventLog.modelId],
         actorType = row[actorIdentityType],
         actorReference = row[actorIdentityReference],
         actorExternalId = row[actorIdentityExternalId],
-        params = row[AuditLog.params],
-        extra = row[AuditLog.extra],
+        params = row[EventLog.params],
+        extra = row[EventLog.extra],
     )
 
-    override fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit {
-        val updatedEntries = mutableSetOf<AuditEntry>()
+    override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?): Unit {
+        val updatedEntries = mutableSetOf<EventLogEntry>()
         val deletedEntries = mutableSetOf<Long>()
-        readAuditLog(modelId).forEach { original ->
+        readEventLog(modelId).forEach { original ->
             val updated = transformer(original)
             if (updated == null) {
                 deletedEntries.add(original.sequenceNumber)
@@ -284,10 +284,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
         transaction(database) {
             deletedEntries.forEach { seq ->
-                AuditLog.deleteWhere { AuditLog.sequenceNumber eq seq }
+                EventLog.deleteWhere { EventLog.sequenceNumber eq seq }
             }
             updatedEntries.forEach { updated ->
-                AuditLog.update({ AuditLog.sequenceNumber eq updated.sequenceNumber }) {
+                EventLog.update({ EventLog.sequenceNumber eq updated.sequenceNumber }) {
                     it[timestamp] = updated.time.to64bitMicroseconds()
                     it[event] = updated.eventReference.id()
                     it[params] = updated.params
@@ -630,7 +630,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    internal object AuditLog : Table("\"klerk_audit_log\"") {
+    internal object EventLog : Table("\"klerk_event_log\"") {
         val sequenceNumber = long("sequence_number")
         val timestamp = long("timestamp")   // microseconds since 1970
         val event = varchar("event_id", length = 100)

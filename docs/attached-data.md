@@ -432,5 +432,5 @@ beyond the 1-minute window for unclaimed uploads.
 
 If you need a short-lived standalone value — a password-reset token, an email confirmation code, an OAuth state
 parameter — model it: a small model with a state machine and a [time trigger](state-machines.md) that moves it to an
-expired state. You get authorization, the audit log and views for free, which an opaque key-value entry could never give
+expired state. You get authorization, the event log and views for free, which an opaque key-value entry could never give
 you.

@@ -7,7 +7,7 @@ implementing `KlerkContext`:
 ```kotlin
 interface KlerkContext {
     val actor: ActorIdentity
-    val auditExtra: String?
+    val eventLogExtra: String?
     val translation: Translation
     val time: Instant
 }
@@ -18,7 +18,7 @@ A typical application-specific context adds whatever else its rules need, e.g. a
 ```kotlin
 data class Context(
     override val actor: ActorIdentity,
-    override val auditExtra: String? = null,
+    override val eventLogExtra: String? = null,
     override val time: Instant = Clock.System.now(),
     override val translation: Translation = DefaultTranslation,
     val user: Model<User>? = null,
@@ -75,9 +75,9 @@ names, and so on (see [translation](translation.md)). Passing a different `Trans
 multiple languages for the same actor pool — e.g. `Context.swedishUnauthenticated()` in the test suite uses a
 `SwedishTranslation` while the default uses `DefaultTranslation`.
 
-## auditExtra
+## eventLogExtra
 
-An optional free-text string that is stored alongside the audit log entry for whatever command is processed with this
+An optional free-text string that is stored alongside the event log entry for whatever command is processed with this
 context. Use it to attach information that doesn't belong in the event parameters but is still useful when reviewing
 history (e.g. "imported from legacy system", a support ticket id, ...).
 

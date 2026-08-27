@@ -24,14 +24,14 @@ klerk.read(context) {
 }
 ```
 
-The [audit log](events-and-commands.md#the-audit-log) is part of the same snapshot, but is reached in two steps because
-it lives in storage rather than in memory: `auditLog(...)` inside the block captures the snapshot, and `get()` reads the
+The [event log](events-and-commands.md#the-event-log) is part of the same snapshot, but is reached in two steps because
+it lives in storage rather than in memory: `eventLog(...)` inside the block captures the snapshot, and `get()` reads the
 entries afterwards, so no database query happens under the read lock.
 
 ```kotlin
 val query = klerk.read(context) {
     val order = get(orderId)
-    auditLog(id = orderId)   // consistent with `order` -- no later command can appear in it
+    eventLog(id = orderId)   // consistent with `order` -- no later command can appear in it
 }
 val entries = query.get()
 ```

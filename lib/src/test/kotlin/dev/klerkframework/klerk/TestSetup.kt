@@ -896,7 +896,7 @@ object AlwaysFalseAlgorithm :
 
 data class Ctx(
     override val actor: dev.klerkframework.klerk.ActorIdentity,
-    override val auditExtra: String? = null,
+    override val eventLogExtra: String? = null,
     override val time: Instant = Clock.System.now(),
     override val translation: Translation = DefaultTranslation,
     val user: Model<User>? = null,

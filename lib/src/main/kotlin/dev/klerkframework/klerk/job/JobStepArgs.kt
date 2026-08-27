@@ -110,8 +110,8 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
  * and survives a restart halfway through.
  *
  * @property failedAtCursor the job's cursor at the moment it died, preserved read-only for the life of the job. Use
- * *this*, not the audit log, to decide what needs undoing: the cursor is a record your own code designed, while the
- * audit log is authorization-gated and may have been erased by retention rules.
+ * *this*, not the event log, to decide what needs undoing: the cursor is a record your own code designed, while the
+ * event log is authorization-gated and may have been erased by retention rules.
  * @property cursor the hook's own cursor, checkpointed separately so that unwinding never destroys [failedAtCursor].
  * It starts out equal to [failedAtCursor].
  * @property reason why the job is ending: the `Fail`/`Abort` reason, or the cancellation reason.

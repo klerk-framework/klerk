@@ -513,7 +513,7 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
  * scheduled the job for a [dev.klerkframework.klerk.job.JobAgent.Scheduler] one. Note that the latter is rebuilt from
  * what was persisted, so an actor identified by a model arrives as a [ModelReferenceIdentity].
  * @property time the current time according to the configured clock. Use it as the context's time so that job steps,
- * and the audit entries of the commands they emit, follow the clock a test controls.
+ * and the event log entries of the commands they emit, follow the clock a test controls.
  */
 public data class JobContextRequest(
     val actor: ActorIdentity,
@@ -583,8 +583,8 @@ public interface KlerkContext {
     /** Who is performing the operation; what authorization and business rules key off of. */
     public val actor: ActorIdentity
 
-    /** Optional free-text stored alongside the audit log entry for whatever command uses this context. */
-    public val auditExtra: String?
+    /** Optional free-text stored alongside the event log entry for whatever command uses this context. */
+    public val eventLogExtra: String?
     public val translation: Translation
 
     /** The instant the operation is considered to happen at. Business logic should read time from here, not `Clock.System.now()`. */

@@ -12,14 +12,14 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
 
 /**
- * One persisted entry in the audit log: the record of a single committed command against a single model.
+ * One persisted entry in the event log: the record of a single committed command against a single model.
  *
  * @property sequenceNumber identifies the entry and orders the log. Assigned by Klerk, one per committed command, in
  * commit order. Unlike [time], which is whatever the command's context said, it is monotonic and unique.
  * @property time the [KlerkContext.time] of the command, i.e. when the application considered it to happen.
  * @property reference the id of the model the command acted on.
  */
-public data class AuditEntry(
+public data class EventLogEntry(
     val sequenceNumber: Long,
     val time: Instant,
     val eventReference: EventReference,
@@ -89,7 +89,7 @@ public data class AttachedDataClaim(
 )
 
 /**
- * Storage backend SPI: implement this to durably store models, the audit log, jobs and attached data. Klerk owns the
+ * Storage backend SPI: implement this to durably store models, the event log, jobs and attached data. Klerk owns the
  * schema; implementations only need to persist and retrieve the shapes below. Provided implementations are
  * [dev.klerkframework.klerk.storage.SqlPersistence] and [RamStorage]. Wire an instance in via
  * `SpecificationBuilder.persistence(...)`.
@@ -99,10 +99,10 @@ public interface Persistence {
     public val currentModelSchemaVersion: Int
 
     /**
-     * Commits everything one command implies: the model delta, its audit-log entry, the attached-data delta, and any
+     * Commits everything one command implies: the model delta, its event-log entry, the attached-data delta, and any
      * jobs the command scheduled. All of it in a single transaction.
      *
-     * @param sequenceNumber the number to store on the audit-log entry, see [AuditEntry.sequenceNumber].
+     * @param sequenceNumber the number to store on the event-log entry, see [EventLogEntry.sequenceNumber].
      */
     public fun <T : Any, P, C : KlerkContext, V> store(
         delta: ProcessingData<out T, C, V>,
@@ -129,14 +129,14 @@ public interface Persistence {
      * 2. the attached-data delta, including new job claims from [JobCommit.attachedDataClaimed];
      * 3. the job's new cursor, progress, status, step number and log entries;
      * 4. rows for any children declared in the step's `spawn`;
-     * 5. the audit-log entry for the command.
+     * 5. the event-log entry for the command.
      *
      * An implementation only has to write the rows it is given, in one transaction, for the contract to hold.
      *
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**
      *
-     * @param sequenceNumber the number to store on the audit-log entry, see [AuditEntry.sequenceNumber]. Irrelevant
+     * @param sequenceNumber the number to store on the event-log entry, see [EventLogEntry.sequenceNumber]. Irrelevant
      * when [command] is null, since then there is no entry to write.
      */
     public fun <T : Any, P, C : KlerkContext, V> commitJobStep(
@@ -162,27 +162,27 @@ public interface Persistence {
     public fun readModel(id: Int): Model<out Any>?
 
     /**
-     * Reads audit-log entries, ordered by [AuditEntry.sequenceNumber], oldest first.
+     * Reads event-log entries, ordered by [EventLogEntry.sequenceNumber], oldest first.
      *
      * @param modelId if given, only entries for that model
-     * @param from only entries whose [AuditEntry.time] is at or after this
-     * @param until only entries whose [AuditEntry.time] is at or before this
+     * @param from only entries whose [EventLogEntry.time] is at or after this
+     * @param until only entries whose [EventLogEntry.time] is at or before this
      * @param upToSequenceNumber only entries at or below this number. Klerk uses it to hide a commit that is written
      * to storage but not yet visible to readers, so an implementation must honour it.
      * @param sequenceNumber if given, only the entry with exactly this number
      */
-    public fun readAuditLog(
+    public fun readEventLog(
         modelId: Int? = null,
         from: Instant = Instant.DISTANT_PAST,
         until: Instant = Instant.DISTANT_FUTURE,
         upToSequenceNumber: Long = Long.MAX_VALUE,
         sequenceNumber: Long? = null,
-    ): Iterable<AuditEntry>
+    ): Iterable<EventLogEntry>
 
-    /** The highest [AuditEntry.sequenceNumber] in storage, or 0 if the log is empty. Read once at startup. */
-    public fun lastAuditSequenceNumber(): Long
+    /** The highest [EventLogEntry.sequenceNumber] in storage, or 0 if the log is empty. Read once at startup. */
+    public fun lastEventLogSequenceNumber(): Long
 
-    public fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?): Unit
+    public fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?): Unit
     public fun setSpecification(specification: Specification<*, *>): Unit
     public fun migrate(migrations: List<MigrationStep>): Unit
 
@@ -299,9 +299,9 @@ public interface Persistence {
 public open class RamStorage : Persistence {
     // Set by setSpecification with the app's configured Gson (which knows how to serialize Klerk's own data types) once
     // Klerk starts. Left uninitialized when RamStorage is used standalone, e.g. in a test that never calls
-    // setSpecification -- createAuditEntry falls back to an empty params string in that case.
+    // setSpecification -- createEventLogEntry falls back to an empty params string in that case.
     private lateinit var gson: Gson
-    private val auditLog = mutableSetOf<AuditEntry>()
+    private val eventLog = mutableSetOf<EventLogEntry>()
 
     // Concurrent because readModel is called by readers that do not hold the write lock, while a commit writes here
     // (writes are serialized against each other, but not against readers, since a commit persists before it takes the
@@ -357,7 +357,7 @@ public open class RamStorage : Persistence {
             return
         }
         if (command != null && context != null) {
-            auditLog.add(createAuditEntry(command, delta, context, sequenceNumber))
+            eventLog.add(createEventLogEntry(command, delta, context, sequenceNumber))
         }
         delta.createdModels
             .union(delta.aggregatedModelState.keys)
@@ -388,14 +388,14 @@ public open class RamStorage : Persistence {
 
     override fun readModel(id: Int): Model<out Any>? = models[id]
 
-    override fun readAuditLog(
+    override fun readEventLog(
         modelId: Int?,
         from: Instant,
         until: Instant,
         upToSequenceNumber: Long,
         sequenceNumber: Long?,
-    ): Iterable<AuditEntry> = synchronized(lock) {
-        return auditLog
+    ): Iterable<EventLogEntry> = synchronized(lock) {
+        return eventLog
             .filter { modelId == null || modelId == it.reference }
             .filter { it.time >= from && it.time <= until }
             .filter { it.sequenceNumber <= upToSequenceNumber }
@@ -403,16 +403,16 @@ public open class RamStorage : Persistence {
             .sortedBy { it.sequenceNumber }
     }
 
-    override fun lastAuditSequenceNumber(): Long = synchronized(lock) {
-        auditLog.maxOfOrNull { it.sequenceNumber } ?: 0L
+    override fun lastEventLogSequenceNumber(): Long = synchronized(lock) {
+        eventLog.maxOfOrNull { it.sequenceNumber } ?: 0L
     }
 
-    override fun modifyEventsInAuditLog(modelId: Int, transformer: (AuditEntry) -> AuditEntry?) {
-        readAuditLog(modelId).toList().forEach {
-            auditLog.remove(it)
+    override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?) {
+        readEventLog(modelId).toList().forEach {
+            eventLog.remove(it)
             val new = transformer(it)
             if (new != null) {
-                auditLog.add(new)
+                eventLog.add(new)
             }
         }
     }
@@ -514,15 +514,15 @@ public open class RamStorage : Persistence {
         cronState[scheduleId] = firedAt
     }
 
-    public fun <T : Any, P, C : KlerkContext, V> createAuditEntry(
+    public fun <T : Any, P, C : KlerkContext, V> createEventLogEntry(
         command: Command<T, P>,
         result: ProcessingData<out T, C, V>,
         context: C,
         sequenceNumber: Long,
-    ): AuditEntry {
+    ): EventLogEntry {
         val reference = command.model?.value
             ?: result.createdModels.single { true }.value
-        return AuditEntry(
+        return EventLogEntry(
             sequenceNumber,
             context.time,
             command.event.id,
@@ -531,7 +531,7 @@ public open class RamStorage : Persistence {
             context.actor.id?.value,
             context.actor.externalId,
             if (::gson.isInitialized) gson.toJson(command.params) else "{}",    // TODO
-            extra = context.auditExtra
+            extra = context.eventLogExtra
         )
     }
 

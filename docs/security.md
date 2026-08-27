@@ -8,7 +8,7 @@ them.
 ## Secure by design
 
 All data interactions go through Klerk, ensuring that all authorization rules are enforced. This applies independently
-to reading a model, reading a single property of a model, submitting a command, reading the audit log, and reading or
+to reading a model, reading a single property of a model, submitting a command, reading the event log, and reading or
 preparing [attached data](attached-data.md). This design prevents developers from accidentally bypassing security
 checks. If a developer needs to override a rule, they must explicitly state it, making such exceptions stand out in the
 code.
@@ -42,10 +42,10 @@ guarantees it is only ever applied once, and can optionally require that the mod
 the token was created. This is what makes it safe to retry a submission (e.g. after a dropped connection)
 without risking a duplicate effect.
 
-## Audit log
+## Event log
 
-Every successfully processed command is durably recorded and can be read back via `auditLog(...)` in a read block (see
-[events-and-commands.md](events-and-commands.md#the-audit-log)), gated by its own `eventLog` authorization rules. This
+Every successfully processed command is durably recorded and can be read back via `eventLog(...)` in a read block (see
+[events-and-commands.md](events-and-commands.md#the-event-log)), gated by its own `eventLog` authorization rules. This
 is what you reach for during an incident or a compliance review — "what happened, and who did it" is answered by the
 framework itself rather than by whatever ad hoc logging individual code paths happened to include.
 

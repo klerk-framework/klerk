@@ -7,7 +7,7 @@ itself.
 ```kotlin
 interface KlerkContext {
     val translation: Translation
-    // ... actor, time, auditExtra
+    // ... actor, time, eventLogExtra
 }
 
 interface Translation {

@@ -21,12 +21,12 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
 /**
- * The audit log is read from storage rather than from memory, so it gets its consistency from the sequence number the
+ * The event log is read from storage rather than from memory, so it gets its consistency from the sequence number the
  * query captures inside the read block: an entry is only visible if the command it describes was visible there.
  */
-class AuditLogTest {
+class EventLogTest {
 
-    /** Holds [store] open until released, i.e. after the audit entry is durable but before the cache knows about it. */
+    /** Holds [store] open until released, i.e. after the event log entry is durable but before the cache knows about it. */
     private class BlockingStore(private val delegate: Persistence) : Persistence by delegate {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -94,7 +94,7 @@ class AuditLogTest {
         val (klerk, _) = start(storage)
         klerk.meta.start()
         val author = createAuthor(klerk)
-        val before = klerk.read(Ctx.system()) { auditLog(author) }.get()
+        val before = klerk.read(Ctx.system()) { eventLog(author) }.get()
 
         storage.block = true
         val committing = launch(Dispatchers.Default) { rename(klerk, author, "Renamed") }
@@ -106,7 +106,7 @@ class AuditLogTest {
                 assertEquals(FirstName("Solo"), klerk.read(Ctx.system()) { get(author) }.props.firstName)
 
                 // Reading the log must neither show the rename nor wait for it.
-                val during = klerk.read(Ctx.system()) { auditLog(author) }.get()
+                val during = klerk.read(Ctx.system()) { eventLog(author) }.get()
                 assertEquals(before, during, "the log showed an event whose command was not visible yet")
             }
         } finally {
@@ -115,7 +115,7 @@ class AuditLogTest {
             committing.join()
         }
 
-        val after = klerk.read(Ctx.system()) { auditLog(author) }.get()
+        val after = klerk.read(Ctx.system()) { eventLog(author) }.get()
         assertEquals(before.size + 1, after.size)
         assertEquals(ChangeName.id, after.last().eventReference)
         klerk.meta.stop()
@@ -127,13 +127,13 @@ class AuditLogTest {
         klerk.meta.start()
         val author = createAuthor(klerk)
 
-        val (snapshot, nameWhenTaken) = klerk.read(Ctx.system()) { auditLog(author) to get(author).props.firstName }
+        val (snapshot, nameWhenTaken) = klerk.read(Ctx.system()) { eventLog(author) to get(author).props.firstName }
         rename(klerk, author, "Renamed")
 
         val entries = snapshot.get()
         assertEquals(FirstName("Solo"), nameWhenTaken)
         assertTrue(entries.none { it.eventReference == ChangeName.id }, "the snapshot must not grow after its block")
-        assertEquals(1, klerk.read(Ctx.system()) { auditLog(author) }.get().count { it.eventReference == ChangeName.id })
+        assertEquals(1, klerk.read(Ctx.system()) { eventLog(author) }.get().count { it.eventReference == ChangeName.id })
         klerk.meta.stop()
     }
 
@@ -149,7 +149,7 @@ class AuditLogTest {
         rename(klerk, author, "Second", sameTime)
         rename(klerk, author, "Third", Ctx(SystemIdentity, time = sameTime.time.minus(30.days)))
 
-        val entries = klerk.read(Ctx.system()) { auditLog(author) }.get()
+        val entries = klerk.read(Ctx.system()) { eventLog(author) }.get()
         assertEquals(3, entries.size, "every command must be logged, even ones sharing a timestamp")
         assertEquals(entries.map { it.sequenceNumber }.sorted(), entries.map { it.sequenceNumber })
         assertEquals(listOf(CreateAuthor.id, ChangeName.id, ChangeName.id), entries.map { it.eventReference })
@@ -163,9 +163,9 @@ class AuditLogTest {
         val author = createAuthor(klerk)
         rename(klerk, author, "Renamed")
 
-        val all = klerk.read(Ctx.system()) { auditLog() }.get()
+        val all = klerk.read(Ctx.system()) { eventLog() }.get()
         val wanted = all.last()
-        val found = klerk.read(Ctx.system()) { auditLog(sequenceNumber = wanted.sequenceNumber) }.get()
+        val found = klerk.read(Ctx.system()) { eventLog(sequenceNumber = wanted.sequenceNumber) }.get()
         assertEquals(listOf(wanted), found)
         klerk.meta.stop()
     }
@@ -177,13 +177,13 @@ class AuditLogTest {
         first.meta.start()
         val author = createAuthor(first)
         rename(first, author, "Renamed")
-        val beforeRestart = first.read(Ctx.system()) { auditLog() }.get()
+        val beforeRestart = first.read(Ctx.system()) { eventLog() }.get()
         first.meta.stop()
 
         val (second, _) = start(storage)
         second.meta.start()
         rename(second, author, "AfterRestart")
-        val afterRestart = second.read(Ctx.system()) { auditLog() }.get()
+        val afterRestart = second.read(Ctx.system()) { eventLog() }.get()
 
         assertEquals(beforeRestart.size + 1, afterRestart.size)
         assertEquals(beforeRestart.map { it.sequenceNumber }, afterRestart.dropLast(1).map { it.sequenceNumber })
@@ -197,8 +197,8 @@ class AuditLogTest {
     @Test
     fun `an unauthorized actor cannot read the log`() = runBlocking {
         val (klerk, _) = start(SQLiteInMemory.create()) {
+            // Only a negative block: declaring one half of a category must not require declaring the other.
             eventLog {
-                positive {}
                 negative { rule(::unauthenticatedCannotReadTheEventLog) }
             }
         }
@@ -206,7 +206,7 @@ class AuditLogTest {
         createAuthor(klerk)
 
         assertFailsWith<AuthorizationException> {
-            klerk.read(Ctx.unauthenticated()) { auditLog() }
+            klerk.read(Ctx.unauthenticated()) { eventLog() }
         }
         klerk.meta.stop()
     }
@@ -218,7 +218,7 @@ class AuditLogTest {
         createAuthor(klerk)
 
         val e = assertFailsWith<IllegalStateException> {
-            klerk.readSuspend(Ctx.system()) { auditLog().get() }
+            klerk.readSuspend(Ctx.system()) { eventLog().get() }
         }
         assertTrue(e.message!!.contains("must not be called inside a read block"))
         klerk.meta.stop()

@@ -23,14 +23,14 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override val jobs: JobReader get() = jobReader
 
-    override fun auditLog(
+    override fun eventLog(
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
         sequenceNumber: Long?,
-    ): AuditLogQuery {
-        checkAuditLogAuthorization(klerk, context, withoutAuth)
-        return auditLogQuery(klerk, id, after, before, sequenceNumber)
+    ): EventLogQuery {
+        checkEventLogAuthorization(klerk, context, withoutAuth)
+        return eventLogQuery(klerk, id, after, before, sequenceNumber)
     }
 
     internal val modelsRead = mutableSetOf<Model<*>>()

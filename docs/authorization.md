@@ -37,7 +37,8 @@ SpecificationBuilder<Ctx, Views>(views).build {
 
 There are six independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
 `eventLog`, `readAttachedData` and `writeAttachedData` — each with its own `positive`/`negative` rule sets. A category
-with no rules at all denies everything in that category, since there is no rule to explicitly allow it.
+with no rules at all denies everything in that category, since there is no rule to explicitly allow it. Both the
+categories and the `positive`/`negative` blocks inside them are optional, so declare only the ones you need.
 
 For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning — never
 use it in production.
@@ -121,7 +122,7 @@ passed — so a command that's both invalid and unauthorized is reported as inva
 
 ### eventLog
 
-Gates whether an actor can read entries from the audit log (`auditLog(...)` inside a read block, see
+Gates whether an actor can read entries from the event log (`eventLog(...)` inside a read block, see
 [events and commands](events-and-commands.md)). Rules receive an `ArgContextReader<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
 
