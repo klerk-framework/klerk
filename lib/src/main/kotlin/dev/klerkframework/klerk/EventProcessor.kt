@@ -521,10 +521,6 @@ public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
         return CalculatedStuff(modified, newTransitions, toFinalize)
     }
 
-    internal fun containsMutations(): Boolean {
-        return true
-    }
-
     internal fun withTimeTriggersOnModels(): ProcessingData<Primary, C, V> {
         val aggStates = mutableMapOf<ModelID<out Any>, Model<out Any>>()
         aggStates.putAll(aggregatedModelState)

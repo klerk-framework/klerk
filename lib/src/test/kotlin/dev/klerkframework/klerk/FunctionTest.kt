@@ -38,6 +38,9 @@ object DummyReader : Reader<Ctx, Views> {
     override val views: Views
         get() = throw exception
 
+    override val jobs: JobReader
+        get() = throw exception
+
     override fun <T : Any> get(id: ModelID<T>): Model<T> {
         throw exception
     }

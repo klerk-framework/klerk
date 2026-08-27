@@ -117,14 +117,10 @@ public interface Persistence {
      * 1. the model delta produced by the step's command, if any;
      * 2. the attached-data delta, including new job claims from [JobCommit.attachedDataClaimed];
      * 3. the job's new cursor, progress, status, step number and log entries;
-     * 4. rows for any children declared in the step's `spawn`, together with the parent's `awaitedChildren` count;
-     * 5. for the terminal step of a child, the decrement of the parent's `awaitedChildren` and the child's `result`;
-     * 6. the audit-log entry for the command.
+     * 4. rows for any children declared in the step's `spawn`;
+     * 5. the audit-log entry for the command.
      *
-     * Point 5 is the one most likely to be missed. Waking a parent must be part of the *child's* own commit, or the
-     * last child's completion can be lost and the parent waits forever. Klerk hands you the parent's updated row in
-     * [JobCommit.upserted] for exactly this reason — an implementation only has to write the rows it is given, in one
-     * transaction, for the contract to hold.
+     * An implementation only has to write the rows it is given, in one transaction, for the contract to hold.
      *
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**

@@ -108,7 +108,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                 is NewJobPlan.Ok -> {
                                     processedCommandTokens.add(options.token)
                                     commit(delta, command, context, plan.delta, jobPlan.commit)
-                                    jobs.jobsWereCommitted(jobPlan)
                                     logger.log(result, options) { "Command ${command.event} succeeded" }
                                     timeTriggerManager.handle(delta)
                                     commandResult
@@ -141,7 +140,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit,
     ): CommandResult<T, C, V>? = mutex.withLock {
         if (command == null || context == null) {
-            settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+            commitJobsOnly(jobCommit)
             return@withLock null
         }
 
@@ -176,7 +175,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                         processedCommandTokens.add(options.token)
                         val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
                         commit(delta, command, context, plan.delta, merged, isJobStep = true)
-                        jobs.jobsWereCommitted(jobPlan)
                         timeTriggerManager.handle(delta)
                         commandResult
                     }
@@ -186,8 +184,18 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     /** Writes the job's checkpoint on its own, for a step whose command was not applied. */
-    private fun checkpointOnly(jobCommit: JobCommit) {
+    private suspend fun checkpointOnly(jobCommit: JobCommit) = commitJobsOnly(jobCommit)
+
+    /**
+     * Persists a commit that touches jobs but no models, and applies it to memory under the write lock.
+     *
+     * These paths never reach [commit], so without this they would write storage and leave the in-memory queue
+     * behind — which is the whole failure this change exists to prevent.
+     */
+    private suspend fun commitJobsOnly(jobCommit: JobCommit) {
         settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, AttachedDataDelta(), jobCommit)
+        readWriteLock.withWrite { jobs.applyToMemory(jobCommit) }
+        jobs.notifyCommitted(jobCommit)
     }
 
     private suspend fun <T : Any, P> commit(
@@ -198,27 +206,39 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
     ) {
-        // The models this command changes must be in memory before storage is written, or a read that misses on one of
-        // them in the window between the two would fetch the new version while seeing the old version of everything
-        // else. Created models cannot be missed (nothing knows their ids yet).
-        ModelCache.ensureResident(delta.updatedModels + delta.transitions + delta.deletedModels)
 
-        if (isJobStep) {
-            settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
-        } else {
-            settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
-        }
-
-        if (delta.containsMutations() || !attachedDataDelta.isEmpty()) {
-            readWriteLock.withWrite {
-                ModelCache.handleDelta(delta)
-                attachedData.applyToMemory(attachedDataDelta)
-                updateViews(delta)
+        // Persisting to the database can take several milliseconds, and reads keep running throughout: the write lock
+        // is taken only for the in-memory flip at the end.
+        //
+        // What makes that safe is that the sole storage read a reader performs while holding the read lock is
+        // ModelCache.getBody's repair of an evicted model. beginCommit pins the pre-commit body of every model this
+        // command changes, so that repair is answered from the pin instead of from storage, which may already hold
+        // the new state. Everything else a read touches -- views, relations, attached-data metadata -- is in memory
+        // and flips under the write lock. A read therefore sees either all of the commit or none of it. Created
+        // models need no pin: nothing knows their ids yet, so nobody can be reading them.
+        val touchedIds = delta.updatedModels + delta.transitions + delta.deletedModels
+        ModelCache.beginCommit(touchedIds)
+        try {
+            if (isJobStep) {
+                settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit)
+            } else {
+                settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
             }
+        } catch (e: Exception) {
+            ModelCache.endCommit()
+            throw e
         }
 
-        maybeEraseAuditLog(specification, delta.deletedModels)
+        readWriteLock.withWrite {
+            ModelCache.handleDelta(delta)
+            attachedData.applyToMemory(attachedDataDelta)
+            jobs.applyToMemory(jobCommit)
+            updateViews(delta)
+            ModelCache.endCommit()
+        }
+        jobs.notifyCommitted(jobCommit)
         notifySubscribers(delta)
+        maybeEraseAuditLog(specification, delta.deletedModels)
     }
 
     private fun <T : Any> updateViews(delta: ProcessingData<T, C, V>) {
@@ -353,7 +373,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             is NewJobPlan.Ok -> planned
         }
         commit<Any, Nothing>(delta, null, null, attachedDataDelta, jobPlan.commit)
-        jobs.jobsWereCommitted(jobPlan)
 
         try {
             delta.unmanagedJobs.forEach { it.f.invoke() }

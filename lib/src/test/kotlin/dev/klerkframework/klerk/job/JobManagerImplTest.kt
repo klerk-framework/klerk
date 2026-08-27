@@ -6,7 +6,11 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.storage.RamStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlin.test.*
 import kotlin.time.Duration.Companion.days
@@ -609,6 +613,41 @@ class JobManagerImplTest {
             JobResult.Yield(cursor = CountCursor(args.cursor.remaining + 1))
     }
 
+    /** Spawns one child per step, forever, which is what the descendant budget exists to stop. */
+    object Breeder : JobType.Local<CountCursor, Ctx, Views>() {
+        override val name = JobName("breeder")
+        override val agent: JobAgent = JobAgent.System
+        override val maxDescendants = 3
+
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+            JobResult.Yield(
+                cursor = CountCursor(args.cursor.remaining + 1),
+                spawn = listOf(Child.declare(CountCursor(0))),
+                progress = JobProgress(completed = args.cursor.remaining + 1),
+            )
+    }
+
+    /**
+     * The budget had no coverage at all before it stopped being a counter, so this pins the behaviour: a job that
+     * spawns in a loop is stopped rather than being allowed to fill the queue.
+     */
+    @Test
+    fun `a job that keeps spawning is dead lettered once it exhausts its descendant budget`() = runBlocking {
+        val f = fixture { register(Breeder); register(Child) }
+        val id = f.klerk.jobs.schedule(Breeder.declare(CountCursor(0)), Ctx.system())
+        f.klerk.jobs.runUntilIdle()
+
+        val breeder = f.job(id)
+        assertEquals(JobStatus.DeadLettered, breeder.status)
+        assertTrue(
+            breeder.reason!!.contains("maxDescendants"),
+            "should say why it was stopped, was: ${breeder.reason}"
+        )
+        // The budget is what it was configured to be, not one more because two spawns raced.
+        val spawned = f.klerk.jobs.getAllJobs(Ctx.system()).count { it.parent == id }
+        assertEquals(3, spawned)
+    }
+
     object Serial : JobType.Local<CountCursor, Ctx, Views>() {
         override val name = JobName("serial")
         override val agent: JobAgent = JobAgent.System
@@ -618,6 +657,38 @@ class JobManagerImplTest {
             if (args.cursor.remaining == 0) return JobResult.Success()
             return JobResult.Yield(cursor = CountCursor(args.cursor.remaining - 1))
         }
+    }
+
+    /**
+     * An id is chosen long before its row reaches the in-memory map, so two schedulers racing over that window can
+     * pick the same free id and the second silently overwrites the first.
+     *
+     * Over the real 2^31 id space a collision never happens, which is exactly why this test shrinks the space: 24
+     * jobs drawn from 48 candidates collide with near-certainty unless allocation is genuinely exclusive.
+     */
+    @Test
+    fun `concurrent scheduling never hands out the same job id twice`() = runBlocking<Unit> {
+        val f = fixture { register(Counter) }
+        val small = java.util.Random(20260826)   // java.util.Random is synchronized, so it is safe to share here
+        (f.klerk.jobs as JobManagerImpl<Ctx, Views>).idCandidates = { small.nextInt(48) }
+
+        val ids = java.util.Collections.synchronizedList(mutableListOf<JobId>())
+        withTimeout(60_000) {
+            (1..24).map {
+                launch(Dispatchers.Default) {
+                    ids.add(f.klerk.jobs.schedule(Counter.declare(CountCursor(remaining = 1)), Ctx.system()))
+                }
+            }.joinAll()
+        }
+
+        assertEquals(24, ids.size)
+        assertEquals(24, ids.toSet().size, "the same job id was handed out more than once")
+        assertEquals(
+            24,
+            f.klerk.jobs.getAllJobs(Ctx.system()).size,
+            "a job row was overwritten by another job that was given the same id"
+        )
+        f.klerk.meta.stop()
     }
 }
 

@@ -102,4 +102,96 @@ class JobAutomaticExecutionTest {
         kotlinx.coroutines.delay(200)
         assertEquals(after, storage.getAllJobs().single { it.id == id }.stepNumber)
     }
+
+    @Serializable
+    data class FanCursor(val children: Int, val awaiting: Boolean = false)
+
+    object Leaf : JobType.Local<FanCursor, Ctx, Views>() {
+        override val name = JobName("fan-leaf")
+        override val agent: JobAgent = JobAgent.System
+
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> =
+            JobResult.Success(result = "leaf")
+    }
+
+    object Fan : JobType.Local<FanCursor, Ctx, Views>() {
+        override val name = JobName("fan-parent")
+        override val agent: JobAgent = JobAgent.System
+
+        /** What the parent's second step actually saw, so the test can assert on the outcomes it was handed. */
+        @Volatile
+        var sawChildren: String? = null
+
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> {
+            if (!args.cursor.awaiting) {
+                return JobResult.Yield(
+                    cursor = args.cursor.copy(awaiting = true),
+                    spawn = (1..args.cursor.children).map { Leaf.declare(FanCursor(0)) },
+                    awaitSpawned = true,
+                )
+            }
+            sawChildren = "saw ${args.children.size} children"
+            return JobResult.Success(result = sawChildren)
+        }
+    }
+
+    /**
+     * The existing fan-out coverage runs on manual execution, which steps one job at a time and so never has two
+     * siblings finishing at once. With the real dispatcher they do, and this used to hang: each sibling read the
+     * parent's remaining-children count before any of their commits were applied, so all of them wrote the same
+     * decrement and the parent never reached zero.
+     */
+    @Test
+    fun `a parent wakes when its last child finishes, even with siblings finishing concurrently`() = runBlocking {
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val store = RamStorage()
+        val klerk = createKlerk(
+            collections,
+            store,
+            jobs = JobSettings(execution = JobExecution.Automatic, maxParallelSteps = 4),
+        ) {
+            register(Fan)
+            register(Leaf)
+        }
+        klerk.meta.start(installShutdownHook = false)
+
+        val id = klerk.jobs.schedule(Fan.declare(FanCursor(children = 4)), Ctx.system())
+        // Used to time out here: the parent never became dispatchable.
+        awaitStatus(klerk, id, JobStatus.Succeeded)
+
+        assertEquals("saw 4 children", Fan.sawChildren, "the parent's step should see every child's outcome")
+
+        val children = klerk.jobs.getAllJobs(Ctx.system()).filter { it.parent == id }
+        assertEquals(4, children.size)
+        assertTrue(children.all { it.status == JobStatus.Succeeded })
+        klerk.meta.stop()
+    }
+
+    /**
+     * The same thing at a width where every sibling really is racing every other one. A single four-child case can
+     * pass by luck if the dispatcher happens to serialise them.
+     */
+    @Test
+    fun `many parents each wake once all of their children finish`() = runBlocking {
+        val bookViews = BookViews()
+        val collections = Views(bookViews, AuthorViews(bookViews.all))
+        val klerk = createKlerk(
+            collections,
+            RamStorage(),
+            jobs = JobSettings(execution = JobExecution.Automatic, maxParallelSteps = 8),
+        ) {
+            register(Fan)
+            register(Leaf)
+        }
+        klerk.meta.start(installShutdownHook = false)
+
+        val ids = (1..12).map { klerk.jobs.schedule(Fan.declare(FanCursor(children = 8)), Ctx.system()) }
+        ids.forEach { awaitStatus(klerk, it, JobStatus.Succeeded) }
+
+        val all = klerk.jobs.getAllJobs(Ctx.system())
+        assertEquals(12 * 8, all.count { it.parent != null }, "every child should exist")
+        assertTrue(all.all { it.status == JobStatus.Succeeded }, "every job should have finished")
+        klerk.meta.stop()
+    }
 }

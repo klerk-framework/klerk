@@ -4,15 +4,20 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.read.Reader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -32,7 +37,10 @@ class EvictionTest {
     ): Pair<Klerk<Ctx, Views>, Views> {
         val bc = BookViews()
         val views = Views(bc, AuthorViews(bc.all))
-        val klerk = Klerk.create(createConfig(views), testSettings(storage = storage, modelCache = cache))
+        val klerk = Klerk.create(
+            createConfig(views),
+            testSettings(storage = storage, modelCache = cache),
+        )
         return klerk to views
     }
 
@@ -179,6 +187,183 @@ class EvictionTest {
             }.joinAll()
         }
         assertEquals(0, mismatches.get(), "concurrent hydration of the same evicted model returned wrong data")
+        klerk.meta.stop()
+    }
+
+    /**
+     * Persistence that holds [store] open until released, so a test can have a read run at the one moment that
+     * matters: after the new state is in storage, before the cache knows about it.
+     */
+    private class BlockingStore(private val delegate: Persistence) : Persistence by delegate {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        @Volatile
+        var block = false
+        private val reads = ConcurrentHashMap<Int, AtomicInteger>()
+
+        fun readsOf(id: ModelID<*>): Int = reads[id.value]?.get() ?: 0
+
+        override fun readModel(id: Int): Model<out Any>? {
+            reads.computeIfAbsent(id) { AtomicInteger() }.incrementAndGet()
+            return delegate.readModel(id)
+        }
+
+        override fun <T : Any, P, C : KlerkContext, V> store(
+            delta: ProcessingData<out T, C, V>,
+            command: Command<T, P>?,
+            context: C?,
+            attachedData: AttachedDataDelta,
+            jobs: JobCommit,
+        ) {
+            delegate.store(delta, command, context, attachedData, jobs)
+            if (block) {
+                entered.countDown()
+                release.await()
+            }
+        }
+    }
+
+    @Test
+    fun `a read during a commit never sees the new state early`() = runBlocking {
+        val storage = BlockingStore(SQLiteInMemory.create())
+        val (klerk, views) = start(storage, tiny)
+        klerk.meta.start()
+        generateSampleData(12, 2, klerk)
+
+        val author = createAuthor(klerk)
+        val before = klerk.read(Ctx.system()) { get(author) }.props.firstName
+
+        // Churn the tiny cache until the author's body is genuinely gone, so the read below has to repair a miss.
+        // Caffeine evicts on its own schedule and favours recently-used entries, so this cannot be a single pass.
+        suspend fun evictAuthor() {
+            repeat(50) {
+                if (!ModelCache.isResident(author.value)) return
+                klerk.read(Ctx.system()) { list(views.books.all).map { it.props.title } }
+            }
+            error("could not evict the author, so this test would not exercise a cache miss")
+        }
+
+        storage.block = true
+        val committing = launch(Dispatchers.Default) {
+            klerk.handle(
+                Command(
+                    event = ChangeName,
+                    model = author,
+                    params = ChangeNameParams(FirstName("Renamed"), LastName("Author")),
+                ),
+                Ctx.system(),
+                ProcessingOptions(CommandToken.simple()),
+            ).orThrow()
+        }
+
+        try {
+            withTimeout(60_000) {
+                // Wait until the new name is durably in storage but the cache has not been updated yet.
+                withContext(Dispatchers.IO) { storage.entered.await() }
+                // Evict the author, so the read below has to repair a miss -- the exact case that would otherwise go
+                // to storage and come back with the not-yet-applied new name.
+                evictAuthor()
+                assertFalse(ModelCache.isResident(author.value), "the author should not be resident at this point")
+                val during = klerk.read(Ctx.system()) { get(author) }.props.firstName
+                assertEquals(before, during, "a read saw the new state before the commit was applied to the cache")
+            }
+        } finally {
+            // Unconditionally, or a failed assertion leaves the commit parked on the latch and runBlocking never
+            // returns -- turning a clean failure into a hung build.
+            storage.release.countDown()
+            committing.join()
+        }
+
+        val after = klerk.read(Ctx.system()) { get(author) }.props.firstName
+        assertEquals(FirstName("Renamed"), after)
+        klerk.meta.stop()
+    }
+
+    /**
+     * A view's membership and the bodies behind it must flip together. `greatAuthors` selects on `firstName`, so a
+     * `ChangeName` moves the author in and out of it, and any moment where the view already lists the author but the
+     * body still has the old name is a torn read.
+     *
+     * The window this targets is the one right after a commit releases the write lock, so the readers here are
+     * deliberately numerous: the lock hands over to every queued reader at once, putting a whole batch into that
+     * window each time a commit finishes.
+     */
+    @Test
+    fun `a view and the bodies behind it flip together`() = runBlocking {
+        val (klerk, views) = start(SQLiteInMemory.create(), ModelCacheSettings())
+        klerk.meta.start()
+        val author = createAuthor(klerk)
+
+        val greatNames = setOf("Linus", "Bertil")
+        val violations = ConcurrentHashMap.newKeySet<String>()
+        val done = AtomicInteger(0)
+
+        suspend fun rename(to: String) = klerk.handle(
+            Command(
+                event = ChangeName,
+                model = author,
+                params = ChangeNameParams(FirstName(to), LastName("Author")),
+            ),
+            Ctx.system(),
+            ProcessingOptions(CommandToken.simple()),
+        ).orThrow()
+
+        withTimeout(120_000) {
+            val readers = (1..12).map {
+                launch(Dispatchers.Default) {
+                    while (done.get() == 0) {
+                        klerk.read(Ctx.system()) { list(views.authors.greatAuthors) }.forEach { listed ->
+                            if (listed.props.firstName.value !in greatNames) {
+                                violations.add(
+                                    "greatAuthors listed ${listed.id} whose name is '${listed.props.firstName.value}'"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            val writer = launch(Dispatchers.Default) {
+                repeat(60) {
+                    rename("Linus")
+                    rename("Solo")
+                }
+                done.set(1)
+            }
+            (readers + listOf(writer)).joinAll()
+        }
+
+        assertTrue(violations.isEmpty(), "torn read between a view and its bodies: ${violations.take(3)}")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `concurrent reads and commits do not deadlock or corrupt models`() = runBlocking {
+        val (klerk, views) = start(SQLiteInMemory.create(), tiny)
+        klerk.meta.start()
+        generateSampleData(12, 2, klerk)
+        val target = createAuthor(klerk)
+
+        withTimeout(60_000) {
+            val readers = (1..8).map {
+                launch(Dispatchers.Default) {
+                    repeat(50) {
+                        klerk.read(Ctx.system()) { get(target) }
+                        // churns the tiny cache so the target keeps getting evicted between reads
+                        klerk.read(Ctx.system()) { list(views.books.all).map { it.id } }
+                    }
+                }
+            }
+            val writer = launch(Dispatchers.Default) {
+                repeat(20) {
+                    klerk.handle(
+                        Command(event = ImproveAuthor, model = target, params = null),
+                        Ctx.system(),
+                        ProcessingOptions(CommandToken.simple()),
+                    )
+                }
+            }
+            (readers + listOf(writer)).joinAll()
+        }
         klerk.meta.stop()
     }
 

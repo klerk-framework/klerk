@@ -38,7 +38,6 @@ private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
 /** The job log and the child outcomes are stored as JSON, since neither is ever queried by SQL. */
 private val jobJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 private val logSerializer = ListSerializer(JobLogEntry.serializer())
-private val outcomeSerializer = ListSerializer(ChildOutcome.serializer())
 
 /**
  * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
@@ -536,9 +535,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.parentId] = record.parentId?.value
         this[Jobs.rootId] = record.rootId.value
         this[Jobs.depth] = record.depth
-        this[Jobs.awaitedChildren] = record.awaitedChildren
-        this[Jobs.descendants] = record.descendants
-        this[Jobs.childOutcomes] = jobJson.encodeToString(outcomeSerializer, record.childOutcomes)
         this[Jobs.result] = record.result
         this[Jobs.failedAtCursor] = record.failedAtCursor
         this[Jobs.hookCursor] = record.hookCursor
@@ -576,9 +572,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     parentId = row[Jobs.parentId]?.let { JobId(it) },
                     rootId = JobId(row[Jobs.rootId]),
                     depth = row[Jobs.depth],
-                    awaitedChildren = row[Jobs.awaitedChildren],
-                    descendants = row[Jobs.descendants],
-                    childOutcomes = jobJson.decodeFromString(outcomeSerializer, row[Jobs.childOutcomes]),
                     result = row[Jobs.result],
                     failedAtCursor = row[Jobs.failedAtCursor],
                     hookCursor = row[Jobs.hookCursor],
@@ -703,9 +696,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val parentId = integer("parent_id").nullable()
         val rootId = integer("root_id")
         val depth = integer("depth")
-        val awaitedChildren = integer("awaited_children")
-        val descendants = integer("descendants")
-        val childOutcomes = text("child_outcomes")      // JSON array of ChildOutcome
         val result = text("result").nullable()
         val failedAtCursor = text("failed_at_cursor").nullable()
         val hookCursor = text("hook_cursor").nullable()
