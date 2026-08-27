@@ -14,15 +14,6 @@ be used again.
 Some indexes are always kept in memory, so Klerk's memory usage will grow with the number of models even if they are
 evicted.
 
-## Commits do not block reads while the database is written
-
-A commit writes to the database without holding the write lock, so persistence latency is not read latency. The write
-lock is taken only at the end, for the in-memory flip of models, views and relations, which is bounded by the size of
-the command's delta rather than by how slow storage is.
-
-Reads stay consistent throughout: a read sees either all of a commit or none of it, never a mixture. Commands are
-still applied one at a time, so a slow persistence write does hold up the *next* command.
-
 ## Keep read locks short
 
 Reads run concurrently with each other, but a read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as long

@@ -122,11 +122,6 @@ public interface Persistence {
      *
      * An implementation only has to write the rows it is given, in one transaction, for the contract to hold.
      *
-     * Note that a finishing child writes nothing but its own row: whether its parent may now run is derived from the
-     * children whenever the question is asked, not tracked as a count on the parent. So there is no cross-row update
-     * here that a backend could get subtly wrong, and nothing is lost if the process dies between a child finishing
-     * and its parent noticing — the answer is recomputed from what was stored.
-     *
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**
      */

@@ -206,7 +206,7 @@ children again on the next attempt, with nothing able to detect it. Declaring th
 remote worker returns "spawn these" as JSON like anything else.
 
 **Waiting.** With `awaitSpawned = true` the parent moves to `Waiting` and is re-queued once **every** child has reached
-a terminal state — `Succeeded`, `DeadLettered` or `Cancelled`. A child that dies wakes the parent; it never hangs.
+a terminal state — `Succeeded`, `DeadLettered` or `Cancelled`. A child that dies wakes the parent.
 
 The next step receives the outcomes:
 
@@ -220,24 +220,7 @@ override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): Jo
 }
 ```
 
-`ChildOutcome` carries the child's id, terminal status, and the `result` value from its `Success` — so fan-in reads the
-children's own report rather than reconstructing what happened from model state.
-
-`args.children` is read from the children's own rows every time a step runs, so it lists every child of the job that
-has finished — not only the ones that finished since its previous step. A finishing child therefore writes nothing but
-its own row, which is what makes siblings finishing at the same instant safe.
-
-Four rules keep this from becoming a footgun:
-
-- **A job may only await children it spawned.** Awaiting an arbitrary `JobId` would let two jobs await each other and
-  hang forever, undetectably. Descendants-only makes cycles impossible by construction.
-- **A `Waiting` parent does not occupy a dispatch slot** and does not count toward `maxConcurrent`. Otherwise parents
-  fill the pool waiting for children that can never be dispatched.
-- **`Waiting` is not stepping**, so it does not trip the [stuck-job guard](#stuck-jobs).
-- **Children bypass admission control but not `maxDescendants`.** Children are scheduled by already-accepted work, so
-  rejecting them would strand the parent mid-job. Instead each root job has a budget — `maxDescendants` (default 10 000)
-  and `maxDepth` (default 8) — and exceeding it aborts the step. Without this, one job spawning children in a loop
-  evades every protection in [Priority, backpressure and overload](#priority-backpressure-and-overload).
+`ChildOutcome` carries the child's id, terminal status, and the `result` value from its `Success`.
 
 ### Reading: Local vs Portable jobs
 
@@ -275,9 +258,9 @@ subject to [authorization](#who-can-see-a-job).
 
 ### Reading jobs inside a read block
 
-`klerk.jobs.getJob(id, context)` and `klerk.jobs.getAllJobs(context)` take the read lock themselves, so they are for
-use *outside* a read block and fail with an explanatory error if called inside one. Inside a read block, use `jobs` on
-the reader:
+`klerk.jobs.getJob(id, context)` and `klerk.jobs.getAllJobs(context)` take the read lock themselves, so they are for use
+*outside* a read block and fail with an explanatory error if called inside one. Inside a read block, use `jobs` on the
+reader:
 
 ```kotlin
 klerk.read(context) {
@@ -287,8 +270,8 @@ klerk.read(context) {
 ```
 
 What you read there is part of the block's snapshot, exactly like a model: nothing can change it while the block runs,
-so a command and the jobs it scheduled are always seen together. The cost is that a long read block delays job
-dispatch, since the dispatcher takes the write lock to claim a job.
+so a command and the jobs it scheduled are always seen together. The cost is that a long read block delays job dispatch,
+since the dispatcher takes the write lock to claim a job.
 
 `message` is a plain string without any specific meaning. It will typically not be shown to the user, but may appear in
 an admin UI.
@@ -308,18 +291,18 @@ The log is capped at the most recent 200 entries per job, so a long-running job 
 - `Abort` → dead-lettered immediately.
 - A dead-lettered job keeps its cursor, progress and log, and keeps its claim on any attached data it created.
 
-Terminal jobs are cleaned up automatically. Three settings in `KlerkSettings.jobs`, each `Duration` and each defaulting to 30 days,
-delete a terminal job once it has aged past their value:
+Terminal jobs are cleaned up automatically. Three settings in `KlerkSettings.jobs`, each `Duration` and each defaulting
+to 30 days, delete a terminal job once it has aged past their value:
 
-| Setting              | Governs                              |
-|----------------------|---------------------------------------|
+| Setting               | Governs                              |
+|-----------------------|--------------------------------------|
 | `succeededRetention`  | `Succeeded`                          |
 | `cancelledRetention`  | `Cancelled`                          |
 | `deadLetterRetention` | `DeadLettered`, `CompensationFailed` |
 
 A succeeded job has already released its attached-data claims (see below), so its retention is only about bounding
-storage and audit history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings
-also bound how long that data can leak.
+storage and audit history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings also
+bound how long that data can leak.
 
 The full set of statuses:
 
@@ -511,8 +494,8 @@ override fun mergeSpecification(previous: Specification<C, V>): Specification<C,
 ```
 
 A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
-live in `KlerkSettings.jobs`, which a plugin never sees. Job names are global, so prefix a plugin's names with the plugin's own — registering
-a name the application already used fails when the specification is built.
+live in `KlerkSettings.jobs`, which a plugin never sees. Job names are global, so prefix a plugin's names with the
+plugin's own — registering a name the application already used fails when the specification is built.
 
 Some of the official Klerk plugins (and Klerk itself) register their own jobs and crons.
 
@@ -543,8 +526,8 @@ A job runs as an **agent**, declared on the job type:
 - `JobAgent.Scheduler` — the actor that scheduled the job. If that actor loses permission mid-job, subsequent commands
   simply fail; your step sees it in `previousResult` and decides whether to `Success`, `Abort`, or do something else.
 
-`JobAgent.Scheduler` requires `jobContextProvider(...)` in the specification, since Klerk cannot construct a context for an
-arbitrary actor of your own context type. Omitting it is a configuration error, caught at startup.
+`JobAgent.Scheduler` requires `jobContextProvider(...)` in the specification, since Klerk cannot construct a context for
+an arbitrary actor of your own context type. Omitting it is a configuration error, caught at startup.
 
 Job metadata (status, progress, log) is authorization-checked. The same rules gate `cancel`, so a user watching their
 own progress bar can stop their own job:

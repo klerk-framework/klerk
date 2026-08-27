@@ -224,30 +224,21 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             } else {
                 settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit)
             }
-
-            readWriteLock.withWrite {
-                ModelCache.handleDelta(delta)
-                attachedData.applyToMemory(attachedDataDelta)
-                // Job rows land in the same critical section as the models, which is what makes a read block see a
-                // command and the jobs it scheduled together, exactly as they were written to storage.
-                jobs.applyToMemory(jobCommit)
-                updateViews(delta)
-                // Inside the lock, not after it: the pins still answer with the pre-commit bodies until this runs, so
-                // dropping them once the lock is released would leave a window where a read can see a model listed in
-                // a view it has only just entered, and then read a body that has not entered it yet.
-                ModelCache.endCommit()
-            }
-            // Outside the lock: emitting can resume a collector inline, and a collector that reads job state takes
-            // the read lock.
-            jobs.notifyCommitted(jobCommit)
-        } finally {
-            // Idempotent. Only does anything when persistence threw, where without it the pins would go on shadowing
-            // the real bodies until some later commit happened to clear them.
+        } catch (e: Exception) {
             ModelCache.endCommit()
+            throw e
         }
 
-        maybeEraseAuditLog(specification, delta.deletedModels)
+        readWriteLock.withWrite {
+            ModelCache.handleDelta(delta)
+            attachedData.applyToMemory(attachedDataDelta)
+            jobs.applyToMemory(jobCommit)
+            updateViews(delta)
+            ModelCache.endCommit()
+        }
+        jobs.notifyCommitted(jobCommit)
         notifySubscribers(delta)
+        maybeEraseAuditLog(specification, delta.deletedModels)
     }
 
     private fun <T : Any> updateViews(delta: ProcessingData<T, C, V>) {
