@@ -3,6 +3,10 @@ package dev.klerkframework.klerk.datatypes
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.validation.PropertyValidation
 import dev.klerkframework.klerk.validation.PropertyValidation.Invalid
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format.char
+import kotlinx.datetime.toLocalDateTime
 import java.io.InputStream
 import java.time.LocalDate
 import kotlin.reflect.KFunction
@@ -10,6 +14,12 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 
 private const val MASKED = "[••••••]"
+
+internal val instantToStringFormat = LocalDateTime.Format {
+    year(); char('-'); monthNumber(); char('-'); day()
+    char(' ')
+    hour(); char(':'); minute(); char(':'); second()
+}
 
 // optimization: can we make these as value classes? See https://kotlinlang.org/docs/inline-classes.html
 
@@ -345,6 +355,12 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
 public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
     public val instant: Instant = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /** `yyyy-MM-dd HH:mm:ss` in the system default time zone, or the masked placeholder if unauthorized. */
+    override fun toString(): String {
+        valueOrNullIfNotAuthorized ?: return super.toString()
+        return instantToStringFormat.format(instant.toLocalDateTime(TimeZone.currentSystemDefault()))
+    }
 }
 
 /**
@@ -353,6 +369,12 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Long>(val
 public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value.toEpochDay().toInt()) {
     public val date: LocalDate = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /** ISO-8601 calendar date (`yyyy-MM-dd`), or the masked placeholder if unauthorized. */
+    override fun toString(): String {
+        valueOrNullIfNotAuthorized ?: return super.toString()
+        return date.toString()
+    }
 }
 
 /**
@@ -361,6 +383,12 @@ public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value
 public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {
     public val duration: Duration = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /** The [Duration]'s default rendering (e.g. `1h 30m`), or the masked placeholder if unauthorized. */
+    override fun toString(): String {
+        valueOrNullIfNotAuthorized ?: return super.toString()
+        return duration.toString()
+    }
 }
 
 /**

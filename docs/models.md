@@ -127,7 +127,9 @@ Two ways to read the wrapped value:
 * `valueOrNullIfNotAuthorized` — like `value`, but returns `null` instead of throwing when unauthorized.
 
 `toString()` on a container prints the masked placeholder `[••••••]` instead of the value if the actor isn't authorized
-to read it.
+to read it. `InstantContainer`, `DateContainer` and `DurationContainer` render human-readably:
+`2026-08-28 14:30:00` (`yyyy-MM-dd HH:mm:ss`, system default time zone), `2026-08-28`, and `1h 30m`. If you want to
+render the value in a different format, you can override `toString()` on the container.
 
 Containers that never went through an authorizing read — the ones you construct yourself, and the ones the framework
 uses internally — always allow reading, which is why validators and view filters can use `.value` without thinking about
@@ -164,10 +166,11 @@ Full details, including how this interacts with per-container validators and eve
 
 ## Appearance
 
-Klerk typically doesn't deal with what the model looks like in the UI, but you still may want to override toString on the
-model data class. This can be used by e.g. klerk-web to display a nice human-readable representation of the model in
+Klerk typically doesn't deal with what the model looks like in the UI, but you still may want to override toString on
+the model data class. This can be used by e.g. klerk-web to display a nice human-readable representation of the model in
 e.g. lists. It is recommended to pick one or two of the properties that best represent the model. If the model has a
 property "name", "title" or "label" is a good choice. E.g.
+
 ```kotlin
 data class Book(
     val title: BookTitle,

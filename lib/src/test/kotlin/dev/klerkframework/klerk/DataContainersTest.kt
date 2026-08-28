@@ -1,10 +1,24 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.createGson
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import java.time.LocalDate
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.test.*
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
+
+private class TestInstant(value: Instant) : InstantContainer(value)
+private class TestDate(value: LocalDate) : DateContainer(value)
+private class TestDuration(value: Duration) : DurationContainer(value)
 
 class DataContainersTest {
 
@@ -100,6 +114,29 @@ class DataContainersTest {
         assertNull(container.validate("genre", DefaultTranslation))
         assertEquals(BookGenre.Fiction, container.enum)
         assertEquals("Fiction", container.valueWithoutAuthorization)
+    }
+
+    @Test
+    fun timeContainerToString() {
+        assertEquals("2026-01-05", TestDate(LocalDate.of(2026, 1, 5)).toString())
+
+        assertEquals("1h 30m", TestDuration(90.minutes).toString())
+        assertEquals("0s", TestDuration(Duration.ZERO).toString())
+
+        val instant = Instant.parse("2026-01-01T00:00:00Z")
+        val s = TestInstant(instant).toString()
+        assertTrue(Regex("""\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}""").matches(s), "unexpected format: $s")
+        assertEquals(
+            instantToStringFormat.format(instant.toLocalDateTime(TimeZone.currentSystemDefault())),
+            s,
+        )
+    }
+
+    @Test
+    fun timeContainerToStringMasked() {
+        val c = TestDuration(5.minutes)
+        c.initAuthorization(false)
+        assertEquals("[••••••]", c.toString())
     }
 
     @Test
