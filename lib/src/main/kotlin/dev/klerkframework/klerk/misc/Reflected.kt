@@ -686,20 +686,22 @@ internal fun getEnumValue(enumClassName: String, enumValue: String) =
     Class.forName(enumClassName).enumConstants.filterIsInstance(Enum::class.java).first { it.name == enumValue }
 
 internal fun extractValueClasses(kClass: KClass<*>): Set<KClass<*>> {
-    if (kClass.starProjectedType.isSubtypeOf(DataContainer::class.starProjectedType)) {
+    if (kClass.isSubclassOf(DataContainer::class)) {
         return setOf(kClass)
     }
     val result = mutableSetOf<KClass<*>>()
     kClass.declaredMemberProperties.map { it.returnType }.forEach {
-        if (it.isSubtypeOf(ModelID::class.starProjectedType)) {
+        // Check the classifier (KClass), not the KType: a nullable property type like `Foo?` is not a subtype of
+        // the non-nullable `DataContainer<*>` / `ModelID<*>`, so KType.isSubtypeOf would miss nullable containers.
+        val clazz = it.classifier as? KClass<*> ?: return@forEach
+        if (clazz.isSubclassOf(ModelID::class)) {
             return@forEach
         }
-        val clazz = it.classifier as KClass<*>
-        if (it.isSubtypeOf(DataContainer::class.starProjectedType)) {
+        if (clazz.isSubclassOf(DataContainer::class)) {
             result.add(clazz)
         } else {
             if (clazz.isData && clazz != kClass) {
-                result.addAll(extractValueClasses(it.classifier as KClass<*>))
+                result.addAll(extractValueClasses(clazz))
             }
             if (clazz.isSubclassOf(Collection::class)) {
                 result.addAll(extractValueClasses(it.arguments.first().type!!.classifier as KClass<*>))

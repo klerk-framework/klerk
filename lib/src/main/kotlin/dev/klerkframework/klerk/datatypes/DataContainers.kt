@@ -345,30 +345,14 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
 public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
     public val instant: Instant = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
-    override fun toString(): String {
-        return try {
-            value.toString()
-        } catch (e: Exception) {
-            MASKED
-        }
-    }
 }
 
 /**
  * A container for a calendar date, without a time of day or time zone — e.g. a contract's start date.
- *
- * Renders as an HTML `date` input in klerk-web, unlike [InstantContainer]'s `datetime-local`.
  */
 public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value.toEpochDay().toInt()) {
     public val date: LocalDate = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
-    override fun toString(): String {
-        return try {
-            value.toString()
-        } catch (e: Exception) {
-            MASKED
-        }
-    }
 }
 
 /**

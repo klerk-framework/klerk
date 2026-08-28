@@ -44,8 +44,8 @@ ModelID<Author>` above is how one model refers to another).
 
 ## Rules for model classes
 
-`SpecificationBuilder` validates these at startup and throws `IllegalArgumentException`/`IllegalConfigurationException` if
-violated:
+`SpecificationBuilder` validates these at startup and throws `IllegalArgumentException`/`IllegalConfigurationException`
+if violated:
 
 * The class must be a `data class`.
 * All properties must be `val`, never `var`.
@@ -94,7 +94,7 @@ Built-in containers:
 | `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
 | `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
 | `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
-| `DateContainer`        | `java.time.LocalDate`  | none — a calendar date with no time of day or time zone                                                             |
+| `DateContainer`        | `java.time.LocalDate`   | none — a calendar date with no time of day or time zone                                                              |
 | `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
 | `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 
@@ -161,3 +161,19 @@ data class Author(val firstName: FirstName, val lastName: LastName) : Validatabl
 
 Full details, including how this interacts with per-container validators and event-level rules, are in
 [validation](validation.md).
+
+## Appearance
+
+Klerk typically doesn't deal with what the model looks like in the UI, but you still may want to override toString on the
+model data class. This can be used by e.g. klerk-web to display a nice human-readable representation of the model in
+e.g. lists. It is recommended to pick one or two of the properties that best represent the model. If the model has a
+property "name", "title" or "label" is a good choice. E.g.
+```kotlin
+data class Book(
+    val title: BookTitle,
+    val author: ModelID<Author>,
+    val coAuthors: Set<ModelID<Author>>
+) {
+    override fun toString() = title.toString()
+}
+```
