@@ -114,6 +114,20 @@ public interface Reader<C : KlerkContext, V> {
     ): QueryResponse<T>
 
     /**
+     * Like [query], but silently drops the models the actor is not authorized to read instead of throwing (the same
+     * relation [listIfAuthorized] has to [list]). Only usable where authorization is enforced; see the
+     * interface-level doc.
+     *
+     * The page's cursor metadata still comes from the full result, so a page may contain fewer than
+     * [QueryOptions.maxItems] items even when later pages hold more.
+     */
+    public fun <T : Any> queryIfAuthorized(
+        collection: ModelView<T, C>,
+        options: QueryOptions? = null,
+        filter: ((Model<T>) -> Boolean)? = null
+    ): QueryResponse<T>
+
+    /**
      * Finds the IDs of all models that reference [id] through any relation property (regardless of model type).
      */
     public fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>>

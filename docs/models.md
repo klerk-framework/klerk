@@ -117,19 +117,17 @@ validation that spans several properties (`Validatable`).
 
 ### Reading a container's value
 
-Two ways to read the wrapped value:
+Different ways to read the wrapped value:
 
+* `toString()` on a container renders the value with a sensible formatting and with the masked placeholder `[••••••]`
+  instead of the value if the actor isn't authorized to read it. This is the recommended way to present the value in a
+  UI. If you want to render the value in a different format, you can override `toString()` on the container.
 * `value` — throws `AuthorizationException` if the current actor is not authorized to read this property (per your
   [authorization](authorization.md) rules).
 * `valueWithoutAuthorization` — always available, bypassing authorization. Business logic inside the framework (e.g. a
   container's own validators, which run before authorization is even relevant) uses this. Application code normally
   should not.
 * `valueOrNullIfNotAuthorized` — like `value`, but returns `null` instead of throwing when unauthorized.
-
-`toString()` on a container prints the masked placeholder `[••••••]` instead of the value if the actor isn't authorized
-to read it. `InstantContainer`, `DateContainer` and `DurationContainer` render human-readably:
-`2026-08-28 14:30:00` (`yyyy-MM-dd HH:mm:ss`, system default time zone), `2026-08-28`, and `1h 30m`. If you want to
-render the value in a different format, you can override `toString()` on the container.
 
 Containers that never went through an authorizing read — the ones you construct yourself, and the ones the framework
 uses internally — always allow reading, which is why validators and view filters can use `.value` without thinking about

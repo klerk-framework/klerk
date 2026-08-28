@@ -83,6 +83,19 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         return result.copy(items = result.items.map { checkAuth(it) })
     }
 
+    override fun <T : Any> queryIfAuthorized(
+        collection: ModelView<T, C>,
+        options: QueryOptions?,
+        filter: ((Model<T>) -> Boolean)?
+    ): QueryResponse<T> {
+        val result = withoutAuth.query(collection, options, filter)
+        return result.copy(
+            items = result.items
+                .map { propertyAuth.secure(it) }
+                .filter { isAuthorized(it, context, klerk.spec, withoutAuth) }
+        )
+    }
+
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? =
         withoutAuth.getOrNull(id)?.let { checkAuth(it) }
 

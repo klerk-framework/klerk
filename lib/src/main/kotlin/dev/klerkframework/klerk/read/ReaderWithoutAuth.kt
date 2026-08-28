@@ -132,6 +132,14 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         throw RuntimeException("Reader.listIfAuthorized was called but the reader doesn't enforce authorization")
     }
 
+    override fun <T : Any> queryIfAuthorized(
+        collection: ModelView<T, C>,
+        options: QueryOptions?,
+        filter: ((Model<T>) -> Boolean)?
+    ): QueryResponse<T> {
+        throw RuntimeException("Reader.queryIfAuthorized was called but the reader doesn't enforce authorization")
+    }
+
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? {
         throw RuntimeException("Reader.findIfAuthorized was called but the reader doesn't enforce authorization")
     }

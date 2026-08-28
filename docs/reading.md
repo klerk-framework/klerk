@@ -44,3 +44,16 @@ klerk.readSuspend(context) {
 
 Note that readSuspend may impact performance if you call slow suspending functions.
 
+## Reader methods
+
+| Method | Not authorized to read a match |
+|---|---|
+| `get(id)` / `list(view)` / `query(view, options)` | throws `AuthorizationException` |
+| `getOrNull(id)` | returns `null` (also for a missing model) |
+| `getIfAuthorizedOrNull(id)` / `listIfAuthorized(view)` / `queryIfAuthorized(view, options)` | silently skips it |
+
+Use the `IfAuthorized` variants when the actor is expected to see only part of a collection (e.g. a supplier that
+may read only its own rows) — `list`/`query` would turn the whole page into a 500. They only work inside a
+`klerk.read` block; inside DSL functions the reader does not enforce authorization, so use `get`/`list` there.
+`queryIfAuthorized` filters after paging, so a page may hold fewer than `maxItems` even when later pages have more.
+
