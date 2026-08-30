@@ -13,6 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import dev.klerkframework.klerk.collection.*
 
 class QueryPaginationTest {
 
@@ -79,7 +80,7 @@ class QueryPaginationTest {
         val pages = mutableListOf<List<ModelID<Author>>>()
         var cursor: QueryListCursor? = null
         while (true) {
-            val page = klerk.read(context) { query(view, QueryOptions(maxItems = maxItems, cursor = cursor)) }
+            val page = klerk.read(context) { view.query(QueryOptions(maxItems = maxItems, cursor = cursor)) }
             pages.add(page.items.map { it.id })
             cursor = page.cursorNextPage ?: break
             check(pages.size < 100) { "The traversal does not terminate" }
@@ -88,7 +89,7 @@ class QueryPaginationTest {
     }
 
     private suspend fun order(klerk: Klerk<Ctx, Views>, view: ModelView<Author, Ctx>): List<ModelID<Author>> =
-        klerk.read(Ctx.system()) { list(view).map { it.id } }
+        klerk.read(Ctx.system()) { view.asList().map { it.id } }
 
     @Test
     fun `walking forward visits every model exactly once, in the view's order`() = runBlocking<Unit> {
@@ -124,14 +125,14 @@ class QueryPaginationTest {
         // From the last page, walk cursorPreviousPage back to the start.
         val backward = mutableListOf<List<ModelID<Author>>>()
         var cursor: QueryListCursor? = null
-        var page = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, cursor = null)) }
+        var page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = null)) }
         while (page.cursorNextPage != null) {
-            page = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, cursor = page.cursorNextPage)) }
+            page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = page.cursorNextPage)) }
         }
         while (true) {
             backward.add(page.items.map { it.id })
             cursor = page.cursorPreviousPage ?: break
-            page = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, cursor = cursor)) }
+            page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = cursor)) }
         }
         assertEquals(forward, backward.reversed())
     }
@@ -147,7 +148,7 @@ class QueryPaginationTest {
         val sharedContext = Ctx.system()
         createAuthors(klerk, 20, sharedContext)
 
-        val createdAt = klerk.read(Ctx.system()) { list(views.authors.all).map { it.createdAt } }
+        val createdAt = klerk.read(Ctx.system()) { views.authors.all.asList().map { it.createdAt } }
         assertEquals(1, createdAt.toSet().size, "the fixture must actually produce identical timestamps")
 
         val expected = order(klerk, views.authors.all)
@@ -161,7 +162,7 @@ class QueryPaginationTest {
         createAuthors(klerk, 12)
         val view = views.authors.all
 
-        val first = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, countTotal = true)) }
+        val first = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, countTotal = true)) }
         assertFalse(first.hasPreviousPage)
         assertTrue(first.hasNextPage)
         assertNull(first.cursorFirstPage)
@@ -171,7 +172,7 @@ class QueryPaginationTest {
         assertEquals(12, first.totalCount)
 
         val last = klerk.read(Ctx.system()) {
-            query(view, QueryOptions(maxItems = 5, cursor = first.cursorLastPage, countTotal = true))
+            view.query(QueryOptions(maxItems = 5, cursor = first.cursorLastPage, countTotal = true))
         }
         assertTrue(last.hasPreviousPage)
         assertFalse(last.hasNextPage)
@@ -188,7 +189,7 @@ class QueryPaginationTest {
         klerk.meta.start()
         val view = views.authors.all
 
-        val empty = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 10, countTotal = true)) }
+        val empty = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10, countTotal = true)) }
         assertEquals(emptyList(), empty.items)
         assertFalse(empty.hasNextPage)
         assertFalse(empty.hasPreviousPage)
@@ -198,12 +199,12 @@ class QueryPaginationTest {
 
         createAuthors(klerk, 10)
 
-        val exact = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 10)) }
+        val exact = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10)) }
         assertEquals(10, exact.items.size)
         assertFalse(exact.hasNextPage, "a page holding the whole view has no next page")
         assertNull(exact.cursorNextPage)
 
-        val bigger = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 50)) }
+        val bigger = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 50)) }
         assertEquals(10, bigger.items.size)
         assertFalse(bigger.hasNextPage)
     }
@@ -215,8 +216,8 @@ class QueryPaginationTest {
         createAuthors(klerk, 14)
 
         val middle = klerk.read(Ctx.system()) {
-            val first = query(views.authors.all, QueryOptions(maxItems = 5, countTotal = true))
-            query(views.authors.all, QueryOptions(maxItems = 5, cursor = first.cursorNextPage, countTotal = true))
+            val first = views.authors.all.query(QueryOptions(maxItems = 5, countTotal = true))
+            views.authors.all.query(QueryOptions(maxItems = 5, cursor = first.cursorNextPage, countTotal = true))
         }
         val cursors = listOfNotNull(
             middle.cursorFirstPage,
@@ -250,12 +251,12 @@ class QueryPaginationTest {
         val all = order(klerk, views.authors.all)
 
         val page = klerk.read(Ctx.system()) {
-            val first = query(views.authors.all, QueryOptions(maxItems = 4))
-            query(views.authors.all, QueryOptions(maxItems = 4, cursor = first.cursorNextPage))
+            val first = views.authors.all.query(QueryOptions(maxItems = 4))
+            views.authors.all.query(QueryOptions(maxItems = 4, cursor = first.cursorNextPage))
         }
         page.items.indices.forEach { i ->
             val fromItem = klerk.read(Ctx.system()) {
-                query(views.authors.all, QueryOptions(maxItems = 2, cursor = page.cursorAt(i)))
+                views.authors.all.query(QueryOptions(maxItems = 2, cursor = page.cursorAt(i)))
             }
             assertEquals(all.subList(4 + i, 6 + i), fromItem.items.map { it.id })
         }
@@ -271,9 +272,8 @@ class QueryPaginationTest {
 
         // The GraphQL `last: 5, before: <cursor of item 12>` shape.
         val page = klerk.read(Ctx.system()) {
-            val second = query(views.authors.all, QueryOptions(maxItems = 12, cursor = null))
-            query(
-                views.authors.all,
+            val second = views.authors.all.query(QueryOptions(maxItems = 12, cursor = null))
+            views.authors.all.query(
                 QueryOptions(maxItems = 5, cursor = second.cursorNextPage, direction = PageDirection.BEFORE),
             )
         }
@@ -290,13 +290,13 @@ class QueryPaginationTest {
         // Sorted by name, so a new author lands *before* the current position rather than at the end.
         val view = views.authors.all.sorted({ it.props.lastName.value })
 
-        val first = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5)) }
+        val first = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5)) }
         assertEquals(listOf("000", "001", "002", "003", "004"), first.items.map { it.props.lastName.value })
 
         createAuthor(klerk, "Kalle", "000a")   // sorts into the first page, shifting everything after it
 
         // Without the anchor the stored offset 5 would now point at "004", repeating it.
-        val second = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, cursor = first.cursorNextPage)) }
+        val second = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = first.cursorNextPage)) }
         assertEquals(
             listOf("005", "006", "007", "008", "009"),
             second.items.map { it.props.lastName.value },
@@ -311,12 +311,12 @@ class QueryPaginationTest {
         createAuthors(klerk, 20)
         val view = views.authors.all
 
-        val first = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5)) }
+        val first = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5)) }
         val nextCursor = requireNotNull(first.cursorNextPage)
         // Delete exactly the model the cursor is anchored to.
         deleteAuthor(klerk, order(klerk, view)[5])
 
-        val second = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 5, cursor = nextCursor)) }
+        val second = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = nextCursor)) }
         assertEquals(order(klerk, view).subList(5, 10), second.items.map { it.id })
     }
 
@@ -328,18 +328,18 @@ class QueryPaginationTest {
             createAuthors(klerk, 30)
             val view = views.authors.all
 
-            var page = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 10)) }
+            var page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10)) }
             while (page.cursorNextPage != null) {
-                page = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 10, cursor = page.cursorNextPage)) }
+                page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10, cursor = page.cursorNextPage)) }
             }
             val beyond = page.cursorAt(page.items.lastIndex)
             (0 until 25).forEach { _ -> deleteAuthor(klerk, order(klerk, view).last()) }
 
-            val stale = klerk.read(Ctx.system()) { query(view, QueryOptions(maxItems = 10, cursor = beyond)) }
+            val stale = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10, cursor = beyond)) }
             assertEquals(emptyList(), stale.items)
             assertTrue(stale.hasPreviousPage)
             val back = klerk.read(Ctx.system()) {
-                query(view, QueryOptions(maxItems = 10, cursor = stale.cursorPreviousPage))
+                view.query(QueryOptions(maxItems = 10, cursor = stale.cursorPreviousPage))
             }
             assertTrue(back.items.isNotEmpty())
         }
@@ -355,14 +355,14 @@ class QueryPaginationTest {
         val pages = mutableListOf<List<ModelID<Author>>>()
         var cursor: QueryListCursor? = null
         while (true) {
-            val page = klerk.read(context) { queryIfAuthorized(view, QueryOptions(maxItems = 4, cursor = cursor)) }
+            val page = klerk.read(context) { view.queryIfAuthorized(QueryOptions(maxItems = 4, cursor = cursor)) }
             pages.add(page.items.map { it.id })
             cursor = page.cursorNextPage ?: break
             check(pages.size < 100)
         }
         pages.dropLast(1).forEach { assertEquals(4, it.size, "authorization must not shrink a page") }
 
-        val readable = klerk.read(context) { listIfAuthorized(view).map { it.id } }
+        val readable = klerk.read(context) { view.asListIfAuthorized().map { it.id } }
         assertEquals(15, readable.size)
         assertEquals(readable, pages.flatten())
     }
@@ -373,7 +373,7 @@ class QueryPaginationTest {
         klerk.meta.start()
         createAuthors(klerk, 12)
 
-        val page = klerk.read(Ctx.system()) { query(views.authors.all, QueryOptions(maxItems = 5)) }
+        val page = klerk.read(Ctx.system()) { views.authors.all.query(QueryOptions(maxItems = 5)) }
         assertNull(page.totalCount)
         assertNull(page.cursorLastPage)
         assertTrue(page.hasNextPage)
@@ -386,7 +386,7 @@ class QueryPaginationTest {
         createAuthors(klerk, 30)
 
         val page = klerk.read(Ctx.system()) {
-            query(views.authors.all, QueryOptions(maxItems = 5)) { it.props.firstName.value == "Greta" }
+            views.authors.all.query(QueryOptions(maxItems = 5)) { it.props.firstName.value == "Greta" }
         }
         assertEquals(5, page.items.size)
         assertTrue(page.items.all { it.props.firstName.value == "Greta" })

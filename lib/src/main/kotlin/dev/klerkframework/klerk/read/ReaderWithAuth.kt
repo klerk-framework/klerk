@@ -11,9 +11,9 @@ import kotlin.reflect.KProperty1
 internal class ReaderWithAuth<C : KlerkContext, V>(
     val klerk: KlerkImpl<C, V>,
     val context: C,
-) : Reader<C, V> {
+) : Reader<C, V>, ViewReader<C, V> {
 
-    private val withoutAuth = ReaderWithoutAuth(klerk)
+    internal val withoutAuth = ReaderWithoutAuth(klerk)
 
     private val propertyAuth = PropertyAuthScope(context, klerk.spec, withoutAuth)
 

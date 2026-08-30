@@ -1,6 +1,9 @@
 package dev.klerkframework.klerk
 
 
+import dev.klerkframework.klerk.collection.asList
+import dev.klerkframework.klerk.collection.first
+import dev.klerkframework.klerk.collection.query
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -176,17 +179,19 @@ class ReaderTest {
             // get a combined result
             val bestAuthorAndAnotherBook = klerk.read(context) {
                 val author = get(astrid)
-                val book = getFirstWhere(collections.books.all) { it.props.author == author.id }
+                val book = collections.books.all.first { it.props.author == author.id }
                 AuthorAndBook(author, book)
             }
 
             assertTrue(bestAuthorAndAnotherBook.author.props.firstName.value == "Astrid")
 
             // read a list of things
-            val authors = klerk.read(context) { list(collections.authors.all) }
+            val authors = klerk.read(context) {
+                collections.authors.all.asList()
+            }
 
             val authorsWithFirstNameBertil = klerk.read(context) {
-                list(collections.authors.all) { it.props.firstName.value == "Bertil" }
+                collections.authors.all.asList { it.props.firstName.value == "Bertil" }
             }
 
 
@@ -195,10 +200,10 @@ class ReaderTest {
             maybeBook?.props?.title?.let { println(it.value) }
 
             // make a query
-            val queryResult = klerk.read(context) { query(collections.authors.establishedGreatAuthors) }
+            val queryResult = klerk.read(context) { collections.authors.establishedGreatAuthors.query() }
             assertTrue(queryResult.items.isEmpty())
 
-            val q2 = klerk.readSuspend(context) { query(collections.authors.greatAuthors) }
+            val q2 = klerk.readSuspend(context) { collections.authors.greatAuthors.query() }
             assertTrue(q2.items.isEmpty())
 
         }

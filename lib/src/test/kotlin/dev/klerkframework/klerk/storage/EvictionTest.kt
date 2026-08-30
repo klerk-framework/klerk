@@ -21,6 +21,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import dev.klerkframework.klerk.collection.*
 
 /**
  * Everything here runs with a cache far smaller than the data, so practically every read is a miss that has to be
@@ -65,7 +66,7 @@ class EvictionTest {
     }
 
     private fun Reader<Ctx, Views>.readEverything(views: Views): Map<Int, Model<out Any>> =
-        (list(views.authors.all) + list(views.books.all)).associateBy { it.id.value }
+        (views.authors.all.asList() + views.books.all.asList()).associateBy { it.id.value }
 
     /** A brand new author: Amateur, and with no books referring to it. */
     private suspend fun createAuthor(klerk: Klerk<Ctx, Views>): ModelID<Author> =
@@ -108,8 +109,8 @@ class EvictionTest {
         generateSampleData(12, 2, klerk)
 
         val (author, expectedBooks) = klerk.read(Ctx.system()) {
-            val author = list(views.authors.all).first { a -> list(views.books.all).any { it.props.author == a.id } }
-            author to list(views.books.all).filter { it.props.author == author.id }.map { it.id }.toSet()
+            val author = views.authors.all.asList().first { a -> views.books.all.asList().any { it.props.author == a.id } }
+            author to views.books.all.asList().filter { it.props.author == author.id }.map { it.id }.toSet()
         }
         assertTrue(expectedBooks.isNotEmpty())
 
@@ -127,7 +128,7 @@ class EvictionTest {
 
         val author = createAuthor(klerk)
         // Push the author out of the cache by reading past it.
-        klerk.read(Ctx.system()) { list(views.books.all).map { it.id } }
+        klerk.read(Ctx.system()) { views.books.all.asList().map { it.id } }
         assertTrue(ModelCache.residentCount < klerk.meta.modelsCount)
 
         klerk.handle(
@@ -150,7 +151,7 @@ class EvictionTest {
         generateSampleData(12, 2, klerk)
 
         val author = createAuthor(klerk)
-        klerk.read(Ctx.system()) { list(views.books.all).map { it.id } }   // evict it
+        klerk.read(Ctx.system()) { views.books.all.asList().map { it.id } }   // evict it
         val countBefore = klerk.meta.modelsCount
 
         klerk.handle(
@@ -172,7 +173,7 @@ class EvictionTest {
         klerk.meta.start()
         generateSampleData(12, 2, klerk)
 
-        val ids = klerk.read(Ctx.system()) { list(views.authors.all).map { it.id } }
+        val ids = klerk.read(Ctx.system()) { views.authors.all.asList().map { it.id } }
         val target = ids.first()
         val expected = klerk.read(Ctx.system()) { get(target) }
 
@@ -239,7 +240,7 @@ class EvictionTest {
         suspend fun evictAuthor() {
             repeat(50) {
                 if (!ModelCache.isResident(author.value)) return
-                klerk.read(Ctx.system()) { list(views.books.all).map { it.props.title } }
+                klerk.read(Ctx.system()) { views.books.all.asList().map { it.props.title } }
             }
             error("could not evict the author, so this test would not exercise a cache miss")
         }
@@ -313,7 +314,7 @@ class EvictionTest {
             val readers = (1..12).map {
                 launch(Dispatchers.Default) {
                     while (done.get() == 0) {
-                        klerk.read(Ctx.system()) { list(views.authors.greatAuthors) }.forEach { listed ->
+                        klerk.read(Ctx.system()) { views.authors.greatAuthors.asList() }.forEach { listed ->
                             if (listed.props.firstName.value !in greatNames) {
                                 violations.add(
                                     "greatAuthors listed ${listed.id} whose name is '${listed.props.firstName.value}'"
@@ -350,7 +351,7 @@ class EvictionTest {
                     repeat(50) {
                         klerk.read(Ctx.system()) { get(target) }
                         // churns the tiny cache so the target keeps getting evicted between reads
-                        klerk.read(Ctx.system()) { list(views.books.all).map { it.id } }
+                        klerk.read(Ctx.system()) { views.books.all.asList().map { it.id } }
                     }
                 }
             }
@@ -375,14 +376,14 @@ class EvictionTest {
         first.meta.start()
         generateSampleData(12, 2, first)
         val before = first.read(Ctx.system()) {
-            (list(views.authors.all) + list(views.books.all)).associateBy { it.id.value }
+            (views.authors.all.asList() + views.books.all.asList()).associateBy { it.id.value }
         }
         first.meta.stop()
 
         val (second, views2) = start(storage, tiny)
         second.meta.start()
         val after = second.read(Ctx.system()) {
-            (list(views2.authors.all) + list(views2.books.all)).associateBy { it.id.value }
+            (views2.authors.all.asList() + views2.books.all.asList()).associateBy { it.id.value }
         }
         assertEquals(before, after)
         second.meta.stop()

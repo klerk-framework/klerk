@@ -40,6 +40,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import dev.klerkframework.klerk.collection.*
 
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
@@ -572,7 +573,7 @@ fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, Cr
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
         }
-        val rowling = firstOrNull(views.authors.all) { it.props.firstName.value == "Rowling" }
+        val rowling = views.authors.all.firstOrNull { it.props.firstName.value == "Rowling" }
         return if (rowling == null) Valid else Invalid()
     }
 }

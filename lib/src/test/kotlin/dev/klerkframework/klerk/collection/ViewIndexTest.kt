@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import dev.klerkframework.klerk.collection.*
 
 class ViewIndexTest {
 
@@ -69,11 +70,11 @@ class ViewIndexTest {
         repeat(30) { createAuthor(klerk, "Kalle", "ordinary$it") }
 
         // First query builds the index and does pay for a full pass.
-        val warm = klerk.read(Ctx.system()) { list(views.authors.greatAuthors) }
+        val warm = klerk.read(Ctx.system()) { views.authors.greatAuthors.asList() }
         assertEquals(3, warm.size)
 
         storage.reads.set(0)
-        val again = klerk.read(Ctx.system()) { list(views.authors.greatAuthors) }
+        val again = klerk.read(Ctx.system()) { views.authors.greatAuthors.asList() }
         assertEquals(3, again.size)
         assertTrue(
             storage.reads.get() < 10,
@@ -90,7 +91,7 @@ class ViewIndexTest {
 
         repeat(3) { createAuthor(klerk, "Linus", "great$it") }
         repeat(30) { createAuthor(klerk, "Kalle", "ordinary$it") }
-        val members = klerk.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } }
+        val members = klerk.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } }
 
         storage.reads.set(0)
         klerk.read(Ctx.system()) {
@@ -109,7 +110,7 @@ class ViewIndexTest {
         val great = createAuthor(klerk, "Linus", "1")
         createAuthor(klerk, "Kalle", "2")
 
-        fun members() = runBlocking { klerk.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } } }
+        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } } }
         assertEquals(listOf(great), members())   // builds the index
 
         // A create after the index exists must land in it.
@@ -151,9 +152,9 @@ class ViewIndexTest {
         val author = createAuthor(klerk, "Linus", "1")
 
         fun established() =
-            runBlocking { klerk.read(Ctx.system()) { list(views.authors.establishedGreatAuthors).map { it.id } } }
+            runBlocking { klerk.read(Ctx.system()) { views.authors.establishedGreatAuthors.asList().map { it.id } } }
         fun great() =
-            runBlocking { klerk.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } } }
+            runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } } }
 
         assertEquals(listOf(author), great())
         assertEquals(emptyList(), established())
@@ -182,7 +183,7 @@ class ViewIndexTest {
         val inRange = createAuthor(klerk, "Kalle", "20")
         createAuthor(klerk, "Kalle", "5")
 
-        fun members() = runBlocking { klerk.read(Ctx.system()) { list(views.authors.midrangeAuthors).map { it.id } } }
+        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.midrangeAuthors.asList().map { it.id } } }
         assertEquals(listOf(inRange), members())
 
         val alsoInRange = createAuthor(klerk, "Kalle", "18")
@@ -198,14 +199,14 @@ class ViewIndexTest {
         generateSampleData(6, 2, klerk)
 
         val view = views.authors.establishedGreatWithAtLeastTwoBooks
-        val first = klerk.read(Ctx.system()) { list(view).map { it.id }.toSet() }
-        val second = klerk.read(Ctx.system()) { list(view).map { it.id }.toSet() }
+        val first = klerk.read(Ctx.system()) { view.asList().map { it.id }.toSet() }
+        val second = klerk.read(Ctx.system()) { view.asList().map { it.id }.toSet() }
         assertEquals(first, second)
 
         // Its membership depends on Book, not Author, so an index keyed off Author changes would go stale here.
         val expected = klerk.read(Ctx.system()) {
-            list(views.authors.all)
-                .filter { a -> list(views.books.all).count { it.props.author == a.id } >= 2 }
+            views.authors.all.asList()
+                .filter { a -> views.books.all.asList().count { it.props.author == a.id } >= 2 }
                 .map { it.id }.toSet()
         }
         assertEquals(expected, first)
@@ -247,7 +248,7 @@ class ViewIndexTest {
 
         // And listing it reads only what it contains, not the 33 models of the parent.
         storage.reads.set(0)
-        val listed = klerk.read(Ctx.system()) { list(view).map { it.id } }
+        val listed = klerk.read(Ctx.system()) { view.asList().map { it.id } }
         assertEquals(chosen, listed)
         assertTrue(storage.reads.get() < 10, "listing read ${storage.reads.get()} models for a 3-model view")
         klerk.meta.stop()
@@ -265,14 +266,14 @@ class ViewIndexTest {
         first.meta.start()
         val great = createAuthor(first, "Linus", "1")
         createAuthor(first, "Kalle", "2")
-        assertEquals(2, first.read(Ctx.system()) { list(views.authors.all) }.size)
-        assertEquals(listOf(great), first.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } })
+        assertEquals(2, first.read(Ctx.system()) { views.authors.all.asList() }.size)
+        assertEquals(listOf(great), first.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } })
         first.meta.stop()
 
         val second = Klerk.create(specification, testSettings(storage = storage))
         second.meta.start()
-        assertEquals(2, second.read(Ctx.system()) { list(views.authors.all) }.size)
-        assertEquals(listOf(great), second.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } })
+        assertEquals(2, second.read(Ctx.system()) { views.authors.all.asList() }.size)
+        assertEquals(listOf(great), second.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } })
         second.meta.stop()
     }
 
@@ -287,7 +288,7 @@ class ViewIndexTest {
         withTimeout(60_000) {
             (1..24).map {
                 launch(Dispatchers.Default) {
-                    val members = klerk.read(Ctx.system()) { list(views.authors.greatAuthors).map { it.id } }
+                    val members = klerk.read(Ctx.system()) { views.authors.greatAuthors.asList().map { it.id } }
                     if (members.size != 5) mismatches.incrementAndGet()
                 }
             }.joinAll()

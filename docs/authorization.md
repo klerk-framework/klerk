@@ -78,7 +78,8 @@ In other words: deny always wins, and you need at least one rule to actively opt
 
 ### readModels
 
-Gates whether an actor can read a `Model<T>` at all — via `Reader.get`, `list`, etc (see [reading](reading.md)). Rules
+Gates whether an actor can read a `Model<T>` at all — via `Reader.get`, `view.asList()`, `view.query(...)`, etc
+(see [reading](reading.md)). Rules
 receive an `ArgModelContextReader<C, V>` (`model`, `context`, `reader`):
 
 ```kotlin
@@ -89,8 +90,8 @@ fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): Ne
 }
 ```
 
-If a model fails this check, `Reader.get`/`list`/etc. throw `AuthorizationException` (or, for the `...IfAuthorized`
-variants, the model is silently omitted — see [reading](reading.md)).
+If a model fails this check, `Reader.get`/`view.asList()`/etc. throw `AuthorizationException` (or, for the
+`...IfAuthorized` variants, the model is silently omitted — see [reading](reading.md)).
 
 ### readProperties
 

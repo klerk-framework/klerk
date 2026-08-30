@@ -3,6 +3,7 @@ package dev.klerkframework.klerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import dev.klerkframework.klerk.collection.*
 
 
 class StateMachineTest {

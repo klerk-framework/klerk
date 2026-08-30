@@ -18,6 +18,7 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import dev.klerkframework.klerk.collection.*
 
 /**
  * The job suite runs entirely on manual execution and a [MutableClock], so there is no sleeping anywhere and repeat

@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import dev.klerkframework.klerk.collection.*
 
 /**
  * The `commitJobStep` contract says a step's command, its checkpoint and any children it spawned land together or not
@@ -153,7 +154,7 @@ class JobAtomicityTest {
                 klerk = klerkOver(survivor, clock)
                 klerk.jobs.runUntilIdle()
 
-                val authors = klerk.read(Ctx.system()) { list(klerk.spec.views.authors.all) }
+                val authors = klerk.read(Ctx.system()) { klerk.spec.views.authors.all.asList() }
                 assertEquals(
                     steps - 1,
                     authors.size,

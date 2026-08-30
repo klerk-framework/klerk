@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import dev.klerkframework.klerk.collection.*
 
 class OnEnterTest {
 

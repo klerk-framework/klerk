@@ -85,44 +85,4 @@ object DummyReader : Reader<Ctx, Views> {
         throw exception
     }
 
-    override fun <T : Any> query(
-        collection: ModelView<T, Ctx>,
-        options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
-    ): QueryResponse<T> {
-        throw exception
-    }
-
-    override fun <T : Any> queryIfAuthorized(
-        collection: ModelView<T, Ctx>,
-        options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
-    ): QueryResponse<T> {
-        throw exception
-    }
-
-    override fun <T : Any> list(
-        modelView: ModelView<T, Ctx>,
-        filter: ((Model<T>) -> Boolean)?
-    ): List<Model<T>> {
-        throw exception
-    }
-
-    override fun <T : Any> listIfAuthorized(collection: ModelView<T, Ctx>): List<Model<T>> {
-        throw exception
-    }
-
-    override fun <T : Any> firstOrNull(
-        collection: ModelView<T, Ctx>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T>? {
-        throw exception
-    }
-
-    override fun <T : Any> getFirstWhere(
-        collection: ModelView<T, Ctx>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T> {
-        throw exception
-    }
 }

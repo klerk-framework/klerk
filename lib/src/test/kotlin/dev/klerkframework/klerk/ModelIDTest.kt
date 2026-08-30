@@ -4,6 +4,7 @@ import kotlin.random.Random
 import kotlin.reflect.KParameter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.klerkframework.klerk.collection.*
 
 class ModelIDTest {
 

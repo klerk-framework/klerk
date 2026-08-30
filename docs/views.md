@@ -4,7 +4,7 @@ Instead of writing queries against a database, you declare **views**: named, typ
 keeps up to date as models are created, updated, and deleted. A view is where you put anything that would otherwise be
 an index or a `WHERE` clause.
 
-This page covers how views are *declared*. For how to actually query them, see [reading.md](reading.md).
+This page covers how views are *declared*. For how to actually read them, see [reading.md](reading.md).
 
 ## The views object
 
@@ -81,7 +81,7 @@ contain `.` or spaces.
 
 Some views can't be expressed as a one-line `filter` — e.g. a view that joins across two managed models. For these,
 implement `ModelView<T, C>` directly. The one method you must write is `memberIds`: the ids in the view, in order.
-Return all of them — a view defines order and membership only, and `Reader.query` does the paging.
+Return all of them — a view defines order and membership only, and `query` does the paging.
 
 ```kotlin
 class AuthorsWithAtLeastTwoBooks<V>(
@@ -153,13 +153,13 @@ built on top of `all` immediately:
 ```kotlin
 val astrid = createAuthorAstrid(klerk)
 klerk.read(Context.system()) {
-    assertTrue { collections.authors.all.contains(astrid, this) }
+    assertTrue { astrid in collections.authors.all }
 }
 
 klerk.handle(Command(DeleteAuthor, astrid, null), Context.system(), ProcessingOptions(CommandToken.simple()))
 
 klerk.read(Context.system()) {
-    assertFalse { collections.authors.all.contains(astrid, this) }
+    assertFalse { astrid in collections.authors.all }
 }
 ```
 
@@ -190,11 +190,11 @@ Views are read through a `Reader`, e.g. inside `klerk.read`:
 
 ```kotlin
 val greatEstablishedAuthors = klerk.read(context) {
-    list(views.authors.establishedGreatAuthors)
+    views.authors.establishedGreatAuthors.asList()
 }
 ```
 
-See [querying.md](querying.md) for how to read a view: `list`, `query`, filtering, and pagination.
+See [reading.md](reading.md) for how to read a view: `count`, `asList`, `query`, filtering and pagination.
 
 ## Using a view as a reference constraint
 

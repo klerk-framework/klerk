@@ -10,6 +10,7 @@ import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
+import dev.klerkframework.klerk.collection.*
 
 
 class ValidatorTest {

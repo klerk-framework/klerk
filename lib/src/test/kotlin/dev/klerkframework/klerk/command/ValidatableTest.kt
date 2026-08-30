@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.fail
+import dev.klerkframework.klerk.collection.*
 
 class ValidatableTest {
 

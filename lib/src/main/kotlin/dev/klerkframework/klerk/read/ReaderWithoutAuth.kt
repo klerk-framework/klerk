@@ -12,10 +12,21 @@ import kotlin.reflect.KProperty1
 import kotlin.time.Instant
 
 /**
+ * The reader behind this one that does not enforce authorization, or null for a [Reader] Klerk did not create.
+ *
+ * Klerk's own read paths run through it: an index has to reflect every model, not the ones one actor may see.
+ */
+internal fun <C : KlerkContext, V> Reader<C, V>.unauthorized(): Reader<C, V>? = when (this) {
+    is ReaderWithoutAuth -> this
+    is ReaderWithAuth -> withoutAuth
+    else -> null
+}
+
+/**
  * Used internally, e.g. when executing the functions provided in a statemachine.
  * Note that no logging to KlerkLog is triggered here.
  */
-internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V> {
+internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V>, ViewReader<C, V> {
 
     override val views = klerk.spec.views
 

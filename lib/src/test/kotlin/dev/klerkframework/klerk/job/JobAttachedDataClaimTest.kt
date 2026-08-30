@@ -12,6 +12,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
+import dev.klerkframework.klerk.collection.*
 
 /**
  * Attached data has two independent claims: a reference from a model, and a claim by a job. The orphan reaper deletes
@@ -105,7 +106,7 @@ class JobAttachedDataClaimTest {
         assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
 
         // The command attached it to a model, so now it is owned as well as claimed.
-        val author = klerk.read(Ctx.system()) { list(klerk.spec.views.authors.all) }.single()
+        val author = klerk.read(Ctx.system()) { klerk.spec.views.authors.all.asList() }.single()
         assertNotNull(author.props.picture)
         klerk.meta.stop()
     }

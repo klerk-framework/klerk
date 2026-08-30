@@ -9,13 +9,17 @@ import kotlin.time.Instant
 import kotlin.reflect.KProperty1
 
 /**
- * Read-only access to models and views, always used as the receiver inside a [dev.klerkframework.klerk.Klerk.read]
- * (or `readSuspend`) block.
+ * Read-only access to models, always used as the receiver inside a [dev.klerkframework.klerk.Klerk.read] (or
+ * `readSuspend`) block.
  *
- * The `getIfAuthorizedOrNull`, `listIfAuthorized`, `getPossibleVoidEvents`, and `getPossibleEvents` functions are
- * only meaningful when authorization is enforced (i.e. inside a `Klerk.read` block). If called from within a state
- * machine's executable functions (create/update/validation blocks etc.), where the reader in scope does not enforce
- * authorization, they throw `RuntimeException` — use `get`/`list`/`filter` there instead.
+ * Reading a *view* is done on the view — `view.count()`, `view.asList()`, `view.query(...)` and friends, in
+ * `dev.klerkframework.klerk.collection`. Those take this reader as a context parameter, so inside a read block, or a
+ * `with(args.reader) { }` block in a DSL function, you never write it out. See docs/reading.md.
+ *
+ * The `getIfAuthorizedOrNull`, `getPossibleVoidEvents`, and `getPossibleEvents` functions are only meaningful when
+ * authorization is enforced (i.e. inside a `Klerk.read` block). If called from within a state machine's executable
+ * functions (create/update/validation blocks etc.), where the reader in scope does not enforce authorization, they
+ * throw `RuntimeException` — use `get` there instead.
  */
 public interface Reader<C : KlerkContext, V> {
 
@@ -61,73 +65,15 @@ public interface Reader<C : KlerkContext, V> {
     public fun <T : Any> getOrNull(id: ModelID<T>): Model<T>?
 
     /**
-     * @throws NoSuchElementException if no model in [collection] matches [filter]
-     * @throws AuthorizationException if the actor is not allowed to read the matching model
-     */
-    public fun <T : Any> getFirstWhere(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T>
-
-    /**
-     * Like [getFirstWhere], but returns null instead of throwing if no model matches [filter].
-     *
-     * @throws AuthorizationException if the actor is not allowed to read the matching model
-     */
-    public fun <T : Any> firstOrNull(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T>?
-
-    /**
      * Like [get], but returns null instead of throwing an [AuthorizationException] when the actor isn't allowed to
      * read the model (a missing model still yields null, same as an unauthorized one — the two cases are
      * indistinguishable). Only usable where authorization is enforced; see the interface-level doc.
      */
     public fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>?
 
-    /**
-     * Lists all models in [collection], silently dropping any the actor is not authorized to read (as opposed to
-     * [list], which throws). Only usable where authorization is enforced; see the interface-level doc.
-     */
-    public fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>>
-
-    /**
-     * @throws AuthorizationException if there is any model in [modelView] (after [filter] is applied) that the actor
-     * is not allowed to read.
-     */
-    public fun <T : Any> list(
-        modelView: ModelView<T, C>,
-        filter: ((Model<T>) -> Boolean)? = null,
-    ): List<Model<T>>
-
-    /**
-     * Reads one page of [collection], in the view's own order. See [QueryOptions] for the page size and starting
-     * point, and [QueryResponse] for the page and the cursors to the pages around it.
-     *
-     * [filter] is applied before the page is cut, so a page is full whenever enough models match.
-     *
-     * @throws AuthorizationException if there is any matching model the actor is not allowed to read.
-     */
-    public fun <T : Any> query(
-        collection: ModelView<T, C>,
-        options: QueryOptions? = null,
-        filter: ((Model<T>) -> Boolean)? = null
-    ): QueryResponse<T>
-
-    /**
-     * Like [query], but silently drops the models the actor is not authorized to read instead of throwing (the same
-     * relation [listIfAuthorized] has to [list]). Only usable where authorization is enforced; see the
-     * interface-level doc.
-     *
-     * The authorization check runs before the page is cut, so pages are full and the cursors describe what this actor
-     * can see. [filter] therefore never sees a model the actor may not read.
-     */
-    public fun <T : Any> queryIfAuthorized(
-        collection: ModelView<T, C>,
-        options: QueryOptions? = null,
-        filter: ((Model<T>) -> Boolean)? = null
-    ): QueryResponse<T>
+    // Reading a view is done on the view itself: `view.count()`, `view.asList()`, `view.query(...)` and friends,
+    // in collection/ViewOperations.kt. They take this Reader as a context parameter, so inside a read block you do
+    // not write it out.
 
     /**
      * Finds the IDs of all models that reference [id] through any relation property (regardless of model type).

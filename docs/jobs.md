@@ -301,8 +301,8 @@ to 30 days, delete a terminal job once it has aged past their value:
 | `deadLetterRetention` | `DeadLettered`, `CompensationFailed` |
 
 A succeeded job has already released its attached-data claims (see below), so its retention is only about bounding
-storage and event log history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings also
-bound how long that data can leak.
+storage and event log history. A cancelled or dead-lettered job keeps its claims until it is deleted, so these settings
+also bound how long that data can leak.
 
 The full set of statuses:
 
@@ -483,7 +483,7 @@ recurring work with no model behind them — "delete expired sessions every nigh
 
 ### Jobs from a plugin
 
-A [plugin](plugins.md) registers its own job types and crons from `mergeSpecification`:
+A plugin registers its own job types and crons from `mergeSpecification`:
 
 ```kotlin
 override fun mergeSpecification(previous: Specification<C, V>): Specification<C, V> =

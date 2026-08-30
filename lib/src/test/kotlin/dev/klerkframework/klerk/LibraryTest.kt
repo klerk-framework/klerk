@@ -12,6 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.days
+import dev.klerkframework.klerk.collection.*
 
 
 class LibraryTest {
@@ -31,7 +32,7 @@ class LibraryTest {
             val context = Ctx.system()
 
             val somethingNull: Model<Book>? = klerk.read(context) {
-                firstOrNull(views.books.all) { true }
+                views.books.all.firstOrNull { true }
             }
 
             assertNull(somethingNull)
@@ -40,7 +41,7 @@ class LibraryTest {
             createBookHarryPotter1(klerk, rowling)
 
             val somethingNotNull: Model<Book>? = klerk.read(context) {
-                firstOrNull(views.books.all) { true }
+                views.books.all.firstOrNull { true }
             }
             assertNotNull(somethingNotNull)
 
@@ -54,7 +55,7 @@ class LibraryTest {
             klerk.meta.start()
 
             val somethingNotNullAgain: Model<Book>? = klerk.read(context) {
-                firstOrNull(views.books.all) { true }
+                views.books.all.firstOrNull { true }
             }
             assertNotNull(somethingNotNullAgain)
 

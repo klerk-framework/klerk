@@ -4,14 +4,14 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
 import dev.klerkframework.klerk.misc.encodeBase64UrlSafe
 import dev.klerkframework.klerk.read.Reader
-import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.read.unauthorized
 
 /**
  * A named, typed, live-updating list of [Model] instances of type `T`. Every [ModelViews] gets an `all` view for
  * free; everything else is built by composing [filter], [filterStates] and [sorted] on top of it (or on another
  * view), then exposing it via [register]. See docs/views.md.
  *
- * Views are read through [Reader] (`withReader`, or the higher-level `Reader.list`/`get`/etc.), never queried
+ * Views are read through [Reader] (`withReader`, or the higher-level `count`/`asList`/`query` extensions), never queried
  * directly — that's what makes their content authorization-checked and lock-consistent with the rest of a read.
  */
 public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: ModelView<T, C>?) {
@@ -81,17 +81,17 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
             return null
         }
         index?.let { return it }
-        // The index must reflect every model, not the ones this reader may see, so it is only ever built from the
-        // unauthorized reader that Klerk's own read paths use. Authorization is applied to the result afterwards.
-        if (reader !is ReaderWithoutAuth<*, *>) {
-            return null
-        }
+        // The index must reflect every model, not the ones this reader may see, so it is always built through the
+        // unauthorized reader behind the caller's. Authorization is applied to the result afterwards. Unwrapping here
+        // rather than demanding a ReaderWithoutAuth is what lets a plain `view.count()` inside a read block be cheap:
+        // the receiver there is a ReaderWithAuth, and it used to fall through to reading every model.
+        val unauthorized = reader.unauthorized() ?: return null
         synchronized(this) {
             index?.let { return it }
-            val parentIds = requireNotNull(parent).ensureIndex(reader) ?: return null
+            val parentIds = requireNotNull(parent).ensureIndex(unauthorized) ?: return null
             val built = HashSet<Int>()
             parentIds.forEach { id ->
-                if (matches(reader.get(ModelID(id)))) {
+                if (matches(unauthorized.get(ModelID(id)))) {
                     built.add(id)
                 }
             }
@@ -181,7 +181,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     public fun <V> withReader(reader: Reader<C, V>): Sequence<Model<T>> =
         memberIds(reader).map { reader.get(it) }
 
-    public fun <V> isEmpty(reader: Reader<C, V>): Boolean = memberIds(reader).none()
+    /** Answered from the index when there is one, so no model is read. */
+    public open fun <V> isEmpty(reader: Reader<C, V>): Boolean =
+        ensureIndex(reader)?.isEmpty() ?: memberIds(reader).none()
 
     /**
      * @return the id this view was [register]ed under, combined with the owning model class's name (e.g.
@@ -201,7 +203,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open fun getView(): ModelViews<T, C> = parent?.getView() ?: throw IllegalStateException()
-    public fun <V> count(reader: Reader<C, V>): Int = memberIds(reader).count()
+    /** Answered from the index when there is one, so no model is read. */
+    public open fun <V> count(reader: Reader<C, V>): Int =
+        ensureIndex(reader)?.size ?: memberIds(reader).count()
 
     /**
      * @return true if a model with this id is currently in the view
@@ -250,6 +254,11 @@ public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     override val isIndexable: Boolean get() = previous.isIndexable
     override fun containsId(id: Int): Boolean = previous.containsId(id)
     override fun <V> ensureIndex(reader: Reader<C, V>): Set<Int>? = previous.ensureIndex(reader)
+
+    // Cardinality is a question about membership, so it goes to the parent rather than through memberIds, which would
+    // read and sort every model just to count it.
+    override fun <V> count(reader: Reader<C, V>): Int = previous.count(reader)
+    override fun <V> isEmpty(reader: Reader<C, V>): Boolean = previous.isEmpty(reader)
 
     // Unlike the other views this must read every model, since only the model itself answers where it sorts.
     override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> {

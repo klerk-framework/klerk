@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import dev.klerkframework.klerk.collection.*
 
 
 class MutationTest {
