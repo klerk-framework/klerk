@@ -55,5 +55,6 @@ Note that readSuspend may impact performance if you call slow suspending functio
 Use the `IfAuthorized` variants when the actor is expected to see only part of a collection (e.g. a supplier that
 may read only its own rows) — `list`/`query` would turn the whole page into a 500. They only work inside a
 `klerk.read` block; inside DSL functions the reader does not enforce authorization, so use `get`/`list` there.
-`queryIfAuthorized` filters after paging, so a page may hold fewer than `maxItems` even when later pages have more.
+
+See [querying.md](querying.md) for reading a page at a time, filtering and cursors.
 

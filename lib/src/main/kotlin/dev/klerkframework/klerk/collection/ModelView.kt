@@ -1,11 +1,10 @@
 package dev.klerkframework.klerk.collection
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.misc.decodeBase64String
-import dev.klerkframework.klerk.misc.encodeBase64
+import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
+import dev.klerkframework.klerk.misc.encodeBase64UrlSafe
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
-import kotlin.time.Instant
 
 /**
  * A named, typed, live-updating list of [Model] instances of type `T`. Every [ModelViews] gets an `all` view for
@@ -105,9 +104,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * The ids of this view, taken from its index: the parent's ids in order, narrowed by a set lookup. No model is
      * read at all. Null when this view has no index, leaving the caller to evaluate its predicate the slow way.
      */
-    protected fun <V> indexedMemberIds(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<ModelID<T>>? {
+    protected fun <V> indexedMemberIds(reader: Reader<C, V>): Sequence<ModelID<T>>? {
         val members = ensureIndex(reader) ?: return null
-        return requireNotNull(parent).memberIds(reader, cursor).filter { members.contains(it.value) }
+        return requireNotNull(parent).memberIds(reader).filter { members.contains(it.value) }
     }
 
     /** Drops this view's index, and every derived view's, so that they are rebuilt against freshly loaded models. */
@@ -169,20 +168,20 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * answered from this without reading anything at all, so a view that knows its ids directly — say from a `Map` it
      * maintains through [ModelViews.didCreate] and friends — answers them for free.
      *
-     * @param cursor where to start and in which direction, for a paginated read. Views that don't handle it themselves
-     * pass it on to the view they are derived from.
+     * Return the whole view: pagination is applied by `Reader.query` to whatever this returns, so a view never has to
+     * deal with cursors.
      */
-    public abstract fun <V> memberIds(reader: Reader<C, V>, cursor: QueryListCursor? = null): Sequence<ModelID<T>>
+    public abstract fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>>
 
     /**
      * The content of this view, as models. Reads each model of [memberIds] through [reader], so be careful not to use
      * the sequence after the reader has been released — that may lead to ConcurrentModificationException. It is
      * usually better to use the methods in Reader (query, list etc.).
      */
-    public fun <V> withReader(reader: Reader<C, V>, cursor: QueryListCursor? = null): Sequence<Model<T>> =
-        memberIds(reader, cursor).map { reader.get(it) }
+    public fun <V> withReader(reader: Reader<C, V>): Sequence<Model<T>> =
+        memberIds(reader).map { reader.get(it) }
 
-    public fun <V> isEmpty(reader: Reader<C, V>): Boolean = memberIds(reader, null).none()
+    public fun <V> isEmpty(reader: Reader<C, V>): Boolean = memberIds(reader).none()
 
     /**
      * @return the id this view was [register]ed under, combined with the owning model class's name (e.g.
@@ -202,7 +201,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open fun getView(): ModelViews<T, C> = parent?.getView() ?: throw IllegalStateException()
-    public fun <V> count(reader: Reader<C, V>): Int = memberIds(reader, null).count()
+    public fun <V> count(reader: Reader<C, V>): Int = memberIds(reader).count()
 
     /**
      * @return true if a model with this id is currently in the view
@@ -212,7 +211,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      */
     public open fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean {
         ensureIndex(reader)?.let { return it.contains(value.value) }
-        return memberIds(reader, null).any { it.value == value.value }
+        return memberIds(reader).any { it.value == value.value }
     }
 
     /**
@@ -253,8 +252,8 @@ public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     override fun <V> ensureIndex(reader: Reader<C, V>): Set<Int>? = previous.ensureIndex(reader)
 
     // Unlike the other views this must read every model, since only the model itself answers where it sorts.
-    override fun <V> memberIds(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<ModelID<T>> {
-        val models = previous.withReader(reader, cursor)
+    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> {
+        val models = previous.withReader(reader)
         return (if (ascending) models.sortedBy(selector) else models.sortedByDescending(selector)).map { it.id }
     }
 
@@ -272,9 +271,9 @@ public class IncludeStatesModelView<T : Any, C : KlerkContext>(
     override fun matches(model: Model<T>): Boolean =
         (included == null || included.contains(model.state)) && (excluded == null || !excluded.contains(model.state))
 
-    override fun <V> memberIds(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<ModelID<T>> =
-        indexedMemberIds(reader, cursor)
-            ?: previous.memberIds(reader, cursor).filter { matches(reader.get(it)) }
+    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> =
+        indexedMemberIds(reader)
+            ?: previous.memberIds(reader).filter { matches(reader.get(it)) }
 
 }
 
@@ -288,9 +287,9 @@ public class FilteredModelView<T : Any, C : KlerkContext>(
 
     override fun matches(model: Model<T>): Boolean = predicate(model)
 
-    override fun <V> memberIds(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<ModelID<T>> =
-        indexedMemberIds(reader, cursor)
-            ?: previous.memberIds(reader, cursor).filter { predicate(reader.get(it)) }
+    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> =
+        indexedMemberIds(reader)
+            ?: previous.memberIds(reader).filter { predicate(reader.get(it)) }
 
 }
 
@@ -315,88 +314,38 @@ public class AllModelView<T : Any, C : KlerkContext>(
     override fun containsId(id: Int): Boolean = view.containsId(id)
     override fun <V> ensureIndex(reader: Reader<C, V>): Set<Int> = view.allIdSet()
 
-    override fun <V> memberIds(reader: Reader<C, V>, cursor: QueryListCursor?): Sequence<ModelID<T>> {
-        if (cursor == null) {
-            return all.asSequence().map { ModelID(it) }
-        }
-        require(cursor.field == QueryCursorField.CREATED_AT)
-        if (cursor.after != null) {
-            return ascending(cursor.after, cursor.including, reader)
-        }
-        if (cursor.before != null) {
-            return descending(cursor.before, cursor.including, reader)
-        }
-        throw IllegalStateException()
-    }
-
-    private fun <V> ascending(after: Instant, include: Boolean, reader: Reader<C, V>): Sequence<ModelID<T>> {
-        // find the model created at or the first model created after the cursor
-        // we know that the list is sorted by createdAt and all models have unique createdAt
-        val startIndex = all.binarySearch { ref ->
-            val model = reader.get(ModelID(ref))
-            if (model.createdAt < after) {
-                return@binarySearch -1
-            }
-            if (model.createdAt == after) {
-                return@binarySearch 0
-            }
-            val index = all.indexOf(ref)
-            if (index == 0) {
-                return@binarySearch -1
-            }
-            val previous = reader.get(ModelID(all[index - 1]))
-            return@binarySearch if (previous.createdAt < after) 0 else 1
-        }
-        if (include) {
-            return all.subList(startIndex, all.lastIndex + 1).asSequence().map { ModelID(it) }
-        }
-        if (startIndex + 1 > all.lastIndex) {
-            return emptySequence()
-        }
-        return all.subList(startIndex + 1, all.lastIndex + 1).asSequence().map { ModelID(it) }
-    }
-
-    private fun <V> descending(before: Instant, include: Boolean, reader: Reader<C, V>): Sequence<ModelID<T>> {
-        // find the model created at or the last model created before the cursor
-        // we know that the list is sorted by createdAt and all models have unique createdAt
-        val startIndex = all.binarySearch { ref ->
-            val model = reader.get(ModelID(ref))
-            if (model.createdAt > before) {
-                return@binarySearch 1
-            }
-            if (model.createdAt == before) {
-                return@binarySearch 0
-            }
-            val index = all.indexOf(ref)
-            if (index == 0) {
-                return@binarySearch 0
-            }
-            if (index == all.lastIndex) {
-                return@binarySearch 1
-            }
-            val next = reader.get(ModelID(all[index + 1]))
-            return@binarySearch if (next.createdAt > before) 0 else -1
-        }
-        if (startIndex < 0) {
-            return all.asReversed().asSequence().map { ModelID(it) }
-        }
-        if (include && startIndex < all.lastIndex) {
-            return all.subList(0, startIndex + 1).asReversed().asSequence().map { ModelID(it) }
-        }
-        return all.subList(0, startIndex).asReversed().asSequence().map { ModelID(it) }
-    }
+    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> = all.asSequence().map { ModelID(it) }
 
     override fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean = view.containsId(value.value)
 }
 
+/** Where [QueryOptions.cursor] sits relative to the page. */
+public enum class PageDirection {
+    /** The page starts at the cursor. This is what the cursors in a [QueryResponse] are meant for. */
+    FROM,
+
+    /** The page starts immediately after the cursor. */
+    AFTER,
+
+    /** The page ends immediately before the cursor. */
+    BEFORE,
+}
+
 /**
- * Page-size and starting point for a paginated [ModelView] read (`Reader.query`).
+ * Page size and starting point for a paginated [ModelView] read (`Reader.query`).
  *
+ * @param maxItems the most items the page may hold.
+ * @param cursor where the page sits; null means the start of the view.
+ * @param direction where [cursor] sits relative to the page.
+ * @param countTotal read the whole view to fill in [QueryResponse.totalCount] and
+ * [QueryResponse.cursorLastPage]. Off by default, since it costs a full pass.
  * @throws IllegalArgumentException if [maxItems] is not positive
  */
 public data class QueryOptions(
     val maxItems: Int = 50,
-    val cursor: QueryListCursor? = null
+    val cursor: QueryListCursor? = null,
+    val direction: PageDirection = PageDirection.FROM,
+    val countTotal: Boolean = false,
 ) {
 
     init {
@@ -405,75 +354,92 @@ public data class QueryOptions(
 
 }
 
-/** One page of a paginated [ModelView] read, with cursors for the adjacent pages. */
+/**
+ * One page of a paginated [ModelView] read, with cursors for the adjacent pages. Every cursor is null when there is
+ * no such page, so a pagination control can render a link for exactly the cursors it was given.
+ *
+ * @param totalCount the size of the whole view, or null unless [QueryOptions.countTotal] was set.
+ * @param cursorLastPage null unless [QueryOptions.countTotal] was set.
+ */
 public data class QueryResponse<T : Any>(
     val items: List<Model<T>>,
     val hasPreviousPage: Boolean,
     val hasNextPage: Boolean,
-    val cursorFirst: QueryListCursor?,
-    val cursorPrevious: QueryListCursor?,
-    val cursorNext: QueryListCursor?,
-    val cursorLast: QueryListCursor?,
-    val options: QueryOptions?
-)
+    val cursorFirstPage: QueryListCursor?,
+    val cursorPreviousPage: QueryListCursor?,
+    val cursorNextPage: QueryListCursor?,
+    val cursorLastPage: QueryListCursor?,
+    val totalCount: Int?,
+    val options: QueryOptions?,
+    /** Where [items] start in the view, needed by [cursorAt]. */
+    internal val offset: Int = 0,
+) {
 
-/** Which [Model] field a [QueryListCursor] is positioned against. Only [CREATED_AT] is currently supported. */
-public enum class QueryCursorField {
-    CREATED_AT
+    /**
+     * A cursor pointing at the item at [index] of [items]. Use it when every row needs its own position rather than
+     * the page as a whole — a GraphQL edge cursor, for instance.
+     *
+     * @throws IndexOutOfBoundsException if [index] is not an index of [items]
+     */
+    public fun cursorAt(index: Int): QueryListCursor {
+        if (index !in items.indices) {
+            throw IndexOutOfBoundsException("No item at index $index, the page holds ${items.size} items")
+        }
+        return QueryListCursor(offset + index, items[index].id.value)
+    }
+
 }
 
 /**
- * An opaque, serializable pagination cursor for [ModelView] reads, positioned either [after] or [before] a point in
- * [field]. Serializes to/from a compact string via [toString]/[fromString].
+ * An opaque position in a [ModelView]. Serializes to and from a URL-safe string via [toString]/[fromString]; treat
+ * that string as meaningless and don't build one yourself.
  *
- * @throws IllegalArgumentException unless exactly one of [after]/[before] is set
+ * A cursor is a position, not a snapshot: it resolves to the item it was cut at whenever that item is still in the
+ * view, so models created or deleted meanwhile neither skip nor repeat a row. If that item is gone, the raw position
+ * is used and a row may shift.
  */
-public data class QueryListCursor(
-    val after: Instant? = null,
-    val before: Instant? = null,
-    val field: QueryCursorField = QueryCursorField.CREATED_AT
+public class QueryListCursor internal constructor(
+    internal val offset: Int,
+    internal val anchor: Int?,
 ) {
 
     init {
-        require((after != null || before != null) && (after == null || before == null)) { "One of after or before must be set" }
+        require(offset >= 0)
     }
 
-    internal var including: Boolean = false
-
     public companion object {
-        /** A cursor positioned before the earliest possible item. */
-        public val first: QueryListCursor = QueryListCursor(after = Instant.DISTANT_PAST)
-
-        /** A cursor positioned after the latest possible item. */
-        public val last: QueryListCursor = QueryListCursor(before = decode64bitMicroseconds(Long.MAX_VALUE))
-        public const val DEFAULT_ITEMS_PER_PAGE: Int = 100
+        /** The start of the view. */
+        public val first: QueryListCursor = QueryListCursor(0, null)
 
         /**
          * Parses a cursor previously serialized with [QueryListCursor.toString].
          * @throws IllegalArgumentException if [s] is not a validly encoded cursor
          */
         public fun fromString(s: String): QueryListCursor {
-            val map = mutableMapOf<String, String>()
-            val keyValues = s.decodeBase64String().split(",")
-            keyValues.forEach {
-                val (key, value) = it.split(":")
-                map[key] = value
+            val fields = try {
+                s.decodeBase64UrlSafeString().split(",").associate { field ->
+                    val separator = field.indexOf(':')
+                    require(separator > 0)
+                    field.substring(0, separator) to field.substring(separator + 1)
+                }
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("Not a cursor: '$s'", e)
             }
-            return QueryListCursor(
-                after = map["a"]?.toLong()?.let { decode64bitMicroseconds(it) },
-                before = map["b"]?.toLong()?.let { decode64bitMicroseconds(it) },
-                field = QueryCursorField.valueOf(map["f"] ?: throw IllegalArgumentException())
-            )
+            val offset = fields["o"]?.toIntOrNull()
+            require(offset != null && offset >= 0) { "Not a cursor: '$s'" }
+            val anchorField = fields["a"]
+            val anchor = if (anchorField == null) null else {
+                requireNotNull(anchorField.toIntOrNull()) { "Not a cursor: '$s'" }
+            }
+            return QueryListCursor(offset, anchor)
         }
     }
 
-    override fun toString(): String {
-        if (after != null) {
-            return "a:${after.to64bitMicroseconds()},f:$field".encodeBase64()
-        }
-        if (before != null) {
-            return "b:${before.to64bitMicroseconds()},f:$field".encodeBase64()
-        }
-        throw IllegalStateException()
-    }
+    override fun toString(): String =
+        (if (anchor == null) "o:$offset" else "o:$offset,a:$anchor").encodeBase64UrlSafe()
+
+    override fun equals(other: Any?): Boolean =
+        other is QueryListCursor && other.offset == offset && other.anchor == anchor
+
+    override fun hashCode(): Int = offset * 31 + (anchor ?: 0)
 }

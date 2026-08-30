@@ -84,6 +84,13 @@ public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): St
 internal fun String.encodeBase64(): String = Base64.getEncoder().encodeToString(this.toByteArray())
 internal fun String.decodeBase64String(): String = String(Base64.getDecoder().decode(this))
 
+/** Base64 without `+`, `/` or `=`, so the result is safe to put in a URL without escaping. */
+internal fun String.encodeBase64UrlSafe(): String =
+    Base64.getUrlEncoder().withoutPadding().encodeToString(this.toByteArray())
+
+/** @throws IllegalArgumentException if this is not valid URL-safe base64 */
+internal fun String.decodeBase64UrlSafeString(): String = String(Base64.getUrlDecoder().decode(this))
+
 /**
  * Klerk uses 64bit microseconds for timestamps, but Instant has higher precision than that. When serializing and
  * deserializing, the result can differ from the original. This function removes precision to make the two equal.

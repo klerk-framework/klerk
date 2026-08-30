@@ -81,6 +81,7 @@ contain `.` or spaces.
 
 Some views can't be expressed as a one-line `filter` — e.g. a view that joins across two managed models. For these,
 implement `ModelView<T, C>` directly. The one method you must write is `memberIds`: the ids in the view, in order.
+Return all of them — a view defines order and membership only, and `Reader.query` does the paging.
 
 ```kotlin
 class AuthorsWithAtLeastTwoBooks<V>(
@@ -88,13 +89,13 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Context>,
 ) : ModelView<Author, Context>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Context, V>, cursor: QueryListCursor?): Sequence<ModelID<Author>> {
-        val withTwoBooks = books.withReader(reader, null)
+    override fun <V> memberIds(reader: Reader<Context, V>): Sequence<ModelID<Author>> {
+        val withTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
             .filterValues { it >= 2 }
             .keys
-        return authors.memberIds(reader, cursor).filter { withTwoBooks.contains(it) }
+        return authors.memberIds(reader).filter { withTwoBooks.contains(it) }
     }
 }
 ```
@@ -120,7 +121,7 @@ class BookViews : ModelViews<Book, Context>() {
 }
 ```
 
-`memberIds` then becomes `authors.memberIds(reader, cursor).filter { (booksPerAuthor[it] ?: 0) >= 2 }`, which reads no
+`memberIds` then becomes `authors.memberIds(reader).filter { (booksPerAuthor[it] ?: 0) >= 2 }`, which reads no
 `Book` at all. Override `contains` too when you can answer it directly — `validReferences` asks it once per command, so
 it is on the write path rather than the read path.
 
@@ -193,8 +194,7 @@ val greatEstablishedAuthors = klerk.read(context) {
 }
 ```
 
-See [reading.md](reading.md) for the full set of `Reader` operations (`list`, `get`, `firstOrNull`, pagination via
-`QueryOptions`/`QueryListCursor`, etc.).
+See [querying.md](querying.md) for how to read a view: `list`, `query`, filtering, and pagination.
 
 ## Using a view as a reference constraint
 

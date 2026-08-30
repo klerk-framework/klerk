@@ -16,16 +16,16 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Ctx>,
 ) : ModelView<Author, Ctx>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Ctx, V>, cursor: QueryListCursor?): Sequence<ModelID<Author>> {
-        val authorsWithTwoBooks = books.withReader(reader, null)
+    override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> {
+        val authorsWithTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
             .filterValues { it >= 2 }
             .keys
-        return authors.memberIds(reader, cursor).filter { authorsWithTwoBooks.contains(it) }
+        return authors.memberIds(reader).filter { authorsWithTwoBooks.contains(it) }
     }
 
     override fun <V> contains(value: ModelID<*>, reader: Reader<Ctx, V>): Boolean =
-        memberIds(reader, null).any { it.value == value.value }
+        memberIds(reader).any { it.value == value.value }
 
 }

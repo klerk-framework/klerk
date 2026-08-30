@@ -49,7 +49,7 @@ class ActionTest {
             klerk.meta.start()
             val author = createAuthorJKRowling(klerk)
             klerk.read(Ctx.system()) {
-                val all = collections.authors.all.withReader(this, null).toList()
+                val all = collections.authors.all.withReader(this).toList()
                 println(all.size)
             }
             val result = klerk.handle(

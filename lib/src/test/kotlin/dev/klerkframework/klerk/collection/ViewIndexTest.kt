@@ -221,8 +221,8 @@ class ViewIndexTest {
         private val authors: ModelView<Author, Ctx>,
         val ids: MutableSet<Int>,
     ) : ModelView<Author, Ctx>(authors) {
-        override fun <V> memberIds(reader: Reader<Ctx, V>, cursor: QueryListCursor?): Sequence<ModelID<Author>> =
-            authors.memberIds(reader, cursor).filter { ids.contains(it.value) }
+        override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> =
+            authors.memberIds(reader).filter { ids.contains(it.value) }
 
         override fun <V> contains(value: ModelID<*>, reader: Reader<Ctx, V>): Boolean = ids.contains(value.value)
     }

@@ -102,8 +102,10 @@ public interface Reader<C : KlerkContext, V> {
     ): List<Model<T>>
 
     /**
-     * Cursor-paginated variant of [list]. See [QueryOptions] for paging/cursor parameters and [QueryResponse] for
-     * the returned page metadata.
+     * Reads one page of [collection], in the view's own order. See [QueryOptions] for the page size and starting
+     * point, and [QueryResponse] for the page and the cursors to the pages around it.
+     *
+     * [filter] is applied before the page is cut, so a page is full whenever enough models match.
      *
      * @throws AuthorizationException if there is any matching model the actor is not allowed to read.
      */
@@ -118,8 +120,8 @@ public interface Reader<C : KlerkContext, V> {
      * relation [listIfAuthorized] has to [list]). Only usable where authorization is enforced; see the
      * interface-level doc.
      *
-     * The page's cursor metadata still comes from the full result, so a page may contain fewer than
-     * [QueryOptions.maxItems] items even when later pages hold more.
+     * The authorization check runs before the page is cut, so pages are full and the cursors describe what this actor
+     * can see. [filter] therefore never sees a model the actor may not read.
      */
     public fun <T : Any> queryIfAuthorized(
         collection: ModelView<T, C>,

@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.collection.PageDirection
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.collection.QueryOptions
 import dev.klerkframework.klerk.collection.QueryResponse
@@ -47,86 +48,117 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
+    ): QueryResponse<T> = queryInternal(collection, options, filter, null)
+
+    /**
+     * Cuts one page out of [collection], in the view's own order.
+     *
+     * One pass over the view's ids. Models outside the page are read only when [authorize] or [filter] has to look at
+     * them; both run before the page is cut, so a page is full whenever enough models match.
+     *
+     * @param authorize applied before [filter], and may replace the model (masked properties). Returning null drops it.
+     */
+    internal fun <T : Any> queryInternal(
+        collection: ModelView<T, C>,
+        options: QueryOptions?,
+        filter: ((Model<T>) -> Boolean)?,
+        authorize: ((Model<T>) -> Model<T>?)?,
     ): QueryResponse<T> {
-        var cursor = options?.cursor
-        if (cursor?.after == Instant.DISTANT_PAST) {
-            cursor = null   // a tiny optimization
+        val opts = options ?: QueryOptions()
+        val maxItems = opts.maxItems
+        val cursorOffset = opts.cursor?.offset ?: 0
+        val anchor = opts.cursor?.anchor
+
+        // Where the page starts, relative to the item the cursor points at.
+        val delta = when (opts.direction) {
+            PageDirection.FROM -> 0
+            PageDirection.AFTER -> 1
+            PageDirection.BEFORE -> -maxItems
         }
+        // How far the cursor's position may move when its anchor is found somewhere else than where it was cut.
+        val slack = if (anchor == null) 0 else maxItems
+        // Everything the answer can need: the page wherever it ends up, the item after it (proving hasNextPage), and
+        // the item one page back (anchoring cursorPreviousPage).
+        val windowFrom = maxOf(0, cursorOffset - slack + delta - maxItems)
+        val windowTo = cursorOffset + slack + delta + maxItems
 
-        // We will request one or two extra items so we know if there are previous/next. To do this, we will treat the
-        // instant as including. The cursor is copied first because the caller may hand us a shared one
-        // (QueryListCursor.first and .last are singletons) and concurrent reads must not write to it.
-        cursor = cursor?.copy()?.also { it.including = true }
-        val desiredNumberOfItems = options?.maxItems ?: QueryListCursor.DEFAULT_ITEMS_PER_PAGE
-        val itemsToTake = desiredNumberOfItems + if (cursor == null) 1 else 2
-
-        var items = collection.withReader(this, cursor)
-            .filter { filter?.invoke(it) ?: true }
-            .take(itemsToTake)
-            .toList()
-
-        if (items.isEmpty()) {
-            return QueryResponse(
-                items,
-                hasPreviousPage = false,
-                hasNextPage = false,
-                cursorFirst = null,
-                cursorPrevious = null,
-                cursorNext = null,
-                cursorLast = null,
-                options = options
-            )
+        val window = mutableListOf<Model<T>>()
+        val needsModel = filter != null || authorize != null
+        var index = 0
+        var exhausted = true
+        for (id in collection.memberIds(this)) {
+            var model: Model<T>? = null
+            if (needsModel) {
+                model = get(id)
+                if (authorize != null) {
+                    model = authorize(model) ?: continue
+                }
+                if (filter != null && !filter(model)) {
+                    continue
+                }
+            }
+            if (index in windowFrom..windowTo) {
+                window.add(model ?: get(id))
+            }
+            index++
+            if (!opts.countTotal && index > windowTo) {
+                exhausted = false
+                break
+            }
         }
+        // Only meaningful when the pass reached the end, which is always the case when counting.
+        val viewSize = if (exhausted) index else null
+        val totalCount = if (opts.countTotal) index else null
 
-        if (cursor?.before != null) {       // the items are in reversed order
-            items = items.asReversed()
+        // Where the cursor actually points now. The anchor wins over the stored position, but only within one page of
+        // it — beyond that we are no longer looking at the same part of the view.
+        val anchorIndex = anchor?.let { wanted ->
+            val inWindow = window.indexOfFirst { it.id.value == wanted }
+            if (inWindow < 0) null else (windowFrom + inWindow).takeIf { it in (cursorOffset - maxItems)..(cursorOffset + maxItems) }
         }
+        val resolved = anchorIndex ?: cursorOffset
+        val pageStart = maxOf(0, resolved + delta)
 
-        val firstIsInvalid = !(cursor?.after?.let { it < items.first().createdAt } ?: true)
-        val lastIsInvalid = !(cursor?.before?.let { it > items.last().createdAt } ?: true)
-        var hasNextPage = false
-        var hasPreviousPage = false
+        val pageFrom = pageStart - windowFrom
+        val items = if (pageFrom >= window.size) emptyList() else
+            window.subList(pageFrom, minOf(pageFrom + maxItems, window.size)).toList()
 
-        if (firstIsInvalid) {
-            items = items.drop(1)
-            hasPreviousPage = true
-        }
-        if (lastIsInvalid) {
-            items = items.dropLast(1)
-            hasNextPage = true
-        }
-
-        val extraItemsToRemove = items.size - desiredNumberOfItems
-        val descending = cursor?.before != null
-        if (descending && extraItemsToRemove > 0) {
-            items = items.drop(extraItemsToRemove)
-            hasPreviousPage = true
-        }
-        if (!descending && extraItemsToRemove > 0) {
-            items = items.dropLast(extraItemsToRemove)
-            hasNextPage = true
-        }
-
-        val previousCursor = if (hasPreviousPage) QueryListCursor(before = items.first().createdAt) else null
-        val nextCursor = if (hasNextPage) QueryListCursor(after = items.last().createdAt) else null
+        val hasNextPage = pageFrom + maxItems < window.size
+        val hasPreviousPage = pageStart > 0
+        // A cursor kept from before a lot of models were deleted can sit past the end of the view. The page is then
+        // empty, which is the honest answer, but stepping back should land on content rather than on more empty pages.
+        val previousStart = maxOf(0, minOf(pageStart, viewSize ?: pageStart) - maxItems)
 
         return QueryResponse(
             items,
             hasPreviousPage = hasPreviousPage,
             hasNextPage = hasNextPage,
-            cursorFirst = QueryListCursor.first,
-            cursorPrevious = previousCursor,
-            cursorNext = nextCursor,
-            cursorLast = QueryListCursor.last,
-            options = options
+            cursorFirstPage = if (hasPreviousPage) QueryListCursor.first else null,
+            cursorPreviousPage = if (hasPreviousPage)
+                QueryListCursor(previousStart, window.getOrNull(previousStart - windowFrom)?.id?.value) else null,
+            cursorNextPage = if (hasNextPage)
+                QueryListCursor(pageStart + maxItems, window.getOrNull(pageFrom + maxItems)?.id?.value) else null,
+            cursorLastPage = lastPageCursor(totalCount, maxItems, pageStart),
+            totalCount = totalCount,
+            options = options,
+            offset = pageStart,
         )
+    }
+
+    /** Null when the total is unknown or the page at hand already is the last one. */
+    private fun lastPageCursor(totalCount: Int?, maxItems: Int, pageStart: Int): QueryListCursor? {
+        if (totalCount == null || totalCount == 0) {
+            return null
+        }
+        val lastStart = ((totalCount - 1) / maxItems) * maxItems
+        return if (lastStart <= pageStart) null else QueryListCursor(lastStart, null)
     }
 
     override fun <T : Any> list(
         modelView: ModelView<T, C>,
         filter: ((Model<T>) -> Boolean)?
     ): List<Model<T>> =
-        modelView.filter(filter = filter).withReader(this, null).toList()
+        modelView.filter(filter = filter).withReader(this).toList()
 
     override fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>> {
         throw RuntimeException("Reader.listIfAuthorized was called but the reader doesn't enforce authorization")
