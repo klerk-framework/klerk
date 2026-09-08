@@ -106,7 +106,7 @@ class PropertyAuthorizationTest {
             val klerk = startKlerk()
             val rowling = createAuthorJKRowling(klerk)
 
-            val listed = klerk.read(Ctx.unauthenticated()) { views.authors.all.asListIfAuthorized() }
+            val listed = klerk.read(Ctx.unauthenticated()) { views.authors.all.asSequence().toList() }
             assertTrue(listed.isNotEmpty())
             assertTrue(listed.all { it.props.lastName.valueOrNullIfNotAuthorized == null })
 

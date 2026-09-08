@@ -32,6 +32,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
     override val jobs: JobReader = UnauthorizedJobReader(klerk)
 
+    override val attachedData: AttachedDataReader = UnauthorizedAttachedDataReader(klerk)
+
     override fun eventLog(
         id: ModelID<out Any>?,
         after: Instant,
@@ -165,47 +167,18 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         return if (lastStart <= pageStart) null else QueryListCursor(lastStart, null)
     }
 
-    override fun <T : Any> list(
-        modelView: ModelView<T, C>,
-        filter: ((Model<T>) -> Boolean)?
-    ): List<Model<T>> =
-        modelView.filter(filter = filter).withReader(this).toList()
+    // Nothing to skip: this reader does not enforce authorization, so every model in the view is visible.
+    override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> = collection.withReader(this)
 
-    override fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>> {
-        throw RuntimeException("Reader.listIfAuthorized was called but the reader doesn't enforce authorization")
-    }
-
-    override fun <T : Any> queryIfAuthorized(
+    override fun <T : Any> queryOrThrow(
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
-    ): QueryResponse<T> {
-        throw RuntimeException("Reader.queryIfAuthorized was called but the reader doesn't enforce authorization")
-    }
+    ): QueryResponse<T> = queryInternal(collection, options, filter, null)
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? {
         throw RuntimeException("Reader.findIfAuthorized was called but the reader doesn't enforce authorization")
     }
-
-    override fun <T : Any> firstOrNull(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T>? {
-        if (collection.isEmpty(this)) {
-            return null
-        }
-        val list = list(collection, filter = filter)
-        if (list.isEmpty()) {
-            return null
-        }
-        return list[0]
-    }
-
-    override fun <T : Any> getFirstWhere(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T> =
-        list(collection, filter).first()
 
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
         return ModelCache.getOrNull(id)

@@ -32,7 +32,7 @@ class LibraryTest {
             val context = Ctx.system()
 
             val somethingNull: Model<Book>? = klerk.read(context) {
-                views.books.all.firstOrNull { true }
+                views.books.all.asSequence().firstOrNull { true }
             }
 
             assertNull(somethingNull)
@@ -41,7 +41,7 @@ class LibraryTest {
             createBookHarryPotter1(klerk, rowling)
 
             val somethingNotNull: Model<Book>? = klerk.read(context) {
-                views.books.all.firstOrNull { true }
+                views.books.all.asSequence().firstOrNull { true }
             }
             assertNotNull(somethingNotNull)
 
@@ -55,7 +55,7 @@ class LibraryTest {
             klerk.meta.start()
 
             val somethingNotNullAgain: Model<Book>? = klerk.read(context) {
-                views.books.all.firstOrNull { true }
+                views.books.all.asSequence().firstOrNull { true }
             }
             assertNotNull(somethingNotNullAgain)
 

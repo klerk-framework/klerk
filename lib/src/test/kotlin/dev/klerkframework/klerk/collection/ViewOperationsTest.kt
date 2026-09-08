@@ -8,12 +8,7 @@ import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
-import dev.klerkframework.klerk.collection.*
+import kotlin.test.*
 
 class ViewOperationsTest {
 
@@ -136,11 +131,11 @@ class ViewOperationsTest {
     }
 
     /**
-     * The cheap operations must agree with the expensive one. `asList` is the reference: it reads every model of the
-     * view, so anything answered from ids instead has to come out the same.
+     * The cheap operations must agree with the expensive one. `asSequence().toList()` is the reference: it reads every
+     * model of the view, so anything answered from ids instead has to come out the same.
      */
     @Test
-    fun `the cheap operations agree with asList`() = runBlocking<Unit> {
+    fun `the cheap operations agree with a full read`() = runBlocking<Unit> {
         val (klerk, views) = start()
         klerk.meta.start()
         repeat(9) { createAuthor(klerk, if (it % 3 == 0) "Linus" else "Kalle", "%03d".format(it)) }
@@ -155,45 +150,48 @@ class ViewOperationsTest {
         klerk.read(Ctx.system()) {
             cases.forEach { (name, of) ->
                 val view = of(views)
-                val reference = view.asList()
+                val reference = view.asSequence().toList()
 
                 assertEquals(reference.size, view.count(), "$name: count")
                 assertEquals(reference.isEmpty(), view.isEmpty(), "$name: isEmpty")
                 assertEquals(reference.isNotEmpty(), view.isNotEmpty(), "$name: isNotEmpty")
                 assertEquals(reference, view.asSequence().toList(), "$name: asSequence")
                 assertEquals(reference.map { it.id }, view.ids().toList(), "$name: ids")
-                assertEquals(reference, view.asListIfAuthorized(), "$name: asListIfAuthorized")
+                assertEquals(reference, view.asSequenceOrThrow().toList(), "$name: asSequenceOrThrow")
                 assertEquals(reference.take(4), view.query(QueryOptions(maxItems = 4)).items, "$name: query")
                 assertEquals(
                     reference.take(4),
-                    view.queryIfAuthorized(QueryOptions(maxItems = 4)).items,
-                    "$name: queryIfAuthorized",
+                    view.queryOrThrow(QueryOptions(maxItems = 4)).items,
+                    "$name: queryOrThrow",
                 )
                 assertEquals(
                     reference.firstOrNull { it.props.firstName.value == "Linus" },
-                    view.firstOrNull { it.props.firstName.value == "Linus" },
-                    "$name: firstOrNull",
+                    view.asSequence().firstOrNull { it.props.firstName.value == "Linus" },
+                    "$name: asSequence().firstOrNull",
                 )
                 reference.forEach { assertTrue(it.id in view, "$name: contains ${it.id}") }
                 // Every id the view does not hold must be reported absent.
-                views.authors.all.asList().map { it.id }.filter { it !in reference.map { m -> m.id } }
+                views.authors.all.asSequence().toList().map { it.id }.filter { it !in reference.map { m -> m.id } }
                     .forEach { assertFalse(it in view, "$name: must not contain $it") }
             }
         }
     }
 
     @Test
-    fun `asList takes a filter and first throws when nothing matches`() = runBlocking<Unit> {
+    fun `asSequence composes with the stdlib sequence operators`() = runBlocking<Unit> {
         val (klerk, views) = start()
         klerk.meta.start()
         repeat(6) { createAuthor(klerk, if (it % 2 == 0) "Linus" else "Kalle", "%03d".format(it)) }
 
         klerk.read(Ctx.system()) {
-            val linuses = views.authors.all.asList { it.props.firstName.value == "Linus" }
+            val linuses = views.authors.all.asSequence().filter { it.props.firstName.value == "Linus" }.toList()
             assertEquals(3, linuses.size)
-            assertEquals("Linus", views.authors.all.first { it.props.firstName.value == "Linus" }.props.firstName.value)
+            assertEquals(
+                "Linus",
+                views.authors.all.asSequence().first { it.props.firstName.value == "Linus" }.props.firstName.value,
+            )
             assertFailsWith<NoSuchElementException> {
-                views.authors.all.first { it.props.firstName.value == "Nobody" }
+                views.authors.all.asSequence().first { it.props.firstName.value == "Nobody" }
             }
         }
     }
@@ -210,5 +208,89 @@ class ViewOperationsTest {
             with(readerAsValue) { views.authors.all.count() }
         }
         assertEquals(4, n)
+    }
+
+    /** Like [start], but an unauthenticated actor may read only the authors whose `lastName` is odd. */
+    private fun startWithHiddenAuthors(
+        storage: RamStorage = RamStorage(),
+        cache: ModelCacheSettings = ModelCacheSettings(),
+    ): Pair<Klerk<Ctx, Views>, Views> {
+        val bc = BookViews()
+        val views = Views(bc, AuthorViews(bc.all))
+        val spec = createConfig(views, configureAuthorization = {
+            readModels { negative { rule(::unauthenticatedCannotReadEvenAuthors) } }
+        })
+        return Klerk.create(spec, testSettings(storage = storage, modelCache = cache)) to views
+    }
+
+    @Suppress("unused")
+    private fun unauthenticatedCannotReadEvenAuthors(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
+        val props = args.model.props
+        if (props !is Author || args.context.actor !is Unauthenticated) {
+            return NegativeAuthorization.Pass
+        }
+        val number = props.lastName.valueWithoutAuthorization.toIntOrNull() ?: return NegativeAuthorization.Pass
+        return if (number % 2 == 0) NegativeAuthorization.Deny else NegativeAuthorization.Pass
+    }
+
+    @Test
+    fun `asSequence skips what the actor may not read, and asSequenceOrThrow throws`() = runBlocking<Unit> {
+        val (klerk, views) = startWithHiddenAuthors()
+        klerk.meta.start()
+        repeat(10) { createAuthor(klerk, "Kalle", "%03d".format(it)) }
+        val context = Ctx.unauthenticated()
+
+        val readable = klerk.read(context) { views.authors.all.asSequence().toList() }
+        assertEquals(listOf("001", "003", "005", "007", "009"), readable.map { it.props.lastName.value })
+
+        assertFailsWith<AuthorizationException> {
+            klerk.read(context) { views.authors.all.asSequenceOrThrow().toList() }
+        }
+    }
+
+    @Test
+    fun `query skips what the actor may not read, and queryOrThrow throws`() = runBlocking<Unit> {
+        val (klerk, views) = startWithHiddenAuthors()
+        klerk.meta.start()
+        repeat(10) { createAuthor(klerk, "Kalle", "%03d".format(it)) }
+        val context = Ctx.unauthenticated()
+
+        val page = klerk.read(context) { views.authors.all.query(QueryOptions(maxItems = 10)).items }
+        assertEquals(listOf("001", "003", "005", "007", "009"), page.map { it.props.lastName.value })
+
+        assertFailsWith<AuthorizationException> {
+            klerk.read(context) { views.authors.all.queryOrThrow(QueryOptions(maxItems = 10)) }
+        }
+    }
+
+    @Test
+    fun `asSequence is lazy`() = runBlocking<Unit> {
+        val storage = CountingStorage()
+        val (klerk, views) = startWithHiddenAuthors(storage, ModelCacheSettings(maxResidentModels = 1))
+        klerk.meta.start()
+        repeat(60) { createAuthor(klerk, "Kalle", "%03d".format(it)) }
+
+        storage.reads.set(0)
+        val firstTwo = klerk.read(Ctx.unauthenticated()) {
+            views.authors.all.asSequence().take(2).toList()
+        }
+        assertEquals(listOf("001", "003"), firstTwo.map { it.props.lastName.value })
+        assertTrue(storage.reads.get() <= 10, "taking 2 of 60 read ${storage.reads.get()} models")
+    }
+
+    /** `asSequence()` is lazy, so `firstOrNull` on it stops at the first match rather than materializing everything. */
+    @Test
+    fun `asSequence firstOrNull stops at the first match`() = runBlocking<Unit> {
+        val storage = CountingStorage()
+        val (klerk, views) = start(storage, ModelCacheSettings(maxResidentModels = 1))
+        klerk.meta.start()
+        repeat(60) { createAuthor(klerk, "Kalle", "%03d".format(it)) }
+
+        storage.reads.set(0)
+        val first = klerk.read(Ctx.system()) {
+            views.authors.all.asSequence().firstOrNull { it.props.lastName.value == "002" }
+        }
+        assertEquals("002", first?.props?.lastName?.value)
+        assertTrue(storage.reads.get() <= 10, "stopping at item 3 of 60 read ${storage.reads.get()} models")
     }
 }

@@ -96,8 +96,8 @@ Since `translation` lives on your `Ctx`, switching language is just constructing
 based on the request's locale, or a user's saved preference:
 
 ```kotlin
-fun contextForRequest(actor: ActorIdentity, locale: String): Context =
-    Context(actor, translation = if (locale == "sv") SwedishTranslation else DefaultTranslation)
+fun contextForRequest(actor: ActorIdentity, locale: String): Ctx =
+    Ctx(actor, translation = if (locale == "sv") SwedishTranslation else DefaultTranslation)
 ```
 
 See [testing](testing.md) for asserting on translated output (`Problem.endUserTranslatedMessage`) rather than on the

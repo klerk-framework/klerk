@@ -377,6 +377,9 @@ public value class ModelID<T : Any>(public val value: Int) {
 @JvmInline
 public value class AttachedBlobID(internal val id: Int) {
     override fun toString(): String = id.toString()
+
+    /** The same reference, with the kind forgotten — see [AttachedDataID]. */
+    public fun untyped(): AttachedDataID = AttachedDataID(id)
 }
 
 /**
@@ -395,6 +398,41 @@ public value class AttachedBlobID(internal val id: Int) {
 @JvmInline
 public value class AttachedStringID(internal val id: Int) {
     override fun toString(): String = id.toString()
+
+    /** The same reference, with the kind forgotten — see [AttachedDataID]. */
+    public fun untyped(): AttachedDataID = AttachedDataID(id)
+}
+
+/**
+ * A reference to attached data whose kind is not known yet — what an HTTP route such as `/attached/{id}/{hash}`
+ * holds.
+ *
+ * Blobs and strings share one id space, so this identifies a value on its own. Ask
+ * [KlerkAttachedData.getMetadata] what it is: [AttachedDataMetadata.kind] says which kind it turned out to be, and
+ * [asBlob]/[asString] then give the typed id needed to read the value.
+ *
+ * ```kotlin
+ * val meta = klerk.attachedData.getMetadata(id, context)
+ * val stream = when (meta.kind) {
+ *     AttachedDataKind.Blob -> klerk.attachedData.get(id.asBlob(), context)
+ *     AttachedDataKind.String -> klerk.attachedData.getStream(id.asString(), context)
+ * }
+ * ```
+ */
+@JvmInline
+public value class AttachedDataID(public val value: Int) {
+    override fun toString(): String = value.toString()
+
+    /** This reference as a blob id. Reading a value that is a string through it throws. */
+    public fun asBlob(): AttachedBlobID = AttachedBlobID(value)
+
+    /** This reference as a string id. Reading a value that is a blob through it throws. */
+    public fun asString(): AttachedStringID = AttachedStringID(value)
+
+    public companion object {
+        /** The id in [value], or null if it is not one. For parsing a path parameter. */
+        public fun parse(value: String?): AttachedDataID? = value?.toIntOrNull()?.let { AttachedDataID(it) }
+    }
 }
 
 /**
@@ -431,6 +469,8 @@ public enum class AttachedDataVisibility {
  *
  * All of it is fixed when the data is uploaded and never changes.
  *
+ * @property id what this describes. A URL needs it together with [hash], so it is carried here rather than having to
+ * be threaded alongside.
  * @property kind whether the value is a blob or a string.
  * @property hash SHA-256 of the value, as lowercase hex. Put it in URLs: ids are recycled after the data they refer to
  * has been deleted, hashes are not, so an id alone is not a safe cache key.
@@ -438,6 +478,7 @@ public enum class AttachedDataVisibility {
  * @property custom whatever was provided as metadata to [KlerkAttachedData.prepare], e.g. a content type.
  */
 public data class AttachedDataMetadata(
+    val id: AttachedDataID,
     val kind: AttachedDataKind,
     val visibility: AttachedDataVisibility,
     val createdAt: Instant,

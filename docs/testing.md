@@ -1,6 +1,7 @@
 # Testing
 
-Because a Klerk specification *is* your business logic, testing it usually means testing your `Specification` end-to-end:
+Because a Klerk specification *is* your business logic, testing it usually means testing your `Specification`
+end-to-end:
 start a real `Klerk` instance backed by in-memory storage, submit commands, and assert on the resulting models and
 `CommandResult`s. There's no need to mock Klerk itself.
 
@@ -9,7 +10,7 @@ start a real `Klerk` instance backed by in-memory storage, submit commands, and 
 ```kotlin
 runBlocking {
     val bookViews = BookViews()
-    val collections = MyCollections(bookViews, AuthorViews(bookViews.all))
+    val collections = Views(bookViews, AuthorViews(bookViews.all))
     val klerk = Klerk.create(createSpecification(collections), KlerkSettings(persistence = RamStorage()))
     klerk.meta.start()
 
@@ -29,13 +30,13 @@ models from storage rather than losing them.
 
 ## Issuing commands
 
-Use `Context.system()` (or another actor via `ActorIdentity`, see [context.md](context.md)) and
+Use `Ctx.system()` (or another actor via `ActorIdentity`, see [context.md](context.md)) and
 `CommandToken.simple()` when the test doesn't care about idempotency:
 
 ```kotlin
 val result = klerk.handle(
     Command(event = CreateAuthor, model = null, params = createAstridParameters),
-    Context.system(),
+    Ctx.system(),
     ProcessingOptions(CommandToken.simple()),
 )
 ```
@@ -60,7 +61,7 @@ See [events-and-commands.md](events-and-commands.md) for the full shape of `Comm
 Read back through the normal `klerk.read` API (see [reading.md](reading.md)):
 
 ```kotlin
-val updated = klerk.read(Context.system()) { get(authorId) }
+val updated = klerk.read(Ctx.system()) { get(authorId) }
 assertEquals("a", updated.props.firstName.value)
 ```
 
@@ -75,7 +76,7 @@ var amateurTriggered = false
 onEnterAmateurStateActionCallback = { amateurTriggered = true }
 
 val result =
-    klerk.handle(Command(ImproveAuthor, rowling, null), Context.system(), ProcessingOptions(CommandToken.simple()))
+    klerk.handle(Command(ImproveAuthor, rowling, null), Ctx.system(), ProcessingOptions(CommandToken.simple()))
 
 when (result) {
     is CommandResult.Failure -> fail(result.problems.first().toString())
@@ -96,7 +97,7 @@ KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 // ... handle the command that schedules the job ...
 klerk.jobs.runUntilIdle()
-assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(result.jobs.single(), Context.system()).status)
+assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(result.jobs.single(), Ctx.system()).status)
 ```
 
 Anything time-dependent — `scheduleAt`, retry backoff, cron — is driven by the settings clock, so set a `MutableClock`
@@ -105,12 +106,12 @@ and advance it rather than waiting. See [jobs.md](jobs.md#testing) and [time.md]
 ## Testing specification mistakes
 
 Misconfigurations (undeclared events used in `onEvent`, a `Ref` parameter missing `validReferences`, a state
-transitioning to itself, model classes with `var` properties, ...) are caught by `SpecificationBuilder.build()` itself, so they
-can be asserted on directly without starting Klerk:
+transitioning to itself, model classes with `var` properties, ...) are caught by `SpecificationBuilder.build()` itself,
+so they can be asserted on directly without starting Klerk:
 
 ```kotlin
 assertFailsWith<IllegalConfigurationException> {
-    SpecificationBuilder<Context, MyCollections>(collections).build {
+    SpecificationBuilder<Ctx, Views>(views).build {
         // ... the invalid specification
     }
 }
@@ -119,5 +120,5 @@ assertFailsWith<IllegalConfigurationException> {
 ## Translation
 
 If your application supports multiple languages (see [translation](translation.md)), pass the `Translation` you want to
-test through the `Ctx` (e.g. `Context.swedishUnauthenticated()` in this repo's test suite) and assert on
+test through the `Ctx` (e.g. `Ctx.swedishUnauthenticated()` in this repo's test suite) and assert on
 `Problem.endUserTranslatedMessage` rather than on the underlying rule.

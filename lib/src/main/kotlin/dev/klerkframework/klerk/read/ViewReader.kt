@@ -8,27 +8,24 @@ import dev.klerkframework.klerk.collection.QueryResponse
 
 /**
  * How a view is actually read. Not part of [Reader]'s public surface: reading a view is done on the view
- * (`view.count()`, `view.asList()`, `view.query(...)`, see `collection/ViewOperations.kt`), and those extensions
+ * (`view.count()`, `view.asSequence().toList()`, `view.query(...)`, see `collection/ViewOperations.kt`), and those extensions
  * dispatch through here. An extension cannot be overridden, and each of these means something different for an
  * authorizing reader than for the internal one, so the polymorphism has to live somewhere.
  */
 internal interface ViewReader<C : KlerkContext, V> {
 
-    fun <T : Any> getFirstWhere(collection: ModelView<T, C>, filter: (Model<T>) -> Boolean): Model<T>
+    /** Lazily, skipping the models the actor may not read rather than throwing. */
+    fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>>
 
-    fun <T : Any> firstOrNull(collection: ModelView<T, C>, filter: (Model<T>) -> Boolean): Model<T>?
-
-    fun <T : Any> listIfAuthorized(collection: ModelView<T, C>): List<Model<T>>
-
-    fun <T : Any> list(modelView: ModelView<T, C>, filter: ((Model<T>) -> Boolean)? = null): List<Model<T>>
-
+    /** Skips the models the actor may not read, before the page is cut. */
     fun <T : Any> query(
         collection: ModelView<T, C>,
         options: QueryOptions? = null,
         filter: ((Model<T>) -> Boolean)? = null,
     ): QueryResponse<T>
 
-    fun <T : Any> queryIfAuthorized(
+    /** Throws [dev.klerkframework.klerk.AuthorizationException] if the actor may not read a matching model. */
+    fun <T : Any> queryOrThrow(
         collection: ModelView<T, C>,
         options: QueryOptions? = null,
         filter: ((Model<T>) -> Boolean)? = null,

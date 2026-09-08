@@ -11,7 +11,7 @@ This page covers how views are *declared*. For how to actually read them, see [r
 Every managed model type gets its own view class, a subclass of `ModelViews<T, C>`:
 
 ```kotlin
-class BookViews : ModelViews<Book, Context>()
+class BookViews : ModelViews<Book, Ctx>()
 ```
 
 All of an application's view classes are grouped into one top-level data class. This class is the `V` type parameter you
@@ -19,12 +19,12 @@ see everywhere (`Klerk<C, V>`, `StateMachine<T, S, C, V>`, ...), and it's what y
 `SpecificationBuilder` and into your state machine builder functions:
 
 ```kotlin
-data class MyCollections(
+data class Views(
     val books: BookViews,
-    val authors: AuthorViews<MyCollections>,
+    val authors: AuthorViews<Views>,
 )
 
-SpecificationBuilder<Context, MyCollections>(collections).build {
+SpecificationBuilder<Ctx, Views>(views).build {
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
         model(Author::class, authorStateMachine(collections), collections.authors)
@@ -39,7 +39,7 @@ SpecificationBuilder<Context, MyCollections>(collections).build {
 instance of that type, ordered by creation time. Everything else is built from it:
 
 ```kotlin
-class AuthorViews<V>(val allBooks: AllModelView<Book, Context>) : ModelViews<Author, Context>() {
+class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     private val greatAuthorNames = setOf("Astrid", "Elsa")
 
@@ -85,11 +85,11 @@ Return all of them — a view defines order and membership only, and `query` doe
 
 ```kotlin
 class AuthorsWithAtLeastTwoBooks<V>(
-    private val authors: ModelView<Author, Context>,
-    private val books: AllModelView<Book, Context>,
-) : ModelView<Author, Context>(authors) {
+    private val authors: ModelView<Author, Ctx>,
+    private val books: AllModelView<Book, Ctx>,
+) : ModelView<Author, Ctx>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Context, V>): Sequence<ModelID<Author>> {
+    override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> {
         val withTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
@@ -108,7 +108,7 @@ The pattern that makes a custom view genuinely cheap is to maintain your own loo
 `didCreate`/`didUpdate`/`didDelete` hooks on the `ModelViews` of whatever the view depends on, and answer from it:
 
 ```kotlin
-class BookViews : ModelViews<Book, Context>() {
+class BookViews : ModelViews<Book, Ctx>() {
     val booksPerAuthor = mutableMapOf<ModelID<Author>, Int>()
 
     override fun didCreate(created: Model<Book>) {
@@ -131,7 +131,7 @@ different models may be constructed in an order you don't control. Use the `init
 once all managed models (and therefore all `ModelViews` instances) exist:
 
 ```kotlin
-class AuthorViews<V>(val allBooks: AllModelView<Book, Context>) : ModelViews<Author, Context>() {
+class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     lateinit var establishedGreatWithAtLeastTwoBooks: AuthorsWithAtLeastTwoBooks<V>
 
@@ -152,13 +152,13 @@ built on top of `all` immediately:
 
 ```kotlin
 val astrid = createAuthorAstrid(klerk)
-klerk.read(Context.system()) {
+klerk.read(Ctx.system()) {
     assertTrue { astrid in collections.authors.all }
 }
 
-klerk.handle(Command(DeleteAuthor, astrid, null), Context.system(), ProcessingOptions(CommandToken.simple()))
+klerk.handle(Command(DeleteAuthor, astrid, null), Ctx.system(), ProcessingOptions(CommandToken.simple()))
 
-klerk.read(Context.system()) {
+klerk.read(Ctx.system()) {
     assertFalse { astrid in collections.authors.all }
 }
 ```
@@ -190,11 +190,11 @@ Views are read through a `Reader`, e.g. inside `klerk.read`:
 
 ```kotlin
 val greatEstablishedAuthors = klerk.read(context) {
-    views.authors.establishedGreatAuthors.asList()
+    views.authors.establishedGreatAuthors.asSequence().toList()
 }
 ```
 
-See [reading.md](reading.md) for how to read a view: `count`, `asList`, `query`, filtering and pagination.
+See [reading.md](reading.md) for how to read a view: `count`, `asSequence`, `query`, filtering and pagination.
 
 ## Using a view as a reference constraint
 

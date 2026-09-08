@@ -42,35 +42,36 @@ context(reader: Reader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.ids(): Sequence<ModelID<T>> = memberIds(reader)
 
 /**
- * The models in the view, in its own order, lazily: only the ones actually consumed are read. Prefer this to
- * [asList] whenever you do not need every model — `asSequence().take(10)`, `asSequence().any { … }`.
+ * The models in the view, in its own order, lazily: only the ones actually consumed are read. Take what you need —
+ * `asSequence().take(10)`, `asSequence().any { … }` — and `asSequence().toList()` when you genuinely want all of
+ * them, which reads and holds every model in the view.
+ *
+ * Models the actor may not read are silently skipped. Use [asSequenceOrThrow] when you expect every match to be
+ * readable and want a loud failure otherwise.
  *
  * Do not use the sequence after the read block has ended — the view may have changed underneath it.
  */
 context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequence(): Sequence<Model<T>> = withReader(reader)
-
-/** The first model matching [filter], or null. Stops as soon as one matches. */
-context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.firstOrNull(
-    filter: (Model<T>) -> Boolean = { true },
-): Model<T>? = reader.viewReader().firstOrNull(this, filter)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequence(): Sequence<Model<T>> =
+    reader.viewReader().sequence(this)
 
 /**
- * The first model matching [filter].
- * @throws NoSuchElementException if nothing matches
+ * Like [asSequence], but throws instead of skipping a model the actor may not read.
+ *
+ * Do not use the sequence after the read block has ended — the view may have changed underneath it.
+ *
+ * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
  */
 context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.first(
-    filter: (Model<T>) -> Boolean = { true },
-): Model<T> = reader.viewReader().getFirstWhere(this, filter)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequenceOrThrow(): Sequence<Model<T>> = withReader(reader)
 
 /**
  * One page of the view. See [QueryOptions] for the page size and starting point, and [QueryResponse] for the page
  * and the cursors around it. [filter] is applied before the page is cut, so a page is full whenever enough models
  * match.
  *
- * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
+ * Models the actor may not read are skipped before the page is cut, so pages stay full and cursors stay correct.
+ * Use [queryOrThrow] when you expect every match to be readable and want a loud failure otherwise.
  */
 context(reader: Reader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.query(
@@ -79,31 +80,12 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.query(
 ): QueryResponse<T> = reader.viewReader().query(this, options, filter)
 
 /**
- * Like [query], but silently drops models the actor may not read instead of throwing. Only usable where
- * authorization is enforced, i.e. inside a `klerk.read` block.
+ * Like [query], but throws instead of skipping a model the actor may not read.
+ *
+ * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
  */
 context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.queryIfAuthorized(
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.queryOrThrow(
     options: QueryOptions? = null,
     filter: ((Model<T>) -> Boolean)? = null,
-): QueryResponse<T> = reader.viewReader().queryIfAuthorized(this, options, filter)
-
-/**
- * Every model in the view, as a list. Unbounded: it reads and holds all of them, and a model that is not resident
- * is fetched from storage. Reach for [count], [isEmpty], [firstOrNull], [asSequence] or [query] when they answer
- * the question, and use this when you genuinely want the whole thing.
- *
- * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read one of them
- */
-context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asList(
-    filter: ((Model<T>) -> Boolean)? = null,
-): List<Model<T>> = reader.viewReader().list(this, filter)
-
-/**
- * Like [asList], but silently drops models the actor may not read instead of throwing. Only usable where
- * authorization is enforced, i.e. inside a `klerk.read` block.
- */
-context(reader: Reader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asListIfAuthorized(): List<Model<T>> =
-    reader.viewReader().listIfAuthorized(this)
+): QueryResponse<T> = reader.viewReader().queryOrThrow(this, options, filter)

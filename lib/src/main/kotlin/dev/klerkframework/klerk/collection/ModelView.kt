@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.read.unauthorized
  * free; everything else is built by composing [filter], [filterStates] and [sorted] on top of it (or on another
  * view), then exposing it via [register]. See docs/views.md.
  *
- * Views are read through [Reader] (`withReader`, or the higher-level `count`/`asList`/`query` extensions), never queried
+ * Views are read through [Reader] (`withReader`, or the higher-level `count`/`asSequence`/`query` extensions), never queried
  * directly — that's what makes their content authorization-checked and lock-consistent with the rest of a read.
  */
 public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: ModelView<T, C>?) {

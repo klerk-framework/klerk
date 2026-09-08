@@ -389,6 +389,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
         transaction(database) {
             AttachedData.select(
+                AttachedData.id,
                 AttachedData.owner,
                 AttachedData.kind,
                 AttachedData.visibility,
@@ -469,6 +470,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
 
     private fun ResultRow.toAttachedDataMetadata(): AttachedDataMetadata = AttachedDataMetadata(
+        id = AttachedDataID(this[AttachedData.id]),
         kind = AttachedDataKind.entries[this[AttachedData.kind].toInt()],
         visibility = AttachedDataVisibility.entries[this[AttachedData.visibility].toInt()],
         createdAt = decode64bitMicroseconds(this[AttachedData.created]),

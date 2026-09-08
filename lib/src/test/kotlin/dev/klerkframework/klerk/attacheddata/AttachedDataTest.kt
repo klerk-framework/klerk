@@ -572,13 +572,86 @@ open class AttachedDataTest {
     }
 
     @Test
-    fun `getMetadata inside a read block throws`() = runBlocking {
+    fun `getMetadata inside a read block throws, and says what to use instead`() = runBlocking {
         val klerk = start()
         val id = klerk.attachedData.prepare(blob("locked"), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
-        assertFailsWith<IllegalStateException> {
+        val thrown = assertFailsWith<IllegalStateException> {
             klerk.readSuspend(Ctx.system()) { klerk.attachedData.getMetadata(id, Ctx.system()) }
+        }
+        assertTrue(thrown.message!!.contains("reader.attachedData.metadata"))
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `metadata is read inside a read block, in the same snapshot as the model`() = runBlocking {
+        val klerk = start()
+        val id = klerk.attachedData.prepare(blob("in the block"), AuthorPicture::class, Ctx.system())
+        val authorID = createAuthorWithPicture(klerk, id)
+
+        val (author, metadata) = klerk.read(Ctx.system()) {
+            val author = get(authorID)
+            author to attachedData.metadata(requireNotNull(author.props.picture).id)
+        }
+
+        assertEquals(id, author.props.picture?.id)
+        assertEquals(klerk.attachedData.getMetadata(id, Ctx.system()), metadata)
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `metadata inside a read block is authorized exactly like the suspending one`() = runBlocking {
+        val klerk = start()
+        val readable = klerk.attachedData.prepare(blob("readable"), AuthorPicture::class, Ctx.system())
+        val secret = klerk.attachedData.prepare(blob("secret"), AuthorPicture::class, Ctx.system())
+        createAuthorWithPicture(klerk, readable, lastName = "Lindgren")
+        createAuthorWithPicture(klerk, secret, lastName = "Secretive")
+
+        val context = Ctx.authenticationIdentity()
+        klerk.read(context) {
+            assertEquals(8L, attachedData.metadata(readable).size)
+            assertFailsWith<AuthorizationException> { attachedData.metadata(secret) }
+            assertNull(attachedData.metadataOrNull(secret.untyped()))
+            assertNull(attachedData.metadataOrNull(AttachedDataID(4711)))
+        }
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `an id whose kind is unknown is resolved by getMetadata`() = runBlocking {
+        val klerk = start()
+        val picture = klerk.attachedData.prepare(blob("a picture"), AuthorPicture::class, Ctx.system())
+        createAuthorWithPicture(klerk, picture)
+        val chapter = prepareString(klerk, "a chapter")
+
+        val untypedPicture = picture.untyped()
+        val untypedChapter = chapter.untyped()
+        assertEquals(AttachedDataKind.Blob, klerk.attachedData.getMetadata(untypedPicture, Ctx.system()).kind)
+        assertEquals(AttachedDataKind.String, klerk.attachedData.getMetadata(untypedChapter, Ctx.system()).kind)
+
+        // and the typed id it hands back is the one that reads the value
+        assertEquals(
+            "a picture",
+            String(klerk.attachedData.get(untypedPicture.asBlob(), Ctx.system()).readAllBytes())
+        )
+        assertEquals("a chapter", klerk.attachedData.get(untypedChapter.asString(), Ctx.system()))
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `an id used as the wrong kind is still refused`() = runBlocking {
+        val klerk = start()
+        val picture = klerk.attachedData.prepare(blob("a picture"), AuthorPicture::class, Ctx.system())
+        createAuthorWithPicture(klerk, picture)
+
+        assertFailsWith<NoSuchElementException> {
+            klerk.attachedData.getMetadata(picture.untyped().asString(), Ctx.system())
+        }
+        klerk.read(Ctx.system()) {
+            assertFailsWith<NoSuchElementException> {
+                attachedData.metadata(picture.untyped().asString())
+            }
         }
         klerk.meta.stop()
     }

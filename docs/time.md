@@ -14,8 +14,8 @@ Use `kotlin.time.Clock` and `kotlin.time.Instant` — not the `kotlinx.datetime`
 
 | Situation                                                        | Source of "now"                                                        |
 |------------------------------------------------------------------|------------------------------------------------------------------------|
-| Handling a command                                               | `Context.time`, supplied by the caller                                 |
-| Reading                                                          | `Context.time`                                                         |
+| Handling a command                                               | `Ctx.time`, supplied by the caller                                     |
+| Reading                                                          | `Ctx.time`                                                             |
 | Validation, authorization, `onEnter`/`onExit`/`onEvent`          | `args.time`, which is the context's time                               |
 | A state-machine time trigger firing                              | The **settings clock**; the context comes from `systemContextProvider` |
 | Deciding a job is ready, a backoff has elapsed, a cron has fired | The **settings clock**                                                 |

@@ -399,7 +399,8 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             entries[id] = AttachedDataEntry(
                 owner = null,
                 metadata = AttachedDataMetadata(
-                    kind, visibility, createdAt, digest.size, digest.hash, metadata, digest.contentType
+                    AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, metadata,
+                    digest.contentType
                 ),
                 expires = expires,
                 claimedByJob = claimedByJob,
@@ -470,7 +471,14 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * The one read path: authorize, check that the id was used as the kind it actually is, then fetch the value.
      */
     private suspend fun read(id: Int, expected: AttachedDataKind, publicId: Any, context: C): InputStream {
-        val entry = authorizeRead(entries[id], publicId, context, "klerk.attachedData.get")
+        val entry = authorizeRead(
+            entries[id],
+            publicId,
+            context,
+            "klerk.attachedData.get",
+            "Reading large data under it would block the application. Read the id inside the read block and call " +
+                    "klerk.attachedData.get after it.",
+        )
         requireKind(entry, expected, publicId)
         val row =
             settings.persistence.getAttachedData(id) ?: throw NoSuchElementException("No data found for id $publicId")
@@ -492,15 +500,44 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     override suspend fun getMetadata(id: AttachedStringID, context: C): AttachedDataMetadata =
         readMetadata(id.id, AttachedDataKind.String, id, context)
 
+    override suspend fun getMetadata(id: AttachedDataID, context: C): AttachedDataMetadata =
+        readMetadata(id.value, expected = null, id, context)
+
+    /**
+     * @param expected the kind the caller has claimed the id is, or null when the caller does not know yet (an
+     * [AttachedDataID], e.g. one taken from a URL).
+     */
     private suspend fun readMetadata(
         id: Int,
-        expected: AttachedDataKind,
+        expected: AttachedDataKind?,
         publicId: Any,
         context: C
     ): AttachedDataMetadata {
-        val entry = authorizeRead(entries[id], publicId, context, "klerk.attachedData.getMetadata")
+        val entry = authorizeRead(
+            entries[id],
+            publicId,
+            context,
+            "klerk.attachedData.getMetadata",
+            "Read it inside the block with reader.attachedData.metadata(...) instead.",
+        )
         return requireKind(entry, expected, publicId)
     }
+
+    /**
+     * The metadata of the data with [id], read with the read lock already held — this is what backs
+     * [dev.klerkframework.klerk.AttachedDataReader], i.e. reading metadata inside a read block.
+     */
+    internal fun metadataWithLockHeld(
+        id: AttachedDataID,
+        expected: AttachedDataKind?,
+        context: C,
+    ): AttachedDataMetadata = requireKind(authorizeReadLocked(entries[id.value], id, context), expected, id)
+
+    /** As [metadataWithLockHeld], for a reader that does not enforce authorization (state machine functions). */
+    internal fun metadataWithLockHeldWithoutAuth(
+        id: AttachedDataID,
+        expected: AttachedDataKind?,
+    ): AttachedDataMetadata = requireKind(existing(entries[id.value], id), expected, id)
 
     /**
      * Rejects an id used as the wrong kind, e.g. a blob id passed as an [AttachedStringID]. Checked after
@@ -513,11 +550,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      */
     private fun requireKind(
         entry: AttachedDataEntry,
-        expected: AttachedDataKind,
+        expected: AttachedDataKind?,
         id: Any
     ): AttachedDataMetadata {
         val metadata = checkNotNull(entry.metadata) { "The data with id $id has no metadata" }
-        if (metadata.kind != expected) {
+        if (expected != null && metadata.kind != expected) {
             throw NoSuchElementException(
                 "The attached data with id $id is a ${metadata.kind}, not a $expected. Blobs and strings share one id " +
                         "space, so an id may only be used through the type it was prepared as."
@@ -621,41 +658,59 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         entry: AttachedDataEntry?,
         id: Any,
         context: C,
-        caller: String
+        caller: String,
+        advice: String,
     ): AttachedDataEntry {
-        ReadBlockGuard.checkNotInsideReadBlock(
-            caller,
-            "Reading large data under it would block the application. Read the id inside the read block and call " +
-                    "$caller after it.",
-        )
+        ReadBlockGuard.checkNotInsideReadBlock(caller, advice)
+        val existing = existing(entry, id)
+        // Public data skips the rules entirely, before the lock is even taken, so serving it never contends with
+        // command processing.
+        if (context.actor == SystemIdentity || existing.metadata?.visibility == AttachedDataVisibility.Public) {
+            return existing
+        }
+        return readWriteLock.withRead { authorizeReadLocked(existing, id, context) }
+    }
+
+    /** The data with [id], or the reason there is nothing to read. */
+    private fun existing(entry: AttachedDataEntry?, id: Any): AttachedDataEntry {
         if (entry == null || entry.isExpired(settings.now())) {
             throw NoSuchElementException("No data found for id $id")
         }
         // Unclaimed data is not reachable: attached data is always read through the model that owns it.
-        val ownerId = entry.owner ?: throw NoSuchElementException(
-            "The data with id $id has not been attached to a model yet"
-        )
-        if (context.actor == SystemIdentity || entry.metadata?.visibility == AttachedDataVisibility.Public) {
-            return entry
-        }
-        readWriteLock.withRead {
-            val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
-                ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
-            val args = ArgsForAttachedDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
-            if (specification.authorization.attachedDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
-                throw AuthorizationException(
-                    KlerkErrorCode.AttachedDataReadPositiveAuthorizationMissing,
-                    "Not allowed to read attached data"
-                )
-            }
-            if (specification.authorization.attachedDataReadNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
-                throw AuthorizationException(
-                    KlerkErrorCode.AttachedDataReadNegativeAuthorizationExist,
-                    "Not allowed to read attached data"
-                )
-            }
-        }
+        entry.owner ?: throw NoSuchElementException("The data with id $id has not been attached to a model yet")
         return entry
+    }
+
+    /**
+     * The rules themselves, with the read lock already held — so that they can also be evaluated from inside a read
+     * block, where the lock is held for the whole block and is not reentrant.
+     */
+    internal fun authorizeReadLocked(
+        entry: AttachedDataEntry?,
+        id: Any,
+        context: C,
+    ): AttachedDataEntry {
+        val existing = existing(entry, id)
+        if (context.actor == SystemIdentity || existing.metadata?.visibility == AttachedDataVisibility.Public) {
+            return existing
+        }
+        val ownerId = requireNotNull(existing.owner)
+        val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
+            ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
+        val args = ArgsForAttachedDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
+        if (specification.authorization.attachedDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+            throw AuthorizationException(
+                KlerkErrorCode.AttachedDataReadPositiveAuthorizationMissing,
+                "Not allowed to read attached data"
+            )
+        }
+        if (specification.authorization.attachedDataReadNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+            throw AuthorizationException(
+                KlerkErrorCode.AttachedDataReadNegativeAuthorizationExist,
+                "Not allowed to read attached data"
+            )
+        }
+        return existing
     }
 
     // ---------------------------------------------------------------- commit-time diff

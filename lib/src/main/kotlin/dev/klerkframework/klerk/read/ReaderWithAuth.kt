@@ -23,6 +23,10 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override val jobs: JobReader get() = jobReader
 
+    private val attachedDataReader = AuthorizingAttachedDataReader(klerk, context)
+
+    override val attachedData: AttachedDataReader get() = attachedDataReader
+
     override fun eventLog(
         id: ModelID<out Any>?,
         after: Instant,
@@ -52,38 +56,14 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
 
-    override fun <T : Any> getFirstWhere(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T> = checkAuth(withoutAuth.getFirstWhere(collection, filter))
-
-    override fun <T : Any> listIfAuthorized(
-        collection: ModelView<T, C>,
-    ): List<Model<T>> {
-        return withoutAuth.list(collection)
+    // Reads through the unauthorized reader so that an unreadable model can be dropped instead of throwing, which is
+    // the point of the plain (non-OrThrow) view reads. Lazy: only what the caller consumes is read.
+    override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> =
+        collection.withReader(withoutAuth)
             .map { propertyAuth.secure(it) }
             .filter { isAuthorized(it, context, klerk.spec, withoutAuth) }
-    }
-
-    override fun <T : Any> list(
-        modelView: ModelView<T, C>,
-        filter: ((Model<T>) -> Boolean)?
-    ): List<Model<T>> {
-        val result = withoutAuth.list(modelView, filter).map { checkAuth(it) }
-        result.forEach { modelsRead.add(it) }
-        return result
-    }
 
     override fun <T : Any> query(
-        collection: ModelView<T, C>,
-        options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
-    ): QueryResponse<T> {
-        val result = withoutAuth.query(collection, options, filter)
-        return result.copy(items = result.items.map { checkAuth(it) })
-    }
-
-    override fun <T : Any> queryIfAuthorized(
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?
@@ -94,13 +74,17 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             propertyAuth.secure(model).takeIf { isAuthorized(it, context, klerk.spec, withoutAuth) }
         }
 
+    override fun <T : Any> queryOrThrow(
+        collection: ModelView<T, C>,
+        options: QueryOptions?,
+        filter: ((Model<T>) -> Boolean)?
+    ): QueryResponse<T> {
+        val result = withoutAuth.query(collection, options, filter)
+        return result.copy(items = result.items.map { checkAuth(it) })
+    }
+
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? =
         withoutAuth.getOrNull(id)?.let { checkAuth(it) }
-
-    override fun <T : Any> firstOrNull(
-        collection: ModelView<T, C>,
-        filter: (Model<T>) -> Boolean
-    ): Model<T>? = withoutAuth.firstOrNull(collection, filter)?.let { checkAuth(it) }
 
     override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? =
         propertyAuth.secure(withoutAuth.get(id))
@@ -126,6 +110,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     internal fun finishRead() {
         propertyAuth.finish()
         jobReader.finish()
+        attachedDataReader.finish()
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =

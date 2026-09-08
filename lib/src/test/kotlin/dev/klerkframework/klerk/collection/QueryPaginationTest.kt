@@ -89,7 +89,7 @@ class QueryPaginationTest {
     }
 
     private suspend fun order(klerk: Klerk<Ctx, Views>, view: ModelView<Author, Ctx>): List<ModelID<Author>> =
-        klerk.read(Ctx.system()) { view.asList().map { it.id } }
+        klerk.read(Ctx.system()) { view.asSequence().toList().map { it.id } }
 
     @Test
     fun `walking forward visits every model exactly once, in the view's order`() = runBlocking<Unit> {
@@ -148,7 +148,7 @@ class QueryPaginationTest {
         val sharedContext = Ctx.system()
         createAuthors(klerk, 20, sharedContext)
 
-        val createdAt = klerk.read(Ctx.system()) { views.authors.all.asList().map { it.createdAt } }
+        val createdAt = klerk.read(Ctx.system()) { views.authors.all.asSequence().toList().map { it.createdAt } }
         assertEquals(1, createdAt.toSet().size, "the fixture must actually produce identical timestamps")
 
         val expected = order(klerk, views.authors.all)
@@ -345,7 +345,7 @@ class QueryPaginationTest {
         }
 
     @Test
-    fun `queryIfAuthorized returns full pages`() = runBlocking<Unit> {
+    fun `query returns full pages`() = runBlocking<Unit> {
         val (klerk, views) = startWithHiddenAuthors()
         klerk.meta.start()
         createAuthors(klerk, 30)
@@ -355,14 +355,14 @@ class QueryPaginationTest {
         val pages = mutableListOf<List<ModelID<Author>>>()
         var cursor: QueryListCursor? = null
         while (true) {
-            val page = klerk.read(context) { view.queryIfAuthorized(QueryOptions(maxItems = 4, cursor = cursor)) }
+            val page = klerk.read(context) { view.query(QueryOptions(maxItems = 4, cursor = cursor)) }
             pages.add(page.items.map { it.id })
             cursor = page.cursorNextPage ?: break
             check(pages.size < 100)
         }
         pages.dropLast(1).forEach { assertEquals(4, it.size, "authorization must not shrink a page") }
 
-        val readable = klerk.read(context) { view.asListIfAuthorized().map { it.id } }
+        val readable = klerk.read(context) { view.asSequence().toList().map { it.id } }
         assertEquals(15, readable.size)
         assertEquals(readable, pages.flatten())
     }

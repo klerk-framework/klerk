@@ -12,7 +12,7 @@ import kotlin.reflect.KProperty1
  * Read-only access to models, always used as the receiver inside a [dev.klerkframework.klerk.Klerk.read] (or
  * `readSuspend`) block.
  *
- * Reading a *view* is done on the view — `view.count()`, `view.asList()`, `view.query(...)` and friends, in
+ * Reading a *view* is done on the view — `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends, in
  * `dev.klerkframework.klerk.collection`. Those take this reader as a context parameter, so inside a read block, or a
  * `with(args.reader) { }` block in a DSL function, you never write it out. See docs/reading.md.
  *
@@ -33,6 +33,15 @@ public interface Reader<C : KlerkContext, V> {
      * `klerk.jobs.getJob(...)` takes the read lock itself and refuses to run inside one.
      */
     public val jobs: JobReader
+
+    /**
+     * Attached-data metadata, as part of this block's snapshot. This is how it is read inside a read block —
+     * `klerk.attachedData.getMetadata(...)` takes the read lock itself and refuses to run inside one.
+     *
+     * Only metadata: the *value* is read after the block with `klerk.attachedData.get(...)`, since holding the read
+     * lock while streaming it would block every command in the application.
+     */
+    public val attachedData: AttachedDataReader
 
     /**
      * A snapshot of the event log as of this read block. Nothing is read from storage here — call
@@ -71,7 +80,7 @@ public interface Reader<C : KlerkContext, V> {
      */
     public fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>?
 
-    // Reading a view is done on the view itself: `view.count()`, `view.asList()`, `view.query(...)` and friends,
+    // Reading a view is done on the view itself: `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends,
     // in collection/ViewOperations.kt. They take this Reader as a context parameter, so inside a read block you do
     // not write it out.
 

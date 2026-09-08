@@ -71,7 +71,7 @@ uploading is the application's own metadata and is never treated as fact.
 
 **Recognising a format is not vouching for it.** A file can satisfy two formats at once (a valid PNG that is also valid
 JavaScript), so `accept` keeps honest mistakes out, not a determined attacker. What makes serving safe is the response
-headers and the origin the bytes are served from — see [serving through a CDN](#serving-through-a-cdn).
+headers and the origin the bytes are served from — see [serving it](#serving-it).
 
 The detector itself is `KlerkSettings.contentTypeDetector`, a `ContentTypeDetector` with one method,
 `detect(head: ByteArray): String?`. The default, `DefaultContentTypeDetector`, is a small dependency-free set of
@@ -255,7 +255,7 @@ val image: InputStream = klerk.attachedData.get(blobID, context)
 `get` **must be called outside a read block**. Calling it inside `klerk.read { }` or `klerk.readSuspend { }` throws —
 attached data is often large, and holding the read lock while streaming it would block every command in the
 application. `get` acquires the lock briefly on its own to make the authorization decision, releases it, and then
-returns the stream.
+returns the stream. [Metadata](#metadata) is different: it is small, so it can be read inside a read block too.
 
 `get` throws `NoSuchElementException` if there is no data for that ID, or if the ID refers to the other kind (a blob
 read as a string, say). Data that has been prepared but not yet claimed by a command is not readable either — attached
@@ -275,6 +275,7 @@ val notes: InputStream = klerk.attachedData.getStream(notesID, context)
 
 ```kotlin
 val meta: AttachedDataMetadata = klerk.attachedData.getMetadata(blobID, context)
+meta.id             // what it describes, so a URL can be built from the metadata alone
 meta.kind           // Blob or String
 meta.visibility     // Public or Private
 meta.createdAt      // when it was uploaded
@@ -286,6 +287,33 @@ meta.custom         // whatever you passed to prepare
 Everything in it is fixed at upload time and never changes. It is authorized exactly like `get`, and refuses unclaimed
 data for the same reason — so the hash is not available in the window between `prepare` and the command that claims the
 ID. If you want the hash before then, compute it yourself while you have the bytes.
+
+Inside a read block, read it on the reader instead — the model and its metadata then come from one snapshot:
+
+```kotlin
+val (author, meta) = klerk.read(context) {
+    val author = get(authorID)
+    author to attachedData.metadata(author.props.picture.id)
+}
+```
+
+`attachedData.metadataOrNull(id)` is the variant that returns null rather than throwing.
+
+#### When you only have an ID
+
+An `AttachedDataID` is a reference whose kind is not known yet — what a URL such as `/attached/{id}/{hash}` holds.
+`getMetadata` resolves it, and `asBlob()`/`asString()` then give the typed ID needed to read the value:
+
+```kotlin
+val id = AttachedDataID.parse(idFromTheUrl) ?: return notFound()
+val meta = klerk.attachedData.getMetadata(id, context)
+val stream = when (meta.kind) {
+    AttachedDataKind.Blob -> klerk.attachedData.get(id.asBlob(), context)
+    AttachedDataKind.String -> klerk.attachedData.getStream(id.asString(), context)
+}
+```
+
+A typed ID becomes one with `untyped()`. Using the wrong typed ID still throws, so this is the only way to ask.
 
 You can attach your own metadata when preparing:
 
@@ -380,10 +408,14 @@ attaches a public value is who may publish one.
 Both kinds are therefore always prepared as `Private`, and there is no way to say otherwise — `prepare` takes a
 container declaration, not a visibility, for either one.
 
-## Serving through a CDN
+## Serving it
 
-A public image should be cached; a private one must not be. `getMetadata` gives a handler everything it needs to decide
-before it touches the value:
+A web application does not have to write this handler: klerk-web's
+[`attachedDataRoutes`](https://github.com/klerkframework/klerk-web/blob/main/docs/serving-attached-data.md) serves
+blobs and strings alike, with the rules below already applied.
+
+Everything a handler needs to decide before it touches the value is in `getMetadata`: what the bytes are, how large
+they are, and whether they are public.
 
 ```kotlin
 val meta = klerk.attachedData.getMetadata(blobID, context)
@@ -391,7 +423,7 @@ val meta = klerk.attachedData.getMetadata(blobID, context)
 // download: an HTML or SVG file served inline from your own origin is a script running as your application.
 val inlineSafe = meta.contentType in setOf("image/png", "image/jpeg", "image/gif", "image/webp")
 call.response.header(HttpHeaders.ContentType, if (inlineSafe) meta.contentType!! else "application/octet-stream")
-call.response.header(HttpHeaders.XContentTypeOptions, "nosniff")
+call.response.header("X-Content-Type-Options", "nosniff")
 if (!inlineSafe) {
     call.response.header(HttpHeaders.ContentDisposition, "attachment")
 }
@@ -399,7 +431,7 @@ call.response.header(HttpHeaders.ContentLength, meta.size.toString())
 call.response.header(
     HttpHeaders.CacheControl,
     when (meta.visibility) {
-        AttachedDataVisibility.Public -> "public, immutable, max-age=31536000"
+        AttachedDataVisibility.Public -> "public, max-age=2419200, immutable"
         AttachedDataVisibility.Private -> "private, no-store"
     }
 )
@@ -420,7 +452,8 @@ URL. It also lets you cache for as long as you like, because the URL changes whe
 that need not know in advance what it is serving — `meta.kind` tells it.
 
 **Deleted data keeps being served.** Deleting the owning model makes `get` throw immediately, but a CDN will happily go
-on serving what it already cached. If that matters, purge the URL when the data goes away.
+on serving what it already cached, for as long as the `max-age` you chose. If that matters, keep the lifetime short or
+purge the URL when the data goes away.
 
 Private data is a different story: it has a hit rate of roughly zero at a shared cache, and getting it wrong leaks one
 user's data to another. Keep the CDN out of the path for it entirely.

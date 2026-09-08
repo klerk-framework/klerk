@@ -570,6 +570,47 @@ public interface KlerkAttachedData<C : KlerkContext> {
      */
     public suspend fun getMetadata(id: AttachedStringID, context: C): AttachedDataMetadata
 
+    /**
+     * Retrieves what is known about a value whose kind is not known yet, e.g. one named by nothing but an id in a
+     * URL. [AttachedDataMetadata.kind] says which kind it turned out to be; [AttachedDataID.asBlob] and
+     * [AttachedDataID.asString] then give the typed id needed to read it.
+     *
+     * Authorized exactly like [get].
+     *
+     * @throws AuthorizationException if the actor isn't authorized
+     * @throws IllegalStateException if called inside [Klerk.read] or [Klerk.readSuspend]
+     * @throws kotlin.NoSuchElementException if there exists no data for the provided id, or if it has not yet been
+     * attached to a model
+     */
+    public suspend fun getMetadata(id: AttachedDataID, context: C): AttachedDataMetadata
+
+}
+
+/**
+ * Attached-data metadata, as part of a read block's snapshot. This is how it is read inside a read block —
+ * [KlerkAttachedData.getMetadata] takes the read lock itself and refuses to run inside one.
+ *
+ * Only metadata: the value itself is often large, so reading it stays outside the block, where holding the lock
+ * across a stream cannot block the application.
+ */
+public interface AttachedDataReader {
+
+    /**
+     * What is known about the value with [id], whichever kind it is.
+     *
+     * @throws kotlin.NoSuchElementException if there is no such data, or it has not been attached to a model
+     * @throws AuthorizationException if the actor isn't authorized
+     */
+    public fun metadata(id: AttachedDataID): AttachedDataMetadata
+
+    /** Null if there is no such data, or the actor isn't allowed to read it. */
+    public fun metadataOrNull(id: AttachedDataID): AttachedDataMetadata?
+
+    /** As [metadata], and additionally throws if the id turns out to refer to a string. */
+    public fun metadata(id: AttachedBlobID): AttachedDataMetadata
+
+    /** As [metadata], and additionally throws if the id turns out to refer to a blob. */
+    public fun metadata(id: AttachedStringID): AttachedDataMetadata
 }
 
 public interface KlerkMeta {

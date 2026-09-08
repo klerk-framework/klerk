@@ -455,7 +455,7 @@ public open class RamStorage : Persistence {
             value = bytes,
             owner = null,
             metadata = AttachedDataMetadata(
-                kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType
+                AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType
             ),
             expires = expires,
             claimedByJob = claimedByJob,

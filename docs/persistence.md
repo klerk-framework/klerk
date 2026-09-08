@@ -99,7 +99,7 @@ Migration steps describe how the application evolves, so they belong in the spec
 is a setting:
 
 ```kotlin
-val specification = SpecificationBuilder<Context, MyCollections>(collections).build {
+val specification = SpecificationBuilder<Ctx, Views>(views).build {
     migrations(setOf(RenameCoAuthorsToCoWriters))
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)

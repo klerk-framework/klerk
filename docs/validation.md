@@ -89,7 +89,7 @@ event(CreateBook) {
   parameters are even looked at. Use it for rules like "this event requires an authenticated actor":
 
   ```kotlin
-  fun preventUnauthenticated(context: Context): PropertyCollectionValidity =
+  fun preventUnauthenticated(context: Ctx): PropertyCollectionValidity =
       if (context.actor == Unauthenticated) Invalid() else Valid
   ```
 
@@ -109,7 +109,7 @@ event(CreateBook) {
 
   ```kotlin
   fun cannotHaveAnAwfulName(
-      args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>
+      args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>
   ): PropertyCollectionValidity {
       return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris")
           Invalid() else Valid
@@ -121,11 +121,11 @@ event(CreateBook) {
 
   ```kotlin
   fun onlyAllowAuthorNameAstridIfThereIsNoRowling(
-      args: ArgForVoidEvent<Author, CreateAuthorParams, Context, MyCollections>
+      args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>
   ): PropertyCollectionValidity {
       args.reader.apply {
           if (args.command.params.firstName.value != "Astrid") return Valid
-          val rowling = views.authors.all.firstOrNull { it.props.firstName.value == "Rowling" }
+          val rowling = views.authors.all.asSequence().firstOrNull { it.props.firstName.value == "Rowling" }
           return if (rowling == null) Valid else Invalid()
       }
   }

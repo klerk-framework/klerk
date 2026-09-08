@@ -11,7 +11,7 @@ In this case, many functions have a reader in the argument which is ready to be 
 provided the function updateBook to describe how a Book model should be modified on an event:
 
 ```kotlin
-fun updateBook(args: ArgForInstanceEvent<Book, Nothing?, Context, MyCollections>): Book {
+fun updateBook(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
     val numberOfLivingAuthors = with(args.reader) {
         views.authors.living.count()
     }
@@ -49,6 +49,55 @@ The reader answers questions about a single model:
 * `getOrNull(id)` — null instead of throwing.
 * `getIfAuthorizedOrNull(id)` — null when the actor may not read it.
 * `getRelated(...)` / `getRelatedInCollection(...)` — the models that reference this one.
+* `attachedData.metadata(id)` / `metadataOrNull(id)` — what is known about an
+  [attached value](attached-data.md) apart from the value itself. The value is read after the block.
+
+## Returning several values from one read block
+
+The read lock is held for the whole block, so everything a request needs should be read in **one** `klerk.read { }`
+call — separate calls let a command commit in between and hand you an inconsistent mix
+([concurrency.md](concurrency.md)). The block returns its last expression, so bundle the values.
+
+Two values — `Pair`:
+
+```kotlin
+val (author, bookCount) = klerk.read(context) {
+    Pair(get(authorId), views.books.all.count())
+}
+```
+
+Three — `Triple`:
+
+```kotlin
+val (author, book, editor) = klerk.read(context) {
+    val author = get(authorId)
+    Triple(author, get(bookId), get(author.props.editor))
+}
+```
+
+More than three — a local `data class`, so the fields stay named on the way out:
+
+```kotlin
+val page = klerk.read(context) {
+    val author = get(authorId)
+
+    data class AuthorPage(
+        val author: Model<Author>,
+        val books: List<Model<Book>>,
+        val editor: Model<User>,
+        val livingPeers: Int,
+    )
+    AuthorPage(
+        author = author,
+        books = views.books.all.asSequence().filter { it.props.author == author.id }.toList(),
+        editor = get(author.props.editor),
+        livingPeers = views.authors.living.count(),
+    )
+}
+```
+
+Filter on the sequence *inside* the block, not with `.toList().filter { … }` after it — see
+[Pick the cheapest thing](#pick-the-cheapest-thing-that-answers-the-question) below.
 
 ## Reading a view
 
@@ -60,7 +109,12 @@ reader is the receiver, you never write it out. In a DSL function, where the rea
 `with(args.reader) { … }`.
 
 ```kotlin
-val authors = klerk.read(context) { views.authors.all.asSequence().take(10).toList() }
+val livingAuthors = klerk.read(context) {
+    views.authors.all.asSequence()
+        .filter { it.props.isAlive.value }
+        .take(10)
+        .toList()
+}
 ```
 
 ### Pick the cheapest thing that answers the question
@@ -72,23 +126,25 @@ that has been evicted is read back from storage. So the difference between askin
 |---------------------------------------|------------------------------------------------------|-----------------------------------|
 | how many, is it empty, is it in there | `count()`, `isEmpty()`, `isNotEmpty()`, `id in view` | ids only, no model read           |
 | the ids                               | `ids()`                                              | ids only, lazy                    |
-| the first match                       | `firstOrNull { … }`, `first { … }`                   | stops at the first match          |
-| some of them                          | `asSequence()`                                       | lazy: reads only what you consume |
+| some of them, or the first match      | `asSequence()`                                       | lazy: reads only what you consume |
 | one page                              | `query(QueryOptions(...))`                           | bounded                           |
-| all of them                           | `asList()`                                           | unbounded                         |
+| all of them                           | `asSequence().toList()`                              | unbounded                         |
+
+`asSequence()` and `query()` skip models the actor may not read; see [Authorization](#authorization) below.
 
 ```kotlin
 klerk.read(context) {
     views.authors.all.count()
     views.authors.all.isEmpty()
     authorId in views.authors.all
-    views.authors.all.firstOrNull { it.props.isAlive.value }
+    views.authors.all.asSequence().firstOrNull { it.props.isAlive.value }
     views.authors.all.asSequence().take(10).toList()
 }
 ```
 
-`asList()` reads and holds every model in the view. Reach for it when you genuinely want all of them, and for one of the
-rows above when you don't.
+There is deliberately no `asList()`, `first()` or `firstOrNull()` on a view. `asSequence()` is lazy, so `first`,
+`firstOrNull`, `take`, `any` and `count` are the stdlib operators right there on the sequence; `asSequence().toList()`
+reads and holds every model in the view, so spelling it out keeps the cost visible.
 
 ### Reading a page
 
@@ -122,8 +178,7 @@ cursor needs.
 
 ### Filtering
 
-`query` and `asList` take a filter, applied *before* the page is cut, so a page is full whenever there are enough
-matching models:
+`query` takes a filter, applied *before* the page is cut, so a page is full whenever there are enough matching models:
 
 ```kotlin
 views.authors.all.query(options) { it.props.isAlive.value }
@@ -172,21 +227,26 @@ two requests gives no such guarantee.
 
 ## Authorization
 
-| Reading                                                         | Not authorized to read a match            |
-|-----------------------------------------------------------------|-------------------------------------------|
-| `get(id)`                                                       | throws `AuthorizationException`           |
-| `getOrNull(id)`                                                 | returns `null` (also for a missing model) |
-| `getIfAuthorizedOrNull(id)`                                     | returns `null`                            |
-| `getRelated(...)` / `getRelatedInCollection(...)`               | throws `AuthorizationException`           |
-| `view.asList()` / `view.query(options)`                         | throws `AuthorizationException`           |
-| `view.asListIfAuthorized()` / `view.queryIfAuthorized(options)` | silently skips it                         |
+| Reading                                                   | Not authorized to read a match            |
+|-----------------------------------------------------------|-------------------------------------------|
+| `get(id)`                                                 | throws `AuthorizationException`           |
+| `getOrNull(id)`                                           | returns `null` (also for a missing model) |
+| `getIfAuthorizedOrNull(id)`                               | returns `null`                            |
+| `getRelated(...)` / `getRelatedInCollection(...)`         | throws `AuthorizationException`           |
+| `attachedData.metadata(id)`                               | throws `AuthorizationException`           |
+| `attachedData.metadataOrNull(id)`                         | returns `null` (also for missing data)    |
+| `view.asSequence()` / `view.query(options)`               | silently skips it                         |
+| `view.asSequenceOrThrow()` / `view.queryOrThrow(options)` | throws `AuthorizationException`           |
 
-Use the `IfAuthorized` variants when the actor is expected to see only part of the data (e.g. a supplier that may read
-only its own rows) — the throwing variants would turn the whole page into a 500.
-`queryIfAuthorized` applies the check before the page is cut, so its pages are full and its cursors are correct.
+`asSequence()` / `query()` skip unreadable matches, which is what a list rendered for an actor that only sees part of
+the data needs (e.g. a supplier that may read only its own rows) — a throw would turn the whole page into a 500. The
+check is applied before the page is cut, so pages stay full and cursors stay correct.
 
-The `IfAuthorized` variants only work inside a `klerk.read` block. Inside DSL functions the reader does not enforce
-authorization, so use `get`/`asList`/`query` there.
+Use the `OrThrow` variants when you expect every match to be readable and a hidden row means the authorization rules are
+wrong (e.g. an admin-only all-users list), so you want a loud failure rather than a silently short page.
+
+All four work in any read context. Inside a DSL function the reader does not enforce authorization, so there they all
+return everything.
 
 ## Cost
 

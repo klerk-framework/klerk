@@ -1,8 +1,7 @@
 package dev.klerkframework.klerk
 
 
-import dev.klerkframework.klerk.collection.asList
-import dev.klerkframework.klerk.collection.first
+import dev.klerkframework.klerk.collection.asSequence
 import dev.klerkframework.klerk.collection.query
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
@@ -179,7 +178,7 @@ class ReaderTest {
             // get a combined result
             val bestAuthorAndAnotherBook = klerk.read(context) {
                 val author = get(astrid)
-                val book = collections.books.all.first { it.props.author == author.id }
+                val book = collections.books.all.asSequence().first { it.props.author == author.id }
                 AuthorAndBook(author, book)
             }
 
@@ -187,11 +186,11 @@ class ReaderTest {
 
             // read a list of things
             val authors = klerk.read(context) {
-                collections.authors.all.asList()
+                collections.authors.all.asSequence().toList()
             }
 
             val authorsWithFirstNameBertil = klerk.read(context) {
-                collections.authors.all.asList { it.props.firstName.value == "Bertil" }
+                collections.authors.all.asSequence().filter { it.props.firstName.value == "Bertil" }.toList()
             }
 
 

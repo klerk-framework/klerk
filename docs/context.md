@@ -1,8 +1,8 @@
 # Context
 
 Every operation in Klerk — reading, issuing a command, or evaluating an authorization rule — happens on behalf of
-someone, at some point in time, in some language. This is carried around in a `Ctx`, which you define yourself by
-implementing `KlerkContext`:
+someone, at some point in time, in some language. This is carried around in a class typically named `Ctx`, which you
+define yourself by implementing `KlerkContext`:
 
 ```kotlin
 interface KlerkContext {
@@ -16,7 +16,7 @@ interface KlerkContext {
 A typical application-specific context adds whatever else its rules need, e.g. a cached reference to the current user:
 
 ```kotlin
-data class Context(
+data class Ctx(
     override val actor: ActorIdentity,
     override val eventLogExtra: String? = null,
     override val time: Instant = Clock.System.now(),
@@ -25,9 +25,9 @@ data class Context(
 ) : KlerkContext {
 
     companion object {
-        fun fromUser(user: Model<User>): Context = Context(ModelIdentity(user), user = user)
-        fun unauthenticated(): Context = Context(Unauthenticated)
-        fun system(): Context = Context(SystemIdentity)
+        fun fromUser(user: Model<User>): Ctx = Ctx(ModelIdentity(user), user = user)
+        fun unauthenticated(): Ctx = Ctx(Unauthenticated)
+        fun system(): Ctx = Ctx(SystemIdentity)
     }
 }
 ```
@@ -53,7 +53,7 @@ off of. The built-in identities are:
 Business and authorization rules narrow on the concrete type, e.g.:
 
 ```kotlin
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Context, MyCollections>): NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is Unauthenticated) Deny else Pass
 }
@@ -72,7 +72,7 @@ choosing between time triggers, `scheduleAt` and cron.
 
 `translation` carries a `Translation`, which supplies human-readable text for validation messages, property names, event
 names, and so on (see [translation](translation.md)). Passing a different `Translation` per context is how you support
-multiple languages for the same actor pool — e.g. `Context.swedishUnauthenticated()` in the test suite uses a
+multiple languages for the same actor pool — e.g. `Ctx.swedishUnauthenticated()` in the test suite uses a
 `SwedishTranslation` while the default uses `DefaultTranslation`.
 
 ## eventLogExtra
@@ -88,8 +88,8 @@ Klerk sometimes needs to act without an actor supplying a context — most notab
 in the specification that builds a `Ctx` from a `SystemIdentity`:
 
 ```kotlin
-SpecificationBuilder<Context, MyCollections>(collections).build {
-    systemContextProvider { systemIdentity -> Context(systemIdentity) }
+SpecificationBuilder<Ctx, Views>(views).build {
+    systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
     // ...
 }
 ```

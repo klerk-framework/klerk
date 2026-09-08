@@ -7,12 +7,12 @@ logic of your application lives — Klerk will refuse to change a model in any w
 A state machine is built with the `stateMachine { }` DSL and wired to its model type in the specification:
 
 ```kotlin
-fun bookStateMachine(collections: MyCollections): StateMachine<Book, BookStates, Context, MyCollections> =
+fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> =
     stateMachine {
         // ...
     }
 
-SpecificationBuilder<Context, MyCollections>(collections).build {
+SpecificationBuilder<Ctx, Views>(views).build {
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
         model(Author::class, authorStateMachine(collections), collections.authors)
@@ -59,7 +59,7 @@ voidState {
     }
 }
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Context, MyCollections>): Book {
+fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>): Book {
     val params = args.command.params
     return Book(title = params.title, author = params.author, /* ... */)
 }
@@ -127,7 +127,7 @@ state(AuthorStates.Established) {
     }
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Context, MyCollections>): Instant = args.time.plus(30.seconds)
+fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant = args.time.plus(30.seconds)
 ```
 
 - `after(duration) { }` fires `duration` after the model entered the current state.
@@ -140,8 +140,8 @@ and won't be retried. Avoid triggers that create loops (e.g. a state whose time 
 with the same trigger), as this can put continuous load on the system.
 
 A time trigger fires on its own, in the background, with no command and no caller-supplied context — notice
-`ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your specification, Klerk needs a
-way to manufacture a `Ctx` for this situation, which is what `systemContextProvider` is for — see
+`ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your specification, Klerk
+needs a way to manufacture a `Ctx` for this situation, which is what `systemContextProvider` is for — see
 [context.md](context.md#systemcontextprovider).
 
 ## Executables
@@ -182,7 +182,7 @@ onEvent(DeleteAuthorAndBooks) {
     createCommands(::eventsToDeleteAuthorAndBooks)
 }
 
-fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Context, MyCollections>): List<Command<Any, Any>> {
+fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
         val books = getRelated(Book::class, requireNotNull(args.model.id))
         return books.map { Command(event = DeleteBook, model = it.id, null) } +
