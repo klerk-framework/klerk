@@ -52,7 +52,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
             currentModel = created.id,
             remainingBlocks = listOf(voidExitBlock, enterBlock),
             functionsToUpdateViews = listOf { view.internalDidCreate(created) },
-            log = listOf("Creating model using '${extractNameFromFunction(f, false)}'"),
+            log = listOf("Creating model using '${extractNameFromFunction(f)}'"),
         )
     }
 

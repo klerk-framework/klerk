@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.attacheddata.ContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
@@ -88,6 +89,29 @@ public data class Specification<C : KlerkContext, V>(
             .forEach { KlerkJson.requireStorable(it) }
     }
 
+    private fun rulesMustBeNamed() {
+        managedModels.flatMap { it.stateMachine.getAllEvents() }.forEach { reference ->
+            val event = getEvent(reference)
+            val rules = mutableListOf<Function<*>>()
+            rules.addAll(event.getContextRules<C>())
+            when (event) {
+                is VoidEventWithParameters<*, *> -> rules.addAll(event.noParamRules + event.paramRulesForVoidEvent)
+                is VoidEvent<*, *> -> rules.addAll(event.noParamRules)
+                is InstanceEventWithParameters<*, *> -> rules.addAll(event.noParamRules + event.paramRulesForInstanceEvent)
+                is InstanceEvent<*, *> -> rules.addAll(event.noParamRules)
+            }
+            rules.forEach { requireNamedRule(it, "A validation rule of the event $reference") }
+        }
+        with(authorization) {
+            listOf(
+                readModelPositiveRules, readModelNegativeRules, readPropertyPositiveRules, readPropertyNegativeRules,
+                eventPositiveRules, eventNegativeRules, eventLogPositiveRules, eventLogNegativeRules,
+                attachedDataReadPositiveRules, attachedDataReadNegativeRules, attachedDataWritePositiveRules,
+                attachedDataWriteNegativeRules, jobPositiveRules, jobNegativeRules,
+            ).flatten().forEach { requireNamedRule(it, "An authorization rule") }
+        }
+    }
+
     private fun validateMigrations() {
         migrationSteps.forEach {
             require(it.migratesToVersion > 1)
@@ -101,6 +125,7 @@ public data class Specification<C : KlerkContext, V>(
 
     private fun validate(settings: KlerkSettings) {
         modelsAndParametersMustBeStorable()
+        rulesMustBeNamed()
         parametersWithReferencesMustHaveCollectionValidation()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
@@ -804,6 +829,8 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      * The six independent authorization categories, each with a `positive { rule(...) }` / `negative { rule(...) }`
      * pair. A category with no rules denies everything in it. See the "Authorization" doc for how positive/negative
      * rules combine, or [insecureAllowEverything] to disable authorization for development.
+     *
+     * Every rule must be a named function reference, e.g. `rule(::myRule)`. A lambda is rejected when Klerk starts.
      */
     @SpecificationMarker
     public class AuthorizationRulesBlock<C : KlerkContext, V> {

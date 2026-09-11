@@ -63,7 +63,7 @@ internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader
  * backticks as written, otherwise un-camel-cased.
  */
 internal fun validatorName(function: Function<*>): String {
-    val name = (function as? KFunction<*>)?.name ?: return extractNameFromFunctionString(function.toString())
+    val name = functionName(function) ?: return extractNameFromFunctionString(function.toString())
     return if (name.contains(' ')) name else camelCaseToPretty(name)
 }
 
@@ -78,23 +78,29 @@ internal fun extractNameFromFunctionString(funString: String): String {
     return funString.substring(startIndex, endIndex)
 }
 
+/** The name of [function] if it is a function reference such as `::mustBeEven`, otherwise null (e.g. a lambda). */
+internal fun functionName(function: Function<*>): String? = (function as? KFunction<*>)?.name
+
 /**
- * Derives a human-readable name for a rule/validator function [f] via reflection, used where only a function
- * reference (not a declared name) is available, e.g. describing why a [dev.klerkframework.klerk.PropertyCollectionValidity.Invalid]
- * failed. Falls back to `"? unknown function name"` if [f] is a lambda (reflection on lambdas doesn't expose a name).
+ * @param where the kind and owner of the rule, e.g. `A validator of BookTitle`
+ * @throws IllegalConfigurationException if [rule] is not a named function reference such as `::myRule`
  */
-public fun extractNameFromFunction(f: Function<Any>, pretty: Boolean = true): String {
-    try {
-        val kFunction = (f as KFunction<*>)
-        if (kFunction.name == "execute") {
-            return kFunction.toString().split(".execute").first().split(".")
-                .last() // should probably lookup the algorithm in specification and use that to find the name (primarily using annotations)
-        }
-        return DefaultKlerkTranslation.function(f)
-    } catch (e: ClassCastException) {
-        logger.warn { "Could not figure out function name. It is probably a lambda." }
-        return "? unknown function name"
+internal fun requireNamedRule(rule: Function<*>, where: String): String = functionName(rule)
+    ?: throw IllegalConfigurationException(
+        KlerkErrorCode.RuleMustBeNamed,
+        "$where is a lambda, but it must be a named function reference (::myRule), since its name identifies the rule."
+    )
+
+/**
+ * A human-readable name for a function, e.g. `Must be even` for `::mustBeEven`, or `? unknown function name` for a
+ * lambda.
+ */
+internal fun extractNameFromFunction(f: Function<*>): String {
+    val name = functionName(f) ?: return "? unknown function name"
+    if (name == "execute") {
+        return f.toString().split(".execute").first().split(".").last()
     }
+    return camelCaseToPretty(name)
 }
 
 // why does Ktor have its own implementation of these?

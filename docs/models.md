@@ -51,9 +51,9 @@ if violated:
 * All properties must be `val`, never `var`.
 * Every property must be a `DataContainer` (see below), or a collection (`List`, `Set`, ...) of one, or a
   `ModelID<...>`, or another plain data class composed the same way (e.g. `Address(val street: Street)`).
-* Every property must be a public `val`, and the primary constructor must be public. This also applies to nested
-  classes and to event parameters classes, since Klerk reads, stores and copies them. A class that breaks a rule is
-  rejected when Klerk starts.
+* The class, its primary constructor and every property must be public, and so must any class it is nested in. This
+  also applies to nested classes, event parameters classes, `DataContainer` subclasses and the enums they hold, since
+  Klerk reads, stores and copies them. A class that breaks a rule is rejected when Klerk starts.
 
 You cannot put a raw `String`, `Int`, etc. directly on a model — everything goes through a `DataContainer`.
 
@@ -170,6 +170,24 @@ data class Author(val firstName: FirstName, val lastName: LastName) : Validatabl
 
 Full details, including how this interacts with per-container validators and event-level rules, are in
 [validation](validation.md).
+
+## Handling classes generically
+
+Code that handles any model or parameters class, e.g. a form, an export or a plugin, uses `ObjectSchema` instead of
+reflection. It describes a class the way Klerk sees it: one `SchemaField` per primary constructor parameter.
+
+```kotlin
+val schema = ObjectSchema.of(CreateBookParams::class)
+schema.fields.forEach { println("${it.name}: ${it.type}, nullable: ${it.isNullable}") }
+
+val title = schema.field("title")!!
+val params = schema.create(mapOf(title.name to title.createContainer("Dune"), "author" to authorId))
+val value = title.get(params)
+```
+
+`create` uses the default value for a field you leave out. It throws `IllegalArgumentException` for an unknown name, a
+missing required field or a value of the wrong type. `createContainer` builds a field's container from what the
+container's constructor takes, e.g. an `Instant` for an `InstantContainer`.
 
 ## Appearance
 

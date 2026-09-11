@@ -9,6 +9,8 @@ import kotlin.reflect.KProperty1
 /**
  * Base of the receiver passed to an `event(...) { }` block in the `stateMachine` DSL — where an event's validation
  * rules are attached. See [dev.klerkframework.klerk.statemachine.StateMachine.event].
+ *
+ * Every rule must be a named function reference, e.g. `validate(::myRule)`. A lambda is rejected when Klerk starts.
  */
 @SpecificationMarker
 public abstract class EventRules<C : KlerkContext> {
@@ -27,14 +29,8 @@ public abstract class EventRules<C : KlerkContext> {
  * `Address::owner`.
  */
 public abstract class EventRulesWithParameters<P : Any, C : KlerkContext> : EventRules<C>() {
-    internal val parametersValidations: MutableSet<((P) -> PropertyCollectionValidity)> = mutableSetOf()
     internal val validRefs: MutableMap<PropertyKey, ModelView<out Any, *>?> = mutableMapOf()
     internal val validEnumsMap: MutableMap<PropertyKey, Set<Enum<*>>> = mutableMapOf()
-
-    /** Adds a rule that validates the event's parameters of type [P] in isolation, without model/context access. */
-    public fun validateParameters(function: (P) -> PropertyCollectionValidity) {
-        parametersValidations.add(function)
-    }
 
     /**
      * Declares which models the `ModelID` [property] may point to. Required for every `ModelID` in the parameters —

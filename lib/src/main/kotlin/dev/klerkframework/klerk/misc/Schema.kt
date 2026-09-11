@@ -16,7 +16,6 @@ import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
 import kotlin.reflect.full.primaryConstructor
-import kotlin.reflect.jvm.isAccessible
 
 /**
  * The structure of a model props or event parameters class (or a class nested in one), as Klerk sees it: one
@@ -51,11 +50,13 @@ public class ObjectSchema<T : Any> private constructor(
         if (kClass.isAbstract || kClass.isSealed || kClass.java.isInterface) {
             unsupported(where, "$className is abstract")
         }
+        if (!isPublic(kClass)) {
+            unsupported(where, "$className is not public")
+        }
         constructor = kClass.primaryConstructor ?: unsupported(where, "$className has no primary constructor")
-        if (!constructor.visibility.isReadable()) {
+        if (constructor.visibility != KVisibility.PUBLIC) {
             unsupported(where, "the primary constructor of $className is not public")
         }
-        constructor.isAccessible = true
         if (building.size > 1 && constructor.parameters.isEmpty()) {
             unsupported(where, "$className has no constructor parameters")
         }
@@ -70,12 +71,24 @@ public class ObjectSchema<T : Any> private constructor(
             @Suppress("UNCHECKED_CAST")
             val property = propertiesByName[name] as KProperty1<Any, *>?
                 ?: unsupported(fieldWhere, "the constructor parameter is not a property")
-            if (!property.visibility.isReadable()) {
+            if (property.visibility != KVisibility.PUBLIC) {
                 unsupported(fieldWhere, "it is not public")
             }
-            property.isAccessible = true
             SchemaField(this, parameter, property, schemaType(parameter.type, fieldWhere, building + kClass))
         }
+        if (kClass.isSubclassOf(Validatable::class)) {
+            requireNamedValidators()
+        }
+    }
+
+    /** Checks the validators of a placeholder instance; a class that cannot make one is checked when validating. */
+    private fun requireNamedValidators() {
+        val placeholder = try {
+            create(fields.map { it.schemaType.dummy() }) as Validatable
+        } catch (e: Exception) {
+            return
+        }
+        placeholder.validators().forEach { requireNamedRule(it, "A validator of ${kClass.simpleName}") }
     }
 
     /** @return the field called [name], or null if there is none */
@@ -93,6 +106,7 @@ public class ObjectSchema<T : Any> private constructor(
         require(unknown.isEmpty()) { "${kClass.simpleName} has no ${unknown.joinToString(", ")}" }
         val missing = fields.filter { it.isRequired && it.name !in values }
         require(missing.isEmpty()) { "${missing.joinToString(", ") { it.name }} is missing" }
+        values.forEach { (name, value) -> field(name)!!.schemaType.requireAccepts(value, name) }
         return callConstructor(fields.filter { it.name in values }.associate { it.parameter to values[it.name] })
     }
 
@@ -352,6 +366,23 @@ internal class SchemaType(
 ) {
 
     /**
+     * Checks what type erasure lets through, e.g. a `List<String>` for a `List<Title>`. The model a [ModelID] refers
+     * to cannot be checked.
+     *
+     * @throws IllegalArgumentException if a field of this type cannot hold [value]
+     */
+    fun requireAccepts(value: Any?, path: String) {
+        if (value == null) {
+            require(nullable) { "'$path' is null, but it is not nullable" }
+            return
+        }
+        require(kClass.isInstance(value)) { "'$path' must be a ${kClass.simpleName}, not a ${value::class.simpleName}" }
+        if (shape is Shape.Many) {
+            (value as Collection<*>).forEachIndexed { index, element -> shape.element.requireAccepts(element, "$path[$index]") }
+        }
+    }
+
+    /**
      * A placeholder value of this type, e.g. to create an instance when only the declaration matters. Never use it as
      * data.
      */
@@ -405,17 +436,31 @@ internal sealed class Shape {
                 if (kClass.isAbstract) {
                     unsupported(where, "${kClass.simpleName} is abstract")
                 }
+                if (!isPublic(kClass)) {
+                    unsupported(where, "${kClass.simpleName} is not public")
+                }
                 val kind = ContainerKind.entries.firstOrNull { kClass.isSubclassOf(it.base) }
                     ?: unsupported(where, "${kClass.simpleName} is a kind of DataContainer that cannot be stored")
                 val constructor = kClass.primaryConstructor?.takeIf { it.parameters.size == 1 }
                     ?: kClass.constructors.singleOrNull { it.parameters.size == 1 }
                     ?: unsupported(where, "${kClass.simpleName} needs a constructor with a single parameter")
-                if (!constructor.visibility.isReadable()) {
+                if (constructor.visibility != KVisibility.PUBLIC) {
                     unsupported(where, "the constructor of ${kClass.simpleName} is not public")
                 }
-                constructor.isAccessible = true
-                return Container(kClass, kind, constructor).also { containers.putIfAbsent(kClass, it) }
+                val container = Container(kClass, kind, constructor)
+                container.requireNamedValidators()
+                return container.also { containers.putIfAbsent(kClass, it) }
             }
+        }
+
+        /** Checks the validators of a placeholder instance; a class that cannot make one is checked when validating. */
+        private fun requireNamedValidators() {
+            val placeholder = try {
+                dummy()
+            } catch (e: Exception) {
+                return
+            }
+            placeholder.validators.forEach { placeholder.nameOf(it) }
         }
     }
 
@@ -520,7 +565,9 @@ private fun describeRules(container: DataContainer<*>): Map<String, String> {
     return rules
 }
 
-private fun KVisibility?.isReadable(): Boolean = this == KVisibility.PUBLIC || this == KVisibility.INTERNAL
+/** True if [kClass] and every class it is nested in are public. */
+private fun isPublic(kClass: KClass<*>): Boolean =
+    generateSequence(kClass) { it.java.enclosingClass?.kotlin }.all { it.visibility == KVisibility.PUBLIC }
 
 private fun isPlatformClass(kClass: KClass<*>): Boolean {
     val packageName = kClass.java.packageName
@@ -533,6 +580,6 @@ private fun join(path: String, key: String) = if (path.isEmpty()) key else "$pat
 private fun unsupported(where: String?, problem: String): Nothing =
     throw IllegalConfigurationException(
         KlerkErrorCode.PropertyMustBeDataContainer,
-        "$where cannot be used by Klerk: $problem. Properties must be public vals of DataContainers, ModelIDs, " +
-                "List/Set thereof, or classes made of these, and every class must have a public primary constructor."
+        "$where cannot be used by Klerk: $problem. Properties must be vals of DataContainers, ModelIDs, List/Set " +
+                "thereof, or classes made of these, and every class, primary constructor and property must be public."
     )

@@ -31,7 +31,7 @@ internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
     )
 
 }
@@ -49,7 +49,7 @@ internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
     )
 
 }
@@ -67,7 +67,7 @@ internal class InstanceNonEventJobs<T : Any, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
     )
 
 }
@@ -85,7 +85,7 @@ internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
     )
 
 }
@@ -103,7 +103,7 @@ internal class InstanceEventJobs<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
     )
 
 }
@@ -121,7 +121,7 @@ internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
+        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
     )
 
 }

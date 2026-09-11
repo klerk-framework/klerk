@@ -9,7 +9,8 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import java.io.InputStream
 import java.time.LocalDate
-import kotlin.reflect.KFunction
+import dev.klerkframework.klerk.misc.functionName
+import dev.klerkframework.klerk.misc.requireNamedRule
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -79,9 +80,16 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
      * Override to add rules like "must be even". Each function is called with the current [Translation] and returns
      * [PropertyValidation.Valid] or [PropertyValidation.Invalid].
+     *
+     * Each must be a named function reference, e.g. `setOf(::mustBeEven)`, since its name identifies the rule in
+     * messages and translations. A lambda is rejected when Klerk starts.
      */
     public open val validators: Set<(translator: Translation) -> PropertyValidation> =
         emptySet()
+
+    /** @throws IllegalConfigurationException if [validator] is not a named function reference */
+    internal fun nameOf(validator: Function<*>): String =
+        requireNamedRule(validator, "A validator of ${this::class.simpleName}")
 
     /**
      * Checks the built-in constraints and [validators] against [valueWithoutAuthorization].
@@ -216,7 +224,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -253,7 +261,7 @@ public abstract class IntContainer(value: Int) :
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -285,7 +293,7 @@ public abstract class ShortContainer(value: Short) : DataContainer<Short>(value)
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -316,7 +324,7 @@ public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -347,7 +355,7 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -378,7 +386,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -409,7 +417,7 @@ public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -440,7 +448,7 @@ public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(val
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -471,7 +479,7 @@ public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value)
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -502,7 +510,7 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -533,7 +541,7 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
                 InvalidPropertyProblem(
                     endUserTranslatedMessage = translation.klerk.invalidProperty(
                         propertyName,
-                        (functionAndResult.first as KFunction<*>).name,
+                        nameOf(functionAndResult.first),
                         (functionAndResult.second as Invalid).translationInfo
                     ), propertyName = propertyName
                 )
@@ -854,7 +862,7 @@ public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataCo
      */
     internal val stepsToRun: List<Pair<String, BlobPreAttachStep>> by lazy {
         val named = preAttachSteps.map { step ->
-            val name = (step as? KFunction<*>)?.name
+            val name = functionName(step)
                 ?: throw IllegalArgumentException(
                     "Every step of ${this::class.simpleName} must be a named function reference (::myStep), since " +
                             "the name is what records that it has run. A lambda has no name to record."

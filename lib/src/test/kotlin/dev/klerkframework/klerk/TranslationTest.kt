@@ -16,6 +16,13 @@ class TranslationTest {
     }
 
     @Test
+    fun `A rule is named after its function`() {
+        assertEquals("Must be even", DefaultKlerkTranslation.function(::mustBeEven))
+    }
+
+    private fun mustBeEven(): Int = 2
+
+    @Test
     fun test() {
         val evenInt = PositiveEvenIntContainer(3)
         val validation = evenInt.validate("myEvenIntField", SwedishTranslation)

@@ -40,6 +40,9 @@ There are six independent rule categories — `readModels`, `readProperties`, `c
 with no rules at all denies everything in that category, since there is no rule to explicitly allow it. Both the
 categories and the `positive`/`negative` blocks inside them are optional, so declare only the ones you need.
 
+Every rule must be a named function reference, such as `::everybodyCanRead`, since its name identifies the rule in
+problems and documentation. A lambda is rejected when Klerk starts.
+
 For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning — never
 use it in production.
 

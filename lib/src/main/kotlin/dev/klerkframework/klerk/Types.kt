@@ -10,12 +10,12 @@ import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.misc.camelCaseToPretty
+import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
 import kotlinx.serialization.Serializable
 import java.math.BigInteger
 import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
 import kotlin.time.Duration
@@ -634,6 +634,7 @@ public interface KlerkTranslation {
     /** A description of [property], e.g. shown as a tooltip, or null if it has none. */
     public fun propertyDescription(property: KProperty1<*, *>): String?
     public fun event(event: EventReference): String
+    /** The name of the rule [f], a named function reference, e.g. used as the message when it fails without one. */
     public fun function(f: Function<Any>): String
     public fun mustBeAtLeast(value: Number): String
     public fun mustBeAtMost(value: Number): String
@@ -667,10 +668,7 @@ public object DefaultKlerkTranslation : KlerkTranslation {
         return camelCaseToPretty(event.eventName)
     }
 
-    override fun function(f: Function<Any>): String {
-        val name = (f as KFunction<*>).name
-        return camelCaseToPretty(name)
-    }
+    override fun function(f: Function<Any>): String = functionName(f)?.let { camelCaseToPretty(it) } ?: invalid
 
 
     override fun invalidProperty(

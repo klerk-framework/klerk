@@ -22,7 +22,7 @@ internal class VoidEventCreateEvents<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),
-        log = listOf("Adding commands '${extractNameFromFunction(f, false)}'"),
+        log = listOf("Adding commands '${extractNameFromFunction(f)}'"),
     )
 
 }
@@ -40,7 +40,7 @@ internal class InstanceNonEventCreateEvents<T : Any, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),
-        log = listOf("Adding commands '${extractNameFromFunction(f, false)}'"),
+        log = listOf("Adding commands '${extractNameFromFunction(f)}'"),
     )
 
 }
@@ -58,7 +58,7 @@ internal class InstanceEventCreateEvents<T : Any, P, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         remainingCommands = f(args),
-        log = listOf("Adding commands '${extractNameFromFunction(f, false)}'"),
+        log = listOf("Adding commands '${extractNameFromFunction(f)}'"),
     )
 
 }

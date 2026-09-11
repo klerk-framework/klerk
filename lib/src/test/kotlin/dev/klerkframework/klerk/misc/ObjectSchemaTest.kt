@@ -3,6 +3,9 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.attacheddata.collectAttachedData
 import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlin.test.*
 
 data class SchemaAddress(val street: Street, val owner: ModelID<Author>?)
@@ -25,6 +28,30 @@ data class SchemaBodyVar(val street: Street) {
     var counter: Int = 0
 }
 data class SchemaWithDefault(val street: Street, val other: Street = Street("default"))
+
+class LambdaValidated(value: Int) : IntContainer(value) {
+    override val min = 0
+    override val max = 10
+    override val validators = setOf<(Translation) -> PropertyValidation>({ PropertyValidation.Invalid() })
+}
+
+data class SchemaLambdaValidated(val number: LambdaValidated)
+
+data class SchemaLambdaValidatable(val street: Street) : Validatable {
+    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf({ PropertyCollectionValidity.Valid })
+}
+
+internal data class SchemaInternalClass(val street: Street)
+
+class SchemaOuter {
+    internal data class Nested(val street: Street)
+}
+
+internal class InternalStreet(value: String) : StringContainer(value) {
+    override val minLength = 0
+    override val maxLength = 10
+    override val maxLines = 1
+}
 
 class ObjectSchemaTest {
 
@@ -58,6 +85,44 @@ class ObjectSchemaTest {
         assertEquals("default", schema.field("other")?.kotlinDefaultInstance?.valueWithoutAuthorization)
         assertNull(schema.field("street")?.kotlinDefaultInstance)
     }
+
+    @Test
+    fun `A value of the wrong type is rejected when creating`() {
+        val schema = ObjectSchema.of(SchemaPerson::class)
+        val valid = mapOf(
+            "name" to person.name,
+            "address" to person.address,
+            "nicknames" to person.nicknames,
+            "friends" to person.friends,
+        )
+        assertEquals(person, schema.create(valid))
+
+        fun rejected(name: String, value: Any?): String =
+            assertFailsWith<IllegalArgumentException> { schema.create(valid + (name to value)) }.message!!
+
+        assertTrue(rejected("name", "Main").contains("'name'"))
+        assertTrue(rejected("name", null).contains("not nullable"))
+        assertTrue(rejected("nicknames", listOf("a")).contains("'nicknames[0]'"))
+        assertTrue(rejected("friends", person.friends.toList()).contains("Set"))
+    }
+
+    @Test
+    fun `A validator must be a named function reference`() {
+        val e = assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaLambdaValidated::class) }
+        assertEquals(KlerkErrorCode.RuleMustBeNamed, e.code)
+        assertFailsWith<IllegalConfigurationException> { LambdaValidated(1).validate("number", DefaultTranslation) }
+        val validatable = assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaLambdaValidatable::class) }
+        assertEquals(KlerkErrorCode.RuleMustBeNamed, validatable.code)
+    }
+
+    @Test
+    fun `Only public classes are accepted`() {
+        assertTrue(
+            assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaInternalClass::class) }
+                .message!!.contains("SchemaInternalClass is not public")
+        )
+        assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaOuter.Nested::class) }
+        assertFailsWith<IllegalArgumentException> { DataContainer.create(InternalStreet::class, "x") }    }
 
     private val person = SchemaPerson(
         name = Street("Main"),

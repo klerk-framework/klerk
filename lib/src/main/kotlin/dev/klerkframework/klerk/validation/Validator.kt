@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.validation
 
+import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.PositiveAuthorization.Allow
@@ -317,6 +318,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             return emptyList()
         }
         return params.validators()
+            .onEach { requireNamedRule(it, "A validator of ${params::class.simpleName}") }
             .associateWith { it.invoke() }
             .filter { it.value is PropertyCollectionValidity.Invalid }
             .map { (it.value as PropertyCollectionValidity.Invalid).toProblem(it.key, translation) }

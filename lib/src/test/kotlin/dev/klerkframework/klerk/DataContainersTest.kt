@@ -23,47 +23,47 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
-private class TestInstant(value: Instant) : InstantContainer(value)
-private class TestDate(value: LocalDate) : DateContainer(value)
-private class TestDuration(value: Duration) : DurationContainer(value)
-private data class GenreHolder(val genre: BookGenreContainer)
+class TestInstant(value: Instant) : InstantContainer(value)
+class TestDate(value: LocalDate) : DateContainer(value)
+class TestDuration(value: Duration) : DurationContainer(value)
+data class GenreHolder(val genre: BookGenreContainer)
 
-private class TestShort(value: Short) : ShortContainer(value) {
+class TestShort(value: Short) : ShortContainer(value) {
     override val min: Short = -100
     override val max: Short = 100
 }
 
-private class TestByte(value: Byte) : ByteContainer(value) {
+class TestByte(value: Byte) : ByteContainer(value) {
     override val min: Byte = -10
     override val max: Byte = 10
 }
 
-private class TestULong(value: ULong) : ULongContainer(value) {
+class TestULong(value: ULong) : ULongContainer(value) {
     override val min: ULong = 0uL
     override val max: ULong = ULong.MAX_VALUE
 }
 
-private class TestUInt(value: UInt) : UIntContainer(value) {
+class TestUInt(value: UInt) : UIntContainer(value) {
     override val min: UInt = 0u
     override val max: UInt = 100u
 }
 
-private class TestUShort(value: UShort) : UShortContainer(value) {
+class TestUShort(value: UShort) : UShortContainer(value) {
     override val min: UShort = 0u
     override val max: UShort = 100u
 }
 
-private class TestUByte(value: UByte) : UByteContainer(value) {
+class TestUByte(value: UByte) : UByteContainer(value) {
     override val min: UByte = 0u
     override val max: UByte = 100u
 }
 
-private class TestDouble(value: Double) : DoubleContainer(value) {
+class TestDouble(value: Double) : DoubleContainer(value) {
     override val min: Double = -100.0
     override val max: Double = 100.0
 }
 
-private data class NumberHolder(
+data class NumberHolder(
     val short: TestShort,
     val byte: TestByte,
     val uLong: TestULong,

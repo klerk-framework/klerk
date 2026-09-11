@@ -76,6 +76,20 @@ class NestedPropsTest {
         assertTrue(e.message!!.contains("validEnums(Book::genre"), e.message)
     }
 
+    @Test
+    fun `A rule that is a lambda is rejected`() {
+        val e = assertFailsWith<IllegalConfigurationException> {
+            startWithBookRules { views ->
+                validReferences(CreateBookParams::author, views.authors.all)
+                validReferences(CreateBookParams::coAuthors, views.authors.all)
+                validReferences(CreateBookParams::previousBooksInSameSeries, views.books.all)
+                validateWithParameters { PropertyCollectionValidity.Valid }
+            }
+        }
+        assertEquals(KlerkErrorCode.RuleMustBeNamed, e.code)
+        assertTrue(e.message!!.contains("CreateBook"), e.message)
+    }
+
     private fun bookParams(author: ModelID<Author>) = CreateBookParams(
         title = BookTitle("Emil"),
         author = author,

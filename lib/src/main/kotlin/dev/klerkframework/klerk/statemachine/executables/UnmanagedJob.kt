@@ -27,7 +27,7 @@ internal class VoidEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
                     description = "Action: ${extractNameFromFunction(action)}"
                 )
             ),
-            log = listOf("Adding action '${extractNameFromFunction(action, false)}'")
+            log = listOf("Adding action '${extractNameFromFunction(action)}'")
         )
 
 }
@@ -51,7 +51,7 @@ internal class InstanceNonEventUnmanagedJob<T : Any, C : KlerkContext, V>(
                     description = "Action: ${extractNameFromFunction(action)}"
                 )
             ),
-            log = listOf("Adding action '${extractNameFromFunction(action, false)}'")
+            log = listOf("Adding action '${extractNameFromFunction(action)}'")
         )
 
 }
@@ -75,7 +75,7 @@ internal class InstanceEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
                     description = "Action: ${extractNameFromFunction(action)}"
                 )
             ),
-            log = listOf("Adding action '${extractNameFromFunction(action, false)}'")
+            log = listOf("Adding action '${extractNameFromFunction(action)}'")
         )
 
 }

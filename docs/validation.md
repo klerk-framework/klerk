@@ -16,6 +16,9 @@ names the value by its path, e.g. `address.street` or `tags[1]`.
    `validateWithParameters`).
 7. [Authorization](authorization.md) rules.
 
+Every rule and validator must be a named function reference, such as `::mustBeEven`, since its name identifies the rule
+in messages, translations and documentation. A lambda is rejected when Klerk starts.
+
 ## 1. Per-property rules (DataContainer)
 
 Every `DataContainer` subclass validates its own value: the built-in constraints (`minLength`/`maxLength` for

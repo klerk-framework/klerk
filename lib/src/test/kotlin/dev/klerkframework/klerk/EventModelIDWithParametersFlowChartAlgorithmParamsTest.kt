@@ -25,7 +25,7 @@ class EventModelIDWithParametersFlowChartAlgorithmParamsTest {
 
 }
 
-private class MyValidEventParams(
+class MyValidEventParams(
     val stringOne: NonEmptyString,
     val list: List<NonEmptyString>,
     val firstContainer: FirstContainer,
@@ -33,19 +33,19 @@ private class MyValidEventParams(
     val containerSet: Set<FirstContainer>
 )
 
-private data class FirstContainer(val stringTwo: NonEmptyString, val secondContainer: SecondContainer)
+data class FirstContainer(val stringTwo: NonEmptyString, val secondContainer: SecondContainer)
 
-private data class SecondContainer(val stringThree: NonEmptyString)
+data class SecondContainer(val stringThree: NonEmptyString)
 
-private data class BadContainer(val stringFour: String)
+data class BadContainer(val stringFour: String)
 
-private class NonEmptyString(string: String) : StringContainer(string) {
+class NonEmptyString(string: String) : StringContainer(string) {
     override val minLength: Int = 1
     override val maxLength: Int = 10000
     override val maxLines: Int = 1
 }
 
-private class MyInvalidEventParams(
+class MyInvalidEventParams(
     val stringOne: NonEmptyString,
     val list: List<NonEmptyString>,
     val firstContainer: FirstContainer,

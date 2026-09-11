@@ -19,36 +19,36 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
-private class Name(value: String) : StringContainer(value) {
+class Name(value: String) : StringContainer(value) {
     override val minLength = 0
     override val maxLength = 100
     override val maxLines = 1
 }
 
-private class Score(value: Int) : IntContainer(value) {
+class Score(value: Int) : IntContainer(value) {
     override val min = 0
     override val max = 100
 }
 
-private class Count(value: Long) : LongContainer(value) {
+class Count(value: Long) : LongContainer(value) {
     override val min = 0L
     override val max = Long.MAX_VALUE
 }
 
-private class Ratio(value: Float) : FloatContainer(value) {
+class Ratio(value: Float) : FloatContainer(value) {
     override val min = 0f
     override val max = 1f
 }
 
-private class Flag(value: Boolean) : BooleanContainer(value)
-private class Moment(value: Instant) : InstantContainer(value)
-private class Day(value: LocalDate) : DateContainer(value)
-private class Span(value: kotlin.time.Duration) : DurationContainer(value)
-private class Place(value: GeoPosition) : GeoPositionContainer(value)
+class Flag(value: Boolean) : BooleanContainer(value)
+class Moment(value: Instant) : InstantContainer(value)
+class Day(value: LocalDate) : DateContainer(value)
+class Span(value: kotlin.time.Duration) : DurationContainer(value)
+class Place(value: GeoPosition) : GeoPositionContainer(value)
 
-private data class Inner(val name: Name)
+data class Inner(val name: Name)
 
-private data class Everything(
+data class Everything(
     val name: Name,
     val score: Score,
     val count: Count,
@@ -67,18 +67,18 @@ private data class Everything(
     val defaulted: Score = Score(1),
 )
 
-private class Big(value: ULong) : ULongContainer(value) {
+class Big(value: ULong) : ULongContainer(value) {
     override val min = 0uL
     override val max = ULong.MAX_VALUE
 }
 
-private data class HasBig(val big: Big)
-private data class HasBareString(val name: String)
-private data class OnlyNullable(val moment: Moment?, val name: Name?)
-private data class HasMap(val names: Map<String, Name>)
-private data class HasMutableList(val names: MutableList<Name>)
-private class Empty
-private data class HasEmpty(val empty: Empty)
+data class HasBig(val big: Big)
+data class HasBareString(val name: String)
+data class OnlyNullable(val moment: Moment?, val name: Name?)
+data class HasMap(val names: Map<String, Name>)
+data class HasMutableList(val names: MutableList<Name>)
+class Empty
+data class HasEmpty(val empty: Empty)
 
 class KlerkJsonTest {
 
