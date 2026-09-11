@@ -160,7 +160,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
      */
     public open val regexPattern: String? = null
 
-    public val string: String get() = valueWithoutAuthorization
+    public val string: String get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
@@ -210,7 +210,7 @@ public abstract class IntContainer(value: Int) :
     public abstract val min: Int
     public abstract val max: Int
 
-    public val int: Int get() = valueWithoutAuthorization
+    public val int: Int get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
 
@@ -243,7 +243,7 @@ public abstract class ShortContainer(value: Short) : DataContainer<Short>(value)
     public abstract val min: Short
     public abstract val max: Short
 
-    public val short: Short get() = valueWithoutAuthorization
+    public val short: Short get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -274,7 +274,7 @@ public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
     public abstract val min: Byte
     public abstract val max: Byte
 
-    public val byte: Byte get() = valueWithoutAuthorization
+    public val byte: Byte get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -305,7 +305,7 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     public abstract val min: Long
     public abstract val max: Long
 
-    public val long: Long get() = valueWithoutAuthorization
+    public val long: Long get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -336,7 +336,7 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     public abstract val min: ULong
     public abstract val max: ULong
 
-    public val uLong: ULong get() = valueWithoutAuthorization
+    public val uLong: ULong get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -367,7 +367,7 @@ public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
     public abstract val min: UInt
     public abstract val max: UInt
 
-    public val uInt: UInt get() = valueWithoutAuthorization
+    public val uInt: UInt get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -398,7 +398,7 @@ public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(val
     public abstract val min: UShort
     public abstract val max: UShort
 
-    public val uShort: UShort get() = valueWithoutAuthorization
+    public val uShort: UShort get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -429,7 +429,7 @@ public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value)
     public abstract val min: UByte
     public abstract val max: UByte
 
-    public val uByte: UByte get() = valueWithoutAuthorization
+    public val uByte: UByte get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -460,7 +460,7 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     public abstract val min: Float
     public abstract val max: Float
 
-    public val float: Float get() = valueWithoutAuthorization
+    public val float: Float get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -491,7 +491,7 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
     public abstract val min: Double
     public abstract val max: Double
 
-    public val double: Double get() = valueWithoutAuthorization
+    public val double: Double get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -523,13 +523,20 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
  * parameter accepts.
  */
 public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<String>(value.name) {
-    public val enum: E = value
+    private val enumValue: E = value
+
+    /**
+     * The enum value in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val enum: E get() { this.value; return enumValue }
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 /** A [DataContainer] wrapping a [Boolean]. No built-in constraints. */
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
-    public val boolean: Boolean get() = valueWithoutAuthorization
+    public val boolean: Boolean get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -539,7 +546,14 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
  * Handles years between -290308 and +294247. Instants earlier/later will be set to -290308/+294247 respectively.
  */
 public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
-    public val instant: Instant = value
+    private val instantValue: Instant = value
+
+    /**
+     * The instant in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val instant: Instant get() { this.value; return instantValue }
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** `yyyy-MM-dd HH:mm:ss` in the system default time zone, or the masked placeholder if unauthorized. */
@@ -553,7 +567,14 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Long>(val
  * A container for a calendar date, without a time of day or time zone — e.g. a contract's start date.
  */
 public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value.toEpochDay().toInt()) {
-    public val date: LocalDate = value
+    private val dateValue: LocalDate = value
+
+    /**
+     * The date in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val date: LocalDate get() { this.value; return dateValue }
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** ISO-8601 calendar date (`yyyy-MM-dd`), or the masked placeholder if unauthorized. */
@@ -567,7 +588,14 @@ public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value
  * A container for Durations with microsecond resolution.
  */
 public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {
-    public val duration: Duration = value
+    private val durationValue: Duration = value
+
+    /**
+     * The duration in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val duration: Duration get() { this.value; return durationValue }
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** The [Duration]'s default rendering (e.g. `1h 30m`), or the masked placeholder if unauthorized. */
@@ -583,7 +611,14 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Long>(v
  * The precision is at least 6 decimals, which translates to sub-meter precision.
  */
 public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<ULong>(value.uLongEncoded) {
-    public val geoPosition: GeoPosition = value
+    private val geoPositionValue: GeoPosition = value
+
+    /**
+     * The position in this container.
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val geoPosition: GeoPosition get() { this.value; return geoPositionValue }
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -708,7 +743,7 @@ public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
     public open val visibility: AttachedDataVisibility = AttachedDataVisibility.Private
 
     /** The attached value this property refers to. */
-    public val id: ID get() = valueWithoutAuthorization
+    public val id: ID get() = value
 
     /** The id unwrapped to the shared attached-data id space, regardless of whether it is a blob or a string id. */
     internal abstract val rawId: Int
