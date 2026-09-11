@@ -400,7 +400,7 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
 
             onEvent(ChangeName) {
                 update(::changeNameOfAuthor)
-                job(::notifyBookStores)
+                jobs(::notifyBookStores)
             }
 
             after(30.seconds) {
@@ -420,7 +420,7 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
                         ::hasTalent to Established,
                     )
                 )
-                job(::aJob)
+                jobs(::aJob)
             }
 
         }

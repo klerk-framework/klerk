@@ -120,8 +120,20 @@ onEvent(ChangeName) {
     job(::notifyBookStores)
 }
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<ScheduledJob<Ctx, Views>> =
-    listOf(NotifyBookStores.schedule(NotifyCursor(author = args.model.id)))
+fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): DeclaredJob<Ctx, Views> =
+    NotifyBookStores.schedule(NotifyCursor(author = args.model.id))
+```
+
+Use `jobs` instead of `job` when a single event should schedule more than one:
+
+```kotlin
+onEvent(ChangeName) {
+    update(::changeNameOfAuthor)
+    jobs(::notifyBookStoresAndPartners)
+}
+
+fun notifyBookStoresAndPartners(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> =
+    listOf(NotifyBookStores.schedule(NotifyCursor(author = args.model.id)), NotifyPartners.schedule(...))
 ```
 
 Or directly, for work no command is responsible for:

@@ -94,8 +94,20 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
-        public fun job(
+        public fun jobs(
             function: (args: ArgForVoidEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+        ) {
+            executables.add(VoidEventJobs(function, onCondition))
+        }
+
+        /**
+         * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
+         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
+         */
+        public fun job(
+            function: (args: ArgForVoidEvent<T, P, C, V>) -> DeclaredJob<C, V>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventJob(function, onCondition))
@@ -204,8 +216,20 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
-        public fun job(
+        public fun jobs(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+        ) {
+            executables.add(InstanceNonEventJobs(function, onCondition))
+        }
+
+        /**
+         * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
+         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
+         */
+        public fun job(
+            function: (args: ArgForInstanceNonEvent<T, C, V>) -> DeclaredJob<C, V>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceNonEventJob(function, onCondition))
@@ -283,8 +307,20 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
-        public fun job(
+        public fun jobs(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+        ) {
+            executables.add(InstanceEventJobs(function, onCondition))
+        }
+
+        /**
+         * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
+         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
+         */
+        public fun job(
+            function: (args: ArgForInstanceEvent<T, P, C, V>) -> DeclaredJob<C, V>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventJob(function, onCondition))

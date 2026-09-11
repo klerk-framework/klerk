@@ -155,7 +155,7 @@ Inside `onEvent`, `onEnter`, `onExit`, `after`, and `atTime` blocks you can call
 | `transitionTo(State, onCondition = ...)`                                    | Moves the model to `State`. At most one per block.                                                                            |
 | `transitionWhen(linkedMapOf(::decision to State, ...), otherwise = State?)` | Evaluates each decision function in order and transitions to the first match; `otherwise` if none match.                      |
 | `createCommands(::fn)`                                                      | Returns a `List<Command<*, *>>` to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
-| `job(::fn)` / `unmanagedJob(::fn, onCondition = ...)`                       | Schedule background work; see [jobs.md](jobs.md) for the distinction.                                                         |
+| `job(::fn)` / `jobs(::fn)` / `unmanagedJob(::fn, onCondition = ...)`        | Schedule background work — `job` for a single job, `jobs` for a list; see [jobs.md](jobs.md) for the distinction from `unmanagedJob`. |
 
 All of these accept an optional `onCondition` predicate with the same argument type as the main function — if it returns
 `false`, the executable is skipped. `transitionWhen` bakes this idea into its own branching form, evaluating functions

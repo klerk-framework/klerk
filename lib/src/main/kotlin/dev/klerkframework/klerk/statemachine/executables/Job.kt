@@ -18,7 +18,7 @@ private fun <C : KlerkContext, V> List<DeclaredJob<C, V>>.withIds(
     processingOptions: EventProcessingOptions,
 ): List<PendingJob<C, V>> = map { PendingJob(processingOptions.idProvider.getNextJobID(), it) }
 
-internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
+internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
     val f: (args: ArgForVoidEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
     override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
@@ -36,7 +36,25 @@ internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
 
 }
 
-internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
+internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
+    val f: (args: ArgForVoidEvent<T, P, C, V>) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+) : VoidEventExecutable<T, P, C, V> {
+
+    override fun <Primary : Any> process(
+        args: ArgForVoidEvent<T, P, C, V>,
+        processingOptions: EventProcessingOptions,
+        view: ModelViews<T, C>,
+        specification: Specification<C, V>,
+        processingDataSoFar: ProcessingData<Primary, C, V>,
+    ): ProcessingData<Primary, C, V> = ProcessingData(
+        newJobs = listOf(f.invoke(args)).withIds(processingOptions),
+        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
+    )
+
+}
+
+internal class InstanceNonEventJobs<T : Any, C : KlerkContext, V>(
     val f: (args: ArgForInstanceNonEvent<T, C, V>) -> List<DeclaredJob<C, V>>,
     override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
 ) : InstanceNonEventExecutable<T, C, V> {
@@ -54,7 +72,25 @@ internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
 
 }
 
-internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
+internal class InstanceNonEventJob<T : Any, C : KlerkContext, V>(
+    val f: (args: ArgForInstanceNonEvent<T, C, V>) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
+) : InstanceNonEventExecutable<T, C, V> {
+
+    override fun <Primary : Any> process(
+        args: ArgForInstanceNonEvent<T, C, V>,
+        processingOptions: EventProcessingOptions,
+        view: ModelViews<T, C>,
+        specification: Specification<C, V>,
+        processingDataSoFar: ProcessingData<Primary, C, V>,
+    ): ProcessingData<Primary, C, V> = ProcessingData(
+        newJobs = listOf(f.invoke(args)).withIds(processingOptions),
+        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
+    )
+
+}
+
+internal class InstanceEventJobs<T : Any, P, C : KlerkContext, V>(
     val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
     override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
@@ -68,6 +104,24 @@ internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = f.invoke(args).withIds(processingOptions),
         log = listOf("Adding jobs using '${extractNameFromFunction(f, false)}'")
+    )
+
+}
+
+internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
+    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+) : InstanceEventExecutable<T, P, C, V> {
+
+    override fun <Primary : Any> process(
+        args: ArgForInstanceEvent<T, P, C, V>,
+        processingOptions: EventProcessingOptions,
+        view: ModelViews<T, C>,
+        specification: Specification<C, V>,
+        processingDataSoFar: ProcessingData<Primary, C, V>,
+    ): ProcessingData<Primary, C, V> = ProcessingData(
+        newJobs = listOf(f.invoke(args)).withIds(processingOptions),
+        log = listOf("Adding job using '${extractNameFromFunction(f, false)}'")
     )
 
 }
