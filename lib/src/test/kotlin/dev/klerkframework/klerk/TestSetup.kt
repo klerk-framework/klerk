@@ -1239,7 +1239,13 @@ suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAttachStep
     else BlobPreAttachStepResult.Replace(text.replace("\r\n", "\n").byteInputStream())
 }
 
-data class CreateInventoryParams(val name: InventoryName, val rows: InventoryCsv)
+data class CreateInventoryParams(
+    val name: InventoryName,
+    val rows: InventoryCsv,
+    // Makes these declarations the specification knows, so that values can be prepared for them.
+    val draft: dev.klerkframework.klerk.attacheddata.LenientCsv? = null,
+    val tally: dev.klerkframework.klerk.attacheddata.CountedTwice? = null,
+)
 
 object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(
     Inventory::class, EXTERNAL, CreateInventoryParams::class

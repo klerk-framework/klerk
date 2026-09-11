@@ -489,10 +489,16 @@ public data class AttachedDataMetadata(
     val contentType: String? = null,
 
     /**
-     * The names of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] that have run against this value, in
-     * the order they ran.
+     * The names of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer.preAttachSteps] of [preparedFor]
+     * that have run against this value, in the order they ran.
      */
     val completedSteps: List<String> = emptyList(),
+
+    /**
+     * The qualified name of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer] the value was prepared
+     * for, or null if it was prepared without one.
+     */
+    val preparedFor: String? = null,
 )
 
 /**

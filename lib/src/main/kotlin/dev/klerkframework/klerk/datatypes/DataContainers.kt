@@ -873,7 +873,8 @@ public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataCo
      * A step gets the bytes and the metadata, and nothing else. Anything that
      * needs the actor or the model graph is an authorization rule or a validator, not a step.
      *
-     * Each must be a named function reference.
+     * Each must be a named function reference. A value that has been through these steps can only be attached to a
+     * property of this container; steps of another container do not count, even if they have the same names.
      *
      * At least one step is required: an uploaded file usually has to be looked at before it is kept. A property that
      * genuinely wants nothing done says so with [noPreAttachProcessing], which must then be the only step and costs

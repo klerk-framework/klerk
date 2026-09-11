@@ -241,15 +241,18 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val steps = declaration.stepsToRun
         val total = steps.size
         val completed = metadata.completedSteps.toMutableList()
-        // Anything already recorded was done by an earlier step of the job, or before a restart. Running it again
-        // could disarm twice.
-        val next = steps.indexOfFirst { !completed.contains(it.first) }
-        if (next == -1) {
+        // Steps are recorded in order, so what has run is a prefix of what is declared. Matched by position, not by
+        // name, since a step may be declared twice. Anything else means the declaration changed while the value was
+        // being processed, and running its steps again could disarm twice.
+        if (steps.take(completed.size).map { it.first } != completed) {
+            throw BlobRejected("The steps of ${declaration::class.simpleName} changed while the file was being processed")
+        }
+        if (completed.size == total) {
             processed(id)
             return BlobProcessing.Done(total)
         }
 
-        val (name, step) = steps[next]
+        val (name, step) = steps[completed.size]
         val result = LazyInputStream { openValue(id, metadata.kind) }
             .use { step(BlobPreAttachStepArgs(it, metadata)) }
         when (result) {
@@ -395,7 +398,8 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 store?.put(id, hashing)
             }
             settings.persistence.insertAttachedData(
-                id, if (store == null) hashing else null, kind, visibility, createdAt, metadata, expires, claimedByJob
+                id, if (store == null) hashing else null, kind, visibility, createdAt, metadata,
+                declaration?.qualifiedName, expires, claimedByJob
             ) {
                 hashing.digest()
             }
@@ -404,7 +408,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 owner = null,
                 metadata = AttachedDataMetadata(
                     AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, metadata,
-                    digest.contentType
+                    digest.contentType, preparedFor = declaration?.qualifiedName,
                 ),
                 expires = expires,
                 claimedByJob = claimedByJob,
@@ -807,14 +811,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                     )
                     return@forEach
                 }
-                val missing = (declaration as? AttachedBlobContainer)?.stepNames
-                    ?.firstOrNull { !metadata.completedSteps.contains(it) }
-                if (missing != null) {
+                val notProcessed = (declaration as? AttachedBlobContainer)?.let { notProcessedReason(it, metadata) }
+                if (notProcessed != null) {
                     problems.add(
                         StateProblem(
                             "The file has not finished being checked",
-                            "The attached data with id $id cannot be claimed by $modelId: it has not been through " +
-                                    "'$missing'. Wait for klerk.attachedData.awaitProcessing(...) before attaching it.",
+                            "The attached data with id $id cannot be claimed by $modelId: $notProcessed",
                             KlerkErrorCode.AttachedDataNotProcessed
                         )
                     )
@@ -829,6 +831,26 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 visibility = declaration?.visibility ?: metadata?.visibility ?: AttachedDataVisibility.Private,
             )
         }
+    }
+
+    /**
+     * Why a value may not be held by a property of [declaration] yet, or null if it has been through all its steps.
+     * Steps count only if they ran for this declaration: another container's steps may have the same names.
+     */
+    private fun notProcessedReason(declaration: AttachedBlobContainer, metadata: AttachedDataMetadata): String? {
+        val steps = declaration.stepNames
+        if (steps.isEmpty()) {
+            return null
+        }
+        val expected = declaration::class.qualifiedName
+        if (metadata.preparedFor != expected) {
+            return "it was prepared for ${metadata.preparedFor ?: "no declaration"}, not for $expected"
+        }
+        if (metadata.completedSteps == steps) {
+            return null
+        }
+        val missing = steps.getOrNull(metadata.completedSteps.size) ?: steps.first()
+        return "it has not been through '$missing'. Wait for klerk.attachedData.awaitProcessing(...) before attaching it."
     }
 
     /**

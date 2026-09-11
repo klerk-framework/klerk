@@ -286,6 +286,12 @@ public class SchemaField internal constructor(
     /** The constants of the enum an [EnumContainer] (or a collection of them) holds; empty for other fields. */
     public val enumConstants: List<Enum<*>> = (elementType.shape as? Shape.Container)?.enumConstants ?: emptyList()
 
+    /** The [AttachedBlobContainer] class of the field (or of its elements), or null if it is not one. */
+    @Suppress("UNCHECKED_CAST")
+    public val blobDeclaration: KClass<out AttachedBlobContainer>? =
+        (elementType.shape as? Shape.Container)?.takeIf { it.kind == ContainerKind.AttachedBlob }?.kClass
+                as KClass<out AttachedBlobContainer>?
+
     internal val owner: KClass<*> get() = schema.kClass
 
     internal val key: PropertyKey = PropertyKey(schema.kClass, name)

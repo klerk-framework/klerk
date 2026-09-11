@@ -201,6 +201,7 @@ public interface Persistence {
      * the record of them. A null value never happens for [AttachedDataKind.String].
      * @param claimedByJob the job that prepared this value, if it was prepared inside a job step. Such a row is not
      * reaped for as long as the job lives — see [deleteExpiredAttachedData].
+     * @param preparedFor returned as [AttachedDataMetadata.preparedFor].
      * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written. Already
      * complete when [value] is null, since the bytes were written before this call.
      */
@@ -211,6 +212,7 @@ public interface Persistence {
         visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
+        preparedFor: String?,
         expires: Instant,
         claimedByJob: JobId? = null,
         digestAfterWrite: () -> AttachedDataDigest,
@@ -438,6 +440,7 @@ public open class RamStorage : Persistence {
         visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
+        preparedFor: String?,
         expires: Instant,
         claimedByJob: JobId?,
         digestAfterWrite: () -> AttachedDataDigest,
@@ -449,7 +452,8 @@ public open class RamStorage : Persistence {
             value = bytes,
             owner = null,
             metadata = AttachedDataMetadata(
-                AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType
+                AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType,
+                preparedFor = preparedFor,
             ),
             expires = expires,
             claimedByJob = claimedByJob,

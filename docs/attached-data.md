@@ -110,7 +110,11 @@ implicitly** — if the scanner should see the disarmed output, declare it twice
 
 A step is a **pure function of the file**: it gets the bytes and the metadata, and nothing else. Anything that needs
 the actor or the model graph is an authorization rule or a validator, not a step. Each must be a named function
-reference (`::checkTheHeader`), because the name is what Klerk records when it has run.
+reference (`::checkTheHeader`), because the name is what Klerk records when it has run. Steps are recorded in order,
+so the same step may be declared more than once.
+
+A value can only be attached to a property of the container it was prepared for. Steps of another container do not
+count, even if they have the same names.
 
 **Klerk runs them itself**, in a [job](jobs.md) it schedules from `prepare` — see [Writing](#writing). A command
 attaching a value whose declared steps have not all run is rejected, so this is a guarantee rather than a convention.

@@ -42,6 +42,7 @@ private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
 private val jobJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 private val logSerializer = ListSerializer(JobLogEntry.serializer())
 private val stringMapSerializer = MapSerializer(String.serializer(), String.serializer())
+private val stringListSerializer = ListSerializer(String.serializer())
 
 /**
  * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
@@ -355,6 +356,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         visibility: AttachedDataVisibility,
         createdAt: Instant,
         custom: Map<String, String>,
+        preparedFor: String?,
         expires: Instant,
         claimedByJob: JobId?,
         digestAfterWrite: () -> AttachedDataDigest,
@@ -373,6 +375,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[this.size] = 0
                 it[this.hash] = ""
                 it[this.metadata] = encodeCustomMetadata(custom)
+                it[this.preparedFor] = preparedFor
                 it[this.expires] = expires.to64bitMicroseconds()
                 it[this.claimedByJob] = claimedByJob?.value
             }
@@ -400,6 +403,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 AttachedData.metadata,
                 AttachedData.contentType,
                 AttachedData.completedSteps,
+                AttachedData.preparedFor,
                 AttachedData.expires,
                 AttachedData.claimedByJob,
             )
@@ -432,7 +436,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[this.size] = digest.size
                 it[this.hash] = digest.hash
                 it[this.contentType] = digest.contentType
-                it[this.completedSteps] = completedSteps.joinToString(",")
+                it[this.completedSteps] = Json.encodeToString(stringListSerializer, completedSteps)
             }
         }
     }
@@ -458,6 +462,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 AttachedData.metadata,
                 AttachedData.contentType,
                 AttachedData.completedSteps,
+                AttachedData.preparedFor,
                 AttachedData.expires,
                 AttachedData.claimedByJob
             ).associate {
@@ -479,7 +484,9 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         hash = this[AttachedData.hash],
         custom = decodeCustomMetadata(this[AttachedData.metadata]),
         contentType = this[AttachedData.contentType],
-        completedSteps = this[AttachedData.completedSteps]?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+        completedSteps = this[AttachedData.completedSteps]?.let { Json.decodeFromString(stringListSerializer, it) }
+            ?: emptyList(),
+        preparedFor = this[AttachedData.preparedFor],
     )
 
     private fun encodeCustomMetadata(custom: Map<String, String>): String? =
@@ -688,9 +695,12 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         // uploader claimed the value was, if anything, is the application's business and lives in metadata.
         val contentType = varchar("content_type", length = 255).nullable()
 
-        // The names of the declared steps that have run against this value, comma-separated. What makes an
+        // The names of the declared steps that have run against this value, as a JSON array. What makes an
         // interrupted pipeline resumable, and what a command checks before letting a model claim the value.
         val completedSteps = text("completed_steps").nullable()
+
+        // The qualified name of the AttachedBlobContainer the value was prepared for, whose steps are the ones above.
+        val preparedFor = text("prepared_for").nullable()
 
         // The second, independent claim: a job that prepared this data and is still alive. A row is reaped only when
         // neither claim holds.

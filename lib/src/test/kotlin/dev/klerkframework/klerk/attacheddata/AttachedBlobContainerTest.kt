@@ -439,7 +439,57 @@ class AttachedBlobContainerTest {
         val e = assertFailsWith<IllegalArgumentException> { Confused(AttachedBlobID(1)).stepNames }
         assertTrue(e.message!!.contains("noPreAttachProcessing"), e.message!!)
     }
+
+    @Test
+    fun `a step declared twice runs twice`() = runBlocking {
+        counted = 0
+        val klerk = start()
+        val id = klerk.attachedData.prepare("anything".byteInputStream(), CountedTwice::class, Ctx.system())
+
+        klerk.attachedData.awaitProcessing(id)
+
+        assertEquals(2, counted, "the second countIt is a step of its own, not one that has already run")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `steps of another declaration do not count, even with the same names`() = runBlocking {
+        val klerk = start()
+        // InventoryCsv's checkTheHeader would reject this, but LenientCsv's lets it through
+        val id = klerk.attachedData.prepare(
+            "wrong,header\nrose,3\n".byteInputStream(),
+            LenientCsv::class,
+            Ctx.system(),
+        )
+        klerk.attachedData.awaitProcessing(id)
+
+        val result = count(klerk, id)
+
+        assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
+        val problem = result.problems.single()
+        assertEquals(KlerkErrorCode.AttachedDataNotProcessed, problem.code)
+        val internal = (problem as StateProblem).internalDescription
+        assertTrue(internal.contains("LenientCsv"), internal)
+        klerk.meta.stop()
+    }
 }
+
+/** Declares the same step twice, so it runs twice. */
+class CountedTwice(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val acceptUnrecognised: Boolean = true
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::countIt)
+}
+
+/** Steps named like InventoryCsv's, but that let anything through. */
+class LenientCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val accept: Set<String> = setOf("text/plain")
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
+}
+
+private suspend fun checkTheHeader(args: BlobPreAttachStepArgs): BlobPreAttachStepResult = BlobPreAttachStepResult.Pass
+
+private suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAttachStepResult =
+    BlobPreAttachStepResult.Pass
 
 /** Says both that there is something to do and that there is not. */
 class Confused(id: AttachedBlobID) : AttachedBlobContainer(id) {
