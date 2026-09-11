@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.datatypes.StringContainer
-import dev.klerkframework.klerk.misc.EventParameters
+import dev.klerkframework.klerk.misc.ObjectSchema
 import kotlin.test.Test
 import kotlin.test.fail
 
@@ -10,13 +10,13 @@ class EventModelIDWithParametersFlowChartAlgorithmParamsTest {
 
     @Test
     fun valid() {
-        EventParameters(MyValidEventParams::class)
+        ObjectSchema.of(MyValidEventParams::class)
     }
 
     @Test
     fun invalid() {
         try {
-            EventParameters(MyInvalidEventParams::class)
+            ObjectSchema.of(MyInvalidEventParams::class)
             fail()
         } catch (e: IllegalConfigurationException) {
             //

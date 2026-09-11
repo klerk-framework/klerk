@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.LongContainer
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobInfo
-import dev.klerkframework.klerk.misc.EventParameters
+import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
@@ -91,7 +91,11 @@ public fun interface Validatable {
     public fun validators(): Set<() -> PropertyCollectionValidity>
 }
 
-public data class EventWithParameters<T : Any>(val eventReference: EventReference, val parameters: EventParameters<T>)
+/** An event together with the [ObjectSchema] of its parameters class, e.g. to build a form for it. */
+public data class EventWithParameters<T : Any>(val eventReference: EventReference, val parameters: ObjectSchema<T>) {
+    public constructor(eventReference: EventReference, parametersClass: KClass<T>) :
+            this(eventReference, ObjectSchema.of(parametersClass))
+}
 
 /**
  * A reference to a specific event in a state machine
@@ -627,7 +631,8 @@ public interface Translation {
 /** Built-in framework-level strings (used by [DefaultKlerkTranslation] unless overridden). */
 public interface KlerkTranslation {
     public fun property(property: KProperty1<*, *>): String
-    public fun propertyDescription(property: String): String?
+    /** A description of [property], e.g. shown as a tooltip, or null if it has none. */
+    public fun propertyDescription(property: KProperty1<*, *>): String?
     public fun event(event: EventReference): String
     public fun function(f: Function<Any>): String
     public fun mustBeAtLeast(value: Number): String
@@ -656,7 +661,7 @@ public object DefaultKlerkTranslation : KlerkTranslation {
         return camelCaseToPretty(property.name)
     }
 
-    override fun propertyDescription(property: String): String? = null
+    override fun propertyDescription(property: KProperty1<*, *>): String? = null
 
     override fun event(event: EventReference): String {
         return camelCaseToPretty(event.eventName)

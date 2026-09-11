@@ -155,8 +155,10 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
             @Suppress("UNCHECKED_CAST")
             return try {
                 container.create(value) as C
-            } catch (e: java.lang.reflect.InvocationTargetException) {
-                throw IllegalArgumentException("Could not create ${kClass.simpleName}", e.targetException)
+            } catch (e: IllegalArgumentException) {
+                throw e
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Could not create ${kClass.simpleName}", e)
             }
         }
     }

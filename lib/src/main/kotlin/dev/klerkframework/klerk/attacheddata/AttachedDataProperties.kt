@@ -8,7 +8,6 @@ import dev.klerkframework.klerk.datatypes.AttachedDataContainer
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.Shape
 import kotlin.reflect.KClass
-import kotlin.reflect.full.isSubclassOf
 
 /**
  * One attached-data reference found in a model's props, together with what the property declares about it.
@@ -71,22 +70,20 @@ internal fun <ID, C : AttachedDataContainer<ID>> instantiateDeclaration(kClass: 
 }
 
 /**
- * The same, from the name a job cursor carries. The class is gone if it was renamed since the value was prepared, in
- * which case the job fails rather than silently letting an unprocessed value through.
- *
- * The class is loaded without being initialized, so nothing in it runs unless it is an [AttachedBlobContainer].
+ * The same, from the name a job cursor carries, looked up among the [declarations] the specification uses. The class
+ * is gone if it was renamed since the value was prepared, in which case the job fails rather than silently letting an
+ * unprocessed value through.
  *
  * Blob-only: only a blob ever has pre-attach steps to resume, so only a blob ever has a job cursor to rebuild from.
  */
-@Suppress("UNCHECKED_CAST")
-internal fun instantiateDeclaration(className: String, id: AttachedBlobID): AttachedBlobContainer {
-    val kClass = try {
-        Class.forName(className, false, AttachedBlobContainer::class.java.classLoader).kotlin
-    } catch (e: ClassNotFoundException) {
-        throw IllegalArgumentException("There is no longer a blob declaration called '$className'", e)
-    }
-    require(kClass.isSubclassOf(AttachedBlobContainer::class)) { "$className is not an AttachedBlobContainer" }
-    return instantiateDeclaration(kClass as KClass<out AttachedBlobContainer>, id)
+internal fun instantiateDeclaration(
+    className: String,
+    id: AttachedBlobID,
+    declarations: Map<String, KClass<out AttachedBlobContainer>>,
+): AttachedBlobContainer {
+    val kClass = declarations[className]
+        ?: throw IllegalArgumentException("There is no longer a blob declaration called '$className'")
+    return instantiateDeclaration(kClass, id)
 }
 
 /** The ids alone, for the places that only need to know which values a model refers to. */

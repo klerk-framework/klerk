@@ -21,8 +21,43 @@ data class SchemaHasVar(var street: Street)
 data class SchemaNestedVar(val inner: SchemaHasVar)
 data class SchemaBlobHolder(val cover: AttachedBlobID)
 data class SchemaNestedBlobs(val holders: List<SchemaBlobHolder>)
+data class SchemaBodyVar(val street: Street) {
+    var counter: Int = 0
+}
+data class SchemaWithDefault(val street: Street, val other: Street = Street("default"))
 
 class ObjectSchemaTest {
+
+    @Test
+    fun `Fields describe the constructor parameters`() {
+        val schema = ObjectSchema.of(SchemaPerson::class)
+        assertEquals(listOf("name", "address", "nicknames", "friends"), schema.fields.map { it.name })
+        assertEquals(PropertyType.String, schema.field("name")?.type)
+        assertNull(schema.field("address")?.type)
+        assertNull(schema.field("missing"))
+
+        val friends = assertNotNull(schema.field("friends"))
+        assertTrue(friends.isCollection)
+        assertNull(friends.type)
+        assertEquals(ModelID::class, friends.valueClass)
+        assertEquals(Author::class, friends.referencedModel)
+
+        val owner = assertNotNull(ObjectSchema.of(SchemaAddress::class).field("owner"))
+        assertEquals(PropertyType.Ref, owner.type)
+        assertTrue(owner.isNullable)
+        assertEquals(Author::class, owner.referencedModel)
+        assertEquals(ModelID<Author>(3), owner.get(person.address))
+    }
+
+    @Test
+    fun `An instance is created from values by name`() {
+        val schema = ObjectSchema.of(SchemaWithDefault::class)
+        assertEquals(SchemaWithDefault(Street("a"), Street("default")), schema.create(mapOf("street" to Street("a"))))
+        assertFailsWith<IllegalArgumentException> { schema.create(mapOf("other" to Street("b"))) }
+        assertFailsWith<IllegalArgumentException> { schema.create(mapOf("street" to Street("a"), "nope" to 1)) }
+        assertEquals("default", schema.field("other")?.kotlinDefaultInstance?.valueWithoutAuthorization)
+        assertNull(schema.field("street")?.kotlinDefaultInstance)
+    }
 
     private val person = SchemaPerson(
         name = Street("Main"),
@@ -67,6 +102,7 @@ class ObjectSchemaTest {
         assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaHasPrivateNested::class) }
         assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaPrivateConstructor::class) }
         assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaNestedVar::class) }
+        assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaBodyVar::class) }
     }
 
     @Test

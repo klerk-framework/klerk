@@ -200,11 +200,11 @@ class KlerkJsonTest {
     }
 
     @Test
-    fun `Event parameters from JSON`() {
-        val parameters = EventParameters(Inner::class)
-        assertEquals(Inner(Name("x")), parameters.fromJson("""{"name":"x"}"""))
-        val e = assertFailsWith<IllegalArgumentException> { parameters.fromJson("""{"name":"x","other":1}""") }
-        assertEquals("Invalid parameters for Inner: 'other' is not a property of Inner", e.message)
+    fun `Schema from JSON`() {
+        val schema = ObjectSchema.of(Inner::class)
+        assertEquals(Inner(Name("x")), schema.fromJson("""{"name":"x"}"""))
+        val e = assertFailsWith<IllegalArgumentException> { schema.fromJson("""{"name":"x","other":1}""") }
+        assertEquals("Invalid JSON for Inner: 'other' is not a property of Inner", e.message)
     }
 
     private fun reasonFor(change: MutableMap<String, JsonElement>.() -> Unit): String {

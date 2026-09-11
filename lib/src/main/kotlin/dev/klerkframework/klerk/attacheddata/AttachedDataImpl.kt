@@ -354,6 +354,10 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         // than from inside a job an hour later. The list is empty when the only step is noPreAttachProcessing, and
         // then there is nothing for a job to do.
         val steps = declaration?.let { instantiateDeclaration(it, AttachedBlobID(0)).stepNames } ?: emptyList()
+        // The job that runs the steps finds the declaration by name among those the specification uses.
+        require(steps.isEmpty() || declaration?.qualifiedName in specification.attachedBlobContainers) {
+            "${declaration?.qualifiedName ?: declaration} is not the type of any model property or event parameter"
+        }
         val requested = lease ?: settings.unclaimedAttachedDataLifetime
         require(requested <= settings.maxAttachedDataLease) {
             "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +

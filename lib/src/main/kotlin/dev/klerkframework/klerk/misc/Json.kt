@@ -48,8 +48,8 @@ private fun mismatch(path: String, problem: String, cause: Throwable? = null): N
 
 private fun join(path: String, key: String) = if (path.isEmpty()) key else "$path.$key"
 
-private fun encodeObject(schema: ObjectSchema, value: Any): JsonObject =
-    JsonObject(schema.fields.associate { it.name to encodeValue(it.type, it.get(value)) })
+private fun encodeObject(schema: ObjectSchema<*>, value: Any): JsonObject =
+    JsonObject(schema.fields.associate { it.name to encodeValue(it.schemaType, it.get(value)) })
 
 private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
     if (value == null) {
@@ -85,7 +85,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
     }
 }
 
-private fun decodeObject(schema: ObjectSchema, json: JsonElement, path: String): Any {
+private fun decodeObject(schema: ObjectSchema<*>, json: JsonElement, path: String): Any {
     val obj = json as? JsonObject ?: mismatch(path, "is ${describe(json)}, expected an object")
     val names = schema.fields.map { it.name }
     val unknown = obj.keys.filterNot { it in names }
@@ -95,7 +95,7 @@ private fun decodeObject(schema: ObjectSchema, json: JsonElement, path: String):
                 missing.map { "'${join(path, it)}' is missing" }
         throw JsonMismatchException(problems.joinToString(", "))
     }
-    val arguments = schema.fields.map { decodeValue(it.type, obj.getValue(it.name), join(path, it.name)) }
+    val arguments = schema.fields.map { decodeValue(it.schemaType, obj.getValue(it.name), join(path, it.name)) }
     return construct(schema.kClass.simpleName, path) { schema.create(arguments) }
 }
 

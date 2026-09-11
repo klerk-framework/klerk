@@ -28,13 +28,13 @@ class StateMachineTest {
 
             val parameters = klerk.spec.getParameters(CreateBook.id)
             requireNotNull(parameters)
-            val p = parameters.all.first()
+            val p = parameters.fields.first()
             println(p.name)
             println(p.isNullable)
             println(p.type)
-            println(p.modelIDType)
+            println(p.referencedModel)
             println(p.recommendedDefaultValue)
-            assertTrue(parameters.raw == CreateBookParams::class)
+            assertTrue(parameters.kClass == CreateBookParams::class)
 
         }
 

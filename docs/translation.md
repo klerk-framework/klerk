@@ -25,7 +25,7 @@ actor is.
 ```kotlin
 interface KlerkTranslation {
     fun property(property: KProperty1<*, *>): String
-    fun propertyDescription(property: String): String?
+    fun propertyDescription(property: KProperty1<*, *>): String?
     fun event(event: EventReference): String
     fun function(f: Function<Any>): String
     fun mustBeAtLeast(value: Number): String

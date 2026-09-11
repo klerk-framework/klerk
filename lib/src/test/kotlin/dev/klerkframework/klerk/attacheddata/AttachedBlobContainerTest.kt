@@ -256,6 +256,16 @@ class AttachedBlobContainerTest {
     }
 
     @Test
+    fun `a declaration that no property uses is refused`() = runBlocking {
+        val klerk = start()
+        val e = assertFailsWith<IllegalArgumentException> {
+            klerk.attachedData.prepare("anything".byteInputStream(), UnusedDocument::class, Ctx.system())
+        }
+        assertTrue(e.message!!.contains("UnusedDocument"), e.message!!)
+        klerk.meta.stop()
+    }
+
+    @Test
     fun `a step that fails is retried, and the steps before it are not run again`() = runBlocking {
         counted = 0
         flaky = 1
@@ -449,6 +459,12 @@ class NeedsMoreThanAnId(id: AttachedBlobID, val extra: String) : AttachedBlobCon
 class FlakyDocument(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val acceptUnrecognised: Boolean = true
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::failOnce)
+}
+
+/** A container with steps that no model property or event parameter uses. */
+class UnusedDocument(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val acceptUnrecognised: Boolean = true
+    override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt)
 }
 
 suspend fun countIt(args: BlobPreAttachStepArgs): BlobPreAttachStepResult {

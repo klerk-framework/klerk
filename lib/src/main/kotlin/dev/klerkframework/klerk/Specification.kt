@@ -84,7 +84,7 @@ public data class Specification<C : KlerkContext, V>(
         managedModels.forEach { KlerkJson.requireStorable(it.kClass) }
         managedModels
             .flatMap { it.stateMachine.getAllEvents() }
-            .mapNotNull { getParameters(it)?.raw }
+            .mapNotNull { getParameters(it)?.kClass }
             .forEach { KlerkJson.requireStorable(it) }
     }
 
@@ -258,6 +258,11 @@ public data class Specification<C : KlerkContext, V>(
         }
     }
 
+    /** Every [AttachedBlobContainer] class a model property or event parameter uses, by qualified name. */
+    internal val attachedBlobContainers: Map<String, KClass<out AttachedBlobContainer>> by lazy {
+        declaredAttachedBlobContainers().keys.mapNotNull { kClass -> kClass.qualifiedName?.let { it to kClass } }.toMap()
+    }
+
     /** Every [AttachedBlobContainer] class a model property or event parameter uses, and where it was found. */
     private fun declaredAttachedBlobContainers(): Map<KClass<out AttachedBlobContainer>, String> {
         val found = mutableMapOf<KClass<out AttachedBlobContainer>, String>()
@@ -423,49 +428,6 @@ public data class Specification<C : KlerkContext, V>(
     }
 
     /**
-     * Returns a list of method names from views that returns lists of ModelId<type>
-     */
-    internal fun getViewLists(type: KType): List<String> {
-        return getViewMembers(type).map { it.name }
-    }
-
-    /**
-     * Finds the method in any view and calls it.
-     */
-    internal fun getViewList(type: KType, methodName: String): List<ModelID<Any>> {
-        val desiredType = List::class.createType(
-            listOf(
-                KTypeProjection(
-                    type = type.withNullability(false),
-                    variance = KVariance.INVARIANT
-                )
-            )
-        )
-        val view = managedModels.map { it.collections }.single {
-            it::class.members.any { m -> m.name == methodName && m.returnType == desiredType }
-        }
-
-        val callable = view::class.members.single { m -> m.name == methodName && m.returnType == desiredType }
-        @Suppress("UNCHECKED_CAST")
-        return callable.call(view) as List<ModelID<Any>>
-    }
-
-    private fun getViewMembers(type: KType): List<KCallable<*>> {
-        val desiredType = List::class.createType(
-            listOf(
-                KTypeProjection(
-                    type = type.withNullability(false),
-                    variance = KVariance.INVARIANT
-                )
-            )
-        )
-        return managedModels.flatMap { mm ->
-            mm.collections::class.members.filter { view -> view.returnType == desiredType }
-        }
-        //   .filter { it.parameters.isEmpty() }
-    }
-
-    /**
      * Every [ModelView] declared on any managed model's [ModelViews], paired with the model class it belongs to.
      */
     public fun getCollections(): List<Pair<KClass<out Any>, ModelView<out Any, C>>> {
@@ -492,7 +454,7 @@ public data class Specification<C : KlerkContext, V>(
      */
     public fun getValidationCollectionFor(
         eventReference: EventReference,
-        parameter: EventParameter
+        parameter: SchemaField
     ): ModelView<out Any, C>? {
         val parametersClass = parametersClassOf(eventReference) ?: return null
         return validReferencesOf(eventReference)[PropertyKey(parametersClass, parameter.name)]
@@ -530,7 +492,7 @@ public data class Specification<C : KlerkContext, V>(
      */
     public fun getValidEnumsFor(
         eventReference: EventReference,
-        parameter: EventParameter
+        parameter: SchemaField
     ): Set<Enum<*>>? {
         val parametersClass = parametersClassOf(eventReference) ?: return null
         return validEnumsOf(eventReference)[PropertyKey(parametersClass, parameter.name)]
@@ -566,18 +528,11 @@ public data class Specification<C : KlerkContext, V>(
     }
 
     /**
-     * The declared parameter class of the event [eventReference], reflectively wrapped as [EventParameters], or null
-     * if the event takes no parameters.
+     * The [ObjectSchema] of the parameters class of the event [eventReference], or null if the event takes no
+     * parameters.
      */
-    public fun getParameters(eventReference: EventReference): EventParameters<*>? {
-        @Suppress("UNCHECKED_CAST")
-        return when (val event = getEvent(eventReference)) {
-            is InstanceEventNoParameters -> null
-            is InstanceEventWithParameters<*, *> -> EventParameters((event as InstanceEventWithParameters<Any, Any>).parametersClass) // is this cast needed?
-            is VoidEventNoParameters -> null
-            is VoidEventWithParameters<*, *> -> EventParameters((event as VoidEventWithParameters<Any, Any>).parametersClass)
-        }
-    }
+    public fun getParameters(eventReference: EventReference): ObjectSchema<*>? =
+        parametersClassOf(eventReference)?.let { ObjectSchema.of(it) }
 
     /**
      * The void events (i.e. events that create a new instance of [clazz]) that [context]'s actor is currently
@@ -702,17 +657,6 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             )
         }
 
-        //val valueClasses = managedModelsValue.flatMap { managed -> managed.kClass.memberProperties.map { (it.returnType.classifier!! as KClass<*>) } }.toSet()
-
-
-        /*            .mapNotNull { it.parameters?.raw }
-                    .mapNotNull { it.primaryConstructor?.parameters}
-                    .flatMap { it }
-                    .map { (it.type.classifier!! as KClass<*>) }
-                    .toSet()
-
-         */
-
         return Specification(
             views = views,
             authorization = AuthorizationConfig(
@@ -836,11 +780,12 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
         /**
          * Registers [clazz] as a managed model with its [stateMachine] and [view] (the [ModelViews] holding its
-         * collections). [clazz] must be a data class with only `val` properties, each of a [DataContainer] type (or
-         * a collection thereof); every managed model's simple name must be unique within the specification.
+         * collections). [clazz] must be a data class that Klerk can handle (see [ObjectSchema]); every managed model's
+         * simple name must be unique within the specification.
          *
-         * @throws IllegalArgumentException if [clazz] has a `var` property or a property that isn't a [DataContainer]
-         * @throws IllegalArgumentException if another managed model already has the same simple name
+         * @throws IllegalArgumentException if [clazz] is not a data class, or another managed model already has the
+         * same simple name
+         * @throws IllegalConfigurationException if [clazz] has a `var`, or a property Klerk cannot store
          */
         public fun <T : Any, ModelStates : Enum<*>> model(
             clazz: KClass<T>,
@@ -1304,17 +1249,8 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 }
 
 private fun <T : Any> validateModelClass(clazz: KClass<T>) {
-    require(clazz.isData)
-    val problematic = clazz.memberProperties.filterIsInstance<KMutableProperty<*>>()
-    if (problematic.isNotEmpty()) {
-        throw IllegalArgumentException(
-            "Properties in models must be immutable. Change var -> val for ${
-                problematic.map { "'${it.name}'" }.joinToString(", ")
-            } in ${clazz.qualifiedName}"
-        )
-    }
-
-    KlerkJson.requireStorable(clazz)
+    require(clazz.isData) { "${clazz.qualifiedName} must be a data class" }
+    ObjectSchema.of(clazz)
 }
 
 /**

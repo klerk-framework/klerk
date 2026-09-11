@@ -35,7 +35,11 @@ internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessB
 
     override suspend fun step(args: JobStepArgs.Local<ProcessBlobCursor, C, V>): JobResult<ProcessBlobCursor> {
         val attachedData = args.klerk.impl().attachedDataImpl
-        val declaration = instantiateDeclaration(args.cursor.declaration, AttachedBlobID(args.cursor.blobId))
+        val declaration = instantiateDeclaration(
+            args.cursor.declaration,
+            AttachedBlobID(args.cursor.blobId),
+            args.klerk.spec.attachedBlobContainers,
+        )
         return try {
             when (val progress = attachedData.processNextStep(declaration)) {
                 is BlobProcessing.More -> JobResult.Yield(

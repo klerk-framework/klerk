@@ -1065,7 +1065,12 @@ class PaintingImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
-data class CreatePaintingParams(val title: PaintingTitle, val image: PaintingImage)
+data class CreatePaintingParams(
+    val title: PaintingTitle,
+    val image: PaintingImage,
+    // Makes FlakyDocument a declaration the specification knows, so its processing job can find it.
+    val document: dev.klerkframework.klerk.attacheddata.FlakyDocument? = null,
+)
 
 object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(
     Painting::class, EXTERNAL, CreatePaintingParams::class
