@@ -5,9 +5,11 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ReaderWithAuth
+import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 import dev.klerkframework.klerk.collection.*
 
@@ -79,6 +81,33 @@ class EventProcessorTest {
 
             assertEquals(3, willNotFail.deletedModels.size)
         }
+    }
+
+    @Test
+    fun `startup fails when a stored model no longer passes validation`() = runBlocking {
+        val storage = RamStorage()
+
+        val first = Klerk.create(specification, testSettings(storage)) as KlerkImpl
+        first.meta.start()
+        val authorId = createAuthorJKRowling(first)
+        val validAuthor = ReaderWithAuth(first, Ctx.system()).get(authorId)
+
+        // Bypass validation to get a property that no longer satisfies FirstName's minLength onto disk.
+        val corrupted = validAuthor.copy(props = validAuthor.props.copy(firstName = FirstName("")))
+        storage.store<Author, Nothing?, Ctx, Views>(
+            ProcessingData(aggregatedModelState = mapOf(authorId to corrupted), updatedModels = listOf(authorId)),
+            command = null,
+            context = null,
+            sequenceNumber = 1,
+        )
+        first.meta.stop()
+
+        val second = Klerk.create(specification, testSettings(storage)) as KlerkImpl
+        val exception = assertFailsWith<PersistedModelValidationException> {
+            second.meta.start()
+        }
+        assertEquals("Author", exception.modelType)
+        assertEquals(authorId.value, exception.modelId)
     }
 }
 

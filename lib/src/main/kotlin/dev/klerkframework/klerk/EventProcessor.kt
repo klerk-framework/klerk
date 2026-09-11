@@ -73,6 +73,15 @@ internal class EventProcessor<C : KlerkContext, V>(
             ModelCache.storeFromPersistence(model)
             (allLists[model.props::class.simpleName!!]
                 ?: throw NullPointerException()).add(model.id.value)  // the 'all' list-source
+
+            val problems = klerk.validator.validateDataContainers(model.props, DefaultTranslation)
+            if (problems.isNotEmpty()) {
+                throw PersistedModelValidationException(
+                    model.props::class.simpleName!!,
+                    model.id.value,
+                    problems.joinToString()
+                )
+            }
         }
         val readModelsMilliS = clock.now().toEpochMilliseconds() - start.toEpochMilliseconds()
         val durationSeconds = readModelsMilliS.toFloat() / 1000

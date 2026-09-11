@@ -163,6 +163,23 @@ public class PersistedModelMismatchException(
 )
 
 /**
+ * Thrown at startup when a stored model's properties no longer pass their [dev.klerkframework.klerk.datatypes.DataContainer.validate]
+ * rules, e.g. because a rule (min, max, minLength, ...) was tightened after the model was stored. Register a
+ * [dev.klerkframework.klerk.migration.MigrationStep] that fixes the stored data.
+ *
+ * @property modelType the model's simple class name, as stored
+ * @property reason which properties are invalid, and why. Never contains a stored value.
+ */
+public class PersistedModelValidationException(
+    public val modelType: String,
+    public val modelId: Int,
+    public val reason: String,
+) : RuntimeException(
+    "The stored $modelType with id $modelId no longer passes validation: $reason. Register a MigrationStep " +
+            "that makes the stored data valid."
+)
+
+/**
  * Error codes for Klerk configuration errors. The error codes should never change, so if a code is
  * removed or modified, the old code should not be reused.
  */
