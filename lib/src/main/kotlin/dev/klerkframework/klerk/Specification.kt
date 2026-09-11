@@ -7,8 +7,6 @@ import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
-import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.datatypes.propertiesMustInheritFrom
 import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
@@ -1316,22 +1314,8 @@ private fun <T : Any> validateModelClass(clazz: KClass<T>) {
     }
 
     clazz.memberProperties.forEach { prop ->
-        require(prop.returnType.toString() != DataContainer::class.qualifiedName)
-        {
-            "Illegal property: ${clazz.simpleName}.${prop.name} is ${prop.returnType}. The properties in your model should inherit from (or be a collection of) ${
-                propertiesMustInheritFrom.map { it.simpleName }.joinToString(", ")
-            }"
-        }
-        require(propertiesMustInheritFrom.none { it.qualifiedName == prop.returnType.toString() })
-        {
-            "Illegal property: ${clazz.simpleName}.${prop.name} is ${prop.returnType}. The properties in your model should inherit from (or be a collection of) ${
-                propertiesMustInheritFrom.map { it.simpleName }.joinToString(", ")
-            }"
-        }
-
+        validatePropertyType(prop.name, prop.returnType)
     }
-
-    // do we also need to check so that the user provided value classes are completely immutable?
 }
 
 /**

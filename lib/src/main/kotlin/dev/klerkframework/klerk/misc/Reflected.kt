@@ -423,8 +423,7 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
      * or is a mutable collection type
      */
     public fun validate() {
-        val ktype = raw.type.withNullability(false)
-        validate(ktype)
+        validatePropertyType(name, raw.type.withNullability(false))
     }
 
     private fun findValueClass(): KClass<*> {
@@ -443,46 +442,6 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
             return null
         }
         return raw.type.withNullability(false).arguments.single().type.toString()
-    }
-
-    private fun validate(ktype: KType) {
-        if (basicTypeEnumFromKType(ktype) != null) {
-            return
-        }
-
-        if (ktype.isSubtypeOf(Collection::class.starProjectedType)) {
-            if (ktype.toString().contains("MutableSet")) {
-                throwPropertyException(ktype, "MutableSet is not allowed.")
-            }
-            if (ktype.toString().contains("MutableList")) {
-                throwPropertyException(ktype, "MutableList is not allowed.")
-            }
-            if (!(ktype.toString().contains("List") || ktype.toString().contains("Set"))) {
-                throwPropertyException(ktype, "Only List and Set collections are allowed.")
-            }
-            validate(ktype.arguments.single().type!!)
-            return
-        }
-        val constructors = (ktype.classifier!! as KClass<*>).constructors
-        if (constructors.size != 1) {
-            throwPropertyException(ktype, "Found ${constructors.size} constructors, expected only one.")
-        }
-        val constructor = constructors.single()
-        if (constructor.parameters.isEmpty()) {
-            throwPropertyException(ktype, "Found constructor with no parameters.")
-        }
-        constructor.parameters.forEach { kParameter: KParameter ->
-            validate(kParameter.type)
-        }
-    }
-
-    private fun throwPropertyException(type: KType, message: String): Nothing {
-        val first = "Property '$name' has invalid type '$type'."
-        val propertyDocumentation = "Properties must be subtypes of DataContainer or List/Set thereof."
-        throw IllegalConfigurationException(
-            KlerkErrorCode.PropertyMustBeDataContainer,
-            "$first $message $propertyDocumentation"
-        )
     }
 
     /**
@@ -666,6 +625,53 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
     }
 
     return null
+}
+
+/**
+ * Validates that [ktype] is a legal type for a model or event property: a [DataContainer], a [ModelID], an
+ * [AttachedBlobID]/[AttachedStringID], a List/Set thereof, or a class whose single constructor's parameters are
+ * themselves valid.
+ * @throws IllegalConfigurationException otherwise
+ */
+internal fun validatePropertyType(name: String, ktypeMaybeNullable: KType) {
+    val ktype = ktypeMaybeNullable.withNullability(false)
+    if (basicTypeEnumFromKType(ktype) != null) {
+        return
+    }
+
+    if (ktype.isSubtypeOf(Collection::class.starProjectedType)) {
+        if (ktype.toString().contains("MutableSet")) {
+            throwPropertyException(name, ktype, "MutableSet is not allowed.")
+        }
+        if (ktype.toString().contains("MutableList")) {
+            throwPropertyException(name, ktype, "MutableList is not allowed.")
+        }
+        if (!(ktype.toString().contains("List") || ktype.toString().contains("Set"))) {
+            throwPropertyException(name, ktype, "Only List and Set collections are allowed.")
+        }
+        validatePropertyType(name, ktype.arguments.single().type!!)
+        return
+    }
+    val constructors = (ktype.classifier!! as KClass<*>).constructors
+    if (constructors.size != 1) {
+        throwPropertyException(name, ktype, "Found ${constructors.size} constructors, expected only one.")
+    }
+    val constructor = constructors.single()
+    if (constructor.parameters.isEmpty()) {
+        throwPropertyException(name, ktype, "Found constructor with no parameters.")
+    }
+    constructor.parameters.forEach { kParameter: KParameter ->
+        validatePropertyType(name, kParameter.type)
+    }
+}
+
+private fun throwPropertyException(name: String, type: KType, message: String): Nothing {
+    val first = "Property '$name' has invalid type '$type'."
+    val propertyDocumentation = "Properties must be subtypes of DataContainer or List/Set thereof."
+    throw IllegalConfigurationException(
+        KlerkErrorCode.PropertyMustBeDataContainer,
+        "$first $message $propertyDocumentation"
+    )
 }
 
 /*fun extractValueClasses(from: Any): Set<KClass<String>> {

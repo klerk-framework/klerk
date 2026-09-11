@@ -469,15 +469,6 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
     }
 }
 
-internal val propertiesMustInheritFrom = setOf(
-    StringContainer::class,
-    IntContainer::class,
-    LongContainer::class,
-    FloatContainer::class,
-    BooleanContainer::class,
-    EnumContainer::class
-)
-
 /** A ready-to-use [StringContainer] for examples/tests where a real domain-specific container isn't the point. */
 public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
     override val minLength: Int = 1
