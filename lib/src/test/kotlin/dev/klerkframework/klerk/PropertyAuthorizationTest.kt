@@ -134,10 +134,95 @@ class PropertyAuthorizationTest {
         }
     }
 
-    private suspend fun startKlerk(storage: Persistence = RamStorage()): Klerk<Ctx, Views> {
+    @Test
+    fun `valueWithoutAuthorization is not allowed on a read result by default`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            val author = klerk.read(Ctx.unauthenticated()) { get(rowling) }
+            assertFailsWith<AuthorizationException> { author.props.lastName.valueWithoutAuthorization }
+            assertFailsWith<AuthorizationException> { author.props.firstName.valueWithoutAuthorization }
+            assertEquals("J.K", author.props.firstName.value)
+        }
+    }
+
+    @Test
+    fun `valueWithoutAuthorization bypasses the rules when allowBypassAuthRead is enabled`() {
+        runBlocking {
+            val klerk = startKlerk(allowBypassAuthRead = true)
+            val rowling = createAuthorJKRowling(klerk)
+
+            val author = klerk.read(Ctx.unauthenticated()) { get(rowling) }
+            assertNull(author.props.lastName.valueOrNullIfNotAuthorized)
+            assertEquals("Rowling", author.props.lastName.valueWithoutAuthorization)
+        }
+    }
+
+    @Test
+    fun `system reads and containers created by the application allow valueWithoutAuthorization`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+
+            assertEquals("Rowling", klerk.read(Ctx.system()) { get(rowling) }.props.lastName.valueWithoutAuthorization)
+            assertEquals("Rowling", LastName("Rowling").valueWithoutAuthorization)
+        }
+    }
+
+    @Test
+    fun `valueWithoutAuthorization is not allowed on the models in a command result by default`() {
+        runBlocking {
+            val klerk = startKlerk()
+
+            val result = klerk.handle(
+                Command(event = AnEventWithoutParameters, model = null, params = null),
+                Ctx.unauthenticated(),
+                ProcessingOptions(CommandToken.simple()),
+            ).orThrow()
+
+            val author = assertNotNull(result.authorizedModels[result.createdModels.single()]).props as Author
+            assertFailsWith<AuthorizationException> { author.firstName.valueWithoutAuthorization }
+        }
+    }
+
+    @Test
+    fun `containers from a read result can be passed to a command`() {
+        runBlocking {
+            val klerk = startKlerk()
+            val rowling = createAuthorJKRowling(klerk)
+            val readByAnonymous = klerk.read(Ctx.unauthenticated()) { get(rowling) }
+
+            val result = klerk.handle(
+                Command(
+                    event = CreateAuthor,
+                    model = null,
+                    params = CreateAuthorParams(
+                        firstName = readByAnonymous.props.firstName,
+                        lastName = readByAnonymous.props.lastName,
+                        phone = PhoneNumber("+46123456"),
+                        secretToken = SecretPasscode(234234902359245345),
+                    ),
+                ),
+                Ctx.system(),
+                ProcessingOptions(CommandToken.simple()),
+            ).orThrow()
+
+            // the restrictions of the anonymous read must not follow the containers into the model cache
+            val created = klerk.read(Ctx.system()) { get(assertNotNull(result.primaryModel)) }
+            assertEquals("Rowling", created.props.lastName.value)
+            assertEquals("Rowling", created.props.lastName.valueWithoutAuthorization)
+        }
+    }
+
+    private suspend fun startKlerk(
+        storage: Persistence = RamStorage(),
+        allowBypassAuthRead: Boolean = false,
+    ): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val klerk = Klerk.create(createPropertyAuthConfig(collections), testSettings(storage))
+        val settings = testSettings(storage).copy(allowBypassAuthRead = allowBypassAuthRead)
+        val klerk = Klerk.create(createPropertyAuthConfig(collections), settings)
         klerk.meta.start()
         return klerk
     }

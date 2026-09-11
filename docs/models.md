@@ -116,7 +116,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
     override val validators = setOf(::mustBeEven)
 
     fun mustBeEven(t: Translation): PropertyValidation {
-        return if (valueWithoutAuthorization % 2 == 0) PropertyValidation.Valid else PropertyValidation.Invalid()
+        return if (value % 2 == 0) PropertyValidation.Valid else PropertyValidation.Invalid()
     }
 }
 ```
@@ -133,9 +133,8 @@ Different ways to read the wrapped value:
   UI. If you want to render the value in a different format, you can override `toString()` on the container.
 * `value` — throws `AuthorizationException` if the current actor is not authorized to read this property (per your
   [authorization](authorization.md) rules).
-* `valueWithoutAuthorization` — always available, bypassing authorization. Business logic inside the framework (e.g. a
-  container's own validators, which run before authorization is even relevant) uses this. Application code normally
-  should not.
+* `valueWithoutAuthorization` — bypasses authorization. On the models returned by a read or a command result for an
+  actor other than the system, it throws `AuthorizationException` unless `KlerkSettings.allowBypassAuthRead` is `true`.
 * `valueOrNullIfNotAuthorized` — like `value`, but returns `null` instead of throwing when unauthorized.
 
 Containers that never went through an authorizing read — the ones you construct yourself, and the ones the framework

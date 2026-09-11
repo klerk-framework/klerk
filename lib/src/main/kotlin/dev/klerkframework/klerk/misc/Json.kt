@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.microseconds
  * The JSON that model props and event parameters are stored as.
  *
  * Driven by each class's [ObjectSchema]: an object has exactly one key per constructor parameter, a [DataContainer] is
- * written as its `valueWithoutAuthorization` and a [ModelID] as a number. Decoding is strict: an unknown key, a missing
+ * written as its value (regardless of authorization) and a [ModelID] as a number. Decoding is strict: an unknown key, a missing
  * key (also for a nullable property or one with a default value) or a value of the wrong type throws
  * [JsonMismatchException].
  */
@@ -66,7 +66,7 @@ private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
 }
 
 private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): JsonElement {
-    val value = container.valueWithoutAuthorization
+    val value = container.rawValue
     return when (kind) {
         ContainerKind.AttachedBlob, ContainerKind.AttachedString -> JsonPrimitive((container as AttachedDataContainer<*>).rawId)
         ContainerKind.String, ContainerKind.Enum -> JsonPrimitive(value as String)

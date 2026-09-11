@@ -40,7 +40,7 @@ internal val instantToStringFormat = LocalDateTime.Format {
  *      Code that uses this function cannot misinterpret the unit.
  * 7. you can express default values by providing a no-params constructor.
  */
-public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) : Cloneable {
+public abstract class DataContainer<T>(internal val rawValue: T) : Cloneable {
 
     /**
      * The read authorization of *this particular instance*.
@@ -55,6 +55,26 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
      */
     private var authorizedToRead: Boolean = true
 
+    private var bypassAllowed: Boolean = true
+
+    /**
+     * The value in this container, ignoring the read authorization.
+     *
+     * @throws AuthorizationException if this container belongs to a model returned by a read or a command result for
+     * an actor other than the system, and [dev.klerkframework.klerk.KlerkSettings.allowBypassAuthRead] is false.
+     */
+    public val valueWithoutAuthorization: T
+        get() {
+            if (!bypassAllowed) {
+                throw AuthorizationException(
+                    KlerkErrorCode.BypassAuthReadNotAllowed,
+                    "valueWithoutAuthorization is not allowed on ${this::class.simpleName}. Use value or " +
+                            "valueOrNullIfNotAuthorized, or enable KlerkSettings.allowBypassAuthRead."
+                )
+            }
+            return rawValue
+        }
+
     /**
      * The value in this container.
      *
@@ -67,14 +87,14 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
                 logger.warn { message }
                 throw AuthorizationException(KlerkErrorCode.UnauthorizedPropertyRead, message)
             }
-            return valueWithoutAuthorization
+            return rawValue
         }
 
     /**
      * Like [value], but returns null instead of throwing if the actor is not allowed to read this property.
      */
     public val valueOrNullIfNotAuthorized: T?
-        get() = if (authorizedToRead) valueWithoutAuthorization else null
+        get() = if (authorizedToRead) rawValue else null
 
     /**
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
@@ -92,7 +112,7 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
         requireNamedRule(validator, "A validator of ${this::class.simpleName}")
 
     /**
-     * Checks the built-in constraints and [validators] against [valueWithoutAuthorization].
+     * Checks the built-in constraints and [validators] against the value, ignoring the read authorization.
      *
      * @param propertyName used to build the returned problem's message
      * @return null if valid, otherwise the first failing rule as an [InvalidPropertyProblem]
@@ -104,12 +124,17 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
      * than by calling a constructor, so no validation or `init` block is re-executed and containers that store the
      * value in a different representation than they were constructed from (e.g. [InstantContainer]) are handled too.
      */
-    internal fun copyWithAuthorization(isAuthorized: Boolean): DataContainer<T> {
+    internal fun copyWithAuthorization(isAuthorized: Boolean, allowBypass: Boolean): DataContainer<T> {
         @Suppress("UNCHECKED_CAST")
         val copy = clone() as DataContainer<T>
         copy.authorizedToRead = isAuthorized
+        copy.bypassAllowed = allowBypass
         return copy
     }
+
+    /** This container without the restrictions a read put on it, e.g. when application code passes it to a command. */
+    internal fun withoutReadRestrictions(): DataContainer<T> =
+        if (authorizedToRead && bypassAllowed) this else copyWithAuthorization(isAuthorized = true, allowBypass = true)
 
     /**
      * Sets the authorization directly. Intended for tests — Klerk itself uses [copyWithAuthorization] since it must not
@@ -134,17 +159,17 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     public open val recommendedDefault: T? = null
 
     override fun toString(): String {
-        return if (authorizedToRead) valueWithoutAuthorization.toString() else MASKED
+        return if (authorizedToRead) rawValue.toString() else MASKED
     }
 
     override fun equals(other: Any?): Boolean {
         if (other?.javaClass != this.javaClass) {
             return false
         }
-        return valueWithoutAuthorization == (other as DataContainer<*>).valueWithoutAuthorization
+        return rawValue == (other as DataContainer<*>).rawValue
     }
 
-    override fun hashCode(): Int = valueWithoutAuthorization.hashCode()
+    override fun hashCode(): Int = rawValue.hashCode()
 
     public companion object {
         /**
@@ -198,23 +223,23 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
-        if (valueWithoutAuthorization.length < minLength) {
+        if (rawValue.length < minLength) {
             return InvalidPropertyProblem(
-                if (valueWithoutAuthorization.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(
+                if (rawValue.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(
                     minLength
                 ), propertyName
             )
         }
 
-        if (valueWithoutAuthorization.length > maxLength) {
+        if (rawValue.length > maxLength) {
             return InvalidPropertyProblem(translation.klerk.tooLong(maxLength), propertyName)
         }
-        if (valueWithoutAuthorization.lines().size > maxLines) {
+        if (rawValue.lines().size > maxLines) {
             return InvalidPropertyProblem(translation.klerk.tooManyLines(maxLines), propertyName)
         }
         val regex = regexPattern
         if (regex != null && !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
-                .matches(valueWithoutAuthorization)) {
+                .matches(rawValue)) {
             return InvalidPropertyProblem(translation.klerk.invalid, propertyName)
         }
         return validators
@@ -248,10 +273,10 @@ public abstract class IntContainer(value: Int) :
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
 
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
@@ -280,10 +305,10 @@ public abstract class ShortContainer(value: Short) : DataContainer<Short>(value)
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
@@ -311,10 +336,10 @@ public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
@@ -342,10 +367,10 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
@@ -373,10 +398,10 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toDouble()), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toDouble()), propertyName)
         }
         return validators
@@ -404,10 +429,10 @@ public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toLong()), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toLong()), propertyName)
         }
         return validators
@@ -435,10 +460,10 @@ public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(val
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
         }
         return validators
@@ -466,10 +491,10 @@ public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value)
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
         }
         return validators
@@ -497,10 +522,10 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators
@@ -528,10 +553,10 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
-        if (valueWithoutAuthorization < min) {
+        if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
         }
-        if (valueWithoutAuthorization > max) {
+        if (rawValue > max) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
         }
         return validators

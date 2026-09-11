@@ -766,6 +766,10 @@ public class JobIdContainer(value: Long) : LongContainer(value) {
     override val min: Long = 0
     override val max: Long = Int.MAX_VALUE.toLong()
 
-    /** The wrapped value as a [JobId]. */
-    public val jobId: JobId get() = JobId(valueWithoutAuthorization.toInt())
+    /**
+     * The wrapped value as a [JobId].
+     *
+     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
+     */
+    public val jobId: JobId get() = JobId(value.toInt())
 }

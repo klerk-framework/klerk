@@ -13,6 +13,7 @@ import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.read.withoutReadRestrictions
 import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.ModelCache
@@ -74,8 +75,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         if (options.dryRun) {
             logger.log(misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)
-            val delta = eventProcessor.processPrimaryCommand(command, context, withoutAuth, options)
-            return CommandResult.from(delta, withoutAuth, context, specification)
+            val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
+            return CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
         }
 
         val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
@@ -85,8 +86,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             // is a slightly higher level description of the delta. We don't want to return the delta since it may
             // contain data that the user is not authorized to access.
             val readerWithoutAuth = ReaderWithoutAuth(klerk)
-            val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
-            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification)) {
+            val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
+            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)) {
                 is Failure -> {
                     logger.log(
                         result,
@@ -163,8 +164,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)
-        val delta = eventProcessor.processPrimaryCommand(command, context, readerWithoutAuth, options)
-        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification)) {
+        val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
+        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)) {
             is Failure -> {
                 checkpointOnly(jobCommit)
                 commandResult

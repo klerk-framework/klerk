@@ -1341,6 +1341,14 @@ public data class KlerkSettings(
     val allowUnsafeOperations: Boolean = false,
 
     /**
+     * Whether [dev.klerkframework.klerk.datatypes.DataContainer.valueWithoutAuthorization] may be used on the models
+     * returned by a read or a command result. When false (the default) it throws there, so that application code
+     * cannot bypass the `readProperties` rules. Reads made by the system, and containers you create yourself, are not
+     * affected.
+     */
+    val allowBypassAuthRead: Boolean = false,
+
+    /**
      * How long attached data that has been prepared but not yet claimed by a command survives (see
      * [KlerkAttachedData.prepare]). Mainly here so that tests don't have to wait a minute.
      */
@@ -1399,6 +1407,7 @@ public data class KlerkSettings(
                 jobs = jobs,
                 modelCache = modelCache,
                 allowUnsafeOperations = envBoolean("KLERK_ALLOW_UNSAFE_OPERATIONS") ?: defaults.allowUnsafeOperations,
+                allowBypassAuthRead = envBoolean("KLERK_ALLOW_BYPASS_AUTH_READ") ?: defaults.allowBypassAuthRead,
                 unclaimedAttachedDataLifetime = envDuration("KLERK_UNCLAIMED_ATTACHED_DATA_LIFETIME")
                     ?: defaults.unclaimedAttachedDataLifetime,
                 maxAttachedDataLease = envDuration("KLERK_MAX_ATTACHED_DATA_LEASE") ?: defaults.maxAttachedDataLease,

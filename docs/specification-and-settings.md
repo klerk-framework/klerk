@@ -45,6 +45,7 @@ val settings = KlerkSettings.fromEnvVars(persistence = SqlPersistence(dataSource
 | Environment variable                     | Setting                                                |
 |------------------------------------------|--------------------------------------------------------|
 | `KLERK_ALLOW_UNSAFE_OPERATIONS`          | `allowUnsafeOperations`                                |
+| `KLERK_ALLOW_BYPASS_AUTH_READ`           | `allowBypassAuthRead`                                  |
 | `KLERK_UNCLAIMED_ATTACHED_DATA_LIFETIME` | `unclaimedAttachedDataLifetime`                        |
 | `KLERK_MAX_ATTACHED_DATA_LEASE`          | `maxAttachedDataLease`                                 |
 | `KLERK_JOBS_ON_UNLOADABLE_JOB`           | `jobs.onUnloadableJob` (`FailToStart` or `DeadLetter`) |

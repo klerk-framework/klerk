@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.misc.ObjectSchema
 
@@ -27,6 +28,7 @@ internal class PropertyAuthScope<C : KlerkContext, V>(
     private val context: C,
     private val specification: Specification<C, V>,
     private val reader: ReaderWithoutAuth<C, V>,
+    private val allowBypass: Boolean,
 ) {
 
     private val decisions = HashMap<DecisionKey, Boolean>()
@@ -43,7 +45,7 @@ internal class PropertyAuthScope<C : KlerkContext, V>(
         }
         check(!finished) { "The reader cannot be used after its read has finished" }
         val securedProps = ObjectSchema.of(model.props::class).transformLeaves(model.props) { leaf ->
-            if (leaf is DataContainer<*>) leaf.copyWithAuthorization(isAuthorized(model, leaf)) else leaf
+            if (leaf is DataContainer<*>) leaf.copyWithAuthorization(isAuthorized(model, leaf), allowBypass) else leaf
         }
         if (securedProps === model.props) {
             return model
@@ -77,4 +79,17 @@ internal class PropertyAuthScope<C : KlerkContext, V>(
         }
 
     private data class DecisionKey(val modelId: Int, val property: DataContainer<*>)
+}
+
+/**
+ * Params may hold containers taken from a read result. Their restrictions belong to that read and must not end up in
+ * the model cache.
+ */
+internal fun <T : Any, P> withoutReadRestrictions(command: Command<T, P>): Command<T, P> {
+    val params: Any = command.params ?: return command
+    val cleaned = ObjectSchema.of(params::class).transformLeaves(params) { leaf ->
+        if (leaf is DataContainer<*>) leaf.withoutReadRestrictions() else leaf
+    }
+    @Suppress("UNCHECKED_CAST")
+    return if (cleaned === params) command else command.copy(params = cleaned as P)
 }

@@ -227,6 +227,7 @@ public enum class KlerkErrorCode(public val code: String) {
     AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11"),
     JobReadPositiveAuthorizationMissing("ERROR-AUTH-12"),
     JobReadNegativeAuthorizationExist("ERROR-AUTH-13"),
+    BypassAuthReadNotAllowed("ERROR-AUTH-14"),
 
     /**
      * A new job was refused because the queue is not draining fast enough. Only ever produced for *new* work — yields,

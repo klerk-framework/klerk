@@ -112,7 +112,7 @@ public class ObjectSchema<T : Any> private constructor(
 
     /**
      * Decodes an instance from the JSON Klerk stores it as: an object with exactly one key per field, a
-     * [DataContainer] as its `valueWithoutAuthorization` and a [ModelID] as a number.
+     * [DataContainer] as its value and a [ModelID] as a number.
      *
      * @throws IllegalArgumentException if a key is unknown or missing (also for a nullable field or one with a default
      * value), or a value has the wrong type

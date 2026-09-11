@@ -76,7 +76,8 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
             delta: ProcessingData<T, C, V>,
             reader: ReaderWithoutAuth<C, V>,
             context: C,
-            specification: Specification<C, V>
+            specification: Specification<C, V>,
+            allowBypassAuthRead: Boolean,
         ): CommandResult<T, C, V> {
             if (delta.problems.isNotEmpty()) {
                 return Failure(delta.problems)
@@ -84,10 +85,10 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
 
             // The models handed to the caller must have the property authorization applied, just like the models that
             // come out of a Reader.
-            val propertyAuth = PropertyAuthScope(context, specification, reader)
+            val propertyAuth = PropertyAuthScope(context, specification, reader, allowBypassAuthRead)
             val authorized = delta.aggregatedModelState
-                .mapValues { (_, model) -> propertyAuth.secure(model) }
                 .filter { isAuthorized(it.value, context, specification, reader) }
+                .mapValues { (_, model) -> propertyAuth.secure(model) }
 
             return Success(
                 primaryModel = delta.primaryModel as ModelID<T>,
