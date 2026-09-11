@@ -72,8 +72,8 @@ private class Big(value: ULong) : ULongContainer(value) {
     override val max = ULong.MAX_VALUE
 }
 
+private data class HasBig(val big: Big)
 private data class HasBareString(val name: String)
-private data class HasULong(val big: Big)
 private data class OnlyNullable(val moment: Moment?, val name: Name?)
 private data class HasMap(val names: Map<String, Name>)
 private data class HasMutableList(val names: MutableList<Name>)
@@ -186,10 +186,16 @@ class KlerkJsonTest {
     @Test
     fun `Types that cannot be stored are rejected up front`() {
         assertFailsWith<IllegalConfigurationException> { KlerkJson.requireStorable(HasBareString::class) }
-        assertFailsWith<IllegalConfigurationException> { KlerkJson.requireStorable(HasULong::class) }
         assertFailsWith<IllegalConfigurationException> { KlerkJson.requireStorable(HasMap::class) }
         assertFailsWith<IllegalConfigurationException> { KlerkJson.requireStorable(HasMutableList::class) }
         assertFailsWith<IllegalConfigurationException> { KlerkJson.requireStorable(HasEmpty::class) }
+    }
+
+    @Test
+    fun `ULongContainer round-trips through JSON`() {
+        val original = HasBig(Big(ULong.MAX_VALUE))
+        val deserialized = KlerkJson.decode(HasBig::class, KlerkJson.encode(original))
+        assertEquals(original, deserialized)
     }
 
     @Test

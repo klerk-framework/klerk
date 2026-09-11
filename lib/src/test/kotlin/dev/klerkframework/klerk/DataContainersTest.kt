@@ -1,9 +1,16 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.datatypes.ByteContainer
 import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DoubleContainer
 import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.ShortContainer
+import dev.klerkframework.klerk.datatypes.UByteContainer
+import dev.klerkframework.klerk.datatypes.UIntContainer
+import dev.klerkframework.klerk.datatypes.ULongContainer
+import dev.klerkframework.klerk.datatypes.UShortContainer
 import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.KlerkJson
 import kotlinx.datetime.TimeZone
@@ -20,6 +27,51 @@ private class TestInstant(value: Instant) : InstantContainer(value)
 private class TestDate(value: LocalDate) : DateContainer(value)
 private class TestDuration(value: Duration) : DurationContainer(value)
 private data class GenreHolder(val genre: BookGenreContainer)
+
+private class TestShort(value: Short) : ShortContainer(value) {
+    override val min: Short = -100
+    override val max: Short = 100
+}
+
+private class TestByte(value: Byte) : ByteContainer(value) {
+    override val min: Byte = -10
+    override val max: Byte = 10
+}
+
+private class TestULong(value: ULong) : ULongContainer(value) {
+    override val min: ULong = 0uL
+    override val max: ULong = ULong.MAX_VALUE
+}
+
+private class TestUInt(value: UInt) : UIntContainer(value) {
+    override val min: UInt = 0u
+    override val max: UInt = 100u
+}
+
+private class TestUShort(value: UShort) : UShortContainer(value) {
+    override val min: UShort = 0u
+    override val max: UShort = 100u
+}
+
+private class TestUByte(value: UByte) : UByteContainer(value) {
+    override val min: UByte = 0u
+    override val max: UByte = 100u
+}
+
+private class TestDouble(value: Double) : DoubleContainer(value) {
+    override val min: Double = -100.0
+    override val max: Double = 100.0
+}
+
+private data class NumberHolder(
+    val short: TestShort,
+    val byte: TestByte,
+    val uLong: TestULong,
+    val uInt: TestUInt,
+    val uShort: TestUShort,
+    val uByte: TestUByte,
+    val double: TestDouble,
+)
 
 class DataContainersTest {
 
@@ -138,6 +190,46 @@ class DataContainersTest {
         val c = TestDuration(5.minutes)
         c.initAuthorization(false)
         assertEquals("[••••••]", c.toString())
+    }
+
+    @Test
+    fun numberContainersValidation() {
+        assertNull(TestShort(50).validate("short", DefaultTranslation))
+        assertNotNull(TestShort(-101).validate("short", DefaultTranslation))
+        assertNotNull(TestShort(101).validate("short", DefaultTranslation))
+
+        assertNull(TestByte(5).validate("byte", DefaultTranslation))
+        assertNotNull(TestByte(-11).validate("byte", DefaultTranslation))
+
+        assertNull(TestULong(1000uL).validate("uLong", DefaultTranslation))
+
+        assertNull(TestUInt(50u).validate("uInt", DefaultTranslation))
+        assertNotNull(TestUInt(101u).validate("uInt", DefaultTranslation))
+
+        assertNull(TestUShort(50u).validate("uShort", DefaultTranslation))
+        assertNotNull(TestUShort(101u).validate("uShort", DefaultTranslation))
+
+        assertNull(TestUByte(50u).validate("uByte", DefaultTranslation))
+        assertNotNull(TestUByte(101u).validate("uByte", DefaultTranslation))
+
+        assertNull(TestDouble(3.14).validate("double", DefaultTranslation))
+        assertNotNull(TestDouble(101.0).validate("double", DefaultTranslation))
+    }
+
+    @Test
+    fun numberContainersSerialization() {
+        val original = NumberHolder(
+            short = TestShort(-99),
+            byte = TestByte(-9),
+            uLong = TestULong(ULong.MAX_VALUE),
+            uInt = TestUInt(99u),
+            uShort = TestUShort(99u),
+            uByte = TestUByte(99u),
+            double = TestDouble(3.14159),
+        )
+        val deserialized = KlerkJson.decode(NumberHolder::class, KlerkJson.encode(original))
+        assertEquals(original, deserialized)
+        assertEquals(ULong.MAX_VALUE, deserialized.uLong.uLong)
     }
 
     @Test

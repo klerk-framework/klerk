@@ -229,8 +229,29 @@ private fun containerCodec(kClass: KClass<*>, where: String): Codec {
         kClass.isSubclassOf(LongContainer::class) ->
             codec({ JsonPrimitive(it.valueWithoutAuthorization as Long) }) { json, path -> json.long(path) }
 
+        kClass.isSubclassOf(ShortContainer::class) ->
+            codec({ JsonPrimitive(it.valueWithoutAuthorization as Short) }) { json, path -> json.short(path) }
+
+        kClass.isSubclassOf(ByteContainer::class) ->
+            codec({ JsonPrimitive(it.valueWithoutAuthorization as Byte) }) { json, path -> json.byte(path) }
+
+        kClass.isSubclassOf(ULongContainer::class) ->
+            codec({ JsonPrimitive((it.valueWithoutAuthorization as ULong).toString()) }) { json, path -> json.uLong(path) }
+
+        kClass.isSubclassOf(UIntContainer::class) ->
+            codec({ JsonPrimitive((it.valueWithoutAuthorization as UInt).toLong()) }) { json, path -> json.uInt(path) }
+
+        kClass.isSubclassOf(UShortContainer::class) ->
+            codec({ JsonPrimitive((it.valueWithoutAuthorization as UShort).toInt()) }) { json, path -> json.uShort(path) }
+
+        kClass.isSubclassOf(UByteContainer::class) ->
+            codec({ JsonPrimitive((it.valueWithoutAuthorization as UByte).toInt()) }) { json, path -> json.uByte(path) }
+
         kClass.isSubclassOf(FloatContainer::class) ->
             codec({ JsonPrimitive(it.valueWithoutAuthorization as Float) }) { json, path -> json.float(path) }
+
+        kClass.isSubclassOf(DoubleContainer::class) ->
+            codec({ JsonPrimitive(it.valueWithoutAuthorization as Double) }) { json, path -> json.double(path) }
 
         kClass.isSubclassOf(BooleanContainer::class) ->
             codec({ JsonPrimitive(it.valueWithoutAuthorization as Boolean) }) { json, path -> json.boolean(path) }
@@ -307,8 +328,49 @@ private fun JsonElement.int(path: String): Int {
 private fun JsonElement.long(path: String): Long =
     number(path, "an integer").content.toLongOrNull() ?: mismatch(path, "is ${describe(this)}, expected an integer")
 
+private fun JsonElement.short(path: String): Short {
+    val content = number(path, "an integer").content
+    return content.toShortOrNull()
+        ?: mismatch(path, if (content.toLongOrNull() != null) "is too large for a Short" else "is ${describe(this)}, expected an integer")
+}
+
+private fun JsonElement.byte(path: String): Byte {
+    val content = number(path, "an integer").content
+    return content.toByteOrNull()
+        ?: mismatch(path, if (content.toLongOrNull() != null) "is too large for a Byte" else "is ${describe(this)}, expected an integer")
+}
+
+private fun JsonElement.uLong(path: String): ULong {
+    val primitive = this as? JsonPrimitive
+    if (primitive == null || !primitive.isString) {
+        mismatch(path, "is ${describe(this)}, expected a ULong encoded as a string")
+    }
+    return primitive.content.toULongOrNull() ?: mismatch(path, "is negative or too large for a ULong")
+}
+
+private fun JsonElement.uInt(path: String): UInt {
+    val content = number(path, "an integer").content
+    return content.toLongOrNull()?.takeIf { it in 0..UInt.MAX_VALUE.toLong() }?.toUInt()
+        ?: mismatch(path, "is negative or too large for a UInt")
+}
+
+private fun JsonElement.uShort(path: String): UShort {
+    val content = number(path, "an integer").content
+    return content.toIntOrNull()?.takeIf { it in 0..UShort.MAX_VALUE.toInt() }?.toUShort()
+        ?: mismatch(path, "is negative or too large for a UShort")
+}
+
+private fun JsonElement.uByte(path: String): UByte {
+    val content = number(path, "an integer").content
+    return content.toIntOrNull()?.takeIf { it in 0..UByte.MAX_VALUE.toInt() }?.toUByte()
+        ?: mismatch(path, "is negative or too large for a UByte")
+}
+
 private fun JsonElement.float(path: String): Float =
     number(path, "a number").content.toFloatOrNull() ?: mismatch(path, "is ${describe(this)}, expected a number")
+
+private fun JsonElement.double(path: String): Double =
+    number(path, "a number").content.toDoubleOrNull() ?: mismatch(path, "is ${describe(this)}, expected a number")
 
 private fun JsonElement.boolean(path: String): Boolean =
     (this as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull

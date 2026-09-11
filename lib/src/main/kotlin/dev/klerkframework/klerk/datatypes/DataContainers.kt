@@ -238,6 +238,68 @@ public abstract class IntContainer(value: Int) :
 
 }
 
+/** A [DataContainer] wrapping a [Short], constrained to the inclusive range [min]..[max]. */
+public abstract class ShortContainer(value: Short) : DataContainer<Short>(value) {
+    public abstract val min: Short
+    public abstract val max: Short
+
+    public val short: Short get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
+/** A [DataContainer] wrapping a [Byte], constrained to the inclusive range [min]..[max]. */
+public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
+    public abstract val min: Byte
+    public abstract val max: Byte
+
+    public val byte: Byte get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
 /** A [DataContainer] wrapping a [Long], constrained to the inclusive range [min]..[max]. */
 public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     public abstract val min: Long
@@ -300,12 +362,136 @@ public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value)
     }
 }
 
+/** A [DataContainer] wrapping a [UInt], constrained to the inclusive range [min]..[max]. */
+public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
+    public abstract val min: UInt
+    public abstract val max: UInt
+
+    public val uInt: UInt get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toLong()), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toLong()), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
+/** A [DataContainer] wrapping a [UShort], constrained to the inclusive range [min]..[max]. */
+public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(value) {
+    public abstract val min: UShort
+    public abstract val max: UShort
+
+    public val uShort: UShort get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
+/** A [DataContainer] wrapping a [UByte], constrained to the inclusive range [min]..[max]. */
+public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value) {
+    public abstract val min: UByte
+    public abstract val max: UByte
+
+    public val uByte: UByte get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
 /** A [DataContainer] wrapping a [Float], constrained to the inclusive range [min]..[max]. */
 public abstract class FloatContainer(value: Float) : DataContainer<Float>(value) {
     public abstract val min: Float
     public abstract val max: Float
 
     public val float: Float get() = valueWithoutAuthorization
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        if (valueWithoutAuthorization < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
+        }
+        if (valueWithoutAuthorization > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
+        }
+        return validators
+            .map { Pair(it, it.invoke(translation)) }
+            .filter { it.second is Invalid }
+            .map { functionAndResult ->
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        (functionAndResult.first as KFunction<*>).name,
+                        (functionAndResult.second as Invalid).translationInfo
+                    ), propertyName = propertyName
+                )
+            }
+            .firstOrNull()
+    }
+}
+
+/** A [DataContainer] wrapping a [Double], constrained to the inclusive range [min]..[max]. */
+public abstract class DoubleContainer(value: Double) : DataContainer<Double>(value) {
+    public abstract val min: Double
+    public abstract val max: Double
+
+    public val double: Double get() = valueWithoutAuthorization
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }

@@ -89,8 +89,14 @@ Built-in containers:
 | `StringContainer`      | `String`                | `minLength`, `maxLength`, `maxLines`, optional `regexPattern`                                                        |
 | `IntContainer`         | `Int`                   | `min`, `max`                                                                                                         |
 | `LongContainer`        | `Long`                  | `min`, `max`                                                                                                         |
+| `ShortContainer`       | `Short`                 | `min`, `max`                                                                                                         |
+| `ByteContainer`        | `Byte`                  | `min`, `max`                                                                                                         |
+| `UIntContainer`        | `UInt`                  | `min`, `max`                                                                                                         |
 | `ULongContainer`       | `ULong`                 | `min`, `max`                                                                                                         |
+| `UShortContainer`      | `UShort`                | `min`, `max`                                                                                                         |
+| `UByteContainer`       | `UByte`                 | `min`, `max`                                                                                                         |
 | `FloatContainer`       | `Float`                 | `min`, `max`                                                                                                         |
+| `DoubleContainer`      | `Double`                | `min`, `max`                                                                                                         |
 | `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
 | `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
 | `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
