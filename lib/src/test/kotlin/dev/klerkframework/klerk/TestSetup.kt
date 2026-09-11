@@ -29,6 +29,7 @@ import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import org.sqlite.SQLiteConfig
 import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
@@ -837,12 +838,20 @@ object SQLiteInMemory {
 
     fun create(): SqlPersistence {
         keepAlive?.close()
-        val sqliteMemoryPath = "jdbc:sqlite:file:test?mode=memory&cache=shared"
-        val ds = SQLiteDataSource()
+        // Every call reuses the same shared-cache database name, so a counter keeps concurrent tests from
+        // colliding on it.
+        val sqliteMemoryPath = "jdbc:sqlite:file:test${dbCounter.getAndIncrement()}?mode=memory&cache=shared"
+        // Shared-cache mode uses table-level locking between connections: without read_uncommitted, a reader
+        // can hit SQLITE_LOCKED_SHAREDCACHE while a concurrent writer holds the table, and that error is not
+        // retried by SQLite's busy handler.
+        val config = SQLiteConfig().apply { setReadUncommitted(true) }
+        val ds = SQLiteDataSource(config)
         ds.url = sqliteMemoryPath
         keepAlive = DriverManager.getConnection(sqliteMemoryPath)
         return SqlPersistence(ds)
     }
+
+    private val dbCounter = java.util.concurrent.atomic.AtomicInteger()
 }
 
 object CreateAuthor :
