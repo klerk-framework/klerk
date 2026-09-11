@@ -60,6 +60,31 @@ Attached blobs are configured separately with `KlerkSettings.attachedBlobStore`,
 specification declares a blob property. **With `FileBlobStore`, a database backup no longer contains the blobs** — back
 up its directory as well. See [attached data](attached-data.md).
 
+## Stored models must match the model classes
+
+A model is stored as a JSON object with one key per constructor parameter of its class. A `DataContainer` is stored as
+its `valueWithoutAuthorization` (e.g. an `InstantContainer` as microseconds since 1970), a `ModelID` as a number, a
+`List` or `Set` as an array and a nested class as an object.
+
+`klerk.meta.start()` runs any pending [migration steps](#migrations) and then reads every stored model into its model
+class. A stored model must match its class exactly:
+
+- every stored key must be a property of the class
+- every property must be stored, also a nullable property and one with a default value
+- every value must have the type of its property, e.g. an integer for an `IntContainer` and one of the enum's
+  constants for an `EnumContainer`
+- the stored type must be the simple name of a model class
+
+The same rules apply to nested classes. If a stored model does not match, `start()` throws
+`PersistedModelMismatchException` and Klerk does not start:
+
+```
+The stored Author with id 42 does not match the model classes: 'givenName' is not a property of Author,
+'firstName' is missing. Register a MigrationStep that makes the stored data match.
+```
+
+Renaming, removing, adding or retyping a model property therefore requires a migration step.
+
 ## Migrations
 
 Model classes evolve over time, but already-persisted data was written against an older shape. `MigrationStep`
@@ -80,10 +105,10 @@ interface MigrationStepV1toV1 : MigrationStep {
 `MigrationStepV1toV1` is the concrete kind of step available today (there is room in the naming for future
 `MigrationStepV1toV2`-style steps once a more structural schema version bump is introduced). Its `migrateModel`
 receives every persisted model as a generic `MigrationModelV1` — `type` (the model's simple class name), `id`,
-timestamps, `state`, and `props` as a raw `Map<String, Any>` (i.e. before it is deserialized back into your actual data
-class). Returning the same instance unchanged leaves the stored model untouched, returning a modified copy rewrites its
-stored JSON, and returning `null` deletes the model. `renameKey` is a small helper for the common case of a renamed
-property; it throws if the `from` key isn't found.
+timestamps, `state`, and `props` as the stored `JsonObject` (from `kotlinx.serialization`). Returning the same instance
+unchanged leaves the stored model untouched, returning a modified copy rewrites its stored JSON, and returning `null`
+deletes the model. `renameKey` is a small helper for the common case of a renamed property; it throws if the `from` key
+isn't found.
 
 ```kotlin
 object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
@@ -91,6 +116,20 @@ object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
     override val migratesToVersion = 2
     override fun migrateModel(original: MigrationModelV1): MigrationModelV1? {
         return if (original.type == "Book") renameKey(original, "coAuthors", "coWriters") else original
+    }
+}
+```
+
+Adding a property means adding its key, also when the property is nullable or has a default value. A step can rewrite
+values as well, e.g. when a property changes type:
+
+```kotlin
+object AddNickname : MigrationStepV1toV1 {
+    override val description = "Add Author.nickname"
+    override val migratesToVersion = 3
+    override fun migrateModel(original: MigrationModelV1): MigrationModelV1? {
+        if (original.type != "Author") return original
+        return original.copy(props = JsonObject(original.props + ("nickname" to JsonNull)))
     }
 }
 ```

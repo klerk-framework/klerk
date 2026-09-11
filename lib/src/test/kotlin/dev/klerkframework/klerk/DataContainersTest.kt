@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.datatypes.InstantContainer
 import dev.klerkframework.klerk.datatypes.instantToStringFormat
-import dev.klerkframework.klerk.misc.createGson
+import dev.klerkframework.klerk.misc.KlerkJson
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import java.time.LocalDate
@@ -19,6 +19,7 @@ import kotlin.time.Instant
 private class TestInstant(value: Instant) : InstantContainer(value)
 private class TestDate(value: LocalDate) : DateContainer(value)
 private class TestDuration(value: Duration) : DurationContainer(value)
+private data class GenreHolder(val genre: BookGenreContainer)
 
 class DataContainersTest {
 
@@ -141,16 +142,10 @@ class DataContainersTest {
 
     @Test
     fun enumContainerSerialization() {
-        val bc = BookViews()
-        val collections = Views(bc, AuthorViews(bc.all))
-        val specification = createConfig(collections)
-        val gson = createGson(specification)
-
-        val original = BookGenreContainer(BookGenre.Mystery)
-        val json = gson.toJson(original, BookGenreContainer::class.java)
-        val deserialized = gson.fromJson(json, BookGenreContainer::class.java)
+        val original = GenreHolder(BookGenreContainer(BookGenre.Mystery))
+        val deserialized = KlerkJson.decode(GenreHolder::class, KlerkJson.encode(original))
         assertEquals(original, deserialized)
-        assertEquals(BookGenre.Mystery, deserialized.enum)
+        assertEquals(BookGenre.Mystery, deserialized.genre.enum)
     }
 
 }

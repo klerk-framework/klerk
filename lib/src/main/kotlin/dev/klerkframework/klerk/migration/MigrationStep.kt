@@ -1,10 +1,11 @@
 package dev.klerkframework.klerk.migration
 
+import kotlinx.serialization.json.JsonObject
 import kotlin.time.Instant
 
 /**
  * A persisted model as raw, pre-deserialization data, given to [MigrationStepV1toV1.migrateModel]. [props] is the
- * model's stored JSON decoded to a generic map (i.e. before Gson would deserialize it into the actual props class).
+ * model's stored JSON, i.e. what is decoded into the props class once all migration steps have run.
  *
  * @property type the model's simple class name (e.g. `"Book"`)
  */
@@ -15,7 +16,7 @@ public data class MigrationModelV1(
     val lastPropsUpdatedAt: Instant,
     val lastTransitionAt: Instant,
     val state: String,
-    val props: Map<String, Any>,
+    val props: JsonObject,
 )
 
 /**
@@ -49,9 +50,8 @@ public interface MigrationStepV1toV1 : MigrationStep {
      * @throws IllegalStateException if [from] is not a key of `original.props`
      */
     public fun renameKey(original: MigrationModelV1, from: String, to: String): MigrationModelV1 {
-        val newProps = original.props.toMutableMap().mapKeys { (key, _) -> if (key == from) to else key }
-        check(newProps != original.props) { "Could not find any key '$from'" }
-        return original.copy(props = newProps)
+        check(from in original.props) { "Could not find any key '$from'" }
+        return original.copy(props = JsonObject(original.props.mapKeys { (key, _) -> if (key == from) to else key }))
     }
 
 }

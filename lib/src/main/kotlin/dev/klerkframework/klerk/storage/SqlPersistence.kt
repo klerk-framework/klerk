@@ -1,13 +1,13 @@
 package dev.klerkframework.klerk.storage
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.MigrationStepV1toV1
+import dev.klerkframework.klerk.misc.JsonMismatchException
+import dev.klerkframework.klerk.misc.KlerkJson
 import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityExternalId
 import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityReference
 import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityType
@@ -15,7 +15,10 @@ import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.event
 import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.timestamp
 import dev.klerkframework.klerk.storage.SqlPersistence.ModelSchemaMigrations.toVersion
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
@@ -38,12 +41,13 @@ private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
 /** The job log and the child outcomes are stored as JSON, since neither is ever queried by SQL. */
 private val jobJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 private val logSerializer = ListSerializer(JobLogEntry.serializer())
+private val stringMapSerializer = MapSerializer(String.serializer(), String.serializer())
 
 /**
  * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
  * On construction, connects and creates its tables if missing (event log, models, schema-migration tracking,
  * attached data, jobs), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
- * Model `props` and command `params` are stored as JSON (via Gson).
+ * Model `props` and command `params` are stored as JSON.
  */
 public class SqlPersistence(dataSource: DataSource) : Persistence {
 
@@ -51,17 +55,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     override var currentModelSchemaVersion: Int = 0
     private val logger = KotlinLogging.logger {}
     private lateinit var specification: Specification<*, *>
-    private lateinit var gson: Gson
 
     /** The model classes by the simple name stored in the `type` column. Kept ready rather than built per read. */
     @Volatile
     private var modelClasses: Map<String, KClass<out Any>> = emptyMap()
-    private val mapType = object : TypeToken<Map<String, Any>>() {}.type
-
-    // The application's own metadata for attached data is a plain string map, so it needs none of the DataContainer
-    // adapters in specification.gson. Keeping it separate also means it does not depend on setSpecification having run.
-    private val plainGson = Gson()
-    private val stringMapType = object : TypeToken<Map<String, String>>() {}.type
 
     init {
         logger.info { "Connecting to database: $dataSource" }
@@ -146,7 +143,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[timestamp] = context.time.to64bitMicroseconds()
                     it[event] = command.event.id.toString()
                     it[modelId] = reference
-                    it[params] = gson.toJson(command.params)
+                    it[params] = KlerkJson.encode(command.params)
                     it[actorIdentityType] = context.actor.type.toByte()
                     it[actorIdentityReference] = context.actor.id?.value
                     it[actorIdentityExternalId] = context.actor.externalId
@@ -164,7 +161,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[lastTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
                     it[state] = model.state
                     it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
-                    it[properties] = gson.toJson(model.props)
+                    it[properties] = KlerkJson.encode(model.props)
                 }
             }
 
@@ -178,7 +175,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                         it[lastTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
                         it[state] = model.state
                         it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
-                        it[properties] = gson.toJson(model.props)
+                        it[properties] = KlerkJson.encode(model.props)
                     }
                 }
 
@@ -204,11 +201,16 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val modelId = row[Models.id]
         try {
             val type = row[Models.type]
-            val props = gson.fromJson(
-                row[Models.properties], modelClasses[type]?.javaObjectType ?: throw NoSuchElementException(
-                    "Type is $type in database but the code only has these types: ${modelClasses.keys.joinToString(", ")}"
-                )
+            val kClass = modelClasses[type] ?: throw PersistedModelMismatchException(
+                type,
+                modelId,
+                "there is no model class named $type (the model classes are ${modelClasses.keys.sorted().joinToString(", ")})"
             )
+            val props = try {
+                KlerkJson.decode(kClass, row[Models.properties])
+            } catch (e: JsonMismatchException) {
+                throw PersistedModelMismatchException(type, modelId, e.reason)
+            }
             return Model(
                 id = ModelID(modelId),
                 createdAt = decode64bitMicroseconds(row[Models.createdAt]),
@@ -302,7 +304,6 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun setSpecification(specification: Specification<*, *>) {
         this.specification = specification
-        this.gson = specification.gson
         this.modelClasses = specification.managedModels.associate { it.kClass.simpleName!! to it.kClass }
     }
 
@@ -482,10 +483,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     )
 
     private fun encodeCustomMetadata(custom: Map<String, String>): String? =
-        if (custom.isEmpty()) null else plainGson.toJson(custom)
+        if (custom.isEmpty()) null else Json.encodeToString(stringMapSerializer, custom)
 
     private fun decodeCustomMetadata(json: String?): Map<String, String> =
-        if (json == null) emptyMap() else plainGson.fromJson(json, stringMapType)
+        if (json == null) emptyMap() else Json.decodeFromString(stringMapSerializer, json)
 
     override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
         val cutoff = now.to64bitMicroseconds()
@@ -754,7 +755,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             lastPropsUpdatedAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
             lastTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
             state = row[Models.state],
-            props = gson.fromJson(row[Models.properties], mapType)
+            props = Json.parseToJsonElement(row[Models.properties]).jsonObject
         )
         val after = migration.migrateModel(before)
         if (after == before) {
@@ -771,7 +772,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[lastPropsUpdateAt] = after.lastPropsUpdatedAt.to64bitMicroseconds()
                 it[lastTransitionAt] = after.lastTransitionAt.to64bitMicroseconds()
                 it[state] = after.state
-                it[properties] = gson.toJson(after.props)
+                it[properties] = after.props.toString()
             }
         }
     }

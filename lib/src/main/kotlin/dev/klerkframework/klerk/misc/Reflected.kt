@@ -225,12 +225,13 @@ public class ReflectedProperty(
  * constructor parameter as an [EventParameter]. Used by generic tooling (e.g. auto-generated forms/UI) that needs
  * to render or validate an event's parameters without knowing the concrete type at compile time.
  *
- * @throws IllegalConfigurationException if any parameter fails [EventParameter.validate] (see there for the rules)
+ * @throws IllegalConfigurationException if a parameter is not a [DataContainer], a [ModelID], a List/Set thereof, or a
+ * class made of these
  */
 public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
     init {
-        all.forEach { it.validate() }
+        KlerkJson.requireStorable(raw)
     }
 
     val all: List<EventParameter>
@@ -245,11 +246,24 @@ public data class EventParameters<T : Any>(val raw: KClass<out T>) {
     val optionalParameters: List<EventParameter>
         get() = all.filter { !it.isRequired }
 
+    /**
+     * Decodes an instance of [raw] from the JSON Klerk stores parameters as: an object with exactly one key per
+     * constructor parameter, a [DataContainer] as its `valueWithoutAuthorization` and a [ModelID] as a number.
+     *
+     * @throws IllegalArgumentException if a key is unknown or missing (also for a nullable parameter or one with a
+     * default value), or a value has the wrong type
+     */
+    public fun fromJson(json: String): T = try {
+        KlerkJson.decode(raw, json)
+    } catch (e: JsonMismatchException) {
+        throw IllegalArgumentException("Invalid parameters for ${raw.simpleName}: ${e.reason}")
+    }
+
 }
 
 /**
  * Reflects a single constructor parameter of an event's parameters class. The parameter's type must be a
- * [DataContainer] subtype (or a List/Set thereof) or a [ModelID]; validated in [validate].
+ * [DataContainer] subtype (or a List/Set thereof) or a [ModelID]; validated when [EventParameters] is created.
  *
  * @param owner the parameters class's primary constructor [raw] is one of the parameters of, if known. Needed to
  * compute [kotlinDefaultInstance].
@@ -416,14 +430,6 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
         } else {
             null
         }
-    }
-
-    /**
-     * @throws IllegalConfigurationException if this parameter's type is not a [DataContainer] (or List/Set thereof),
-     * or is a mutable collection type
-     */
-    public fun validate() {
-        validatePropertyType(name, raw.type.withNullability(false))
     }
 
     private fun findValueClass(): KClass<*> {
@@ -627,97 +633,6 @@ private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
     return null
 }
 
-/**
- * Validates that [ktype] is a legal type for a model or event property: a [DataContainer], a [ModelID], an
- * [AttachedBlobID]/[AttachedStringID], a List/Set thereof, or a class whose single constructor's parameters are
- * themselves valid.
- * @throws IllegalConfigurationException otherwise
- */
-internal fun validatePropertyType(name: String, ktypeMaybeNullable: KType) {
-    val ktype = ktypeMaybeNullable.withNullability(false)
-    if (basicTypeEnumFromKType(ktype) != null) {
-        return
-    }
-
-    if (ktype.isSubtypeOf(Collection::class.starProjectedType)) {
-        if (ktype.toString().contains("MutableSet")) {
-            throwPropertyException(name, ktype, "MutableSet is not allowed.")
-        }
-        if (ktype.toString().contains("MutableList")) {
-            throwPropertyException(name, ktype, "MutableList is not allowed.")
-        }
-        if (!(ktype.toString().contains("List") || ktype.toString().contains("Set"))) {
-            throwPropertyException(name, ktype, "Only List and Set collections are allowed.")
-        }
-        validatePropertyType(name, ktype.arguments.single().type!!)
-        return
-    }
-    val constructors = (ktype.classifier!! as KClass<*>).constructors
-    if (constructors.size != 1) {
-        throwPropertyException(name, ktype, "Found ${constructors.size} constructors, expected only one.")
-    }
-    val constructor = constructors.single()
-    if (constructor.parameters.isEmpty()) {
-        throwPropertyException(name, ktype, "Found constructor with no parameters.")
-    }
-    constructor.parameters.forEach { kParameter: KParameter ->
-        validatePropertyType(name, kParameter.type)
-    }
-}
-
-private fun throwPropertyException(name: String, type: KType, message: String): Nothing {
-    val first = "Property '$name' has invalid type '$type'."
-    val propertyDocumentation = "Properties must be subtypes of DataContainer or List/Set thereof."
-    throw IllegalConfigurationException(
-        KlerkErrorCode.PropertyMustBeDataContainer,
-        "$first $message $propertyDocumentation"
-    )
-}
-
-/*fun extractValueClasses(from: Any): Set<KClass<String>> {
-    val result = mutableSetOf<KClass<String>>()
-    from::class.primaryConstructor!!.parameters.forEach {
-
-        if (it.type.isSubtypeOf(DataContainer::class.starProjectedType)) {
-            println(it)
-            //result.add(it)
-        }
-    }
-    return result
-}
-
- */
-
 internal fun getEnumValue(enumClassName: String, enumValue: String) =
     Class.forName(enumClassName).enumConstants.filterIsInstance(Enum::class.java).first { it.name == enumValue }
 
-internal fun extractValueClasses(kClass: KClass<*>): Set<KClass<*>> {
-    if (kClass.isSubclassOf(DataContainer::class)) {
-        return setOf(kClass)
-    }
-    val result = mutableSetOf<KClass<*>>()
-    kClass.declaredMemberProperties.map { it.returnType }.forEach {
-        // Check the classifier (KClass), not the KType: a nullable property type like `Foo?` is not a subtype of
-        // the non-nullable `DataContainer<*>` / `ModelID<*>`, so KType.isSubtypeOf would miss nullable containers.
-        val clazz = it.classifier as? KClass<*> ?: return@forEach
-        if (clazz.isSubclassOf(ModelID::class)) {
-            return@forEach
-        }
-        if (clazz.isSubclassOf(DataContainer::class)) {
-            result.add(clazz)
-        } else {
-            if (clazz.isData && clazz != kClass) {
-                result.addAll(extractValueClasses(clazz))
-            }
-            if (clazz.isSubclassOf(Collection::class)) {
-                result.addAll(extractValueClasses(it.arguments.first().type!!.classifier as KClass<*>))
-            }
-        }
-    }
-    return result
-}
-
-internal fun checkDataContainerProperties(kClass: KClass<*>) {
-    EventParameters(kClass)
-    // it didn't throw, so it's fine
-}

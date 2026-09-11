@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
@@ -23,6 +24,10 @@ class SqliteStoreKtTest {
             epoch.plus(1.seconds).plus(1.milliseconds) to 1001000,
             epoch.plus(400.seconds).plus(999999000.nanoseconds) to 400999999,
             epoch.plus(401.seconds) to 401000000,
+            epoch.plus(1.microseconds) to 1,
+            epoch.plus(5.milliseconds) to 5000,
+            epoch.minus(1.microseconds) to -1,
+            epoch.minus(1500.milliseconds) to -1500000,
         )
         instants.forEach { (i, l) -> assertEquals(l, i.to64bitMicroseconds()) }
         instants.keys.forEach { assertEquals(it, decode64bitMicroseconds(it.to64bitMicroseconds())) }

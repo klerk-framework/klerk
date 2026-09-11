@@ -688,19 +688,17 @@ open class AttachedDataTest {
         klerk.meta.stop()
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun `The ids are serialized as plain numbers`() = runBlocking {
-        // see the note on ModelID in Types.kt: a value class can leak its field name into the serialized form
         val klerk = start()
         val picture = klerk.attachedData.prepare(blob("x"), AuthorPicture::class, Ctx.system())
         val chapter = klerk.attachedData.prepare("y", BookChapter::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
-        val authorJson = klerk.spec.toJson(klerk.read(Ctx.system()) { get(authorID) }.props)
+        val authorJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(authorID) }.props)
         assertTrue(authorJson.contains("\"picture\":${picture.id}"), "Unexpected JSON: $authorJson")
-        val bookJson = klerk.spec.toJson(klerk.read(Ctx.system()) { get(bookID) }.props)
+        val bookJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(bookID) }.props)
         assertTrue(bookJson.contains("\"chapters\":[${chapter.id}]"), "Unexpected JSON: $bookJson")
         klerk.meta.stop()
     }
@@ -717,7 +715,7 @@ open class AttachedDataTest {
         klerk.meta.stop()
 
         val restarted = start(storage)
-        // this also checks that the value classes survive Gson and the database — both the nullable (boxed) property
+        // this also checks that the value classes survive the JSON and the database — both the nullable (boxed) property
         // and the one inside a List
         assertEquals(claimed, restarted.read(Ctx.system()) { get(authorID).props.picture?.id })
         assertEquals(listOf(chapter), restarted.read(Ctx.system()) { get(bookID).props.chapters.map { it.id } })

@@ -18,7 +18,6 @@ val micrometerVersion = "1.11.1"
 val kotlinLoggingVersion = "2.1.21"
 val slf4jVersion = "2.0.3"
 val sqliteJdbcVersion = "3.44.1.0"
-val gsonVersion = "2.9.0"
 val caffeineVersion = "3.2.4"
 
 group = "dev.klerkframework"
@@ -37,7 +36,6 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
     implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
     implementation("io.micrometer:micrometer-core:$micrometerVersion")
-    implementation("com.google.code.gson:gson:$gsonVersion")
     implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")

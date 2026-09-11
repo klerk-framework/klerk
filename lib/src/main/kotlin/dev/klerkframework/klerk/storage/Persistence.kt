@@ -1,12 +1,12 @@
 package dev.klerkframework.klerk.storage
 
-import com.google.gson.Gson
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobCommit
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobRecord
 import dev.klerkframework.klerk.migration.MigrationStep
+import dev.klerkframework.klerk.misc.KlerkJson
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
@@ -297,10 +297,6 @@ public interface Persistence {
  * Keeps all data in memory. Should only be used for testing.
  */
 public open class RamStorage : Persistence {
-    // Set by setSpecification with the app's configured Gson (which knows how to serialize Klerk's own data types) once
-    // Klerk starts. Left uninitialized when RamStorage is used standalone, e.g. in a test that never calls
-    // setSpecification -- createEventLogEntry falls back to an empty params string in that case.
-    private lateinit var gson: Gson
     private val eventLog = mutableSetOf<EventLogEntry>()
 
     // Concurrent because readModel is called by readers that do not hold the write lock, while a commit writes here
@@ -417,9 +413,7 @@ public open class RamStorage : Persistence {
         }
     }
 
-    override fun setSpecification(specification: Specification<*, *>) {
-        this.gson = specification.gson
-    }
+    override fun setSpecification(specification: Specification<*, *>): Unit = Unit
 
     override fun migrate(migrations: List<MigrationStep>) {
         logger.debug { "Skipping migration since RamStorage is always empty on startup" }
@@ -530,7 +524,7 @@ public open class RamStorage : Persistence {
             context.actor.type.toByte(),
             context.actor.id?.value,
             context.actor.externalId,
-            if (::gson.isInitialized) gson.toJson(command.params) else "{}",    // TODO
+            KlerkJson.encode(command.params),
             extra = context.eventLogExtra
         )
     }

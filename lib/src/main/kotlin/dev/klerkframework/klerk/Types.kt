@@ -345,11 +345,7 @@ public typealias EventId = String
  * Implementation details: We first used UInt, but it seems that there is a problem when making this @JvmInline and
  * value class in combination with ULong and UInt (see KT-69674).
  *
- * NOTE: If you make any change to this: clean build, and verify how a relation is serialized ("value" may appear). (If
- * you use IntelliJ's database tool, double check that you actually see the difference, you may have to delete/refresh)
- *
- * The `@Serializable` annotation is for `kotlinx.serialization`, which Klerk uses for job cursors; models themselves
- * are still stored with Gson. It means a job cursor can hold a [ModelID] without the job author doing anything.
+ * The `@Serializable` annotation lets a job cursor hold a [ModelID] without the job author doing anything.
  */
 @Serializable(with = ModelIDSerializer::class)
 @JvmInline
@@ -748,16 +744,11 @@ private val klerkInstantMax = decode64bitMicroseconds(Long.MAX_VALUE)
 private val ONE_MILLION = BigInteger.valueOf(1000000)
 private val ONE_THOUSAND = BigInteger.valueOf(1000)
 
-public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant {
-    // can be improved, e.g. this cannot handle Instant.EPOCH + 1 nanosecond
-    if (microsecondsSince1970 == 0L) {
-        return Instant.fromEpochSeconds(0)
-    }
-    val str = microsecondsSince1970.toString()
-    val epochSeconds = str.substring(0, str.length - 6).toLong()
-    val micros = str.substring(str.length - 6).toLong()
-    return Instant.fromEpochSeconds(epochSeconds, micros * 1000)
-}
+public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant =
+    Instant.fromEpochSeconds(
+        Math.floorDiv(microsecondsSince1970, 1_000_000L),
+        Math.floorMod(microsecondsSince1970, 1_000_000L) * 1000
+    )
 
 /**
  * A packaged extension that contributes specification (managed models, events, rules, ...) to a host application.

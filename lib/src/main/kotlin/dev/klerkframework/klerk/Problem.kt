@@ -146,6 +146,23 @@ public class IllegalConfigurationException(public val code: KlerkErrorCode, mess
     RuntimeException("[$code] $message")
 
 /**
+ * Thrown by `klerk.meta.start()` when a stored model does not match its model class, e.g. because a property has been
+ * renamed, removed, added or has changed type since the model was stored. Register a
+ * [dev.klerkframework.klerk.migration.MigrationStep] that makes the stored data match.
+ *
+ * @property modelType the model's simple class name, as stored
+ * @property reason which properties do not match, and how. Never contains a stored value.
+ */
+public class PersistedModelMismatchException(
+    public val modelType: String,
+    public val modelId: Int,
+    public val reason: String,
+) : RuntimeException(
+    "The stored $modelType with id $modelId does not match the model classes: $reason. Register a MigrationStep " +
+            "that makes the stored data match."
+)
+
+/**
  * Error codes for Klerk configuration errors. The error codes should never change, so if a code is
  * removed or modified, the old code should not be reused.
  */

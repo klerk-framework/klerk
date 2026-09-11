@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import com.google.gson.Gson
 import dev.klerkframework.klerk.attacheddata.ContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
@@ -75,13 +74,18 @@ public data class Specification<C : KlerkContext, V>(
      */
     val eraseEventLogAfterModelDeletion: Duration? = null,
 ) {
-    internal lateinit var gson: Gson
-
     internal fun initialize(settings: KlerkSettings): Unit {
         validate(settings)
-        gson = createGson(this)
         validateMigrations()
         managedModels.map { it.stateMachine.onKlerkStart(this) }
+    }
+
+    private fun modelsAndParametersMustBeStorable() {
+        managedModels.forEach { KlerkJson.requireStorable(it.kClass) }
+        managedModels
+            .flatMap { it.stateMachine.getAllEvents() }
+            .mapNotNull { getParameters(it)?.raw }
+            .forEach { KlerkJson.requireStorable(it) }
     }
 
     private fun validateMigrations() {
@@ -96,7 +100,7 @@ public data class Specification<C : KlerkContext, V>(
     }
 
     private fun validate(settings: KlerkSettings) {
-        modelsMustHavePropertiesOfDataContainer()
+        modelsAndParametersMustBeStorable()
         parametersWithReferencesMustHaveCollectionValidation()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
@@ -296,12 +300,6 @@ public data class Specification<C : KlerkContext, V>(
             }
         }
         return found
-    }
-
-    private fun modelsMustHavePropertiesOfDataContainer() {
-        managedModels.forEach { managed ->
-            checkDataContainerProperties(managed.kClass)
-        }
     }
 
     private fun checkContextProviderExistIfConfigContainsTimeTriggers() {
@@ -619,16 +617,6 @@ public data class Specification<C : KlerkContext, V>(
         updatedPlugins.add(plugin)
         return plugin.mergeSpecification(this).copy(plugins = updatedPlugins)
     }
-
-    /**
-     * This exists so that it is possible to use the configuration of the Gson instance.
-     * It will probably be removed in the future so don't rely on this.
-     */
-    @Deprecated("Do not use")
-    public fun <T> fromJson(json: String, typeOfT: Class<T>): T = gson.fromJson(json, typeOfT)
-
-    @Deprecated("Do not use")
-    public fun toJson(props: Any): String = gson.toJson(props)
 
 }
 
@@ -1313,9 +1301,7 @@ private fun <T : Any> validateModelClass(clazz: KClass<T>) {
         )
     }
 
-    clazz.memberProperties.forEach { prop ->
-        validatePropertyType(prop.name, prop.returnType)
-    }
+    KlerkJson.requireStorable(clazz)
 }
 
 /**
