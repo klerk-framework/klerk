@@ -82,6 +82,8 @@ class InstanceNonInstanceEventBlockTest {
         stateMachine {
             event(CreateBook) {
                 validReferences(CreateBookParams::author, authors.all)
+                validReferences(CreateBookParams::coAuthors, authors.all)
+                validReferences(CreateBookParams::previousBooksInSameSeries, null)
             }
 
             event(PublishBook) {}

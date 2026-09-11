@@ -51,6 +51,9 @@ if violated:
 * All properties must be `val`, never `var`.
 * Every property must be a `DataContainer` (see below), or a collection (`List`, `Set`, ...) of one, or a
   `ModelID<...>`, or another plain data class composed the same way (e.g. `Address(val street: Street)`).
+* Every property must be a public `val`, and the primary constructor must be public. This also applies to nested
+  classes and to event parameters classes, since Klerk reads, stores and copies them. A class that breaks a rule is
+  rejected when Klerk starts.
 
 You cannot put a raw `String`, `Int`, etc. directly on a model — everything goes through a `DataContainer`.
 

@@ -133,7 +133,7 @@ class ReaderTest {
                 lastStateTransitionAt = Clock.System.now(),
                 state = AuthorStates.Improving.name,
                 timeTrigger = null,
-                props = BookLover("Ida", listOf(rowling)),
+                props = BookLover(FirstName("Ida"), listOf(rowling)),
             )
             ModelCache.store(ida)
 
@@ -215,4 +215,4 @@ data class AuthorAndBook(val author: Model<Author>, val book: Model<Book>)
 
 data class Test1(val author: ModelID<Author>)
 data class Test2(val author: ModelID<Author>)
-data class BookLover(val name: String, val favouriteAuthors: List<ModelID<Author>>) 
+data class BookLover(val name: FirstName, val favouriteAuthors: List<ModelID<Author>>)

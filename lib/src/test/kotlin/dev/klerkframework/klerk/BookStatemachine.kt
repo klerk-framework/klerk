@@ -13,6 +13,8 @@ fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Vi
 
         event(CreateBook) {
             validReferences(CreateBookParams::author, collections.authors.all)
+            validReferences(CreateBookParams::coAuthors, collections.authors.all)
+            validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
             validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
         }
 
@@ -22,6 +24,8 @@ fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Vi
 
         event(UpdateBook) {
             validReferences(Book::author, collections.authors.all)
+            validReferences(Book::coAuthors, collections.authors.all)
+            validReferences(Book::previousBooksInSameSeries, collections.books.all)
         }
 
         voidState {

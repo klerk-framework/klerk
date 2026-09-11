@@ -43,7 +43,7 @@ This block is where you attach the event's validation rules (`validate`, `valida
 `validateWithContext`, `validReferences`, `validEnums`) — see [validation.md](validation.md). Declaring the event
 separately from where it's used means all its rules are visible in one place instead of scattered across every state
 that reacts to it. It's also a safety net: Klerk throws `IllegalConfigurationException` at startup if an event is
-referenced in `onEvent` without having been declared, or if a parameter of type `ModelID` has no `validReferences`. The
+referenced in `onEvent` without having been declared, or if a `ModelID` in the parameters has no `validReferences`. The
 event objects themselves (`CreateBook`, `PublishBook`, ...) and their parameter classes are defined separately —
 see [events-and-commands.md](events-and-commands.md).
 

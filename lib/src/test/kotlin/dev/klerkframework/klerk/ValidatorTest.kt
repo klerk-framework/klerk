@@ -132,6 +132,8 @@ class ValidatorTest {
             val restrictedSm: StateMachine<Book, BookStates, Ctx, Views> = stateMachine {
                 event(CreateBook) {
                     validReferences(CreateBookParams::author, collections.authors.all)
+                    validReferences(CreateBookParams::coAuthors, collections.authors.all)
+                    validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
                     // Only Fiction is valid, not Mystery or Fantasy
                     validEnums(CreateBookParams::genre, setOf(BookGenre.Fiction))
                 }

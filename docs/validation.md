@@ -7,8 +7,11 @@ short-circuits the rest and is returned as a `Problem` in a `CommandResult.Failu
 1. Per-property rules on each `DataContainer` in the event's parameters.
 2. Cross-property rules on the parameters class as a whole (`Validatable`).
 3. Rules that use the `Ctx` (`validateWithContext`).
-4. `ModelID` reference parameters are checked against a declared [view](views.md) (`validReferences`).
-5. `EnumContainer` parameters are checked against a declared set of allowed values (`validEnums`).
+4. `ModelID`s are checked against a declared [view](views.md) (`validReferences`).
+5. `EnumContainer`s are checked against a declared set of allowed values (`validEnums`).
+
+Steps 1, 4 and 5 cover every value in the parameters, also those in a `List`, a `Set` or a nested class. A problem
+names the value by its path, e.g. `address.street` or `tags[1]`.
 6. Rules that see the full picture — parameters, context, and (for instance events) the current model (`validate` /
    `validateWithParameters`).
 7. [Authorization](authorization.md) rules.
@@ -93,14 +96,30 @@ event(CreateBook) {
       if (context.actor == Unauthenticated) Invalid() else Valid
   ```
 
-* **`validReferences(property, view)`** — every `ModelID<...>` parameter must be declared here, pointing at the
-  [view](views.md) it must be found in. This is enforced at specification build time: if a parameter contains a
-  `ModelID` and you haven't declared `validReferences` for it, `SpecificationBuilder.build()` throws
-  `IllegalConfigurationException` (`KlerkErrorCode.MissingValidReferences`) with a message telling you exactly what to
-  add. Pass `null` for "any id is accepted, existing or not" (only available for void events).
+* **`validReferences(property, view)`** — every `ModelID` in the parameters must be declared here, pointing at the
+  [view](views.md) it must be found in. This includes a `List` or `Set` of ids, where every id must be in the view,
+  and ids in a nested class, which you declare with the nested class's property:
 
-* **`validEnums(property, validValues)`** — restricts an `EnumContainer` parameter to a subset of the enum's values,
-  e.g. to phase out a value without removing it from the enum itself.
+  ```kotlin
+  data class CreateBookParams(val author: ModelID<Author>, val coAuthors: Set<ModelID<Author>>, val shelf: Placement)
+  data class Placement(val nextTo: ModelID<Book>)
+
+  event(CreateBook) {
+      validReferences(CreateBookParams::author, collections.authors.all)
+      validReferences(CreateBookParams::coAuthors, collections.authors.all)
+      validReferences(Placement::nextTo, collections.books.all)
+  }
+  ```
+
+  Klerk starts only if every `ModelID` is declared; otherwise it throws `IllegalConfigurationException`
+  (`KlerkErrorCode.MissingValidReferences`) with a message telling you exactly what to add. Pass `null` instead of a
+  view to accept any id without a membership check.
+
+* **`validEnums(property, validValues)`** — restricts an `EnumContainer` (or a `List`/`Set` of them) to a subset of
+  the enum's values, e.g. to phase out a value without removing it from the enum itself.
+
+Declaring `validReferences` or `validEnums` for a property that is not in the event's parameters throws
+`IllegalConfigurationException` (`KlerkErrorCode.ValidationRuleForUnknownProperty`) at startup.
 
 * **`validate(function)`** and **`validateWithParameters(function)`** — the general escape hatch, run last, with access
   to the full `Arg...` object for the event (context, reader, command — and for instance events, the current model).

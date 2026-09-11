@@ -3,19 +3,14 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.read.Reader
-import java.time.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-import mu.KotlinLogging
 import kotlin.reflect.*
 import kotlin.reflect.full.*
-import kotlin.reflect.jvm.javaConstructor
-import kotlin.time.Duration
+import kotlin.reflect.jvm.jvmErasure
 import kotlin.time.Instant
-
-private val log = KotlinLogging.logger {}
 
 internal val dateFormatter = LocalDateTime.Format {
     year()
@@ -51,42 +46,18 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
     public val id: ModelID<*>
         get() = original.id
 
-    private val nonReferenceCollectionsPretty: Map<String, Collection<*>>
-
     private val relatedModels: MutableMap<ModelID<*>, Model<Any>> = mutableMapOf()
 
     private var idsOfModelsWithReferencesToThis: List<ReflectedModel<Any>>? = null
-
-    init {
-        val nonReferenceCollectionsPrettyInit: MutableMap<String, Collection<*>> = mutableMapOf()
-        original.props::class.memberProperties
-            .filter { it.returnType.isSubtypeOf(Collection::class.createType(listOf(KTypeProjection.STAR))) }
-            .forEach { property ->
-                nonReferenceCollectionsPrettyInit[camelCaseToPretty(property.name)] =
-                    property.getter.call(original.props) as Collection<*>
-            }
-        nonReferenceCollectionsPretty = nonReferenceCollectionsPrettyInit
-    }
 
     /**
      * If this is called, some functions will be able to return more detailed information.
      */
     public fun <V, C : KlerkContext> populateRelations(): Reader<C, V>.() -> Unit = {
-        original.props::class.memberProperties.forEach { property ->
-            val value = property.getter.call(original.props)
-            if (value is ModelID<*>) {
-                @Suppress("UNCHECKED_CAST")
-                relatedModels[value] = get(value as ModelID<Any>)
-            }
-            if (isCollectionOfModelId(property.returnType)) {
-                val collection = property.getter.call(original.props) ?: return@forEach
-
-                @Suppress("UNCHECKED_CAST")
-                val relatedIds = (collection as Collection<ModelID<Any>>).toList()
-                relatedIds.forEach {
-                    relatedModels[it] = get(it)
-                }
-            }
+        ObjectSchema.of(original.props::class).forEachLeaf(original.props) { leaf ->
+            val reference = leaf.value as? ModelID<*> ?: return@forEachLeaf
+            @Suppress("UNCHECKED_CAST")
+            relatedModels[reference] = get(reference as ModelID<Any>)
         }
         idsOfModelsWithReferencesToThis =
             @Suppress("UNCHECKED_CAST")
@@ -127,50 +98,23 @@ public class ReflectedModel<T : Any>(public val original: Model<T>) {
         return result
     }
 
-    private fun propertiesPretty(): Map<String, String> {
-        val result: MutableMap<String, String> = mutableMapOf()
-        original.props::class.memberProperties.forEach { property ->
-            val value = property.getter.call(original.props)
-            if (value is ModelID<*>) {
-                val referencedModelName = (relatedModels[value] ?: "").toString()
-                result[property.name] = "$referencedModelName (id: $value)"
-            } else {
-                val valueAsString = stringify(value)
-                result[property.name] = valueAsString
+    /**
+     * The models that each `List` or `Set` of [ModelID]s in the props refers to, keyed by the property's pretty name.
+     * Requires [populateRelations] to have been called first, otherwise the lists are empty.
+     */
+    public fun referencesPretty(): Map<String, List<Model<Any>>> =
+        ObjectSchema.of(original.props::class).fields
+            .filter { (it.type.shape as? Shape.Many)?.element?.shape == Shape.Reference }
+            .associate { field ->
+                val ids = field.get(original.props) as Collection<*>? ?: emptyList<Any>()
+                camelCaseToPretty(field.name) to ids.mapNotNull { relatedModels[it as ModelID<*>] }
             }
-        }
-        return result
-    }
-
-    /** Requires [populateRelations] to have been called first, otherwise related models are unresolved. */
-    public fun referencesPretty(): Map<String, List<Model<Any>>> {
-        val result = mutableMapOf<String, List<Model<Any>>>()
-        original.props::class.memberProperties.forEach { property ->
-            if (isCollectionOfModelId(property.returnType)) {
-                val collection = property.getter.call(original.props) ?: return@forEach
-
-                @Suppress("UNCHECKED_CAST")
-                val relatedIds = (collection as Collection<ModelID<Any>>).toList()
-                relatedIds.map {
-                    relatedModels[it]?.toString() ?: "(id: ${it})"
-                }
-            }
-        }
-        return result
-    }
 
     /**
      * Returns a list of ReflectedModels that has a reference to this model.
      * This is null until it has been populated.
      */
     public fun referencesToThis(): List<ReflectedModel<Any>>? = idsOfModelsWithReferencesToThis
-
-    private fun isCollectionOfModelId(type: KType): Boolean {
-        val AnyType = KTypeProjection(KVariance.OUT, Any::class.createType())
-        val modelIDType =
-            KTypeProjection(KVariance.INVARIANT, ModelID::class.createType(arguments = listOf(AnyType)))
-        return type.isSubtypeOf(Collection::class.createType(arguments = listOf(modelIDType)))
-    }
 }
 
 /** A single reflected property of a [Model] or its props, paired with its value for display purposes. */
@@ -205,10 +149,6 @@ public class ReflectedProperty(
         return camelCaseToPretty(original.name)
     }
 
-    private fun getRelatedModel(): Model<Any>? {
-        return relatedModels[value]
-    }
-
     /** @return the props class of the related model if [value] is a [ModelID] that has been resolved (see [ReflectedModel.populateRelations]), else `null`. */
     public fun getRelatedModelPropsClass(): KClass<*>? {
         val model = relatedModels[value] ?: return null
@@ -231,7 +171,7 @@ public class ReflectedProperty(
 public data class EventParameters<T : Any>(val raw: KClass<out T>) {
 
     init {
-        KlerkJson.requireStorable(raw)
+        ObjectSchema.of(raw)
     }
 
     val all: List<EventParameter>
@@ -275,131 +215,16 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
         requireNotNull(findValueClass().qualifiedName) { "No qualified name for $name. Model and parameter classes must be concrete classes" }
     val prettyName: String = camelCaseToPretty(name)
     val isRequired: Boolean = !raw.isOptional
-    val type: PropertyType? = basicTypeEnumFromKType(raw.type.withNullability(false))
+    val type: PropertyType? = propertyTypeOf(raw.type)
     val isNullable: Boolean = raw.type.isMarkedNullable
     val modelIDType: String? = findModelIDType()
     val validationRulesDescriptions: Map<String, String>
     val recommendedDefaultValue: Any?
 
     init {
-        val validationRulesDescriptionsTemp = mutableMapOf<String, String>()
-        if ((raw.type.classifier as KClass<*>).visibility == KVisibility.PRIVATE) {
-            logger.warn { "Property $name is private. This means that some info will be missing" } // or should we just force the modifier?
-            validationRulesDescriptionsTemp["required"] = "false"
-            validationRulesDescriptionsTemp["validator"] = "none"
-            recommendedDefaultValue = null
-            validationRulesDescriptions = emptyMap()
-        } else {
-            when (type) {
-                PropertyType.String -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call("") as StringContainer)
-                    validationRulesDescriptionsTemp["min length"] = s.minLength.toString()
-                    validationRulesDescriptionsTemp["max length"] = s.maxLength.toString()
-                    s.regexPattern?.let { validationRulesDescriptionsTemp["pattern"] = it }
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Int -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .apply { javaConstructor?.isAccessible = true }
-                        .call(0) as IntContainer)
-                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
-                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Long -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(0L) as LongContainer)
-                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
-                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Float -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(0f) as FloatContainer)
-                    s.min.let { validationRulesDescriptionsTemp["min"] = it.toString() }
-                    s.max.let { validationRulesDescriptionsTemp["max"] = it.toString() }
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Boolean -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(false) as BooleanContainer)
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Instant -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(Instant.fromEpochSeconds(0)) as InstantContainer)
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Date -> {
-                    val s = ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                        .call(LocalDate.ofEpochDay(0)) as DateContainer)
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Duration -> {
-                    val s =
-                        ((raw.type.classifier as KClass<*>).constructors.single { it.parameters.size == 1 }
-                            .call(Duration.ZERO) as DurationContainer)
-                    validationRulesDescriptionsTemp["validator"] =
-                        s.validators.joinToString(", ") { extractNameFromFunctionString(it.toString()) }
-                    recommendedDefaultValue = s.recommendedDefault
-                }
-
-                PropertyType.Ref -> {
-                    recommendedDefaultValue = null
-                }   // TODO
-
-                /*            else -> {
-                            logger.warn { "validationRulesDescription not implemented for type $type" }
-
-                        }
-
-
-             */
-
-                PropertyType.AttachedDataRef -> {
-                    recommendedDefaultValue = null
-                    logger.warn { "validationRulesDescription not implemented for type $type" }
-                } // TODO
-
-                PropertyType.Enum -> {
-                    recommendedDefaultValue = null
-                    logger.warn { "validationRulesDescription not implemented for type $type" }
-                } // TODO
-
-                PropertyType.Geo -> {
-                    recommendedDefaultValue = null
-                    logger.warn { "validationRulesDescription not implemented for type $type" }
-                } // TODO
-
-                null -> {
-                    recommendedDefaultValue = null
-                    logger.warn { "PropertyType is null for $name" }
-                }
-            }
-            validationRulesDescriptions = validationRulesDescriptionsTemp
-        }
+        val dummy = containerShape()?.dummy()
+        validationRulesDescriptions = dummy?.let { describeRules(it) } ?: emptyMap()
+        recommendedDefaultValue = dummy?.recommendedDefault
     }
 
     public val valueClass: KClass<*> = findValueClass()      // TODO: internal?
@@ -414,22 +239,25 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
      * to this parameter of this event.
      */
     public val kotlinDefaultInstance: DataContainer<*>? by lazy {
-        if (raw.isOptional && owner != null) {
-            try {
-                val args = owner.parameters
-                    .filter { it != raw && !it.isOptional }
-                    .associateWith { EventParameter(it).getDummyInstance() }
-                val instance = owner.callBy(args) ?: return@lazy null
-                instance::class.memberProperties
-                    .single { it.name == name }
-                    .getter.call(instance) as? DataContainer<*>
-            } catch (e: Exception) {
-                logger.warn(e) { "Could not evaluate the Kotlin default value of '$name'" }
-                null
-            }
-        } else {
+        if (!raw.isOptional || owner == null) {
+            return@lazy null
+        }
+        try {
+            val schema = ObjectSchema.of(owner.returnType.jvmErasure)
+            val args = owner.parameters
+                .filter { it != raw && !it.isOptional }
+                .associateWith { parameter -> schema.fields.single { it.name == parameter.name }.type.dummy() }
+            val instance = owner.callBy(args) ?: return@lazy null
+            schema.fields.single { it.name == name }.get(instance) as? DataContainer<*>
+        } catch (e: Exception) {
+            logger.warn(e) { "Could not evaluate the Kotlin default value of '$name'" }
             null
         }
+    }
+
+    private fun containerShape(): Shape.Container? {
+        val kClass = raw.type.jvmErasure
+        return if (kClass.isSubclassOf(DataContainer::class)) Shape.Container.of(kClass) else null
     }
 
     private fun findValueClass(): KClass<*> {
@@ -454,70 +282,46 @@ public data class EventParameter(public val raw: KParameter, internal val owner:
      * Turns the provided value into a DataContainer.
      * @param value must be of the correct type.
      */
-    public fun getInstance(value: Any): DataContainer<*> = getAnInstance(value)
+    public fun getInstance(value: Any): DataContainer<*> =
+        (containerShape() ?: throw IllegalArgumentException("'$name' is not a DataContainer")).create(value)
 
     /**
      * Returns a dummy instance of the property type.
      * Use this if you want to access validation rules etc, but the value should not be used.
      */
-    public fun getDummyInstance(): DataContainer<*> = getAnInstance(null)
+    public fun getDummyInstance(): DataContainer<*> =
+        (containerShape() ?: throw IllegalArgumentException("'$name' is not a DataContainer")).dummy()
 
-    /**
-     * Returns an instance of the given property type.
-     * @param value the value to be used for the instance. If null, a dummy instance is returned.
-     */
-    private fun getAnInstance(value: Any?): DataContainer<*> {
-        val clazz = raw.type.withNullability(false).classifier as KClass<*>
-        try {
-            if (clazz.isSubclassOf(StringContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: "") as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(IntContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(LongContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0L) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(FloatContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: 0f) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(BooleanContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }.call(value ?: false) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(EnumContainer::class)) {
-                val ctor = clazz.constructors.single { it.parameters.size == 1 }
-                val enumClass = ctor.parameters.single().type.classifier as KClass<*>
-                val dummyValue = value ?: enumClass.java.enumConstants.first()
-                return ctor.call(dummyValue) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(ModelID::class)) {
-                val idValue = (value as? Int) ?: 0
-                return clazz.constructors.single { it.parameters.size == 1 }
-                    .call(ModelID<Any>(idValue)) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(InstantContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }
-                    .call(value ?: Instant.fromEpochMilliseconds(0)) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(DateContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }
-                    .call(value ?: LocalDate.ofEpochDay(0)) as DataContainer<*>
-            }
-            if (clazz.isSubclassOf(DurationContainer::class)) {
-                return clazz.constructors.single { it.parameters.size == 1 }
-                    .call(value ?: Duration.ZERO) as DataContainer<*>
-            }
-            TODO("cannot handle $clazz")
-        } catch (e: InstantiationException) {
-            log.error(
-                "Double check that your parameter class only consists of Datatypes and ModelIds (or set, list thereof). Note that it cannot be abstract!",
-                e
-            )
-            throw e
+}
+
+private fun describeRules(container: DataContainer<*>): Map<String, String> {
+    val rules = mutableMapOf<String, String>()
+    when (container) {
+        is StringContainer -> {
+            rules["min length"] = container.minLength.toString()
+            rules["max length"] = container.maxLength.toString()
+            container.regexPattern?.let { rules["pattern"] = it }
         }
+
+        is IntContainer -> {
+            rules["min"] = container.min.toString()
+            rules["max"] = container.max.toString()
+        }
+
+        is LongContainer -> {
+            rules["min"] = container.min.toString()
+            rules["max"] = container.max.toString()
+        }
+
+        is FloatContainer -> {
+            rules["min"] = container.min.toString()
+            rules["max"] = container.max.toString()
+        }
+
+        else -> Unit
     }
-
-
+    rules["validator"] = container.validators.joinToString(", ") { validatorName(it) }
+    return rules
 }
 
 /**
@@ -532,7 +336,7 @@ public data class Field(private val kProperty1: KProperty1<*, *>, private val va
         get() = camelCaseToPretty(name)
 
     val type: PropertyType?
-        get() = basicTypeEnumFromKType(kProperty1.returnType.withNullability(false))
+        get() = propertyTypeOf(kProperty1.returnType)
 
     val value: Any?
         get() {
@@ -560,7 +364,7 @@ private fun stringify(value: Any?): String {
     }
 }
 
-/** The reflected "kind" of a [DataContainer] property, as determined by [basicTypeEnumFromKType]. */
+/** The "kind" of a property, as used by generic tooling such as forms. */
 public enum class PropertyType {
     String,
     Int,
@@ -577,62 +381,28 @@ public enum class PropertyType {
     Geo,
 }
 
-/**
- * @return a PropertyType if this is a "basic" type, otherwise null
- */
-private fun basicTypeEnumFromKType(ktypeMaybeNullable: KType): PropertyType? {
-    val ktype = ktypeMaybeNullable.withNullability(false)
-    if (ktype.isSubtypeOf(ModelID::class.starProjectedType)) {
+/** @return the [PropertyType] of [type], or null if it has none (e.g. a collection or a `ShortContainer`) */
+private fun propertyTypeOf(type: KType): PropertyType? {
+    val kClass = type.jvmErasure
+    if (kClass == ModelID::class) {
         return PropertyType.Ref
     }
-
-    if (ktype.isSubtypeOf(AttachedBlobID::class.starProjectedType) ||
-        ktype.isSubtypeOf(AttachedStringID::class.starProjectedType) ||
-        // An AttachedDataContainer is a DataContainer, so it has to be recognised before the generic container handling below.
-        ktype.isSubtypeOf(AttachedDataContainer::class.starProjectedType)
-    ) {
+    if (kClass == AttachedBlobID::class || kClass == AttachedStringID::class) {
         return PropertyType.AttachedDataRef
     }
-
-    if (ktype.isSubtypeOf(StringContainer::class.starProjectedType)) {
-        return PropertyType.String
+    return when (ContainerKind.entries.firstOrNull { kClass.isSubclassOf(it.base) }) {
+        ContainerKind.AttachedBlob, ContainerKind.AttachedString -> PropertyType.AttachedDataRef
+        ContainerKind.String -> PropertyType.String
+        ContainerKind.Int -> PropertyType.Int
+        ContainerKind.Long -> PropertyType.Long
+        ContainerKind.Float -> PropertyType.Float
+        ContainerKind.Boolean -> PropertyType.Boolean
+        ContainerKind.Enum -> PropertyType.Enum
+        ContainerKind.Instant -> PropertyType.Instant
+        ContainerKind.Date -> PropertyType.Date
+        ContainerKind.Duration -> PropertyType.Duration
+        ContainerKind.Geo -> PropertyType.Geo
+        ContainerKind.Short, ContainerKind.Byte, ContainerKind.ULong, ContainerKind.UInt, ContainerKind.UShort,
+        ContainerKind.UByte, ContainerKind.Double, null -> null
     }
-    if (ktype.isSubtypeOf(BooleanContainer::class.starProjectedType)) {
-        return PropertyType.Boolean
-    }
-    if (ktype.isSubtypeOf(IntContainer::class.starProjectedType)) {
-        return PropertyType.Int
-    }
-    if (ktype.isSubtypeOf(LongContainer::class.starProjectedType)) {
-        return PropertyType.Long
-    }
-    if (ktype.isSubtypeOf(FloatContainer::class.starProjectedType)) {
-        return PropertyType.Float
-    }
-    if (ktype.isSubtypeOf(InstantContainer::class.starProjectedType)) {
-        return PropertyType.Instant
-    }
-    if (ktype.isSubtypeOf(DateContainer::class.starProjectedType)) {
-        return PropertyType.Date
-    }
-    if (ktype.isSubtypeOf(DurationContainer::class.starProjectedType)) {
-        return PropertyType.Duration
-    }
-
-    if (ktype.isSubtypeOf(EnumContainer::class.starProjectedType)) {
-        return PropertyType.Enum
-    }
-    if (ktype.isSubtypeOf(GeoPositionContainer::class.starProjectedType)) {
-        return PropertyType.Geo
-    }
-
-    if (ktype.isSubtypeOf(DataContainer::class.starProjectedType)) {
-        throw NotImplementedError(ktype.toString())
-    }
-
-    return null
 }
-
-internal fun getEnumValue(enumClassName: String, enumValue: String) =
-    Class.forName(enumClassName).enumConstants.filterIsInstance(Enum::class.java).first { it.name == enumValue }
-

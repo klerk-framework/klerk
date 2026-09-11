@@ -11,13 +11,10 @@ import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyKey
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
-import kotlin.reflect.KTypeProjection
-import kotlin.reflect.KVariance
-import kotlin.reflect.full.createType
-import kotlin.reflect.full.isSubtypeOf
-import kotlin.reflect.full.memberProperties
 
 /**
  * How much model data Klerk keeps in memory. See docs/performance.md.
@@ -219,7 +216,7 @@ internal object ModelCache {
     internal fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
         return getAllRelated(id).map {
             val model = getBody(it.value) ?: return@map null
-            if (model.props::class.qualifiedName!! == clazz.qualifiedName) {
+            if (model.props::class == clazz) {
                 @Suppress("UNCHECKED_CAST")
                 return@map model.copy() as Model<T>
             }
@@ -231,69 +228,28 @@ internal object ModelCache {
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>
     ): Set<Model<T>> {
-        val result = mutableSetOf<Model<T>>()
         if (!ids.contains(id.value)) throw NoSuchElementException("Could not find model with id $id")
-        getAllRelated(id).forEach { relatedId ->
-            try {
-                val related =
-                    getBody(relatedId.value)?.copy()
-                        ?: throw NoSuchElementException("Could not find model with id $relatedId")
-                val relatedProperty =
-                    related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
-                val relatedPropertyValue = relatedProperty.getter.call(related.props) ?: return@forEach
-
-                val isTypeModelID =
-                    relatedProperty.returnType.toString().startsWith(ModelID::class.qualifiedName!!, false)
-                @Suppress("UNCHECKED_CAST")
-                if (isTypeModelID && ((relatedPropertyValue as ModelID<Any>) == id)) {
-                    @Suppress("UNCHECKED_CAST")
-                    result.add(related as Model<T>)
-                }
-            } catch (e: Exception) {
-                log.error("Could not getRelated", e)
-            }
-        }
-        return result
+        return relatedThrough(PropertyKey.of(property), id)
     }
 
     internal fun <T : Any, U : Any> getRelatedInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>
-    ): Set<Model<T>> {
-        val result = mutableSetOf<Model<T>>()
-        getAllRelated(id).forEach { relatedId ->
-            try {
-                val related =
-                    getBody(relatedId.value)?.copy()
-                        ?: throw NoSuchElementException("Could not find model with id $relatedId")
-                val relatedProperty =
-                    related.props::class.memberProperties.firstOrNull { it == property } ?: return@forEach
-                val relatedPropertyValue = relatedProperty.getter.call(related.props) ?: return@forEach
+    ): Set<Model<T>> = relatedThrough(PropertyKey.of(property), id)
 
-                val isTypeModelID =
-                    relatedProperty.returnType.toString().startsWith(ModelID::class.qualifiedName!!, false)
-
-                // is it a collection of ModelIds?
-                val anyType = KTypeProjection(KVariance.OUT, Any::class.createType())
-                val modelIDType = KTypeProjection(
-                    KVariance.INVARIANT,
-                    ModelID::class.createType(arguments = listOf(anyType))
-                )
-                val isTypeCollectionOfModelId =
-                    relatedProperty.returnType.isSubtypeOf(Collection::class.createType(arguments = listOf(modelIDType)))
-                @Suppress("UNCHECKED_CAST")
-                if (isTypeCollectionOfModelId && (relatedPropertyValue as Collection<ModelID<out Any>>).contains(
-                        id
-                    )
-                ) {
-                    result.add(related as Model<T>)
+    /** The models that refer to [id] through the property [key], wherever in their props it is. */
+    private fun <T : Any> relatedThrough(key: PropertyKey, id: ModelID<*>): Set<Model<T>> =
+        getAllRelated(id).mapNotNull { relatedId ->
+            val related = getBody(relatedId.value)?.copy() ?: return@mapNotNull null
+            var refers = false
+            ObjectSchema.of(related.props::class).forEachLeaf(related.props) { leaf ->
+                if (leaf.field.key == key && leaf.value == id) {
+                    refers = true
                 }
-            } catch (e: Exception) {
-                log.error("Could not getRelated", e)
             }
-        }
-        return result
-    }
+            @Suppress("UNCHECKED_CAST")
+            if (refers) related as Model<T> else null
+        }.toSet()
 
     /**
      * Calculates relations for the model and updates the provided relationsMap
@@ -313,30 +269,8 @@ internal object ModelCache {
             relationsMap.forEach { (_, relationSet) -> relationSet.remove(fromId) }
         }
 
-        model.props::class.memberProperties.forEach { property ->
-            if (property.returnType.toString().startsWith(ModelID::class.qualifiedName!!, false)) {
-                val propValue = property.getter.call(model.props) ?: return@forEach
-                val id = (propValue as ModelID<*>).value
-                createReference(fromId, id, relationsMap)
-            } else {
-                // is there a reference in a collection?
-                try {
-                    val AnyType = KTypeProjection(KVariance.OUT, Any::class.createType())
-                    val modelIDType = KTypeProjection(
-                        KVariance.INVARIANT,
-                        ModelID::class.createType(arguments = listOf(AnyType))
-                    )
-                    if (property.returnType.isSubtypeOf(Collection::class.createType(arguments = listOf(modelIDType)))) {
-                        val collection = property.getter.call(model.props) ?: return@forEach
-                        @Suppress("UNCHECKED_CAST")
-                        (collection as Collection<ModelID<out Any>>).forEach {
-                            createReference(fromId, it.value, relationsMap)
-                        }
-                    }
-                } catch (e: Exception) {
-                    log.error(e) { "Could not find out if there is a reference to the model" }
-                }
-            }
+        ObjectSchema.of(model.props::class).forEachLeaf(model.props) { leaf ->
+            (leaf.value as? ModelID<*>)?.let { createReference(fromId, it.value, relationsMap) }
         }
     }
 

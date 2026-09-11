@@ -6,16 +6,11 @@ import dev.klerkframework.klerk.PositiveAuthorization.Allow
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
-import dev.klerkframework.klerk.misc.EventParameter
-
+import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.getStateMachine
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.ModelCache
-import kotlin.reflect.full.isSubtypeOf
-import kotlin.reflect.full.memberProperties
-import kotlin.reflect.full.primaryConstructor
-import kotlin.reflect.full.starProjectedType
 
 /*
 Before a command is accepted, a lot of rules must be evaluated.
@@ -138,63 +133,65 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
     }
 
+    /** Checks every [EnumContainer] in [parameters], also in collections and nested objects, against `validEnums`. */
     private fun validateEnums(eventReference: EventReference, parameters: Any?): Problem? {
         if (parameters == null) {
             return null
         }
-        parameters::class.primaryConstructor!!.parameters.forEach { parameter ->
-            if (parameter.type.isSubtypeOf(EnumContainer::class.starProjectedType)) {
-                val p = EventParameter(parameter)
-                val validValues = klerk.spec.getValidEnumsFor(eventReference, p)
-                if (validValues != null) {
-                    val prop = parameters::class.memberProperties.single { it.name == parameter.name }
-                    val container = prop.getter.call(parameters) as EnumContainer<*>
-                    val enumValue = container.enum
-                    if (!validValues.contains(enumValue)) {
-                        return InvalidPropertyProblem(
-                            "'${enumValue}' is not a valid value for parameter ${parameter.name}",
-                            propertyName = parameter.name ?: "?"
-                        )
-                    }
-                }
+        val validEnums = klerk.spec.validEnumsOf(eventReference)
+        var problem: Problem? = null
+        ObjectSchema.of(parameters::class).forEachLeaf(parameters) { leaf ->
+            val container = leaf.value as? EnumContainer<*> ?: return@forEachLeaf
+            val validValues = validEnums[leaf.field.key] ?: return@forEachLeaf
+            if (problem == null && !validValues.contains(container.enum)) {
+                problem = InvalidPropertyProblem(
+                    "'${container.enum}' is not a valid value for parameter ${leaf.path}",
+                    propertyName = leaf.path
+                )
             }
         }
-        return null
+        return problem
     }
 
+    /**
+     * Checks every [ModelID] in [parameters], also in collections and nested objects, against `validReferences`. An id
+     * in a property without a declaration is rejected.
+     */
     private fun validateReferences(eventReference: EventReference, parameters: Any?, context: C): Problem? {
         if (parameters == null) {
             return null
         }
-        parameters::class.primaryConstructor!!.parameters.forEach { parameter ->
-            if (parameter.type.isSubtypeOf(ModelID::class.starProjectedType)) {
-                val reader = ReaderWithoutAuth<C, V>(klerk)
-                val p = EventParameter(parameter)
-                val collection = klerk.spec.getValidationCollectionFor(eventReference, p)
-                val prop = parameters::class.memberProperties.single { it.name == parameter.name }
-                val value = prop.getter.call(parameters) as ModelID<*>
-                if (collection != null && !collection.contains(value, reader)) {
-                    logger.info { collection }
-                    return InvalidPropertyProblem(
-                        "Did not find $value in ${collection.getFullId()} for parameter ${parameter.name}",
-                        propertyName = parameter.name ?: "?"
-                    )
-                }
+        val validReferences = klerk.spec.validReferencesOf(eventReference)
+        val reader = ReaderWithoutAuth<C, V>(klerk)
+        var problem: Problem? = null
+        ObjectSchema.of(parameters::class).forEachLeaf(parameters) { leaf ->
+            val id = leaf.value as? ModelID<*> ?: return@forEachLeaf
+            if (problem != null) {
+                return@forEachLeaf
+            }
+            if (!validReferences.containsKey(leaf.field.key)) {
+                problem = InvalidPropertyProblem(
+                    "There is no validReferences declared for ${leaf.field.key}",
+                    propertyName = leaf.path
+                )
+                return@forEachLeaf
+            }
+            val view = validReferences[leaf.field.key] ?: return@forEachLeaf
+            if (!view.contains(id, reader)) {
+                problem = InvalidPropertyProblem(
+                    "Did not find $id in ${view.getFullId()} for parameter ${leaf.path}",
+                    propertyName = leaf.path
+                )
             }
         }
-        return null
+        return problem
     }
 
+    /** Validates every [DataContainer] in [instance], also in collections and nested objects. */
     fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> {
         val problems = mutableSetOf<InvalidPropertyProblem>()
-        instance::class.memberProperties.forEach { property ->
-            if (property.returnType.isSubtypeOf(DataContainer::class.starProjectedType)) {
-                val problem =
-                    (property.getter.call(instance) as DataContainer<*>).validate(property.name, translation)
-                if (problem != null) {
-                    problems.add(problem)
-                }
-            }
+        ObjectSchema.of(instance::class).forEachLeaf(instance) { leaf ->
+            (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation)?.let { problems.add(it) }
         }
         return problems
     }

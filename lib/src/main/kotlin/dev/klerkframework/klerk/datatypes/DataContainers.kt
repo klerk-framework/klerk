@@ -137,6 +137,29 @@ public abstract class DataContainer<T>(public val valueWithoutAuthorization: T) 
     }
 
     override fun hashCode(): Int = valueWithoutAuthorization.hashCode()
+
+    public companion object {
+        /**
+         * Creates an instance of the container class [kClass] holding [value], for code that only knows the class at
+         * runtime (e.g. a form). [value] is what the constructor takes, e.g. an `Instant` for an [InstantContainer]
+         * or an enum constant for an [EnumContainer].
+         *
+         * @throws IllegalArgumentException if [kClass] cannot be created from [value], or its constructor throws
+         */
+        public fun <C : DataContainer<*>> create(kClass: kotlin.reflect.KClass<out C>, value: Any): C {
+            val container = try {
+                dev.klerkframework.klerk.misc.Shape.Container.of(kClass)
+            } catch (e: dev.klerkframework.klerk.IllegalConfigurationException) {
+                throw IllegalArgumentException(e.message, e)
+            }
+            @Suppress("UNCHECKED_CAST")
+            return try {
+                container.create(value) as C
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw IllegalArgumentException("Could not create ${kClass.simpleName}", e.targetException)
+            }
+        }
+    }
 }
 
 /**

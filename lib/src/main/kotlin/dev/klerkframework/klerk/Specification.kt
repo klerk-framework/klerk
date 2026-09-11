@@ -202,24 +202,15 @@ public data class Specification<C : KlerkContext, V>(
         return found.distinct()
     }
 
-    private fun attachedDataPropertyNames(kClass: KClass<*>, kind: AttachedDataDeclaration): List<String> {
-        val wanted = when (kind) {
-            AttachedDataDeclaration.BareBlobId -> AttachedBlobID::class
-            AttachedDataDeclaration.BareStringId -> AttachedStringID::class
-            AttachedDataDeclaration.BlobContainerDeclaration -> AttachedBlobContainer::class
-        }.starProjectedType
-
-        fun matches(type: KType): Boolean {
-            val bare = type.withNullability(false)
-            // A container is not a bare id, so the two kinds never match each other.
-            return bare.isSubtypeOf(wanted) ||
-                    // a List<...> or Set<...> of them
-                    (bare.isSubtypeOf(Collection::class.starProjectedType) &&
-                            bare.arguments.singleOrNull()?.type?.withNullability(false)?.isSubtypeOf(wanted) == true)
-        }
-
-        return kClass.memberProperties.filter { matches(it.returnType) }.map { it.name }
-    }
+    private fun attachedDataPropertyNames(kClass: KClass<*>, kind: AttachedDataDeclaration): List<String> =
+        ObjectSchema.of(kClass).leafFields().filter { leaf ->
+            when (kind) {
+                AttachedDataDeclaration.BareBlobId -> leaf.shape == Shape.BlobId
+                AttachedDataDeclaration.BareStringId -> leaf.shape == Shape.StringId
+                AttachedDataDeclaration.BlobContainerDeclaration ->
+                    (leaf.shape as? Shape.Container)?.kind == ContainerKind.AttachedBlob
+            }
+        }.map { it.path }
 
     /**
      * A string, like a blob, has to be declared in a container — the way every other property has a DataContainer —
@@ -272,19 +263,12 @@ public data class Specification<C : KlerkContext, V>(
         val found = mutableMapOf<KClass<out AttachedBlobContainer>, String>()
 
         fun collect(kClass: KClass<*>, describe: (String) -> String) {
-            kClass.memberProperties.forEach { property ->
-                val bare = property.returnType.withNullability(false)
-                val type = if (bare.isSubtypeOf(Collection::class.starProjectedType)) {
-                    bare.arguments.singleOrNull()?.type?.withNullability(false)
-                } else {
-                    bare
-                } ?: return@forEach
-                if (!type.isSubtypeOf(AttachedBlobContainer::class.starProjectedType)) {
-                    return@forEach
+            ObjectSchema.of(kClass).leafFields().forEach { leaf ->
+                val container = leaf.shape as? Shape.Container ?: return@forEach
+                if (container.kind == ContainerKind.AttachedBlob) {
+                    @Suppress("UNCHECKED_CAST")
+                    found.putIfAbsent(container.kClass as KClass<out AttachedBlobContainer>, describe(leaf.path))
                 }
-                @Suppress("UNCHECKED_CAST")
-                val container = type.classifier as? KClass<out AttachedBlobContainer> ?: return@forEach
-                found.putIfAbsent(container, describe(property.name))
             }
         }
 
@@ -376,32 +360,45 @@ public data class Specification<C : KlerkContext, V>(
                 .forEach { event ->
                     when (event) {
                         is InstanceEventNoParameters -> {}
-                        is InstanceEventWithParameters -> checkRefParam(getParameters(event.id), event.validRefs, event)
+                        is InstanceEventWithParameters -> checkRefParam(event.parametersClass, event.validRefs.keys, event.validEnums.keys, event)
                         is VoidEventNoParameters -> {}
-                        is VoidEventWithParameters -> checkRefParam(getParameters(event.id), event.validRefs, event)
+                        is VoidEventWithParameters -> checkRefParam(event.parametersClass, event.validRefs.keys, event.validEnums.keys, event)
                     }
                 }
         }
     }
 
+    /**
+     * Every ModelID in the parameters, also in collections and nested classes, must have `validReferences`, and
+     * `validReferences`/`validEnums` must only be declared for properties that are in the parameters.
+     */
     private fun checkRefParam(
-        params: EventParameters<*>?,
-        validRefs: Map<String, ModelView<out Any, *>?>,
+        parametersClass: KClass<*>,
+        validRefs: Set<PropertyKey>,
+        validEnums: Set<PropertyKey>,
         event: Event<*, *>
     ) {
-        if (params == null) {
-            return
-        }
-        val refParameters = params.all.filter { it.type == PropertyType.Ref }
-        refParameters.firstOrNull { refParam -> !validRefs.containsKey(refParam.name) }?.let {
+        val leaves = ObjectSchema.of(parametersClass).leafFields()
+        val references = leaves.filter { it.shape == Shape.Reference }
+        references.firstOrNull { it.field.key !in validRefs }?.let {
             throw IllegalConfigurationException(
                 KlerkErrorCode.MissingValidReferences, """
-                The parameter '${it.name}' in '${params.raw.simpleName}' for '$event' contains a property of type Reference, but there is no 'validReferences' declared for that parameter in the state machine.
-                E.g. to declare that all references are valid, add this to the state machine for ${params.raw.simpleName}:
+                '${it.path}' in '${parametersClass.simpleName}' for '$event' is a ModelID, but there is no 'validReferences' declared for it in the state machine. Declare which view the ids must be in, e.g.:
                 event(${event.name}) {
-                    validReferences(${params.raw.simpleName}::${it.name}, views.the-view-of-the-referenced-model.all)
+                    validReferences(${it.field.key}, views.the-view-of-the-referenced-model.all)
                 }
+                Pass null instead of a view to accept any id.
                 """.trimIndent()
+            )
+        }
+        val enums = leaves.filter { (it.shape as? Shape.Container)?.kind == ContainerKind.Enum }
+        val unknown = (validRefs - references.map { it.field.key }.toSet()).map { "validReferences($it, ...)" } +
+                (validEnums - enums.map { it.field.key }.toSet()).map { "validEnums($it, ...)" }
+        if (unknown.isNotEmpty()) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.ValidationRuleForUnknownProperty,
+                "${unknown.joinToString(", ")} is declared for '$event', but the property is not a matching property " +
+                        "of ${parametersClass.simpleName} or a class nested in it"
             )
         }
     }
@@ -497,14 +494,35 @@ public data class Specification<C : KlerkContext, V>(
         eventReference: EventReference,
         parameter: EventParameter
     ): ModelView<out Any, C>? {
-        val event = getEvent(eventReference)
-        return when (event) {
-            is InstanceEventNoParameters -> null
-            is InstanceEventWithParameters<*, *> -> event.getValidRefs(parameter.name)
-            is VoidEventNoParameters -> null
-            is VoidEventWithParameters<*, *> -> event.getValidRefs(parameter.name)
-        }
+        val parametersClass = parametersClassOf(eventReference) ?: return null
+        return validReferencesOf(eventReference)[PropertyKey(parametersClass, parameter.name)]
     }
+
+    /** The views declared with `validReferences` for the event, by property. A null view accepts any id. */
+    internal fun validReferencesOf(eventReference: EventReference): Map<PropertyKey, ModelView<out Any, C>?> {
+        val validRefs = when (val event = getEvent(eventReference)) {
+            is InstanceEventWithParameters<*, *> -> event.validRefs
+            is VoidEventWithParameters<*, *> -> event.validRefs
+            else -> emptyMap()
+        }
+        @Suppress("UNCHECKED_CAST")
+        return validRefs as Map<PropertyKey, ModelView<out Any, C>?>
+    }
+
+    /** The values declared with `validEnums` for the event, by property. */
+    internal fun validEnumsOf(eventReference: EventReference): Map<PropertyKey, Set<Enum<*>>> =
+        when (val event = getEvent(eventReference)) {
+            is InstanceEventWithParameters<*, *> -> event.validEnums
+            is VoidEventWithParameters<*, *> -> event.validEnums
+            else -> emptyMap()
+        }
+
+    private fun parametersClassOf(eventReference: EventReference): KClass<*>? =
+        when (val event = getEvent(eventReference)) {
+            is InstanceEventWithParameters<*, *> -> event.parametersClass
+            is VoidEventWithParameters<*, *> -> event.parametersClass
+            else -> null
+        }
 
     /**
      * The set of allowed values declared with `validEnums(...)` for [parameter] of the event [eventReference], or
@@ -514,13 +532,8 @@ public data class Specification<C : KlerkContext, V>(
         eventReference: EventReference,
         parameter: EventParameter
     ): Set<Enum<*>>? {
-        val event = getEvent(eventReference)
-        return when (event) {
-            is InstanceEventNoParameters -> null
-            is InstanceEventWithParameters<*, *> -> event.getValidEnums(parameter.name)
-            is VoidEventNoParameters -> null
-            is VoidEventWithParameters<*, *> -> event.getValidEnums(parameter.name)
-        }
+        val parametersClass = parametersClassOf(eventReference) ?: return null
+        return validEnumsOf(eventReference)[PropertyKey(parametersClass, parameter.name)]
     }
 
     /**

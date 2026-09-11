@@ -3,8 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.datatypes.DataContainer
 
 import kotlin.reflect.KProperty0
-import kotlin.reflect.jvm.ExperimentalReflectionOnLambdas
-import kotlin.reflect.jvm.reflect
+import kotlin.reflect.KFunction
 
 /**
  * Base class for everything that can go wrong while processing a command, surfaced in
@@ -51,8 +50,7 @@ public class InvalidPropertyProblem(
 
 /** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
 public data class RuleDescription(val function: Function<Any>, val type: RuleType) {
-    @OptIn(ExperimentalReflectionOnLambdas::class)
-    public override fun toString(): String = "${type.name}: ${function.reflect()?.name}"
+    public override fun toString(): String = "${type.name}: ${(function as? KFunction<*>)?.name}"
 }
 
 /** Which kind of rule produced a [RuleDescription]. */
@@ -196,6 +194,7 @@ public enum class KlerkErrorCode(public val code: String) {
     BlobMustBeDeclaredInAContainer("ERROR-SPEC-10"),
     MissingPreAttachStep("ERROR-SPEC-11"),
     StringMustBeDeclaredInAContainer("ERROR-SPEC-12"),
+    ValidationRuleForUnknownProperty("ERROR-SPEC-13"),
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
     AttachedBlobStoreIsNone("ERROR-SETTINGS-2"),
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),

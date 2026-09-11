@@ -40,14 +40,31 @@ public fun camelCaseToPretty(s: String): String {
 }
 
 
+/** Checks that every [ModelID] in the model's props, also in collections and nested objects, refers to a model. */
 internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: Reader<C, V>): Problem? {
-    val reflected = ReflectedModel(model)
-    try {
-        reader.apply(reflected.populateRelations())
-    } catch (e: NoSuchElementException) {
-        return NotFoundProblem(e.message!!)
+    var problem: Problem? = null
+    ObjectSchema.of(model.props::class).forEachLeaf(model.props) { leaf ->
+        val id = leaf.value as? ModelID<*> ?: return@forEachLeaf
+        if (problem != null) {
+            return@forEachLeaf
+        }
+        try {
+            @Suppress("UNCHECKED_CAST")
+            reader.get(id as ModelID<Any>)
+        } catch (e: NoSuchElementException) {
+            problem = NotFoundProblem(e.message ?: "Could not find the model with id $id")
+        }
     }
-    return null
+    return problem
+}
+
+/**
+ * The name of a validator function, as shown in generated documentation: the name of a function reference in
+ * backticks as written, otherwise un-camel-cased.
+ */
+internal fun validatorName(function: Function<*>): String {
+    val name = (function as? KFunction<*>)?.name ?: return extractNameFromFunctionString(function.toString())
+    return if (name.contains(' ')) name else camelCaseToPretty(name)
 }
 
 internal fun extractNameFromFunctionString(funString: String): String {

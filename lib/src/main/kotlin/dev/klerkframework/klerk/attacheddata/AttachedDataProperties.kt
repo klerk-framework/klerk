@@ -2,12 +2,13 @@ package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.AttachedBlobID
 import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.IllegalConfigurationException
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.AttachedDataContainer
-import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.Shape
 import kotlin.reflect.KClass
 import kotlin.reflect.full.isSubclassOf
-import kotlin.reflect.full.memberProperties
 
 /**
  * One attached-data reference found in a model's props, together with what the property declares about it.
@@ -21,9 +22,9 @@ internal data class AttachedDataReference(
 )
 
 /**
- * Finds the [AttachedBlobID] and [AttachedStringID] values in a model's props, including those inside a `List` or
- * `Set`, and those wrapped in an [AttachedDataContainer]. Blobs and strings share one id space, so they need not be
- * told apart here.
+ * Finds the [AttachedBlobID] and [AttachedStringID] values in a model's props, including those inside a `List`, a
+ * `Set` or a nested object, and those wrapped in an [AttachedDataContainer]. Blobs and strings share one id space, so
+ * they need not be told apart here.
  *
  * Note that the result is keyed by id, so a model that holds the same id in two properties yields it once. That is
  * what makes `Book(cover = blobX, thumbnail = blobX)` behave correctly when one of the two is cleared: the id is
@@ -31,25 +32,12 @@ internal data class AttachedDataReference(
  */
 internal fun collectAttachedData(props: Any): Map<Int, AttachedDataReference> {
     val found = mutableMapOf<Int, AttachedDataReference>()
-
-    fun add(value: Any?) {
-        when (value) {
+    ObjectSchema.of(props::class).forEachLeaf(props) { leaf ->
+        when (val value = leaf.value) {
             is AttachedBlobID -> found.putIfAbsent(value.id, AttachedDataReference(value.id))
             is AttachedStringID -> found.putIfAbsent(value.id, AttachedDataReference(value.id))
             is AttachedDataContainer<*> -> found[value.rawId] = AttachedDataReference(value.rawId, value)
             else -> Unit
-        }
-    }
-
-    props::class.memberProperties.forEach { property ->
-        try {
-            when (val value = property.getter.call(props)) {
-                null -> Unit
-                is Collection<*> -> value.forEach { add(it) }
-                else -> add(value)
-            }
-        } catch (e: Exception) {
-            logger.error(e) { "Could not read property ${property.name} while looking for attached data" }
         }
     }
     return found
@@ -65,15 +53,18 @@ internal fun collectAttachedData(props: Any): Map<Int, AttachedDataReference> {
  * @throws IllegalArgumentException if there is no such constructor, or if it threw.
  */
 internal fun <ID, C : AttachedDataContainer<ID>> instantiateDeclaration(kClass: KClass<out C>, id: ID): C {
-    val constructor = kClass.constructors.singleOrNull { it.parameters.size == 1 }
-        ?: throw IllegalArgumentException(
+    val container = try {
+        Shape.Container.of(kClass)
+    } catch (e: IllegalConfigurationException) {
+        throw IllegalArgumentException(
             "${kClass.qualifiedName ?: kClass} cannot be used as an attached-data declaration: it must have " +
-                    "exactly one constructor taking an id, as 'class MyImage(id: AttachedBlobID) : " +
-                    "AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one."
+                    "exactly one constructor taking an id, and it must be public, as 'class MyImage(id: " +
+                    "AttachedBlobID) : AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one.", e
         )
+    }
     @Suppress("UNCHECKED_CAST")
     return try {
-        constructor.call(id) as C
+        container.create(id as Any) as C
     } catch (e: Exception) {
         throw IllegalArgumentException("Could not build the declaration ${kClass.qualifiedName ?: kClass}", e)
     }
@@ -83,12 +74,14 @@ internal fun <ID, C : AttachedDataContainer<ID>> instantiateDeclaration(kClass: 
  * The same, from the name a job cursor carries. The class is gone if it was renamed since the value was prepared, in
  * which case the job fails rather than silently letting an unprocessed value through.
  *
+ * The class is loaded without being initialized, so nothing in it runs unless it is an [AttachedBlobContainer].
+ *
  * Blob-only: only a blob ever has pre-attach steps to resume, so only a blob ever has a job cursor to rebuild from.
  */
 @Suppress("UNCHECKED_CAST")
 internal fun instantiateDeclaration(className: String, id: AttachedBlobID): AttachedBlobContainer {
     val kClass = try {
-        Class.forName(className).kotlin
+        Class.forName(className, false, AttachedBlobContainer::class.java.classLoader).kotlin
     } catch (e: ClassNotFoundException) {
         throw IllegalArgumentException("There is no longer a blob declaration called '$className'", e)
     }

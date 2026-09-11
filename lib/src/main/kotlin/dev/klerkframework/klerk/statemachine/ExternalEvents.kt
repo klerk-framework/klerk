@@ -3,7 +3,7 @@ package dev.klerkframework.klerk.statemachine
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.datatypes.EnumContainer
-import dev.klerkframework.klerk.misc.EventParameter
+import dev.klerkframework.klerk.misc.PropertyKey
 import kotlin.reflect.KProperty1
 
 /**
@@ -20,44 +20,59 @@ public abstract class EventRules<C : KlerkContext> {
     }
 }
 
+/**
+ * Rules for an event with parameters of type [P].
+ *
+ * `validReferences` and `validEnums` take a property of [P] or of a class nested in [P], e.g. `MyParams::author` or
+ * `Address::owner`.
+ */
 public abstract class EventRulesWithParameters<P : Any, C : KlerkContext> : EventRules<C>() {
     internal val parametersValidations: MutableSet<((P) -> PropertyCollectionValidity)> = mutableSetOf()
+    internal val validRefs: MutableMap<PropertyKey, ModelView<out Any, *>?> = mutableMapOf()
+    internal val validEnumsMap: MutableMap<PropertyKey, Set<Enum<*>>> = mutableMapOf()
 
     /** Adds a rule that validates the event's parameters of type [P] in isolation, without model/context access. */
     public fun validateParameters(function: (P) -> PropertyCollectionValidity) {
         parametersValidations.add(function)
+    }
+
+    /**
+     * Declares which models the `ModelID` [property] may point to. Required for every `ModelID` in the parameters —
+     * Klerk rejects the specification at startup otherwise. Pass `modelView = null` to accept any id without a
+     * membership check.
+     */
+    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
+        validRefs[PropertyKey.of(property)] = modelView
+    }
+
+    /** Like the single-id variant, for a `List` or `Set` of ids: every id must be in [modelView]. */
+    @JvmName("validReferencesInCollection")
+    public fun <T : Any> validReferences(
+        property: KProperty1<*, Collection<ModelID<out T>>?>,
+        modelView: ModelView<T, C>?
+    ) {
+        validRefs[PropertyKey.of(property)] = modelView
+    }
+
+    /** Restricts the [EnumContainer] [property] to [validValues]; any other value fails validation. */
+    public fun <E : Enum<E>> validEnums(property: KProperty1<*, EnumContainer<E>?>, validValues: Set<E>) {
+        validEnumsMap[PropertyKey.of(property)] = validValues
+    }
+
+    /** Like the single-value variant, for a `List` or `Set` of [EnumContainer]s: every value must be in [validValues]. */
+    @JvmName("validEnumsInCollection")
+    public fun <E : Enum<E>> validEnums(property: KProperty1<*, Collection<EnumContainer<E>>?>, validValues: Set<E>) {
+        validEnumsMap[PropertyKey.of(property)] = validValues
     }
 }
 
 public class InstanceEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V> :
     EventRulesWithParameters<P, C>() {
 
-    internal val validRefs: MutableMap<String, ModelView<*, C>> = mutableMapOf()
-    internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
-    internal val validEnumsMap: MutableMap<String, Set<Enum<*>>> = mutableMapOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
-
-    /** Restricts [property] (an [EnumContainer] parameter) to [validValues]; any other value fails validation. */
-    public fun <E : Enum<E>> validEnums(property: KProperty1<*, EnumContainer<E>?>, validValues: Set<E>) {
-        @Suppress("UNCHECKED_CAST")
-        validEnumsMap[property.name] = validValues as Set<Enum<*>>
-    }
-
-    /**
-     * Declares which models [property] (a `ModelID` parameter) may point to. Required for every `ModelID` event
-     * parameter — Klerk rejects the specification at startup otherwise. Pass `modelView = null` to allow any existing
-     * model id of that type through with no membership check.
-     */
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<T>?>, modelView: ModelView<T, C>?) {
-        if (modelView == null) {
-            referencesThatAllowsEverything.add(property.name)
-        } else {
-            validRefs[property.name] = modelView
-        }
-    }
 
     /** Adds a rule that validates against [ArgForInstanceEvent] but without access to the event's parameters. */
     public fun validate(function: (ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
@@ -68,43 +83,14 @@ public class InstanceEventRulesWithParameters<T : Any, P : Any, C : KlerkContext
     public fun validateWithParameters(function: (ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity) {
         withParametersValidationRules.add(function)
     }
-
-    internal fun getValidationCollectionFor(parameter: EventParameter): ModelView<out Any, C>? {
-        if (referencesThatAllowsEverything.contains(parameter.name)) {
-            return null
-        }
-        return validRefs[parameter.name]
-            ?: throw NotFoundProblem("No validation listsource found for '${parameter.name}'").asException()
-    }
 }
 
 public class VoidEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V> : EventRulesWithParameters<P, C>() {
 
-    internal val validRefs: MutableMap<String, ModelView<*, C>?> = mutableMapOf()
-    internal var referencesThatAllowsEverything: MutableSet<String> = mutableSetOf()
-    internal val validEnumsMap: MutableMap<String, Set<Enum<*>>> = mutableMapOf()
     internal val withoutParametersValidationRules: MutableSet<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
     internal val withParametersValidationRules: MutableSet<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
-
-    /** Restricts [property] (an [EnumContainer] parameter) to [validValues]; any other value fails validation. */
-    public fun <E : Enum<E>> validEnums(property: KProperty1<*, EnumContainer<E>?>, validValues: Set<E>) {
-        @Suppress("UNCHECKED_CAST")
-        validEnumsMap[property.name] = validValues as Set<Enum<*>>
-    }
-
-    /**
-     * Declares which models [property] (a `ModelID` parameter) may point to. Required for every `ModelID` event
-     * parameter — Klerk rejects the specification at startup otherwise.
-     */
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
-        //if (collection == null) {
-        //  referencesThatAllowsEverything.add(property.name)
-        //} else {
-        validRefs[property.name] = modelView
-        //}
-    }
 
     /** Adds a rule that validates against [ArgForVoidEvent] but without access to the event's parameters. */
     public fun validate(function: (ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
@@ -114,14 +100,6 @@ public class VoidEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V>
     /** Adds a rule that validates against [ArgForVoidEvent], with access to the event's parameters. */
     public fun validateWithParameters(function: (ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity) {
         withParametersValidationRules.add(function)
-    }
-
-    internal fun getValidationCollectionFor(parameter: EventParameter): ModelView<out Any, C>? {
-        if (referencesThatAllowsEverything.contains(parameter.name)) {
-            return null
-        }
-        return validRefs[parameter.name]
-            ?: throw NotFoundProblem("No validation listsource found for '${parameter.name}'").asException()
     }
 }
 

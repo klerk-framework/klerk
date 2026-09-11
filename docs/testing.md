@@ -105,7 +105,7 @@ and advance it rather than waiting. See [jobs.md](jobs.md#testing) and [time.md]
 
 ## Testing specification mistakes
 
-Misconfigurations (undeclared events used in `onEvent`, a `Ref` parameter missing `validReferences`, a state
+Misconfigurations (undeclared events used in `onEvent`, a `ModelID` parameter missing `validReferences`, a state
 transitioning to itself, model classes with `var` properties, ...) are caught by `SpecificationBuilder.build()` itself,
 so they can be asserted on directly without starting Klerk:
 

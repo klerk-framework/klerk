@@ -175,6 +175,7 @@ class KlerkJsonTest {
         val latitude100Degrees = 1_000_000_000L shl 32
         val reason = reasonFor { put("place", JsonPrimitive(latitude100Degrees)) }
         assertTrue(reason.startsWith("'place' could not be created"), reason)
+        assertTrue(!reason.contains("latitude"), "the constructor's message may contain the value: $reason")
     }
 
     @Test

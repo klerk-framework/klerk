@@ -8,6 +8,7 @@ import dev.klerkframework.klerk.datatypes.LongContainer
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.misc.EventParameters
+import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.statemachine.StateMachine
@@ -213,17 +214,12 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(
 ) : VoidEvent<T, P>(forModel, visibility) {
 
     internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
-    internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
-    internal var validEnums: Map<String, Set<Enum<*>>> = mapOf()
+    internal var validRefs: Map<PropertyKey, ModelView<out Any, *>?> = mapOf()
+    internal var validEnums: Map<PropertyKey, Set<Enum<*>>> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
-    @Suppress("UNCHECKED_CAST")
-    internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
-        validRefs[name] as ModelView<out Any, C>?
-
-    internal fun getValidEnums(name: String): Set<Enum<*>>? = validEnums[name]
 
 
 }
@@ -247,17 +243,12 @@ public open class InstanceEventWithParameters<T : Any, P : Any>(
 
     internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> =
         setOf()
-    internal var validRefs: Map<String, ModelView<out Any, *>?> = mapOf()
-    internal var validEnums: Map<String, Set<Enum<*>>> = mapOf()
+    internal var validRefs: Map<PropertyKey, ModelView<out Any, *>?> = mapOf()
+    internal var validEnums: Map<PropertyKey, Set<Enum<*>>> = mapOf()
 
     internal fun <C : KlerkContext, V> getParamRules() =
         paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity>
 
-    @Suppress("UNCHECKED_CAST")
-    internal fun <C : KlerkContext> getValidRefs(name: String): ModelView<out Any, C>? =
-        validRefs[name] as ModelView<out Any, C>?
-
-    internal fun getValidEnums(name: String): Set<Enum<*>>? = validEnums[name]
 
 }
 

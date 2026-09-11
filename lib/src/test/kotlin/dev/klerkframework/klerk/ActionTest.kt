@@ -78,6 +78,8 @@ class ActionTest {
         stateMachine {
             event(CreateBook) {
                 validReferences(CreateBookParams::author, collections.authors.all)
+                validReferences(CreateBookParams::coAuthors, collections.authors.all)
+                validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
             }
 
             event(PublishBook) {}
