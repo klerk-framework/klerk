@@ -793,6 +793,10 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      *
      * fun jobContext(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
      * ```
+     *
+     * The actor is rebuilt from storage, so an actor identified by a model arrives as a [ModelReferenceIdentity] — the
+     * id, not the model — and this function has no reader with which to load it. Rules that a job's commands must pass
+     * should therefore compare the actor's id rather than a model the context only carries on a request.
      */
     public fun jobContextProvider(provider: (JobContextRequest) -> C) {
         jobContextProviderValue = provider

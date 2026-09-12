@@ -108,6 +108,14 @@ Every one of these needs a reader, but takes it as a context parameter — so in
 reader is the receiver, you never write it out. In a DSL function, where the reader is `args.reader`, wrap the calls in
 `with(args.reader) { … }`.
 
+They are extension functions, so import the ones you use:
+
+```kotlin
+import dev.klerkframework.klerk.collection.asSequence
+import dev.klerkframework.klerk.collection.count
+import dev.klerkframework.klerk.collection.query
+```
+
 ```kotlin
 val livingAuthors = klerk.read(context) {
     views.authors.all.asSequence()

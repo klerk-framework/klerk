@@ -90,7 +90,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         /**
-         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.schedule(cursor)`.
+         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.declare(cursor)`.
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
@@ -103,7 +103,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
         /**
          * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
-         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * `MyJobType.declare(cursor)`. It is persisted in this command's own transaction, so a failing command
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(
@@ -212,7 +212,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         /**
-         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.schedule(cursor)`.
+         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.declare(cursor)`.
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
@@ -225,7 +225,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
         /**
          * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
-         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * `MyJobType.declare(cursor)`. It is persisted in this command's own transaction, so a failing command
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(
@@ -303,7 +303,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         /**
-         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.schedule(cursor)`.
+         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.declare(cursor)`.
          * They are persisted in this command's own transaction, so a failing command schedules nothing. See
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
@@ -316,7 +316,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
         /**
          * Schedules a single piece of managed background work: [function] returns the job to schedule, built with
-         * `MyJobType.schedule(cursor)`. It is persisted in this command's own transaction, so a failing command
+         * `MyJobType.declare(cursor)`. It is persisted in this command's own transaction, so a failing command
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(

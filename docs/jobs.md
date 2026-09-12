@@ -121,7 +121,7 @@ onEvent(ChangeName) {
 }
 
 fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): DeclaredJob<Ctx, Views> =
-    NotifyBookStores.schedule(NotifyCursor(author = args.model.id))
+    NotifyBookStores.declare(NotifyCursor(author = args.model.id))
 ```
 
 Use `jobs` instead of `job` when a single event should schedule more than one:
@@ -133,13 +133,13 @@ onEvent(ChangeName) {
 }
 
 fun notifyBookStoresAndPartners(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> =
-    listOf(NotifyBookStores.schedule(NotifyCursor(author = args.model.id)), NotifyPartners.schedule(...))
+    listOf(NotifyBookStores.declare(NotifyCursor(author = args.model.id)), NotifyPartners.declare(...))
 ```
 
 Or directly, for work no command is responsible for:
 
 ```kotlin
-val id = klerk.jobs.schedule(ImportBooks.schedule(ImportCursor(...), scheduleAt = tomorrow), context)
+val id = klerk.jobs.schedule(ImportBooks.declare(ImportCursor(...), scheduleAt = tomorrow), context)
 ```
 
 The context is what decides the job's **owner** — the actor the [authorization rules](#who-can-see-a-job) see — and what
@@ -207,7 +207,7 @@ A job spawns children by **declaring them in its yield**, never by calling `kler
 ```kotlin
 JobResult.Yield(
     cursor = cursor.copy(phase = AwaitingFiles),
-    spawn = files.map { ImportOneFile.schedule(FileCursor(it)) },
+    spawn = files.map { ImportOneFile.declare(FileCursor(it)) },
     awaitSpawned = true,
 )
 ```
@@ -358,7 +358,7 @@ event log is authorization-gated and may have been erased by retention rules lon
 letter.
 
 If a hook only needs to hand off to something bigger, it can spawn a compensation job like any other step
-(`spawn = listOf(UndoImport.schedule(...))`) — but it rarely needs to, since it already has everything a job has.
+(`spawn = listOf(UndoImport.declare(...))`) — but it rarely needs to, since it already has everything a job has.
 
 Rules:
 
@@ -411,7 +411,7 @@ with interactive traffic. The job module therefore sheds load rather than lettin
 
 A job type's `priority` defaults to `Normal`. Setting it to `null` means "inherit": a spawned child takes its parent's
 class, and anything else lands in `Normal`. An individual instance can override the type with
-`MyJob.schedule(cursor, priority = JobPriority.High)`.
+`MyJob.declare(cursor, priority = JobPriority.High)`.
 
 **Admission control is delay-based, not depth-based.** Klerk tracks how long the *oldest ready job* in each class has
 been waiting. Queue depth is a poor signal — one entry may be a one-step webhook and another a 500-step import, and a
@@ -540,6 +540,32 @@ A job runs as an **agent**, declared on the job type:
 
 `JobAgent.Scheduler` requires `jobContextProvider(...)` in the specification, since Klerk cannot construct a context for
 an arbitrary actor of your own context type. Omitting it is a configuration error, caught at startup.
+
+The actor is rebuilt from what was persisted, so an actor identified by a model arrives as a `ModelReferenceIdentity` —
+its id, not the model. `jobContextProvider` is an ordinary function without a reader, so a context that normally
+carries the loaded model cannot fill that in:
+
+```kotlin
+jobContextProvider(::jobContext)
+
+fun jobContext(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
+```
+
+Write the rules a job's commands must pass against the actor's **id** rather than against a model your context only
+holds when a request loaded it:
+
+```kotlin
+class Ctx(override val actor: ActorIdentity, val user: Model<User>? = null, ...) : KlerkContext {
+    val userId: ModelID<*>? get() = user?.id ?: actor.id
+}
+
+fun onlyByOwner(args: ArgForInstanceEvent<Order, Nothing?, Ctx, Views>): PropertyCollectionValidity =
+    if (args.model.props.owner == args.context.userId) Valid else Invalid()
+```
+
+A rule that reads `context.user` instead rejects every command the job emits, and the job still reports **Succeeded** —
+a rejected command is data, not a job failure (see [What a step returns](#what-a-step-returns)). Nothing looks broken
+except that the model never moves.
 
 Job metadata (status, progress, log) is authorization-checked. The same rules gate `cancel`, so a user watching their
 own progress bar can stop their own job:
