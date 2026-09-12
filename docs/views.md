@@ -89,7 +89,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Ctx>,
 ) : ModelView<Author, Ctx>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> {
+    override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {
         val withTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
@@ -156,7 +156,7 @@ klerk.read(Ctx.system()) {
     assertTrue { astrid in collections.authors.all }
 }
 
-klerk.handle(Command(DeleteAuthor, astrid, null), Ctx.system(), ProcessingOptions(CommandToken.simple()))
+klerk.handle(Command(DeleteAuthor, astrid, null), Ctx.system())
 
 klerk.read(Ctx.system()) {
     assertFalse { astrid in collections.authors.all }

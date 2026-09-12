@@ -82,8 +82,7 @@ class EvictionTest {
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     @Test
     fun `modelsCount counts models that exist, not models in memory`() = runBlocking {
@@ -134,8 +133,7 @@ class EvictionTest {
         klerk.handle(
             Command(event = ImproveAuthor, model = author, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
 
         // Improving's onEnter transitions on immediately, so the assertion is just "it left the state it was in" --
         // which it could only do if the command found the evicted model.
@@ -157,8 +155,7 @@ class EvictionTest {
         klerk.handle(
             Command(event = DeleteAuthor, model = author, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
 
         assertEquals(countBefore - 1, klerk.meta.modelsCount)
         assertNull(klerk.read(Ctx.system()) { getOrNull(author) })
@@ -254,8 +251,7 @@ class EvictionTest {
                     params = ChangeNameParams(FirstName("Renamed"), LastName("Author")),
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
         }
 
         try {
@@ -307,8 +303,7 @@ class EvictionTest {
                 params = ChangeNameParams(FirstName(to), LastName("Author")),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         withTimeout(120_000) {
             val readers = (1..12).map {
@@ -360,7 +355,6 @@ class EvictionTest {
                     klerk.handle(
                         Command(event = ImproveAuthor, model = target, params = null),
                         Ctx.system(),
-                        ProcessingOptions(CommandToken.simple()),
                     )
                 }
             }

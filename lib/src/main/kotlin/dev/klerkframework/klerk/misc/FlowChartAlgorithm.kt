@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.misc
 
+import dev.klerkframework.klerk.ExperimentalKlerkApi
 import kotlin.reflect.KFunction1
 
 /**
@@ -7,6 +8,7 @@ import kotlin.reflect.KFunction1
  * nodes so it can be both executed and rendered as a diagram (see [dev.klerkframework.klerk.misc.generateFlowChart]).
  * Subclass and implement [configure] to declare the graph via [AlgorithmBuilder]; call [execute] to run it.
  */
+@ExperimentalKlerkApi
 public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 
     private val nodesAndStartNode: Pair<Set<Node<P, R>>, Node<P, R>> by lazy { initConfig() }
@@ -50,6 +52,7 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 }
 
 /** DSL receiver for [FlowChartAlgorithm.configure]. */
+@ExperimentalKlerkApi
 public class AlgorithmBuilder<P, R>(private val name: String) {
 
     private var startNodeId: Decision<*, P>? = null
@@ -89,6 +92,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
 }
 
 /** A single node in a [FlowChartAlgorithm]'s graph. */
+@ExperimentalKlerkApi
 public sealed class Node<P, R> {
     public abstract fun execute(params: P): NodeExecutionResult<P, R>
 
@@ -153,6 +157,7 @@ public sealed class Node<P, R> {
 }
 
 /** The outcome of evaluating one [Node] against a set of parameters. */
+@ExperimentalKlerkApi
 public sealed class NodeExecutionResult<P, R> {
     /** The algorithm is done: [terminationResult] is the final result. */
     public data class Termination<P, R>(val terminationResult: R, val functionResult: String) :
@@ -164,6 +169,7 @@ public sealed class NodeExecutionResult<P, R> {
 }
 
 /** DSL receiver for [AlgorithmBuilder.booleanNode]. */
+@ExperimentalKlerkApi
 public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
     private val goTos = mutableMapOf<Boolean, Decision<out Any, P>>()
     private val terminations = mutableMapOf<Boolean, R>()
@@ -192,6 +198,7 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
 }
 
 /** DSL receiver for [AlgorithmBuilder.enumNode]. */
+@ExperimentalKlerkApi
 public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
     private val goTos = mutableMapOf<E, Decision<out Any, P>>()
     private val terminations = mutableMapOf<E, R>()
@@ -220,6 +227,7 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
 }
 
 /** A named decision function that inspects the algorithm's parameters [P] and returns a value of type [T] to branch on. */
+@ExperimentalKlerkApi
 public interface Decision<T, P> {
     public val name: String
     public val function: (P) -> T

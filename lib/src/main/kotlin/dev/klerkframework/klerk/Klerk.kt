@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
@@ -9,7 +10,6 @@ import dev.klerkframework.klerk.log.KlerkLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.EventLogEntry
-import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
 import java.nio.file.Path
@@ -53,12 +53,15 @@ public interface Klerk<C : KlerkContext, V> {
      *
      * @param command the event
      * @param context including the actorIdentity on whose behalf the read happens
+     * @param options defaults to a fresh [dev.klerkframework.klerk.command.CommandToken.simple] token, i.e. a command
+     * that is only guarded against being submitted twice. Pass a token from
+     * [dev.klerkframework.klerk.command.CommandToken.requireUnmodifiedModel] for an optimistic-concurrency check.
      * @return either a Success or a Failure describing the processing result
      */
     public suspend fun <T : Any, P> handle(
         command: Command<T, P>,
         context: C,
-        options: ProcessingOptions
+        options: ProcessingOptions = ProcessingOptions(CommandToken.simple())
     ): CommandResult<T, C, V>
 
     /**
@@ -634,6 +637,5 @@ public interface KlerkMeta {
      * models at startup. Ask the view instead: `klerk.read(context) { views.users.all.isEmpty() }`.
      */
     public val modelsCount: Int
-        get() = ModelCache.count
 
 }

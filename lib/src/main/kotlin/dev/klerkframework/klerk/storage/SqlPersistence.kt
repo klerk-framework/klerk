@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
-import dev.klerkframework.klerk.migration.MigrationStepV1toV1
+import dev.klerkframework.klerk.migration.ModelMigrationStep
 import dev.klerkframework.klerk.misc.JsonMismatchException
 import dev.klerkframework.klerk.misc.KlerkJson
 import dev.klerkframework.klerk.storage.SqlPersistence.EventLog.actorIdentityExternalId
@@ -316,7 +316,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 val executionTime = measureTimeMillis {
                     Models.selectAll().forEach { row ->
                         when (migration) {
-                            is MigrationStepV1toV1 -> migrateV1toV1(migration, row)
+                            is ModelMigrationStep -> migrateV1toV1(migration, row)
                             else -> error("Unknown migration step")
                         }
                     }
@@ -757,7 +757,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         override val primaryKey = PrimaryKey(scheduleId)
     }
 
-    private fun migrateV1toV1(migration: MigrationStepV1toV1, row: ResultRow) {
+    private fun migrateV1toV1(migration: ModelMigrationStep, row: ResultRow) {
         val before = MigrationModelV1(
             type = row[Models.type],
             id = row[Models.id],

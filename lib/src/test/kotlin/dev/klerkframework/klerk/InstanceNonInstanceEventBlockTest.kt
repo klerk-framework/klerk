@@ -69,7 +69,6 @@ class InstanceNonInstanceEventBlockTest {
                     params = null
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
             )
 
             assert(result2 is CommandResult.Success)
@@ -99,6 +98,8 @@ class InstanceNonInstanceEventBlockTest {
                     update(::updateModelFunction)
                 }
             }
+
+            state(BookStates.Published) {}
 
         }
 

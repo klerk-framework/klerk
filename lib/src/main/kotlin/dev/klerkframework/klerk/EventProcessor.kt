@@ -9,7 +9,7 @@ import dev.klerkframework.klerk.misc.IdFactory
 import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.makeExactSerializable
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.statemachine.*
 import dev.klerkframework.klerk.statemachine.BlockType.Exit
@@ -122,7 +122,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         processTriggerTimeForModels(models, reader)
     }
 
-    private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: Reader<C, V>) {
+    private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: ModelReader<C, V>) {
         val time = klerk.settings.now()
         val calculated = models.map { it to calculateTriggerTime(it, time, reader) }
 
@@ -144,7 +144,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun calculateTriggerTime(
         model: Model<out Any>,
         time: Instant,
-        reader: Reader<C, V>
+        reader: ModelReader<C, V>
     ): Model<out Any> {
         val state = klerk.spec.getStateMachine(model).getStateByName(model.state)
         check(state is InstanceState)
@@ -167,7 +167,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     internal fun <T : Any, P> processPrimaryCommand(
         command: Command<T, P>,
         context: C,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         options: ProcessingOptions,
     ): ProcessingData<T, C, V> {
         counterPrimaryEventsTotal.increment()
@@ -209,7 +209,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun <Primary : Any> process(
         processingData: ProcessingData<Primary, C, V>,
         context: C,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         isPrimary: Boolean,
         options: ProcessingOptions,
         time: Instant,
@@ -235,7 +235,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun <Primary : Any> prepareNextBlock(
         processingData: ProcessingData<Primary, C, V>,
         options: ProcessingOptions,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         context: C,
     ): ProcessingData<Primary, C, V> {
         // is there a timeTrigger?
@@ -288,7 +288,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun <Primary : Any, T : Any, P> processBlocks(
         processingData: ProcessingData<Primary, C, V>,
         context: C,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         options: ProcessingOptions,
         time: Instant
     ): ProcessingData<Primary, C, V> {
@@ -373,7 +373,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun <Primary : Any, T : Any> withTimeTriggers(
         processingData: ProcessingData<Primary, C, V>,
         time: Instant,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
     ): ProcessingData<Primary, C, V> {
         val newTimeTriggers =
             processingData.transitions

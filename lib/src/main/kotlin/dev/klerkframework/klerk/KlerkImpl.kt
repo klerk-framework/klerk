@@ -37,7 +37,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
     internal val eventsManager = EventsManagerImpl<C, V>(spec, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
-    private val klerkLog = KlerkLogImpl()
+    internal val klerkLog: KlerkLogImpl = KlerkLogImpl()
     internal val validator = Validator(this)
 
     init {
@@ -98,14 +98,6 @@ internal class KlerkImpl<C : KlerkContext, V>(
         }
 
         if (result is CommandResult.Success<T, C, V>) {
-            try {
-                result.unmanagedJobs.forEach { it.f.invoke() }
-            } catch (e: Exception) {
-                logger.warn(e) {
-                    "The command was successful but an exception was thrown when calling an action " +
-                            "function. It is considered bad practice to throw in any function provided to Klerk."
-                }
-            }
             log.add(LogCommandSucceeded(command, context, result))
         }
 
@@ -179,5 +171,8 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
         klerk.jobs.stop()    // stopping jobs after events in case a job is created that must execute on this instance.
         klerk.log.add(LogKlerkStopped())
     }
+
+    override val modelsCount: Int
+        get() = ModelCache.count
 
 }

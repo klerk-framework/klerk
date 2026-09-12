@@ -74,8 +74,7 @@ class EventLogTest {
                 ),
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     private suspend fun rename(klerk: Klerk<Ctx, Views>, author: ModelID<Author>, to: String, context: Ctx = Ctx.system()) =
         klerk.handle(
@@ -85,8 +84,7 @@ class EventLogTest {
                 params = ChangeNameParams(FirstName(to), LastName("Author")),
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
     @Test
     fun `an event is not in the log until its command is visible`() = runBlocking {

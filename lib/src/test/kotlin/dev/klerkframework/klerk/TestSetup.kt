@@ -635,9 +635,8 @@ suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
             ),
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 suspend fun createAuthorAstrid(klerk: Klerk<Ctx, Views>): ModelID<Author> {
@@ -648,10 +647,9 @@ suspend fun createAuthorAstrid(klerk: Klerk<Ctx, Views>): ModelID<Author> {
             params = createAstridParameters,
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
     @Suppress("UNCHECKED_CAST")
-    return result.orThrow().createdModels.single() as ModelID<Author>
+    return result.getOrThrow().createdModels.single() as ModelID<Author>
 }
 
 val createAstridParameters = CreateAuthorParams(
@@ -677,9 +675,8 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Aut
             ),
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple())
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 suspend fun createBookHarryPotter2(
@@ -703,9 +700,8 @@ suspend fun createBookHarryPotter2(
             ),
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 
 class PhoneNumber(value: String) : StringContainer(value) {

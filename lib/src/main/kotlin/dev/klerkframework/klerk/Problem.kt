@@ -9,25 +9,27 @@ import kotlin.reflect.KProperty0
  * [dev.klerkframework.klerk.CommandResult.Failure.problems]. Each subtype maps to an [asException] and a
  * [recommendedHttpCode] for callers that want to translate a failure into a thrown exception or an HTTP response.
  */
-public abstract class Problem(public val endUserTranslatedMessage: String, public val code: KlerkErrorCode) {
-    /** The exception [dev.klerkframework.klerk.CommandResult.orThrow] throws for this problem. */
+public sealed class Problem(public val endUserTranslatedMessage: String, public val code: KlerkErrorCode) {
+    /** The exception [dev.klerkframework.klerk.CommandResult.getOrThrow] throws for this problem. */
     public abstract fun asException(): Exception
     public abstract val recommendedHttpCode: Int
 
     /** The validation/authorization rule that caused this problem, if any. */
     public abstract val violatedRule: RuleDescription?
-    public override fun toString(): String = "[$code] $violatedRule"
+
+    public override fun toString(): String =
+        if (violatedRule == null) "[$code] $endUserTranslatedMessage" else "[$code] $endUserTranslatedMessage ($violatedRule)"
 }
 
 /**
  * A cross-property validation rule was violated (e.g. two mutually-exclusive properties were both non-null).
- * @param fieldsMustBeNull properties the rule requires to be null, if applicable.
- * @param fieldsMustNotBeNull properties the rule requires to be non-null, if applicable.
+ * @param fieldsMustBeNull properties the rule requires to be null. Empty if not applicable.
+ * @param fieldsMustNotBeNull properties the rule requires to be non-null. Empty if not applicable.
  */
 public class InvalidPropertyCollectionProblem(
     endUserTranslatedMessage: String,
-    public val fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
-    public val fieldsMustNotBeNull: Set<KProperty0<DataContainer<*>?>>? = null,
+    public val fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>> = emptySet(),
+    public val fieldsMustNotBeNull: Set<KProperty0<DataContainer<*>?>> = emptySet(),
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidPropertyCollection) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
@@ -42,9 +44,6 @@ public class InvalidPropertyProblem(
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidProperty) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     public override val recommendedHttpCode: Int = 400
-
-    override fun toString(): String = endUserTranslatedMessage
-
 }
 
 /** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
@@ -96,7 +95,7 @@ public class StateProblem(
 
 /** The server is temporarily unable to process the command (e.g. not started, or shutting down). Maps to HTTP 503. */
 public class ServerStateProblem(endUserTranslatedMessage: String) :
-    Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
+    Problem(endUserTranslatedMessage, KlerkErrorCode.ServerNotAvailable) {
     public override fun asException(): IllegalStateException = IllegalStateException(toString())
     public override val recommendedHttpCode: Int = 503
     public override val violatedRule: RuleDescription? = null
@@ -129,18 +128,21 @@ public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErr
     public override val violatedRule: RuleDescription? = null
 }
 
-/** Thrown by [AuthorizationProblem.asException] and other authorization failures throughout the read/write API. */
-public class AuthorizationException(code: KlerkErrorCode, message: String? = null) :
+/** Base class for the exceptions Klerk throws. The [code] identifies what went wrong. */
+public sealed class KlerkException(public val code: KlerkErrorCode, message: String?) :
     RuntimeException("[$code] $message")
+
+/** Thrown by [AuthorizationProblem.asException] and other authorization failures throughout the read/write API. */
+public class AuthorizationException(code: KlerkErrorCode, message: String? = null) : KlerkException(code, message)
 
 /**
  * Indicates a bug in Klerk.
  */
-public class InternalException(public val code: KlerkErrorCode = KlerkErrorCode.Internal, message: String? = null) :
-    RuntimeException("[$code] $message")
+public class InternalException(code: KlerkErrorCode = KlerkErrorCode.Internal, message: String? = null) :
+    KlerkException(code, message)
 
-public class IllegalConfigurationException(public val code: KlerkErrorCode, message: String) :
-    RuntimeException("[$code] $message")
+/** Thrown at startup when the specification or the settings are not valid. */
+public class IllegalConfigurationException(code: KlerkErrorCode, message: String) : KlerkException(code, message)
 
 /**
  * Thrown by `klerk.meta.start()` when a stored model does not match its model class, e.g. because a property has been
@@ -195,13 +197,23 @@ public enum class KlerkErrorCode(public val code: String) {
     StringMustBeDeclaredInAContainer("ERROR-SPEC-12"),
     ValidationRuleForUnknownProperty("ERROR-SPEC-13"),
     RuleMustBeNamed("ERROR-SPEC-14"),
+    InvalidStateMachine("ERROR-SPEC-15"),
+    InvalidMigration("ERROR-SPEC-16"),
+
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
     AttachedBlobStoreIsNone("ERROR-SETTINGS-2"),
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),
+
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
+
     Internal("ERROR-INTERNAL-1"),
+
+    /** The server cannot process commands right now, e.g. because it has not been started or is shutting down. */
+    ServerNotAvailable("ERROR-SERVER-1"),
+
     NotFound("ERROR-USER-1"),
+
     CommandNegativeAuthorizationExist("ERROR-AUTH-1"),
     CommandPositiveAuthorizationMissing("ERROR-AUTH-2"),
     ReadNegativeAuthorizationExist("ERROR-AUTH-3"),
@@ -209,6 +221,14 @@ public enum class KlerkErrorCode(public val code: String) {
     EventLogPositiveAuthorizationMissing("ERROR-AUTH-5"),
     EventLogNegativeAuthorizationExist("ERROR-AUTH-6"),
     UnauthorizedPropertyRead("ERROR-AUTH-7"),
+    AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
+    AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
+    AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
+    AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11"),
+    JobReadPositiveAuthorizationMissing("ERROR-AUTH-12"),
+    JobReadNegativeAuthorizationExist("ERROR-AUTH-13"),
+    BypassAuthReadNotAllowed("ERROR-AUTH-14"),
+
     EventNotPossibleInVoidState("ERROR-COMMAND-1"),
     EventNotPossibleInState("ERROR-COMMAND-2"),
     ModelTypeMismatch("ERROR-COMMAND-3"),
@@ -221,13 +241,6 @@ public enum class KlerkErrorCode(public val code: String) {
     AttachedDataAlreadyOwned("ERROR-COMMAND-10"),
     AttachedDataNotAcceptable("ERROR-COMMAND-11"),
     AttachedDataNotProcessed("ERROR-COMMAND-12"),
-    AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
-    AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
-    AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
-    AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11"),
-    JobReadPositiveAuthorizationMissing("ERROR-AUTH-12"),
-    JobReadNegativeAuthorizationExist("ERROR-AUTH-13"),
-    BypassAuthReadNotAllowed("ERROR-AUTH-14"),
 
     /**
      * A new job was refused because the queue is not draining fast enough. Only ever produced for *new* work — yields,

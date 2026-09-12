@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.misc
 
+import dev.klerkframework.klerk.ExperimentalKlerkApi
 import mu.KotlinLogging
 
 /**
@@ -7,6 +8,7 @@ import mu.KotlinLogging
  * which state-machine blocks, so [dev.klerkframework.klerk.misc.generateStateDiagram]-style tooling can render them.
  * Not something application code calls directly.
  */
+@ExperimentalKlerkApi
 public object AlgorithmDocumenter {
 
     private val logger = KotlinLogging.logger {}

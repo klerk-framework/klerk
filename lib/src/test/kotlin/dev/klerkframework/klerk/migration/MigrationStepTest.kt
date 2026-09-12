@@ -129,16 +129,16 @@ class MigrationStepTest {
 
 private class Step(
     override val migratesToVersion: Int,
-    private val transform: MigrationStepV1toV1.(MigrationModelV1) -> MigrationModelV1?,
-) : MigrationStepV1toV1 {
+    private val transform: ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?,
+) : ModelMigrationStep {
     override val description = "Test step to version $migratesToVersion"
     override fun migrateModel(original: MigrationModelV1): MigrationModelV1? = transform(original)
 }
 
-private fun authors(change: MigrationStepV1toV1.(MigrationModelV1) -> MigrationModelV1?): MigrationStepV1toV1.(MigrationModelV1) -> MigrationModelV1? =
+private fun authors(change: ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?): ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1? =
     { if (it.type == "Author") change(it) else it }
 
-private fun books(change: MigrationStepV1toV1.(MigrationModelV1) -> MigrationModelV1?): MigrationStepV1toV1.(MigrationModelV1) -> MigrationModelV1? =
+private fun books(change: ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?): ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1? =
     { if (it.type == "Book") change(it) else it }
 
 private fun MigrationModelV1.withProps(change: MutableMap<String, JsonElement>.() -> Unit): MigrationModelV1 =

@@ -62,6 +62,11 @@ kotlin {
     explicitApi = ExplicitApiMode.Strict
 }
 
+// Klerk's own tests exercise the experimental API.
+tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
+    compilerOptions.optIn.add("dev.klerkframework.klerk.ExperimentalKlerkApi")
+}
+
 // Declares Markdown Gradle plugin
 @OptIn(InternalDokkaGradlePluginApi::class)
 abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {

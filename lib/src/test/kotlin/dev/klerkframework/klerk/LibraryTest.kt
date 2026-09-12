@@ -75,7 +75,6 @@ class LibraryTest {
             klerk.handle(
                 Command(ChangeName, rowling, ChangeNameParams(FirstName("a"), LastName("b"))),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
             )
             val updatedAuthor = klerk.read(Ctx.system()) { get(rowling) }
             assertEquals("a", updatedAuthor.props.firstName.value)
@@ -105,14 +104,13 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
 
         if (i % 10 == 0) {
             klerk.handle(
                 Command(
                     event = ImproveAuthor,
-                    model = result.orThrow().primaryModel,
+                    model = result.getOrThrow().primaryModel,
                     params = null
                 ),
                 context = Ctx.system(),
@@ -122,7 +120,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
             )
         }
 
-        val authorRef = requireNotNull(result.orThrow().primaryModel)
+        val authorRef = requireNotNull(result.getOrThrow().primaryModel)
         println("Author: $authorRef")
 
         val author = klerk.read(Ctx.system()) { get(authorRef) }
@@ -143,7 +141,6 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                     ),
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
             )
         }
     }

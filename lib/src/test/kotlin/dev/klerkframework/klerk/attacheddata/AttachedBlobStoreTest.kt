@@ -50,9 +50,8 @@ class AttachedBlobStoreTest {
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
-        return requireNotNull(result.orThrow().primaryModel)
+        return requireNotNull(result.getOrThrow().primaryModel)
     }
 
     @Test
@@ -153,7 +152,6 @@ class AttachedBlobStoreTest {
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
         assertTrue(failure is CommandResult.Failure, "The unleased value should have expired, but got $failure")
         klerk.meta.stop()
@@ -275,8 +273,7 @@ class AttachedBlobStoreTest {
         klerk.handle(
             Command(event = DeleteAuthor, model = authorID, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         assertNull(store.get(id.id))
         klerk.meta.stop()

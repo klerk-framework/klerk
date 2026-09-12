@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.misc.camelCaseToPretty
 import dev.klerkframework.klerk.misc.functionName
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.StateMachine
 import kotlinx.serialization.Serializable
 import java.math.BigInteger
@@ -61,7 +61,7 @@ public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext,
 
 /**
  * A stored instance: metadata (id, timestamps, current [state]) plus the model's props of type [T].
- * Returned from reads (e.g. [Reader.get]); never constructed directly by application code.
+ * Returned from reads (e.g. [ModelReader.get]); never constructed directly by application code.
  */
 public data class Model<T : Any>(
     val id: ModelID<T>,
@@ -267,7 +267,7 @@ public abstract class InstanceEventNoParameters<T : Any>(forModel: KClass<T>, vi
 /**
  * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
  */
-public data class ArgContextReader<C : KlerkContext, V>(val context: C, val reader: Reader<C, V>)
+public data class ArgContextReader<C : KlerkContext, V>(val context: C, val reader: ModelReader<C, V>)
 
 /**
  * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
@@ -275,7 +275,7 @@ public data class ArgContextReader<C : KlerkContext, V>(val context: C, val read
 public data class ArgCommandContextReader<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,
     val context: C,
-    val reader: Reader<C, V>
+    val reader: ModelReader<C, V>
 )
 
 /**
@@ -285,7 +285,7 @@ public data class ArgCommandContextReader<P, C : KlerkContext, V>(
 public data class ArgModelContextReader<C : KlerkContext, V>(
     val model: Model<out Any>,
     val context: C,
-    val reader: Reader<C, V>
+    val reader: ModelReader<C, V>
 )
 
 /**
@@ -295,7 +295,7 @@ public data class ArgsForPropertyAuth<C : KlerkContext, V>(
     val property: DataContainer<*>,
     val model: Model<out Any>,
     val context: C,
-    val reader: Reader<C, V>,
+    val reader: ModelReader<C, V>,
 )
 
 /**
@@ -306,7 +306,7 @@ public data class ArgsForPropertyAuth<C : KlerkContext, V>(
 public data class ArgForVoidEvent<T : Any, P, C : KlerkContext, V>(
     val command: Command<T, P>,
     val context: C,
-    val reader: Reader<C, V>,
+    val reader: ModelReader<C, V>,
 )
 
 /**
@@ -317,7 +317,7 @@ public data class ArgForInstanceEvent<T : Any, P, C : KlerkContext, V>(
     val model: Model<T>,
     val command: Command<T, P>,
     val context: C,
-    val reader: Reader<C, V>
+    val reader: ModelReader<C, V>
 )
 
 /**
@@ -327,7 +327,7 @@ public data class ArgForInstanceEvent<T : Any, P, C : KlerkContext, V>(
 public data class ArgForInstanceNonEvent<T : Any, C : KlerkContext, V>(
     val model: Model<T>,
     val time: Instant,
-    val reader: Reader<C, V>
+    val reader: ModelReader<C, V>
 )
 
 public typealias EventId = String
@@ -512,7 +512,7 @@ public data class AttachedDataMetadata(
 public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
     val owner: Model<out Any>,
     val context: C,
-    val reader: Reader<C, V>,
+    val reader: ModelReader<C, V>,
 )
 
 /**
@@ -527,7 +527,7 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val kind: AttachedDataKind,
 
     val context: C,
-    val reader: Reader<C, V>,
+    val reader: ModelReader<C, V>,
 
     /**
      * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
@@ -562,7 +562,7 @@ public data class JobContextRequest(
 public data class ArgsForJobRead<C : KlerkContext, V>(
     val job: JobInfo,
     val context: C,
-    val reader: Reader<C, V>,
+    val reader: ModelReader<C, V>,
 ) {
     /**
      * True if [context]'s actor is the one that scheduled the job.

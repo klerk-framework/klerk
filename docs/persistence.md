@@ -92,18 +92,18 @@ Model classes evolve over time, but already-persisted data was written against a
 describes one step of turning old persisted data into what the current model classes expect:
 
 ```kotlin
-interface MigrationStep {
+sealed interface MigrationStep {
     val description: String
     val migratesToVersion: Int
 }
 
-interface MigrationStepV1toV1 : MigrationStep {
-    fun migrateModel(original: MigrationModelV1): MigrationModelV1? = original
+interface ModelMigrationStep : MigrationStep {
+    fun migrateModel(original: MigrationModelV1): MigrationModelV1?
     fun renameKey(original: MigrationModelV1, from: String, to: String): MigrationModelV1
 }
 ```
 
-`MigrationStepV1toV1` is the concrete kind of step available today (there is room in the naming for future
+`ModelMigrationStep` is the concrete kind of step available today (there is room in the naming for future
 `MigrationStepV1toV2`-style steps once a more structural schema version bump is introduced). Its `migrateModel`
 receives every persisted model as a generic `MigrationModelV1` — `type` (the model's simple class name), `id`,
 timestamps, `state`, and `props` as the stored `JsonObject` (from `kotlinx.serialization`). Returning the same instance
@@ -112,7 +112,7 @@ deletes the model. `renameKey` is a small helper for the common case of a rename
 isn't found.
 
 ```kotlin
-object RenameCoAuthorsToCoWriters : MigrationStepV1toV1 {
+object RenameCoAuthorsToCoWriters : ModelMigrationStep {
     override val description = "Rename Book.coAuthors to coWriters"
     override val migratesToVersion = 2
     override fun migrateModel(original: MigrationModelV1): MigrationModelV1? {
@@ -125,7 +125,7 @@ Adding a property means adding its key, also when the property is nullable or ha
 values as well, e.g. when a property changes type:
 
 ```kotlin
-object AddNickname : MigrationStepV1toV1 {
+object AddNickname : ModelMigrationStep {
     override val description = "Add Author.nickname"
     override val migratesToVersion = 3
     override fun migrateModel(original: MigrationModelV1): MigrationModelV1? {
@@ -160,7 +160,7 @@ there is no explicit step to reach it). `Specification.validateMigrations()` enf
 - every step's `migratesToVersion` must be `> 1`
 - every step's `description` must be shorter than 200 characters
 - folding over the sorted steps, each one's `migratesToVersion` must be exactly one more than the previous
-  (`1, 2, 3, ...`) — a gap throws `"Missing migration to version N"`
+  (`1, 2, 3, ...`) — a gap throws `IllegalConfigurationException` (`KlerkErrorCode.InvalidMigration`)
 
 `Persistence.currentModelSchemaVersion` reports which version the store is currently at (for `SqlPersistence`, read from
 the migrations table; `RamStorage` is hardcoded to `1` since it starts empty every time). On startup, Klerk calls

@@ -39,7 +39,7 @@ class SqlPersistenceTest {
             )
             val options = ProcessingOptions(token = CommandToken.simple())
             val result = klerk.handle(command, Ctx.system(), options)
-            val authorRef = requireNotNull(result.orThrow().primaryModel)
+            val authorRef = requireNotNull(result.getOrThrow().primaryModel)
             val autorFirstRun = klerk.read(Ctx.system()) { get(authorRef) }
             klerk.meta.stop()
             klerk = Klerk.create(specification, testSettings(persistence))
@@ -93,15 +93,14 @@ class SqlPersistenceTest {
                 )
             )
             val authorRef = requireNotNull(
-                klerk.handle(command, Ctx.system(), ProcessingOptions(CommandToken.simple())).orThrow().primaryModel
+                klerk.handle(command, Ctx.system()).getOrThrow().primaryModel
             )
             assertNotNull(persistence.readModel(authorRef.value))
 
             klerk.handle(
                 Command(event = DeleteAuthor, model = authorRef, params = null),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
-            ).orThrow()
+            ).getOrThrow()
             assertNull(persistence.readModel(authorRef.value))
             klerk.meta.stop()
         }

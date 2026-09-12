@@ -3,7 +3,7 @@ package dev.klerkframework.klerk.collection
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.viewReader
 
 /*
@@ -17,19 +17,19 @@ import dev.klerkframework.klerk.read.viewReader
 /**
  * How many models are in the view. Answered from ids for an indexed view, without reading a single model.
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.count(): Int = count(reader)
 
 /** True if the view holds nothing. Stops at the first id rather than counting them all. */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isEmpty(): Boolean = isEmpty(reader)
 
 /** True if the view holds anything. */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isNotEmpty(): Boolean = !isEmpty(reader)
 
 /** `id in view` -- an index lookup for an indexed view. */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public operator fun <T : Any, C : KlerkContext, V> ModelView<T, C>.contains(id: ModelID<T>): Boolean =
     contains(id, reader)
 
@@ -38,7 +38,7 @@ public operator fun <T : Any, C : KlerkContext, V> ModelView<T, C>.contains(id: 
  *
  * Do not use the sequence after the read block has ended — the view may have changed underneath it.
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.ids(): Sequence<ModelID<T>> = memberIds(reader)
 
 /**
@@ -51,7 +51,7 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.ids(): Sequence<ModelI
  *
  * Do not use the sequence after the read block has ended — the view may have changed underneath it.
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequence(): Sequence<Model<T>> =
     reader.viewReader().sequence(this)
 
@@ -62,7 +62,7 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequence(): Sequence
  *
  * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequenceOrThrow(): Sequence<Model<T>> = withReader(reader)
 
 /**
@@ -73,7 +73,7 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.asSequenceOrThrow(): S
  * Models the actor may not read are skipped before the page is cut, so pages stay full and cursors stay correct.
  * Use [queryOrThrow] when you expect every match to be readable and want a loud failure otherwise.
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.query(
     options: QueryOptions? = null,
     filter: ((Model<T>) -> Boolean)? = null,
@@ -84,7 +84,7 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.query(
  *
  * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
  */
-context(reader: Reader<C, V>)
+context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.queryOrThrow(
     options: QueryOptions? = null,
     filter: ((Model<T>) -> Boolean)? = null,

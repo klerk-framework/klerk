@@ -43,8 +43,7 @@ class ViewOperationsTest {
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     /**
      * The bug this design rests on fixing: `ensureIndex` only built an index for `ReaderWithoutAuth`, but inside a

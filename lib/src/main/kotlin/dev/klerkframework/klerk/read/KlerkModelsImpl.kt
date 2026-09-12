@@ -52,7 +52,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         return readWriteLock.withRead {
             try {
                 val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
-                klerk.log.addReads(reader.modelsRead.distinctBy { it.id }, context)
+                klerk.klerkLog.addReads(reader.modelsRead.distinctBy { it.id }, context)
                 result
             } finally {
                 reader.finishRead()

@@ -37,7 +37,6 @@ Use `Ctx.system()` (or another actor via `ActorIdentity`, see [context.md](conte
 val result = klerk.handle(
     Command(event = CreateAuthor, model = null, params = createAstridParameters),
     Ctx.system(),
-    ProcessingOptions(CommandToken.simple()),
 )
 ```
 
@@ -45,7 +44,7 @@ Two common ways to assert on the result:
 
 ```kotlin
 // fail the test with the first Problem's message if the command was rejected
-val authorId = result.orThrow().primaryModel!!
+val authorId = result.getOrThrow().primaryModel!!
 
 // or branch explicitly when you want to assert on the failure itself
 when (result) {
@@ -76,7 +75,7 @@ var amateurTriggered = false
 onEnterAmateurStateActionCallback = { amateurTriggered = true }
 
 val result =
-    klerk.handle(Command(ImproveAuthor, rowling, null), Ctx.system(), ProcessingOptions(CommandToken.simple()))
+    klerk.handle(Command(ImproveAuthor, rowling, null), Ctx.system())
 
 when (result) {
     is CommandResult.Failure -> fail(result.problems.first().toString())

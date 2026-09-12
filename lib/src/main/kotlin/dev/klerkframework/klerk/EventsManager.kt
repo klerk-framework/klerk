@@ -16,6 +16,7 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.withoutReadRestrictions
 import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.EventLogEntry
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.storage.ModelCache
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Mutex
@@ -79,6 +80,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
         }
 
+        // Actions run outside the lock, so they are collected here and invoked after it is released.
+        var actions: List<UnmanagedJob> = emptyList()
         val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
             logger.log(misc, options) { "Processing event ${command.event}" }
 
@@ -124,6 +127,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                     commit(delta, command, context, plan.delta, jobPlan.commit)
                                     logger.log(result, options) { "Command ${command.event} succeeded" }
                                     timeTriggerManager.handle(delta)
+                                    actions = delta.unmanagedJobs
                                     commandResult
                                 }
                             }
@@ -132,6 +136,15 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 }
             }
         }       // release the lock. Next command can now start processing
+
+        try {
+            actions.forEach { it.f.invoke() }
+        } catch (e: Exception) {
+            logger.warn(e) {
+                "The command was successful but an exception was thrown when calling an action function. It is " +
+                        "considered bad practice to throw in any function provided to Klerk."
+            }
+        }
         return result
     }
 

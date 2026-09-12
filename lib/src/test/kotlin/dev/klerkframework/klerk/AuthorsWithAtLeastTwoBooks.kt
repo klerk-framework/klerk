@@ -3,7 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.collection.AllModelView
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryListCursor
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 
 /**
  * A view whose membership depends on a *different* model type, which is what Klerk's own index cannot do for you.
@@ -16,7 +16,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
     private val books: AllModelView<Book, Ctx>,
 ) : ModelView<Author, Ctx>(authors) {
 
-    override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> {
+    override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {
         val authorsWithTwoBooks = books.withReader(reader)
             .groupingBy { it.props.author }
             .eachCount()
@@ -25,7 +25,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
         return authors.memberIds(reader).filter { authorsWithTwoBooks.contains(it) }
     }
 
-    override fun <V> contains(value: ModelID<*>, reader: Reader<Ctx, V>): Boolean =
+    override fun <V> contains(value: ModelID<*>, reader: ModelReader<Ctx, V>): Boolean =
         memberIds(reader).any { it.value == value.value }
 
 }

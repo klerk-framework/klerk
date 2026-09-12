@@ -9,19 +9,17 @@ import kotlin.time.Instant
 import kotlin.reflect.KProperty1
 
 /**
- * Read-only access to models, always used as the receiver inside a [dev.klerkframework.klerk.Klerk.read] (or
- * `readSuspend`) block.
+ * Read-only access to models, available both inside a [dev.klerkframework.klerk.Klerk.read] (or `readSuspend`) block
+ * and inside the functions Klerk calls itself — rules, validations and state machine executables, where it is
+ * `args.reader`.
  *
  * Reading a *view* is done on the view — `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends, in
  * `dev.klerkframework.klerk.collection`. Those take this reader as a context parameter, so inside a read block, or a
  * `with(args.reader) { }` block in a DSL function, you never write it out. See docs/reading.md.
  *
- * The `getIfAuthorizedOrNull`, `getPossibleVoidEvents`, and `getPossibleEvents` functions are only meaningful when
- * authorization is enforced (i.e. inside a `Klerk.read` block). If called from within a state machine's executable
- * functions (create/update/validation blocks etc.), where the reader in scope does not enforce authorization, they
- * throw `RuntimeException` — use `get` there instead.
+ * A read block gets the larger [Reader], which can additionally answer which events are possible right now.
  */
-public interface Reader<C : KlerkContext, V> {
+public interface ModelReader<C : KlerkContext, V> {
 
     /**
      * This is the collection of views that was provided to Klerk when you created the configuration.
@@ -64,24 +62,21 @@ public interface Reader<C : KlerkContext, V> {
     ): EventLogQuery
 
     /**
-     * @throws AuthorizationException if the model is not found or the actor is not allowed to read it.
+     * The model with [id].
+     *
+     * @throws kotlin.NoSuchElementException if there is no such model
+     * @throws AuthorizationException if the actor is not allowed to read it
      */
     public fun <T : Any> get(id: ModelID<T>): Model<T>
 
     /**
-     * Like [get], but returns null instead of throwing if the model doesn't exist or isn't authorized.
+     * Like [get], but null if there is no such model, or the actor is not allowed to read it. The two cases are
+     * indistinguishable.
      */
     public fun <T : Any> getOrNull(id: ModelID<T>): Model<T>?
 
-    /**
-     * Like [get], but returns null instead of throwing an [AuthorizationException] when the actor isn't allowed to
-     * read the model (a missing model still yields null, same as an unauthorized one — the two cases are
-     * indistinguishable). Only usable where authorization is enforced; see the interface-level doc.
-     */
-    public fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>?
-
     // Reading a view is done on the view itself: `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends,
-    // in collection/ViewOperations.kt. They take this Reader as a context parameter, so inside a read block you do
+    // in collection/ViewOperations.kt. They take this reader as a context parameter, so inside a read block you do
     // not write it out.
 
     /**
@@ -111,23 +106,26 @@ public interface Reader<C : KlerkContext, V> {
         id: ModelID<*>,
     ): Set<Model<T>>
 
+}
+
+/**
+ * What a [dev.klerkframework.klerk.Klerk.read] (or `readSuspend`) block gets: everything a [ModelReader] can do, plus
+ * the events that could be submitted right now.
+ */
+public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
+
     /**
      * Returns the void events (i.e. events that create a new model of type [clazz]) that the actor could
      * successfully submit right now: authorization and validation rules are both evaluated, but nothing is executed.
-     *
-     * Only usable where authorization is enforced; see the interface-level doc.
      */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
         visibility: EventVisibility = EventVisibility.CODE
     ): Set<EventReference>
 
-
     /**
      * Returns the instance events that the actor could successfully submit right now against the model with [id],
      * given its current state: authorization and validation rules are both evaluated, but nothing is executed.
-     *
-     * Only usable where authorization is enforced; see the interface-level doc.
      *
      * @throws AuthorizationException if the actor is not allowed to read the model itself
      */

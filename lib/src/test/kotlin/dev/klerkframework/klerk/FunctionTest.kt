@@ -57,10 +57,6 @@ object DummyReader : Reader<Ctx, Views> {
         throw exception
     }
 
-    override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? {
-        throw exception
-    }
-
     override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> {
         throw exception
     }

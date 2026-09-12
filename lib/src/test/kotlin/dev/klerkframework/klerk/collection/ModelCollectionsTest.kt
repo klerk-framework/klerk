@@ -28,7 +28,6 @@ class ModelCollectionsTest {
             klerk.handle(
                 Command(DeleteAuthor, astrid, null),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
             )
             klerk.read(Ctx.system()) {
                 assertFalse { collections.authors.all.contains(astrid, this) }

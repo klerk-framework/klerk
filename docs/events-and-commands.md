@@ -81,11 +81,11 @@ val command = Command(
 val result: CommandResult<Book, Ctx, Views> = klerk.handle(
     command,
     Ctx.system(),
-    ProcessingOptions(CommandToken.simple()),
 )
 ```
 
-`ProcessingOptions` controls how the command is processed:
+The third parameter, `ProcessingOptions`, controls how the command is processed. It defaults to
+`ProcessingOptions(CommandToken.simple())` — a command guarded only against being submitted twice.
 
 ```kotlin
 public data class ProcessingOptions(
@@ -122,13 +122,12 @@ has since changed" checks. `CommandToken` also round-trips through a compact str
 public sealed class CommandResult<T : Any, C : KlerkContext, V> {
     public data class Success<T : Any, C : KlerkContext, V>(
         val primaryModel: ModelID<T>?,
-        val createdModels: List<ModelID<out Any>>,
-        val modelsWithUpdatedProps: List<ModelID<out Any>>,
-        val deletedModels: List<ModelID<out Any>>,
-        val transitionedModels: List<ModelID<out Any>>,
-        val secondaryEvents: List<EventReference>,
-        val jobs: List<RunnableJob<C, V>>,
-        val unmanagedJobs: List<UnmanagedJob>,
+        val createdModels: Set<ModelID<out Any>>,
+        val updatedModels: Set<ModelID<out Any>>,
+        val deletedModels: Set<ModelID<out Any>>,
+        val transitionedModels: Set<ModelID<out Any>>,
+        val jobs: List<JobId>,
+        val unmanagedJobs: List<String>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
     ) : CommandResult<T, C, V>()
@@ -142,16 +141,16 @@ effect, e.g. via `createCommands` in the state machine). `authorizedModels` cont
 context* is allowed to read — anything it isn't authorized for is simply absent, so it is safe to hand this map to a
 caller without leaking data.
 
-In tests and scripts, `.orThrow()` is the common shortcut — it returns `Success` or throws the first `Problem` as an
+In tests and scripts, `.getOrThrow()` is the common shortcut — it returns `Success` or throws the first `Problem` as an
 exception:
 
 ```kotlin
-val bookId = klerk.handle(command, Ctx.system(), ProcessingOptions(CommandToken.simple()))
-    .orThrow()
+val bookId = klerk.handle(command, Ctx.system())
+    .getOrThrow()
     .primaryModel!!
 ```
 
-`getOrHandle { failure -> ... }` is the non-throwing equivalent when you want to recover instead.
+`getOrElse { failure -> ... }` is the non-throwing equivalent when you want to recover instead.
 
 ### Problems
 
@@ -168,8 +167,12 @@ HTTP status if you're exposing this over an API:
 | `IdempotenceProblem`                                          | 400       | The `CommandToken` was already used.                                                             |
 | `InternalProblem` / `ServerStateProblem`                      | 500 / 503 | Framework-internal failure.                                                                      |
 
+Every problem also carries a `code` (`KlerkErrorCode`), and `asException()` turns it into the matching exception. The
+exceptions Klerk throws itself — `AuthorizationException`, `InternalException`, `IllegalConfigurationException` — share
+the `KlerkException` base class, so `code` is available on all of them.
+
 ```kotlin
-when (val result = klerk.handle(command, context, ProcessingOptions(CommandToken.simple()))) {
+when (val result = klerk.handle(command, context)) {
     is CommandResult.Success -> println("Created ${result.primaryModel}")
     is CommandResult.Failure -> result.problems.forEach { println(it.endUserTranslatedMessage) }
 }
@@ -249,8 +252,7 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Aut
             ),
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
-    return requireNotNull(result.orThrow().primaryModel)
+    return requireNotNull(result.getOrThrow().primaryModel)
 }
 ```

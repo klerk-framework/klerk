@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.ModelCacheSettings
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
@@ -52,8 +52,7 @@ class ViewIndexTest {
                 ),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     /**
      * The point of the whole phase: once a narrow view has been queried, querying it again reads only the models it
@@ -121,22 +120,19 @@ class ViewIndexTest {
         klerk.handle(
             Command(event = ChangeName, model = great, params = ChangeNameParams(FirstName("Kalle"), LastName("1"))),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
         assertEquals(listOf(alsoGreat), members())
 
         klerk.handle(
             Command(event = ChangeName, model = great, params = ChangeNameParams(FirstName("Linus"), LastName("1"))),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
         assertEquals(listOf(great, alsoGreat), members())
 
         klerk.handle(
             Command(event = DeleteAuthor, model = great, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
         assertEquals(listOf(alsoGreat), members())
         klerk.meta.stop()
     }
@@ -163,8 +159,7 @@ class ViewIndexTest {
         klerk.handle(
             Command(event = ImproveAuthor, model = author, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple())
-        ).orThrow()
+        ).getOrThrow()
 
         val state = klerk.read(Ctx.system()) { get(author).state }
         assertEquals(
@@ -222,10 +217,10 @@ class ViewIndexTest {
         private val authors: ModelView<Author, Ctx>,
         val ids: MutableSet<Int>,
     ) : ModelView<Author, Ctx>(authors) {
-        override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> =
+        override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> =
             authors.memberIds(reader).filter { ids.contains(it.value) }
 
-        override fun <V> contains(value: ModelID<*>, reader: Reader<Ctx, V>): Boolean = ids.contains(value.value)
+        override fun <V> contains(value: ModelID<*>, reader: ModelReader<Ctx, V>): Boolean = ids.contains(value.value)
     }
 
     @Test

@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.read.ReadResult
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.storage.ModelCache.persistence
 import dev.klerkframework.klerk.misc.envInt
 import io.micrometer.core.instrument.Gauge
@@ -309,6 +309,6 @@ internal object ModelCache {
      * The id of every model that exists.
      * @param reader is not used but must be provided to prove that there will be no concurrent modification
      */
-    internal fun allIds(reader: Reader<*, *>): Set<Int> = ids.toSet()
+    internal fun allIds(reader: ModelReader<*, *>): Set<Int> = ids.toSet()
 
 }

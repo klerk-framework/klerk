@@ -2,7 +2,7 @@ package dev.klerkframework.klerk.misc
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.StateMachine
 import java.util.*
 import kotlin.reflect.KFunction
@@ -41,7 +41,7 @@ public fun camelCaseToPretty(s: String): String {
 
 
 /** Checks that every [ModelID] in the model's props, also in collections and nested objects, refers to a model. */
-internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: Reader<C, V>): Problem? {
+internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: ModelReader<C, V>): Problem? {
     var problem: Problem? = null
     ObjectSchema.of(model.props::class).forEachLeaf(model.props) { leaf ->
         val id = leaf.value as? ModelID<*> ?: return@forEachLeaf

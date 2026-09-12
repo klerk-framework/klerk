@@ -16,24 +16,24 @@ public interface KlerkLog {
      */
     public fun add(entry: LogEntry): Unit
 
-    /** Returns the currently buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include read events. */
+    /**
+     * The currently buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include
+     * read events. The access itself is recorded in the log, which is what [context] is used for.
+     */
     public fun entries(context: KlerkContext): List<LogEntry>
 
     /**
      * Subscribes to log events. Note that events related to reading of data are excluded. If you need those events,
      * use [subscribeToReads].
      */
-    public fun subscribe(context: KlerkContext): SharedFlow<LogEntry>
+    public fun subscribe(): SharedFlow<LogEntry>
 
     /**
      * Subscribes to read events. Note that you must handle the events efficiently as there can be a huge amount of
      * read events in a system.
      * @see subscribe
      */
-    public fun subscribeToReads(context: KlerkContext): SharedFlow<LogEntry>
-
-    /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
-    public fun addReads(models: List<Model<*>>, context: KlerkContext)
+    public fun subscribeToReads(): SharedFlow<LogEntry>
 
 }
 
@@ -63,15 +63,16 @@ internal class KlerkLogImpl : KlerkLog {
         return content
     }
 
-    override fun subscribe(context: KlerkContext): SharedFlow<LogEntry> {
+    override fun subscribe(): SharedFlow<LogEntry> {
         return logEntryFlow
     }
 
-    override fun subscribeToReads(context: KlerkContext): SharedFlow<LogEntry> {
+    override fun subscribeToReads(): SharedFlow<LogEntry> {
         return logEntryReadFlow
     }
 
-    override fun addReads(models: List<Model<*>>, context: KlerkContext) {
+    /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
+    internal fun addReads(models: List<Model<*>>, context: KlerkContext) {
         models.forEach {
             logEntryReadFlow.tryEmit(LogReadModel(it, context))
         }
@@ -85,7 +86,7 @@ public enum class MajorSource() {
 }
 
 /** Where a [LogEntry] came from: a [major] category plus an optional free-text [minor] detail (e.g. a plugin name). */
-public class LogSource(internal val major: MajorSource, internal val minor: String? = null) {
+public class LogSource(public val major: MajorSource, public val minor: String? = null) {
     override fun toString(): String = "${major.name}: $minor"
 }
 
@@ -160,8 +161,8 @@ public interface LogEntry {
     public val facts: List<Fact>
 
     /** Renders [headingTemplate]. Override to substitute [facts]/[actor] into the placeholders described there. */
-    public fun getHeading(): String = headingTemplate
+    public val heading: String get() = headingTemplate
 
-    /** Renders [contentTemplate], analogous to [getHeading]. */
-    public fun getContent(): String? = contentTemplate
+    /** Renders [contentTemplate], analogous to [heading]. */
+    public val content: String? get() = contentTemplate
 }

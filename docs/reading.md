@@ -21,6 +21,10 @@ fun updateBook(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
 
 If there is no reader in the argument when you need it, you are probably not using the DSL correctly.
 
+The reader in `args` is a `ModelReader`: models, relations, views, jobs, attached-data metadata and the event log. A
+`klerk.read { }` block gets the larger `Reader`, which adds `getPossibleEvents(id)` and `getPossibleVoidEvents(clazz)`
+— those need an actor to answer for, so they only exist where authorization is enforced.
+
 ### When Klerk has started
 
 In this case, you can get a reader from Klerk using a context:
@@ -45,9 +49,9 @@ Note that readSuspend may impact performance if you call slow suspending functio
 
 The reader answers questions about a single model:
 
-* `get(id)` — the model, or throws if it does not exist.
-* `getOrNull(id)` — null instead of throwing.
-* `getIfAuthorizedOrNull(id)` — null when the actor may not read it.
+* `get(id)` — the model. Throws `NoSuchElementException` if it does not exist, `AuthorizationException` if the actor
+  may not read it.
+* `getOrNull(id)` — null in both those cases.
 * `getRelated(...)` / `getRelatedInCollection(...)` — the models that reference this one.
 * `attachedData.metadata(id)` / `metadataOrNull(id)` — what is known about an
   [attached value](attached-data.md) apart from the value itself. The value is read after the block.
@@ -239,7 +243,6 @@ two requests gives no such guarantee.
 |-----------------------------------------------------------|-------------------------------------------|
 | `get(id)`                                                 | throws `AuthorizationException`           |
 | `getOrNull(id)`                                           | returns `null` (also for a missing model) |
-| `getIfAuthorizedOrNull(id)`                               | returns `null`                            |
 | `getRelated(...)` / `getRelatedInCollection(...)`         | throws `AuthorizationException`           |
 | `attachedData.metadata(id)`                               | throws `AuthorizationException`           |
 | `attachedData.metadataOrNull(id)`                         | returns `null` (also for missing data)    |

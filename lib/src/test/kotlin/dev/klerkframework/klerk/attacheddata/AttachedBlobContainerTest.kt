@@ -47,7 +47,6 @@ class AttachedBlobContainerTest {
             params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
         ),
         context,
-        ProcessingOptions(CommandToken.simple()),
     )
 
     @Test
@@ -73,7 +72,7 @@ class AttachedBlobContainerTest {
         val klerk = start()
         val id = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
 
-        val painting = requireNotNull(hang(klerk, id).orThrow().primaryModel)
+        val painting = requireNotNull(hang(klerk, id).getOrThrow().primaryModel)
 
         assertEquals(id, klerk.read(Ctx.system()) { get(painting) }.props.image.id)
         klerk.meta.stop()
@@ -140,7 +139,6 @@ class AttachedBlobContainerTest {
             params = CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows)),
         ),
         Ctx.system(),
-        ProcessingOptions(CommandToken.simple()),
     )
 
     @Test
@@ -153,7 +151,7 @@ class AttachedBlobContainerTest {
         )
 
         klerk.attachedData.awaitProcessing(good)
-        val inventory = requireNotNull(count(klerk, good).orThrow().primaryModel)
+        val inventory = requireNotNull(count(klerk, good).getOrThrow().primaryModel)
 
         assertEquals(good, klerk.read(Ctx.system()) { get(inventory) }.props.rows.id)
         klerk.meta.stop()
@@ -222,7 +220,7 @@ class AttachedBlobContainerTest {
         )
 
         klerk.attachedData.awaitProcessing(id)
-        val inventory = requireNotNull(count(klerk, id).orThrow().primaryModel)
+        val inventory = requireNotNull(count(klerk, id).getOrThrow().primaryModel)
 
         assertEquals("name,quantity\nrose,3\n", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
         // the digest describes what is actually stored, not what arrived
@@ -248,7 +246,7 @@ class AttachedBlobContainerTest {
         assertEquals(JobProgress(1, 2), midway.progress)
         klerk.attachedData.awaitProcessing(id)
 
-        count(klerk, id).orThrow()
+        count(klerk, id).getOrThrow()
         val meta = klerk.attachedData.getMetadata(id, Ctx.system())
         assertEquals(listOf("checkTheHeader", "normaliseLineEndings"), meta.completedSteps, "each step ran once")
         assertEquals("name,quantity\nrose,3\n", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
@@ -346,7 +344,7 @@ class AttachedBlobContainerTest {
 
         val image = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
         val before = store.fetches
-        hang(klerk, image).orThrow()
+        hang(klerk, image).getOrThrow()
 
         // PaintingImage declares no steps, so nothing has to be read — and even a container that declares them is
         // checked against what was recorded when they ran, never by reading the value inside command processing.
@@ -361,7 +359,7 @@ class AttachedBlobContainerTest {
         // yet — unclaimed data has no owner, so there is nothing for a rule to decide on.
         val id = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
 
-        hang(klerk, id).orThrow()
+        hang(klerk, id).getOrThrow()
 
         // PaintingImage declares Public, so attaching it published it
         assertEquals(AttachedDataVisibility.Public, klerk.attachedData.getMetadata(id, Ctx.system()).visibility)
@@ -372,7 +370,7 @@ class AttachedBlobContainerTest {
     fun `a published blob is readable by anyone, which is what publishing means`() = runBlocking {
         val klerk = start()
         val id = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
-        hang(klerk, id).orThrow()
+        hang(klerk, id).getOrThrow()
 
         // the read rules in this specification deny unauthenticated actors, but they are not consulted for public data
         assertEquals(24, klerk.attachedData.get(id, Ctx.unauthenticated()).readAllBytes().size)
@@ -384,7 +382,7 @@ class AttachedBlobContainerTest {
         val storage = RamStorage()
         val klerk = start(storage)
         val id = klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
-        val painting = requireNotNull(hang(klerk, id).orThrow().primaryModel)
+        val painting = requireNotNull(hang(klerk, id).getOrThrow().primaryModel)
         klerk.meta.stop()
 
         val restarted = start(storage)
@@ -429,7 +427,7 @@ class AttachedBlobContainerTest {
         // nothing to wait for, and nothing to run: the value is ready as soon as it is written
         klerk.attachedData.awaitProcessing(id)
         assertNull(klerk.jobs.getAllJobs(Ctx.system()).firstOrNull { it.name.value == PROCESS_ATTACHED_DATA })
-        hang(klerk, id).orThrow()
+        hang(klerk, id).getOrThrow()
         assertTrue(klerk.attachedData.getMetadata(id, Ctx.system()).completedSteps.isEmpty())
         klerk.meta.stop()
     }

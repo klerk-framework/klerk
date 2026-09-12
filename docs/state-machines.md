@@ -107,6 +107,10 @@ state(BookStates.Published) {
 Only events declared with `event(...)` at the top of the state machine can be referenced in `onEvent`, and only
 `InstanceEvent`s (not void events) can appear inside `state { }` — void events only make sense in `voidState { }`.
 
+The state machine must declare `voidState { }` once and one `state(...)` per value of the state enum, and each state at
+most one `onEnter`, one `onExit` and one time trigger. Anything else fails at startup with an
+`IllegalConfigurationException` (`KlerkErrorCode.InvalidStateMachine`).
+
 ## Time triggers
 
 A state can also react to the passage of time instead of an event — useful for timeouts, reminders, or scheduled

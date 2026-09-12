@@ -37,7 +37,6 @@ class RelatedTest {
             when (val result = klerk.handle(
                 command,
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple()),
             )) {
                 is CommandResult.Failure -> assert(
                     result.problems.first().asException().message!!.contains("Did not find")

@@ -67,8 +67,7 @@ class ActionTest {
                     ),
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
-            ).orThrow()
+            ).getOrThrow()
             println(result)
 
         }
@@ -96,6 +95,8 @@ class ActionTest {
                     update(::updateModelFunction)
                 }
             }
+
+            state(BookStates.Published) {}
 
         }
 

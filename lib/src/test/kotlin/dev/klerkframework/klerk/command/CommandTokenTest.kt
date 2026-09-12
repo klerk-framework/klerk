@@ -46,7 +46,7 @@ class CommandTokenTest {
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),
-            ).orThrow()
+            ).getOrThrow()
 
             val result = klerk.handle(
                 Command(
@@ -85,8 +85,7 @@ class CommandTokenTest {
                     null
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
 
             val result = klerk.handle(
                 Command(

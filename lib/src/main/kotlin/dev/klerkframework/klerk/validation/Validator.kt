@@ -9,7 +9,7 @@ import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.getStateMachine
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.ModelCache
 
@@ -35,7 +35,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
     fun isEventPossibleGivenModelState(
         currentCommand: Command<out Any, *>,
-        reader: Reader<C, V>
+        reader: ModelReader<C, V>
     ): Problem? {
         val sm = klerk.spec.getStateMachineForEvent(currentCommand.event)
         if (currentCommand.model == null) {
@@ -66,7 +66,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         event: Event<T, P>,
         id: ModelID<T>?,
         params: P,
-        reader: Reader<C, V>
+        reader: ModelReader<C, V>
     ): List<Problem> {
         val propertyCollectionValidityList: List<PropertyCollectionValidity> = when (event) {
 
@@ -199,7 +199,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
     fun <P> validateCommand(
         currentCommand: Command<out Any, P>,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         context: C
     ): List<Problem> {
         currentCommand.model?.let {
@@ -224,7 +224,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
     private fun <T : Any, P> checkAuthorization(
         command: Command<T, P>,
-        reader: Reader<C, V>,
+        reader: ModelReader<C, V>,
         context: C
     ): Problem? {
         val negativeAuthProblem =
@@ -281,7 +281,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     private fun <T : Any, P> validateEvent(
         command: Command<T, P>,
         context: C,
-        reader: Reader<C, V>
+        reader: ModelReader<C, V>
     ): List<Problem> {
         val problems = mutableListOf<Problem>()
         val stateMachine = getStateMachine(command, klerk.spec.managedModels)

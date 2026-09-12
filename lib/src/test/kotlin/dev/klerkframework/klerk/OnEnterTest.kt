@@ -45,7 +45,6 @@ class OnEnterTest {
                     ImproveAuthor, rowling, null
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
             )
             when (result) {
                 is CommandResult.Failure -> fail(result.problems.first().toString())

@@ -114,11 +114,26 @@ public data class Specification<C : KlerkContext, V>(
 
     private fun validateMigrations() {
         migrationSteps.forEach {
-            require(it.migratesToVersion > 1)
-            require(it.description.length < 200)
+            if (it.migratesToVersion <= 1) {
+                throw IllegalConfigurationException(
+                    KlerkErrorCode.InvalidMigration,
+                    "A migration step must migrate to version 2 or higher, but '${it.description}' migrates to ${it.migratesToVersion}"
+                )
+            }
+            if (it.description.length >= 200) {
+                throw IllegalConfigurationException(
+                    KlerkErrorCode.InvalidMigration,
+                    "The description of a migration step must be shorter than 200 characters"
+                )
+            }
         }
         migrationSteps.fold(1) { acc, migrationStep ->
-            require(acc + 1 == migrationStep.migratesToVersion) { "Missing migration to version ${migrationStep.migratesToVersion}" }
+            if (acc + 1 != migrationStep.migratesToVersion) {
+                throw IllegalConfigurationException(
+                    KlerkErrorCode.InvalidMigration,
+                    "Missing migration to version ${acc + 1}"
+                )
+            }
             migrationStep.migratesToVersion
         }
     }
@@ -127,6 +142,7 @@ public data class Specification<C : KlerkContext, V>(
         modelsAndParametersMustBeStorable()
         rulesMustBeNamed()
         parametersWithReferencesMustHaveCollectionValidation()
+        stateMachinesMustBeComplete()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
@@ -360,6 +376,10 @@ public data class Specification<C : KlerkContext, V>(
      * 2. The Event is the container of the declared rules. This is perhaps not optimal, but it means that the Event
      * has state. If the event is not declared, old state may be used, causing unit tests to fail.
      */
+    private fun stateMachinesMustBeComplete() {
+        managedModels.forEach { it.stateMachine.validateStatesAreComplete() }
+    }
+
     private fun allEventsMustBeDeclared() {
         managedModels.map { it.stateMachine }.forEach { sm ->
             sm.mutableStates.flatMap { state ->

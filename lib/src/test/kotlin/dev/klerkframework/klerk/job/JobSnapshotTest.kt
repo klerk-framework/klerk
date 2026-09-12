@@ -122,8 +122,7 @@ class JobSnapshotTest {
             klerk.handle(
                 Command(ChangeName, author, ChangeNameParams(FirstName("Renamed"), LastName("Author"))),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
             kotlinx.coroutines.delay(50)
             stop.set(true)
             readers.joinAll()

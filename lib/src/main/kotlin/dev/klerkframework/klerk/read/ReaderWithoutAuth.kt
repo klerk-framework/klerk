@@ -16,7 +16,7 @@ import kotlin.time.Instant
  *
  * Klerk's own read paths run through it: an index has to reflect every model, not the ones one actor may see.
  */
-internal fun <C : KlerkContext, V> Reader<C, V>.unauthorized(): Reader<C, V>? = when (this) {
+internal fun <C : KlerkContext, V> ModelReader<C, V>.unauthorized(): ModelReader<C, V>? = when (this) {
     is ReaderWithoutAuth -> this
     is ReaderWithAuth -> withoutAuth
     else -> null
@@ -26,7 +26,7 @@ internal fun <C : KlerkContext, V> Reader<C, V>.unauthorized(): Reader<C, V>? = 
  * Used internally, e.g. when executing the functions provided in a statemachine.
  * Note that no logging to KlerkLog is triggered here.
  */
-internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : Reader<C, V>, ViewReader<C, V> {
+internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : ModelReader<C, V>, ViewReader<C, V> {
 
     override val views = klerk.spec.views
 
@@ -176,10 +176,6 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         filter: ((Model<T>) -> Boolean)?
     ): QueryResponse<T> = queryInternal(collection, options, filter, null)
 
-    override fun <T : Any> getIfAuthorizedOrNull(id: ModelID<T>): Model<T>? {
-        throw RuntimeException("Reader.findIfAuthorized was called but the reader doesn't enforce authorization")
-    }
-
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
         return ModelCache.getOrNull(id)
     }
@@ -187,11 +183,5 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
     override fun <T : Any> get(id: ModelID<T>): Model<T> {
         return getOrNull(id) ?: throw NoSuchElementException("Could not find model with id=$id")
     }
-
-    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
-        throw RuntimeException("Reader.getPossibleVoidEvents was called but the reader doesn't support this")
-
-    override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> =
-        throw RuntimeException("Reader.getPossibleEvents was called but the reader doesn't support this")
 
 }

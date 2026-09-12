@@ -4,7 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -51,15 +51,13 @@ class QueryPaginationTest {
                 ),
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow().primaryModel!!
+        ).getOrThrow().primaryModel!!
 
     private suspend fun deleteAuthor(klerk: Klerk<Ctx, Views>, id: ModelID<Author>) {
         klerk.handle(
             Command(event = DeleteAuthor, model = id, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
     }
 
     /** Creates [count] authors, named so that `lastName` gives the creation order and `firstName` alternates. */
@@ -407,7 +405,7 @@ class QueryPaginationTest {
 
     /** A view that is not indexable and answers in ids, i.e. the shape docs/views.md recommends. */
     private class OddAuthors(private val authors: ModelView<Author, Ctx>) : ModelView<Author, Ctx>(authors) {
-        override fun <V> memberIds(reader: Reader<Ctx, V>): Sequence<ModelID<Author>> =
+        override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> =
             authors.memberIds(reader).filterIndexed { i, _ -> i % 2 == 1 }
     }
 

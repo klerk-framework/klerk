@@ -59,7 +59,6 @@ class EventProcessorTest {
                     params = null
                 ),
                 context,
-                ProcessingOptions(CommandToken.simple())
             )
             when (willFail) {
                 is CommandResult.Failure -> assertEquals(willFail.problems.first().code, KlerkErrorCode.BrokenReference)
@@ -73,8 +72,7 @@ class EventProcessorTest {
                     params = null
                 ),
                 context,
-                ProcessingOptions(CommandToken.simple())
-            ).getOrHandle {
+            ).getOrElse {
                 println(it.problems.joinToString(", "))
                 throw it.problems.first().asException()
             }

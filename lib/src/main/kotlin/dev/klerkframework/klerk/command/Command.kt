@@ -49,20 +49,22 @@ public enum class DebugOptions {
  * base64 encoding that can be sent to a client and round-tripped back through [from] (e.g. to let a client hold a
  * token across a request/response cycle before submitting the actual command).
  */
-public data class CommandToken(
-    internal val time: Instant = getCurrentInstant(),
-    internal val models: Set<ModelID<out Any>> = emptySet(),
+public class CommandToken private constructor(
+    internal val time: Instant,
+    internal val models: Set<ModelID<out Any>>,
 ) {
 
     public companion object {
         /** A token that only guards against being reused (no optimistic-concurrency check). */
-        public fun simple(): CommandToken = CommandToken()
+        public fun simple(): CommandToken = CommandToken(getCurrentInstant(), emptySet())
 
         /** A token that additionally fails the command if [id] was modified after the token was created. */
-        public fun requireUnmodifiedModel(id: ModelID<out Any>): CommandToken = CommandToken(models = setOf(id))
+        public fun requireUnmodifiedModel(id: ModelID<out Any>): CommandToken =
+            CommandToken(getCurrentInstant(), setOf(id))
 
         /** A token that additionally fails the command if any model in [ids] was modified after the token was created. */
-        public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken = CommandToken(models = ids)
+        public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken =
+            CommandToken(getCurrentInstant(), ids)
 
         /**
          * Parses a token previously produced by [CommandToken.toString].
@@ -86,11 +88,15 @@ public data class CommandToken(
                             value.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
                     }
                 }
-            return CommandToken(time = requireNotNull(time), models = requireNotNull(models))
+            return CommandToken(requireNotNull(time), requireNotNull(models))
         }
     }
 
-    override fun toString(): String {
-        return "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
-    }
+    override fun toString(): String =
+        "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
+
+    override fun equals(other: Any?): Boolean =
+        other is CommandToken && other.time == time && other.models == models
+
+    override fun hashCode(): Int = 31 * time.hashCode() + models.hashCode()
 }

@@ -68,27 +68,42 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     public val onEventBlocks: MutableList<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
     internal var afterDuration: Duration? = null
+    private var enterBlockDeclared = false
+    private var exitBlockDeclared = false
     internal var atTimeFunction: ((args: ArgForInstanceNonEvent<T, C, V>) -> Instant)? = null
 
     /**
      * Runs [init] whenever a model enters this state, whether via `createModel` (if this is the initial state) or
-     * via `transitionTo`/`transitionWhen` from another state. At most one `onEnter` per state — calling this again
-     * replaces the previous block rather than adding to it.
+     * via `transitionTo`/`transitionWhen` from another state. At most one `onEnter` per state.
      */
     public fun onEnter(init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit) {
+        if (enterBlockDeclared) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state '$name' declares onEnter more than once"
+            )
+        }
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("Enter block for state '$name'", Enter)
         b.init()
         enterBlock = b
+        enterBlockDeclared = true
     }
 
     /**
      * Runs [init] whenever a model leaves this state, right before the transition takes effect. At most one
-     * `onExit` per state — calling this again replaces the previous block rather than adding to it.
+     * `onExit` per state.
      */
     public fun onExit(init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit) {
+        if (exitBlockDeclared) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state '$name' declares onExit more than once"
+            )
+        }
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("Exit block for state '$name'", Exit)
         b.init()
         exitBlock = b
+        exitBlockDeclared = true
     }
 
     /**
@@ -117,7 +132,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
      * few seconds.
      */
     public fun after(duration: Duration, init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit) {
-        check(timeBlock == null)
+        checkNoTimeBlock()
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("After duration block for state '$name'", Time)
         b.init()
         timeBlock = b
@@ -139,11 +154,20 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         f: (args: ArgForInstanceNonEvent<T, C, V>) -> Instant,
         init: InstanceNonEventBlock<T, ModelStates, C, V>.() -> Unit
     ) {
-        check(timeBlock == null)
+        checkNoTimeBlock()
         val b = InstanceNonEventBlock<T, ModelStates, C, V>("At-time block for state '$name'", Time)
         b.init()
         timeBlock = b
         atTimeFunction = f
+    }
+
+    private fun checkNoTimeBlock() {
+        if (timeBlock != null) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state '$name' declares more than one of after/atTime"
+            )
+        }
     }
 
     override fun getEvents(): Set<Event<T, *>> = onEventBlocks.map { it.first }.toSet()

@@ -101,7 +101,7 @@ class PropertyAuthorizationTest {
     }
 
     @Test
-    fun `listIfAuthorized and getIfAuthorizedOrNull apply property authorization`() {
+    fun `views and getOrNull apply property authorization`() {
         runBlocking {
             val klerk = startKlerk()
             val rowling = createAuthorJKRowling(klerk)
@@ -110,7 +110,7 @@ class PropertyAuthorizationTest {
             assertTrue(listed.isNotEmpty())
             assertTrue(listed.all { it.props.lastName.valueOrNullIfNotAuthorized == null })
 
-            val fetched = klerk.read(Ctx.unauthenticated()) { getIfAuthorizedOrNull(rowling) }
+            val fetched = klerk.read(Ctx.unauthenticated()) { getOrNull(rowling) }
             assertNotNull(fetched)
             assertNull(fetched.props.lastName.valueOrNullIfNotAuthorized)
         }
@@ -124,8 +124,7 @@ class PropertyAuthorizationTest {
             val result = klerk.handle(
                 Command(event = AnEventWithoutParameters, model = null, params = null),
                 Ctx.unauthenticated(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
 
             val created = result.createdModels.single()
             val author = assertNotNull(result.authorizedModels[created]).props as Author
@@ -178,8 +177,7 @@ class PropertyAuthorizationTest {
             val result = klerk.handle(
                 Command(event = AnEventWithoutParameters, model = null, params = null),
                 Ctx.unauthenticated(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
 
             val author = assertNotNull(result.authorizedModels[result.createdModels.single()]).props as Author
             assertFailsWith<AuthorizationException> { author.firstName.valueWithoutAuthorization }
@@ -205,8 +203,7 @@ class PropertyAuthorizationTest {
                     ),
                 ),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple()),
-            ).orThrow()
+            ).getOrThrow()
 
             // the restrictions of the anonymous read must not follow the containers into the model cache
             val created = klerk.read(Ctx.system()) { get(assertNotNull(result.primaryModel)) }

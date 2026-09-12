@@ -19,6 +19,10 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
     internal val declaredEvents = mutableListOf<Event<T, *>>()
 
+    private var voidStateDeclared = false
+    private val declaredModelStates = mutableSetOf<ModelStates>()
+    private var modelStatesClass: Class<out ModelStates>? = null
+
     // internal lateinit var externalEvents: ExternalEvents<V, T>
 
     internal fun setView(view: ModelViews<*, C>) {
@@ -115,9 +119,16 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
      * blocks (calling `createModel`) belong here. Every state machine must call this exactly once.
      */
     public fun voidState(init: VoidState<T, ModelStates, C, V>.() -> Unit) {
+        if (voidStateDeclared) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state machine for ${type.simpleName} declares voidState more than once"
+            )
+        }
         val state = VoidState<T, ModelStates, C, V>("void", type.simpleName!!)
         state.init()
         voidState = state
+        voidStateDeclared = true
         mutableStates.add(state)
     }
 
@@ -125,10 +136,33 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
      * Declares one instance state, corresponding to a value of [modelState]. Call once per enum value.
      */
     public fun state(modelState: ModelStates, init: InstanceState<T, ModelStates, C, V>.() -> Unit) {
+        if (!declaredModelStates.add(modelState)) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state machine for ${type.simpleName} declares the state ${modelState.name} more than once"
+            )
+        }
+        modelStatesClass = modelState.javaClass
         val state = InstanceState<T, ModelStates, C, V>(modelState.name, type.simpleName!!)
         state.init()
-        // state.verifyAllUsedEventsAreDeclared(externalEvents.getEvents(), AnyType)
         mutableStates.add(state)
+    }
+
+    /** Fails when the state machine is incomplete: no void state, or an enum value without a `state(...)` block. */
+    internal fun validateStatesAreComplete() {
+        if (!voidStateDeclared) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state machine for ${type.simpleName} does not declare a voidState"
+            )
+        }
+        val missing = (modelStatesClass?.enumConstants ?: emptyArray()).filterNot { declaredModelStates.contains(it) }
+        if (missing.isNotEmpty()) {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "The state machine for ${type.simpleName} does not declare a state for ${missing.joinToString(", ") { it.name }}"
+            )
+        }
     }
 
     internal fun onKlerkStart(specification: Specification<C, V>) {

@@ -3,7 +3,7 @@ package dev.klerkframework.klerk.collection
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
 import dev.klerkframework.klerk.misc.encodeBase64UrlSafe
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.unauthorized
 
 /**
@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.read.unauthorized
  * free; everything else is built by composing [filter], [filterStates] and [sorted] on top of it (or on another
  * view), then exposing it via [register]. See docs/views.md.
  *
- * Views are read through [Reader] (`withReader`, or the higher-level `count`/`asSequence`/`query` extensions), never queried
+ * Views are read through [ModelReader] (`withReader`, or the higher-level `count`/`asSequence`/`query` extensions), never queried
  * directly — that's what makes their content authorization-checked and lock-consistent with the rest of a read.
  */
 public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: ModelView<T, C>?) {
@@ -76,7 +76,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * Two readers may build the same view at once; the work is done under a lock so that only one of them publishes.
      * Writers cannot interleave with this at all, since a commit holds the write lock and a build holds a read lock.
      */
-    internal open fun <V> ensureIndex(reader: Reader<C, V>): Set<Int>? {
+    internal open fun <V> ensureIndex(reader: ModelReader<C, V>): Set<Int>? {
         if (!isIndexable) {
             return null
         }
@@ -104,7 +104,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * The ids of this view, taken from its index: the parent's ids in order, narrowed by a set lookup. No model is
      * read at all. Null when this view has no index, leaving the caller to evaluate its predicate the slow way.
      */
-    protected fun <V> indexedMemberIds(reader: Reader<C, V>): Sequence<ModelID<T>>? {
+    protected fun <V> indexedMemberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>>? {
         val members = ensureIndex(reader) ?: return null
         return requireNotNull(parent).memberIds(reader).filter { members.contains(it.value) }
     }
@@ -171,18 +171,18 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * Return the whole view: pagination is applied by `Reader.query` to whatever this returns, so a view never has to
      * deal with cursors.
      */
-    public abstract fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>>
+    public abstract fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>>
 
     /**
      * The content of this view, as models. Reads each model of [memberIds] through [reader], so be careful not to use
      * the sequence after the reader has been released — that may lead to ConcurrentModificationException. It is
      * usually better to use the methods in Reader (query, list etc.).
      */
-    public fun <V> withReader(reader: Reader<C, V>): Sequence<Model<T>> =
+    public fun <V> withReader(reader: ModelReader<C, V>): Sequence<Model<T>> =
         memberIds(reader).map { reader.get(it) }
 
     /** Answered from the index when there is one, so no model is read. */
-    public open fun <V> isEmpty(reader: Reader<C, V>): Boolean =
+    public open fun <V> isEmpty(reader: ModelReader<C, V>): Boolean =
         ensureIndex(reader)?.isEmpty() ?: memberIds(reader).none()
 
     /**
@@ -204,7 +204,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open fun getView(): ModelViews<T, C> = parent?.getView() ?: throw IllegalStateException()
     /** Answered from the index when there is one, so no model is read. */
-    public open fun <V> count(reader: Reader<C, V>): Int =
+    public open fun <V> count(reader: ModelReader<C, V>): Int =
         ensureIndex(reader)?.size ?: memberIds(reader).count()
 
     /**
@@ -213,7 +213,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * Walks [memberIds] unless the view is indexed. Override it when the view can answer membership directly — it is
      * asked once per `validReferences` check, i.e. on the command path.
      */
-    public open fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean {
+    public open fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean {
         ensureIndex(reader)?.let { return it.contains(value.value) }
         return memberIds(reader).any { it.value == value.value }
     }
@@ -237,8 +237,8 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         this.idBase = idBase
     }
 
-    /** Eagerly collects this view's content into a [List]. Prefer [Reader]'s `list`/`query` unless you specifically need a `List`. */
-    public fun <D> readWith(reader: Reader<C, D>): List<Model<T>> = withReader(reader).toList()
+    /** Eagerly collects this view's content into a [List]. Prefer `asSequence()`/`query()` unless you specifically need a `List`. */
+    public fun <D> readWith(reader: ModelReader<C, D>): List<Model<T>> = withReader(reader).toList()
 
 }
 
@@ -253,15 +253,15 @@ public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     // derived from this one can still be indexed -- without this view keeping an index of its own.
     override val isIndexable: Boolean get() = previous.isIndexable
     override fun containsId(id: Int): Boolean = previous.containsId(id)
-    override fun <V> ensureIndex(reader: Reader<C, V>): Set<Int>? = previous.ensureIndex(reader)
+    override fun <V> ensureIndex(reader: ModelReader<C, V>): Set<Int>? = previous.ensureIndex(reader)
 
     // Cardinality is a question about membership, so it goes to the parent rather than through memberIds, which would
     // read and sort every model just to count it.
-    override fun <V> count(reader: Reader<C, V>): Int = previous.count(reader)
-    override fun <V> isEmpty(reader: Reader<C, V>): Boolean = previous.isEmpty(reader)
+    override fun <V> count(reader: ModelReader<C, V>): Int = previous.count(reader)
+    override fun <V> isEmpty(reader: ModelReader<C, V>): Boolean = previous.isEmpty(reader)
 
     // Unlike the other views this must read every model, since only the model itself answers where it sorts.
-    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> {
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> {
         val models = previous.withReader(reader)
         return (if (ascending) models.sortedBy(selector) else models.sortedByDescending(selector)).map { it.id }
     }
@@ -280,7 +280,7 @@ public class IncludeStatesModelView<T : Any, C : KlerkContext>(
     override fun matches(model: Model<T>): Boolean =
         (included == null || included.contains(model.state)) && (excluded == null || !excluded.contains(model.state))
 
-    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> =
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
         indexedMemberIds(reader)
             ?: previous.memberIds(reader).filter { matches(reader.get(it)) }
 
@@ -296,7 +296,7 @@ public class FilteredModelView<T : Any, C : KlerkContext>(
 
     override fun matches(model: Model<T>): Boolean = predicate(model)
 
-    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> =
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
         indexedMemberIds(reader)
             ?: previous.memberIds(reader).filter { predicate(reader.get(it)) }
 
@@ -321,11 +321,11 @@ public class AllModelView<T : Any, C : KlerkContext>(
     // anything.
     override val isIndexable: Boolean get() = true
     override fun containsId(id: Int): Boolean = view.containsId(id)
-    override fun <V> ensureIndex(reader: Reader<C, V>): Set<Int> = view.allIdSet()
+    override fun <V> ensureIndex(reader: ModelReader<C, V>): Set<Int> = view.allIdSet()
 
-    override fun <V> memberIds(reader: Reader<C, V>): Sequence<ModelID<T>> = all.asSequence().map { ModelID(it) }
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> = all.asSequence().map { ModelID(it) }
 
-    override fun <V> contains(value: ModelID<*>, reader: Reader<C, V>): Boolean = view.containsId(value.value)
+    override fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean = view.containsId(value.value)
 }
 
 /** Where [QueryOptions.cursor] sits relative to the page. */

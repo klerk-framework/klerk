@@ -37,7 +37,6 @@ class AttachedStringContainerTest {
             params = CreateNoteParams(NoteTitle("Reminder"), NoteBody(body)),
         ),
         context,
-        ProcessingOptions(CommandToken.simple()),
     )
 
     @Test
@@ -63,7 +62,7 @@ class AttachedStringContainerTest {
         val klerk = start()
         val id = klerk.attachedData.prepare("buy milk", NoteBody::class, Ctx.system())
 
-        val note = requireNotNull(write(klerk, id).orThrow().primaryModel)
+        val note = requireNotNull(write(klerk, id).getOrThrow().primaryModel)
 
         assertEquals(id, klerk.read(Ctx.system()) { get(note) }.props.body.id)
         klerk.meta.stop()

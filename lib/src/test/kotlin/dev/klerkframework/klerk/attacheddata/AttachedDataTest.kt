@@ -57,9 +57,8 @@ open class AttachedDataTest {
                 ),
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
         )
-        return requireNotNull(result.orThrow().primaryModel)
+        return requireNotNull(result.getOrThrow().primaryModel)
     }
 
     private suspend fun setPicture(
@@ -76,7 +75,6 @@ open class AttachedDataTest {
                 params = author.props.copy(picture = picture?.let { AuthorPicture(it) })
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
         )
     }
 
@@ -95,9 +93,8 @@ open class AttachedDataTest {
                 params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
-        return requireNotNull(result.orThrow().primaryModel)
+        return requireNotNull(result.getOrThrow().primaryModel)
     }
 
     private fun Klerk<Ctx, Views>.blobExists(id: AttachedBlobID): Boolean =
@@ -132,7 +129,7 @@ open class AttachedDataTest {
         assertNull(klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
 
         val id = klerk.attachedData.prepare(blob("later"), AuthorPicture::class, Ctx.system())
-        setPicture(klerk, authorID, id).orThrow()
+        setPicture(klerk, authorID, id).getOrThrow()
 
         assertEquals(id, klerk.read(Ctx.system()) { get(authorID).props.picture?.id })
         klerk.meta.stop()
@@ -244,7 +241,7 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, old)
 
         val new = klerk.attachedData.prepare(blob("new"), AuthorPicture::class, Ctx.system())
-        setPicture(klerk, authorID, new).orThrow()
+        setPicture(klerk, authorID, new).getOrThrow()
 
         assertEquals("new", String(klerk.attachedData.get(new, Ctx.system()).readAllBytes()))
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(old, Ctx.system()) }
@@ -257,7 +254,7 @@ open class AttachedDataTest {
         val id = klerk.attachedData.prepare(blob("bye"), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
 
-        setPicture(klerk, authorID, null).orThrow()
+        setPicture(klerk, authorID, null).getOrThrow()
 
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(id, Ctx.system()) }
         klerk.meta.stop()
@@ -274,8 +271,7 @@ open class AttachedDataTest {
         klerk.handle(
             Command(event = UpdateBook, model = bookID, params = book.props.copy(thumbnail = null)),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         assertEquals("shared within the model", String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
         klerk.meta.stop()
@@ -290,8 +286,7 @@ open class AttachedDataTest {
         klerk.handle(
             Command(event = DeleteAuthor, model = authorID, params = null),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(id, Ctx.system()) }
         klerk.meta.stop()
@@ -317,7 +312,6 @@ open class AttachedDataTest {
                 )
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
         assertTrue(result is CommandResult.Failure)
 
@@ -523,7 +517,7 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, id)
         assertNotNull(klerk.attachedData.getMetadata(id, Ctx.system()))
 
-        setPicture(klerk, authorID, null).orThrow()
+        setPicture(klerk, authorID, null).getOrThrow()
         assertFailsWith<NoSuchElementException> { klerk.attachedData.getMetadata(id, Ctx.system()) }
         klerk.meta.stop()
     }
@@ -680,8 +674,7 @@ open class AttachedDataTest {
                 params = book.props.copy(chapters = listOf(BookChapter(second)))
             ),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         assertFailsWith<NoSuchElementException> { klerk.attachedData.get(first, Ctx.system()) }
         assertEquals("chapter two", klerk.attachedData.get(second, Ctx.system()))
@@ -740,9 +733,8 @@ open class AttachedDataTest {
         val result = klerk.handle(
             Command(event = CreateBook, model = null, params = params(base)),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
-        return requireNotNull(result.orThrow().primaryModel)
+        return requireNotNull(result.getOrThrow().primaryModel)
     }
 
     private suspend fun createBookWithNotes(klerk: Klerk<Ctx, Views>, notes: AttachedStringID) =
@@ -781,7 +773,6 @@ open class AttachedDataTest {
                 ),
             ),
             context,
-            ProcessingOptions(CommandToken.simple()),
         )
         assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
         return result

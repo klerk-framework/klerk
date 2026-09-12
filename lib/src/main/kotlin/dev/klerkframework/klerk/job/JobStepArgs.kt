@@ -3,13 +3,13 @@ package dev.klerkframework.klerk.job
 import dev.klerkframework.klerk.CommandResult
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import kotlin.time.Instant
 
 /**
  * Everything a step is given.
  *
- * The two variants differ only in whether a [Reader] is available: [Local] jobs run on the master node and may read;
+ * The two variants differ only in whether a [ModelReader] is available: [Local] jobs run on the master node and may read;
  * [Portable] jobs must find everything they need in their cursor, which is what will later let them run on a remote
  * worker.
  */
@@ -85,13 +85,13 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
         override val previousResult: CommandResult<*, C, V>?,
         override val job: JobInfo,
         override val context: C,
-        public val reader: Reader<C, V>,
+        public val reader: ModelReader<C, V>,
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
         cancellationRequested: Boolean = false,
     ) : JobStepArgs<Cursor, C, V>(cancellationRequested)
 
-    /** The arguments of a [JobType.Portable] step. No [Reader] — everything the step needs is in the cursor. */
+    /** The arguments of a [JobType.Portable] step. No [ModelReader] — everything the step needs is in the cursor. */
     public class Portable<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val previousResult: CommandResult<*, C, V>?,
@@ -147,7 +147,7 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
         override val previousResult: CommandResult<*, C, V>?,
         override val job: JobInfo,
         override val context: C,
-        public val reader: Reader<C, V>,
+        public val reader: ModelReader<C, V>,
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
     ) : JobEndArgs<Cursor, C, V>()

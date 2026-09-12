@@ -244,8 +244,7 @@ class JobManagerImplTest {
         val result = f.klerk.handle(
             Command(ChangeName, rowling, ChangeNameParams(FirstName("a"), LastName("b"))),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
-        ).orThrow()
+        ).getOrThrow()
 
         assertEquals(1, result.jobs.size)
         assertEquals(JobStatus.Ready, f.job(result.jobs.single()).status)
@@ -260,7 +259,6 @@ class JobManagerImplTest {
         val result = f.klerk.handle(
             Command(ChangeName, ModelID(123456), ChangeNameParams(FirstName("a"), LastName("b"))),
             Ctx.system(),
-            ProcessingOptions(CommandToken.simple()),
         )
         assertTrue(result is CommandResult.Failure)
         assertEquals(before, f.klerk.jobs.getAllJobs(Ctx.system()).size)

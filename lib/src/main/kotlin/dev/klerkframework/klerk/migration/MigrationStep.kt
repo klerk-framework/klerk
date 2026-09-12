@@ -4,7 +4,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlin.time.Instant
 
 /**
- * A persisted model as raw, pre-deserialization data, given to [MigrationStepV1toV1.migrateModel]. [props] is the
+ * A persisted model as raw, pre-deserialization data, given to [ModelMigrationStep.migrateModel]. [props] is the
  * model's stored JSON, i.e. what is decoded into the props class once all migration steps have run.
  *
  * @property type the model's simple class name (e.g. `"Book"`)
@@ -20,12 +20,12 @@ public data class MigrationModelV1(
 )
 
 /**
- * One step of migrating already-persisted data to match the current model classes. Register implementations via
- * `SpecificationBuilder.migrations(...)`. [migratesToVersion] values across all registered steps must form a contiguous
- * sequence starting at 2 (enforced by `Specification.validateMigrations()` when [dev.klerkframework.klerk.Klerk.create] is
- * called) — a gap throws `IllegalConfigurationException`.
+ * One step of migrating already-persisted data to match the current model classes. Implement [ModelMigrationStep] and
+ * register it via `SpecificationBuilder.migrations(...)`. [migratesToVersion] values across all registered steps must
+ * form a contiguous sequence starting at 2 — a gap throws `IllegalConfigurationException` when
+ * [dev.klerkframework.klerk.Klerk.create] is called.
  */
-public interface MigrationStep {
+public sealed interface MigrationStep {
     /** Must be shorter than 200 characters (enforced at specification validation). */
     public val description: String
 
@@ -33,17 +33,14 @@ public interface MigrationStep {
     public val migratesToVersion: Int
 }
 
-/**
- * The concrete [MigrationStep] kind available today (there is room in the naming for a future
- * `MigrationStepV1toV2`-style kind once a more structural schema-version bump is introduced).
- */
-public interface MigrationStepV1toV1 : MigrationStep {
+/** A [MigrationStep] that rewrites stored models one by one. */
+public interface ModelMigrationStep : MigrationStep {
 
     /**
      * Called for every persisted model when this step runs. Return [original] unchanged to leave the stored model
      * untouched, a modified copy to rewrite its stored JSON, or `null` to delete the model.
      */
-    public fun migrateModel(original: MigrationModelV1): MigrationModelV1? = original
+    public fun migrateModel(original: MigrationModelV1): MigrationModelV1?
 
     /**
      * Helper for the common case of a renamed property: copies [original] with the `props` key [from] renamed to [to].

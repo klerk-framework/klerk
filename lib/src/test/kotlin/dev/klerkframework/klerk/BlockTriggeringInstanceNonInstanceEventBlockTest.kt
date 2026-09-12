@@ -34,8 +34,7 @@ class BlockTriggeringInstanceNonInstanceEventBlockTest {
             val result = klerk.handle(
                 Command(ImproveAuthor, rowlingId, null),
                 Ctx.system(),
-                ProcessingOptions(CommandToken.simple())
-            ).getOrHandle { fail() }
+            ).getOrElse { fail() }
 
             assertTrue(result.transitionedModels.contains(rowlingId))
 

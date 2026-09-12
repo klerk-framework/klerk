@@ -12,6 +12,8 @@ import kotlin.reflect.full.memberProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 import kotlin.time.Clock
 
@@ -207,6 +209,26 @@ class ReaderTest {
 
         }
     }
+
+    @Test
+    fun `get and getOrNull follow their contract`() {
+        runBlocking {
+            val bc = BookViews()
+            val collections = Views(bc, AuthorViews(bc.all))
+            val klerk = createKlerk(collections)
+            klerk.meta.start()
+            val astrid = createAuthorAstrid(klerk)
+            val missing = ModelID<Author>(4711)
+
+            assertFailsWith<NoSuchElementException> { klerk.read(Ctx.system()) { get(missing) } }
+            assertFailsWith<AuthorizationException> { klerk.read(Ctx.unauthenticated()) { get(astrid) } }
+
+            assertNull(klerk.read(Ctx.system()) { getOrNull(missing) })
+            assertNull(klerk.read(Ctx.unauthenticated()) { getOrNull(astrid) })
+            assertEquals(astrid, klerk.read(Ctx.system()) { getOrNull(astrid) }?.id)
+        }
+    }
+
 
 }
 

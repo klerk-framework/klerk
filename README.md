@@ -78,4 +78,25 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Security](docs/security.md) — how authorization, concurrency, and the event log combine into Klerk's security model
 * [Performance](docs/performance.md) — what's fast by default, and what to do if it isn't enough
 
+### Experimental API
+
+Declarations marked `@ExperimentalKlerkApi` may change or be removed in any release, without a migration path. Using
+one is a compile error until you opt in, either per declaration:
+
+```kotlin
+@OptIn(ExperimentalKlerkApi::class)
+object IsAutomaticDraw : FlowChartAlgorithm<MyArgs, Boolean>("Is it a draw?") { /* ... */ }
+```
+
+or for a whole module, in `build.gradle.kts`:
+
+```kotlin
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions.optIn.add("dev.klerkframework.klerk.ExperimentalKlerkApi")
+}
+```
+
+The flow-chart algorithms (`FlowChartAlgorithm`, `AlgorithmBuilder`, `Decision`, `AlgorithmDocumenter`) are marked this
+way today.
+
 Read more on [klerkframework.dev](https://klerkframework.dev)

@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
 import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
 import kotlin.time.Instant
@@ -47,7 +47,7 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     newProperties: T,
     model: Model<T>,
     time: Instant,
-    reader: Reader<C, V>,
+    reader: ModelReader<C, V>,
     view: ModelViews<T, C>,
     functionName: String,
 ): ProcessingData<Primary, C, V> {

@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.misc
 
+import dev.klerkframework.klerk.ExperimentalKlerkApi
 import dev.klerkframework.klerk.KlerkTranslation
 import dev.klerkframework.klerk.statemachine.*
 import dev.klerkframework.klerk.statemachine.executables.*
@@ -167,12 +168,14 @@ private fun <V> generateDeleteTransitions(states: List<State<out Any, out Enum<*
 /**
  * Renders [algo]'s nodes as a [Mermaid](https://mermaid.js.org/) `flowchart TD` definition, for documentation/tooling.
  */
+@ExperimentalKlerkApi
 public fun generateFlowChart(algo: FlowChartAlgorithm<*, *>): String {
     return """flowchart TD
         ${algo.nodes.joinToString(separator = System.lineSeparator()) { renderNode(it) }}
     """.trimMargin()
 }
 
+@OptIn(ExperimentalKlerkApi::class)
 private fun renderNode(node: Node<*, *>): String {
     var result = ""
     node.goTos.forEach { goTo ->
