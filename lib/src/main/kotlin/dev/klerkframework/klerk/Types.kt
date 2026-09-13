@@ -712,19 +712,15 @@ public sealed class PropertyCollectionValidity {
         public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
         public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
     ) : PropertyCollectionValidity() {
-        public fun toProblem(f: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem {
-            return InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = this.endUserTranslatedMessage ?: translation.klerk.function(f),
+        internal fun toProblem(f: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
+            toProblem(this.endUserTranslatedMessage ?: translation.klerk.function(f))
+
+        internal fun toProblem(message: String): InvalidPropertyCollectionProblem =
+            InvalidPropertyCollectionProblem(
+                endUserTranslatedMessage = message,
                 fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
                 fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull)
             )
-        }
-
-        public fun toProblem(): InvalidPropertyCollectionProblem {  // TODO: if possible, remove this function
-            return InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = this.endUserTranslatedMessage ?: "? other toProblem",
-            )
-        }
     }
 }
 
@@ -732,7 +728,7 @@ public sealed class PropertyCollectionValidity {
  * Returns microseconds since 1970.
  * It only works for instants between years -290308 and +294247.
  */
-public fun Instant.to64bitMicroseconds(): Long {
+internal fun Instant.to64bitMicroseconds(): Long {
     if (this <= klerkInstantMin) return Long.MIN_VALUE
     if (this >= klerkInstantMax) return Long.MAX_VALUE
     return BigInteger.valueOf(this.epochSeconds).multiply(ONE_MILLION)
@@ -746,7 +742,7 @@ private val klerkInstantMax = decode64bitMicroseconds(Long.MAX_VALUE)
 private val ONE_MILLION = BigInteger.valueOf(1000000)
 private val ONE_THOUSAND = BigInteger.valueOf(1000)
 
-public fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant =
+internal fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant =
     Instant.fromEpochSeconds(
         Math.floorDiv(microsecondsSince1970, 1_000_000L),
         Math.floorMod(microsecondsSince1970, 1_000_000L) * 1000

@@ -38,7 +38,7 @@ public sealed interface JobResult<out Cursor> {
      * arrive as `args.children`.
      * @param progress how far the job has got, for display.
      */
-    public class Yield<Cursor>(
+    public data class Yield<Cursor>(
         public val cursor: Cursor,
         public val command: Command<*, *>? = null,
         public val options: ProcessingOptions? = null,
@@ -63,7 +63,7 @@ public sealed interface JobResult<out Cursor> {
      * @param result a value handed to the parent job (if any) as [ChildOutcome.result]. Encode it yourself; Klerk
      * stores it as an opaque string.
      */
-    public class Success(
+    public data class Success(
         public val command: Command<*, *>? = null,
         public val options: ProcessingOptions? = null,
         public val progress: JobProgress? = null,
@@ -76,7 +76,7 @@ public sealed interface JobResult<out Cursor> {
      *
      * Retried with exponential backoff (base 3 s) until the type's `maxRetries` is reached, then dead-lettered.
      */
-    public class Fail(
+    public data class Fail(
         public val reason: String,
         override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing>
@@ -88,7 +88,7 @@ public sealed interface JobResult<out Cursor> {
      * @param runHook whether to run `onDeadLettered`. Set it to false when aborting *is* the correct end state and
      * there is deliberately nothing to compensate.
      */
-    public class Abort(
+    public data class Abort(
         public val reason: String,
         public val runHook: Boolean = true,
         override val log: List<JobLogEntry> = emptyList(),

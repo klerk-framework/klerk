@@ -23,10 +23,10 @@ class StateMachineTest {
             val klerk = createKlerk(collections)
             klerk.meta.start()
 
-            val voidEvents = klerk.spec.managedModels.single { it.kClass == Book::class }.stateMachine
+            val voidEvents = klerk.specification.managedModels.single { it.kClass == Book::class }.stateMachine
                 .getEventsForVoidState(Ctx.unauthenticated(), EventVisibility.External)
 
-            val parameters = klerk.spec.getParameters(CreateBook.id)
+            val parameters = klerk.specification.getParameters(CreateBook.id)
             requireNotNull(parameters)
             val p = parameters.fields.first()
             println(p.name)

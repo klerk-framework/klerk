@@ -64,24 +64,13 @@ class AttachedBlobStoreTest {
                 model(Author::class, authorStateMachine(collections), collections.authors)
             }
             apply(generousAuthRules())
-            systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+            systemContextProvider { Ctx(SystemIdentity) }
         }
         val e = assertFailsWith<IllegalConfigurationException> {
             Klerk.create(specification, KlerkSettings(persistence = RamStorage()))
         }
         assertEquals(KlerkErrorCode.MissingAttachedBlobStore, e.code)
         assertTrue(e.message!!.contains("Author.picture"), e.message!!)
-    }
-
-    @Test
-    fun `None is refused when the specification declares a blob`() {
-        val bookViews = BookViews()
-        val collections = Views(bookViews, AuthorViews(bookViews.all))
-        val specification = createConfig(collections)
-        val e = assertFailsWith<IllegalConfigurationException> {
-            Klerk.create(specification, testSettings(blobStore = AttachedBlobStore.None))
-        }
-        assertEquals(KlerkErrorCode.AttachedBlobStoreIsNone, e.code)
     }
 
     @Test

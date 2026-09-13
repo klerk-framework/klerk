@@ -243,7 +243,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 }
 
 /** The result of [ModelView.sorted]. */
-public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
+internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     private val previous: ModelView<T, C>,
     private val selector: (Model<T>) -> R,
     private val ascending: Boolean
@@ -269,7 +269,7 @@ public class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
 }
 
 /** The result of [ModelView.filterStates]. */
-public class IncludeStatesModelView<T : Any, C : KlerkContext>(
+internal class IncludeStatesModelView<T : Any, C : KlerkContext>(
     private val previous: ModelView<T, C>,
     private val included: Set<String>?,
     private val excluded: Set<String>?
@@ -287,7 +287,7 @@ public class IncludeStatesModelView<T : Any, C : KlerkContext>(
 }
 
 /** The result of [ModelView.filter]. */
-public class FilteredModelView<T : Any, C : KlerkContext>(
+internal class FilteredModelView<T : Any, C : KlerkContext>(
     private val previous: ModelView<T, C>,
     private val predicate: (Model<T>) -> Boolean,
 ) : ModelView<T, C>(previous) {
@@ -306,7 +306,7 @@ public class FilteredModelView<T : Any, C : KlerkContext>(
  * The `all` view every [ModelViews] provides for free: every instance of `T`, ordered by [Model.createdAt].
  * The root of every other view for that model type.
  */
-public class AllModelView<T : Any, C : KlerkContext>(
+internal class AllModelView<T : Any, C : KlerkContext>(
     private val view: ModelViews<T, C>,
     private val all: List<Int>  // sorted by createdAt
 ) : ModelView<T, C>(null) {
@@ -372,17 +372,17 @@ public data class QueryOptions(
  */
 public data class QueryResponse<T : Any>(
     val items: List<Model<T>>,
-    val hasPreviousPage: Boolean,
-    val hasNextPage: Boolean,
     val cursorFirstPage: QueryListCursor?,
     val cursorPreviousPage: QueryListCursor?,
     val cursorNextPage: QueryListCursor?,
     val cursorLastPage: QueryListCursor?,
     val totalCount: Int?,
-    val options: QueryOptions?,
     /** Where [items] start in the view, needed by [cursorAt]. */
     internal val offset: Int = 0,
 ) {
+
+    public val hasPreviousPage: Boolean get() = cursorPreviousPage != null
+    public val hasNextPage: Boolean get() = cursorNextPage != null
 
     /**
      * A cursor pointing at the item at [index] of [items]. Use it when every row needs its own position rather than

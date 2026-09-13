@@ -106,7 +106,7 @@ class JobAttachedDataClaimTest {
         assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
 
         // The command attached it to a model, so now it is owned as well as claimed.
-        val author = klerk.read(Ctx.system()) { klerk.spec.views.authors.all.asSequence().toList() }.single()
+        val author = klerk.read(Ctx.system()) { klerk.specification.views.authors.all.asSequence().toList() }.single()
         assertNotNull(author.props.picture)
         klerk.meta.stop()
     }

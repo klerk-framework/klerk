@@ -135,8 +135,12 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
      */
     internal val processAttachedData: ProcessAttachedData<C, V> = ProcessAttachedData()
 
-    /** Every registered job type, by name. Nothing else can be loaded from storage. */
-    public val types: Map<JobName, JobType<*, C, V>> = types + (processAttachedData.name to processAttachedData)
+    /** The job types the application and its plugins registered, by name. */
+    public val types: Map<JobName, JobType<*, C, V>> = types
+
+    /** [types] plus the job types Klerk registers itself. Nothing else can be loaded from storage. */
+    internal val allTypes: Map<JobName, JobType<*, C, V>> =
+        types + (processAttachedData.name to processAttachedData)
 
     public companion object {
         /** No job types and no crons, with the default admission policy. */

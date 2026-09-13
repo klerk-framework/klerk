@@ -63,7 +63,7 @@ private fun <T : Any> buildSpecWithExtraModel(kClass: KClass<T>, stateMachine: S
     val bc = BookViews()
     val collections = Views(bc, AuthorViews(bc.all))
     SpecificationBuilder<Ctx, Views>(collections).build {
-        systemContextProvider { identity -> Ctx(actor = identity) }
+        systemContextProvider { Ctx(actor = SystemIdentity) }
         jobContextProvider(::myJobContextProvider)
         jobs { }
         managedModels {

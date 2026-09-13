@@ -66,7 +66,7 @@ open class AttachedDataTest {
         authorID: ModelID<Author>,
         picture: AttachedBlobID?,
         context: Ctx = Ctx.system(),
-    ): CommandResult<Author, Ctx, Views> {
+    ): CommandResult<Author> {
         val author = klerk.read(context) { get(authorID) }
         return klerk.handle(
             Command(
@@ -759,7 +759,7 @@ open class AttachedDataTest {
         klerk: Klerk<Ctx, Views>,
         picture: AttachedBlobID,
         context: Ctx = Ctx.system(),
-    ): CommandResult.Failure<Author, Ctx, Views> {
+    ): CommandResult.Failure<Author> {
         val result = klerk.handle(
             Command(
                 event = CreateAuthor,

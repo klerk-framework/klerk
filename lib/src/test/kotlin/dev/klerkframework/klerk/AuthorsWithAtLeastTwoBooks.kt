@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.AllModelView
 import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.QueryListCursor
 import dev.klerkframework.klerk.read.ModelReader
@@ -13,7 +12,7 @@ import dev.klerkframework.klerk.read.ModelReader
  */
 class AuthorsWithAtLeastTwoBooks<V>(
     private val authors: ModelView<Author, Ctx>,
-    private val books: AllModelView<Book, Ctx>,
+    private val books: ModelView<Book, Ctx>,
 ) : ModelView<Author, Ctx>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {

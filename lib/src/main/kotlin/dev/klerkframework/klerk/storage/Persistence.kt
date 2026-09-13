@@ -92,7 +92,7 @@ public data class AttachedDataClaim(
  * Storage backend SPI: implement this to durably store models, the event log, jobs and attached data. Klerk owns the
  * schema; implementations only need to persist and retrieve the shapes below. Provided implementations are
  * [dev.klerkframework.klerk.storage.SqlPersistence] and [RamStorage]. Wire an instance in via
- * `SpecificationBuilder.persistence(...)`.
+ * [dev.klerkframework.klerk.KlerkSettings.persistence].
  */
 public interface Persistence {
     /** The schema version currently stored (see [dev.klerkframework.klerk.migration.MigrationStep]). */
@@ -182,8 +182,23 @@ public interface Persistence {
     /** The highest [EventLogEntry.sequenceNumber] in storage, or 0 if the log is empty. Read once at startup. */
     public fun lastEventLogSequenceNumber(): Long
 
+    /**
+     * Rewrites every event-log entry of [modelId] through [transformer], deleting the ones it maps to null.
+     *
+     * Used to honour `eraseEventLogAfterModelDeletion`.
+     */
     public fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?): Unit
+
+    /**
+     * Hands the implementation the specification, at startup and before anything is read. An implementation that has
+     * to know the model classes (e.g. to migrate) keeps it; one that does not may ignore it.
+     */
     public fun setSpecification(specification: Specification<*, *>): Unit
+
+    /**
+     * Applies [migrations] to the stored models, in the order given, and records the schema version they lead to in
+     * [currentModelSchemaVersion]. Called at startup with the steps not yet applied, and never with an empty list.
+     */
     public fun migrate(migrations: List<MigrationStep>): Unit
 
     /**
@@ -512,7 +527,7 @@ public open class RamStorage : Persistence {
         cronState[scheduleId] = firedAt
     }
 
-    public fun <T : Any, P, C : KlerkContext, V> createEventLogEntry(
+    internal fun <T : Any, P, C : KlerkContext, V> createEventLogEntry(
         command: Command<T, P>,
         result: ProcessingData<out T, C, V>,
         context: C,

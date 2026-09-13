@@ -28,7 +28,7 @@ internal fun <C : KlerkContext, V> ModelReader<C, V>.unauthorized(): ModelReader
  */
 internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : ModelReader<C, V>, ViewReader<C, V> {
 
-    override val views = klerk.spec.views
+    override val views = klerk.specification.views
 
     override val jobs: JobReader = UnauthorizedJobReader(klerk)
 
@@ -144,8 +144,6 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
         return QueryResponse(
             items,
-            hasPreviousPage = hasPreviousPage,
-            hasNextPage = hasNextPage,
             cursorFirstPage = if (hasPreviousPage) QueryListCursor.first else null,
             cursorPreviousPage = if (hasPreviousPage)
                 QueryListCursor(previousStart, window.getOrNull(previousStart - windowFrom)?.id?.value) else null,
@@ -153,7 +151,6 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
                 QueryListCursor(pageStart + maxItems, window.getOrNull(pageFrom + maxItems)?.id?.value) else null,
             cursorLastPage = lastPageCursor(totalCount, maxItems, pageStart),
             totalCount = totalCount,
-            options = options,
             offset = pageStart,
         )
     }

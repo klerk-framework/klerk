@@ -56,7 +56,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions,
-    ): CommandResult<T, C, V> {
+    ): CommandResult<T> {
         logger.log(Sequence, options) { "Executing command ${command.event}" }
 
         validateToken(options.token, context)?.let {
@@ -165,7 +165,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         context: C?,
         options: ProcessingOptions,
         jobCommit: JobCommit,
-    ): CommandResult<T, C, V>? = mutex.withLock {
+    ): CommandResult<T>? = mutex.withLock {
         if (command == null || context == null) {
             commitJobsOnly(jobCommit)
             return@withLock null
@@ -173,7 +173,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
         validateToken(options.token, context)?.let { problem ->
             checkpointOnly(jobCommit)
-            return@withLock Failure<T, C, V>(listOf(problem))
+            return@withLock Failure<T>(listOf(problem))
         }
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)
@@ -373,7 +373,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
         // A time-trigger can schedule jobs too. There is no caller to fail, so a refusal by admission control can only
         // be logged and the jobs dropped — the trigger's own model changes still commit.
-        val systemContext = specification.systemContextProvider.invoke(SystemIdentity)
+        val systemContext = specification.systemContextProvider.invoke()
         val jobPlan = when (val planned = jobs.planNewJobs(delta.newJobs, systemContext)) {
             is NewJobPlan.Rejected -> {
                 logger.warn {

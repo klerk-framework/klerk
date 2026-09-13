@@ -28,11 +28,6 @@ public sealed interface AttachedBlobStore {
     public data object Database : AttachedBlobStore
 
     /**
-     * Only allowed if the application has no blobs.
-     */
-    public data object None : AttachedBlobStore
-
-    /**
      * Blob bytes live outside the database. Implement this to store them somewhere Klerk does not know about — a
      * filesystem ([FileBlobStore]), an object store, a NAS.
      *

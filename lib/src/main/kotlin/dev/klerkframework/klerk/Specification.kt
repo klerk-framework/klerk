@@ -55,7 +55,7 @@ public data class Specification<C : KlerkContext, V>(
     val managedModels: Set<ManagedModel<*, *, C, V>>,
     val migrationSteps: SortedSet<MigrationStep>,
     val plugins: List<KlerkPlugin<C, V>> = listOf(),
-    val systemContextProvider: ((SystemIdentity) -> C),
+    val systemContextProvider: (() -> C),
     /** The job types and cron schedules this application declares, built by `SpecificationBuilder.jobs { ... }`. */
     val jobs: JobsSpecification<C, V> = JobsSpecification.empty(),
     /**
@@ -164,7 +164,7 @@ public data class Specification<C : KlerkContext, V>(
         if (jobContextProvider != null) {
             return
         }
-        val needsOne = jobs.types.values.filter { it.agent == JobAgent.Scheduler }
+        val needsOne = jobs.allTypes.values.filter { it.agent == JobAgent.Scheduler }
         if (needsOne.isEmpty()) {
             return
         }
@@ -211,13 +211,6 @@ public data class Specification<C : KlerkContext, V>(
                 "$where holds a blob, so 'attachedBlobStore' is required in KlerkSettings. Choose " +
                         "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
                         "keep them on disk. Pick before you have data: Klerk does not move blobs between stores."
-            )
-        }
-        if (attachedBlobStore == AttachedBlobStore.None) {
-            throw IllegalConfigurationException(
-                KlerkErrorCode.AttachedBlobStoreIsNone,
-                "The settings say attachedBlobStore = None, which means this application has no blobs, but $where " +
-                        "holds one."
             )
         }
     }
@@ -661,7 +654,7 @@ internal annotation class SpecificationMarker
  * DSL entry point for building a [Specification]. Typical usage:
  * ```
  * val specification = SpecificationBuilder<MyContext, MyViews>(views).build {
- *     systemContextProvider { SystemIdentity -> ... }
+ *     systemContextProvider { MyContext(SystemIdentity) }
  *     managedModels { model(MyModel::class, myModelStateMachine, myModelViews) }
  *     authorization { ... }
  * }
@@ -735,7 +728,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     private var eraseEventLogValue: Duration? = null
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
-    private lateinit var systemContextProviderValue: ((SystemIdentity) -> C)
+    private lateinit var systemContextProviderValue: (() -> C)
 
     /**
      * Erases the event log of a model when the model is deleted. Only [Duration.ZERO] (erase immediately) is
@@ -750,9 +743,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      * [MigrationStep.migratesToVersion]; [Specification] additionally requires them to form a contiguous chain starting at
      * version 2 (version 1 is implicit). Optional — omit if the schema has never changed.
      */
-    public fun migrations(migrationSteps: Set<MigrationStep>) {
+    public fun migrations(vararg migrationSteps: MigrationStep) {
         migrationStepsValue =
-            sortedSetOf(Comparator.comparingInt(MigrationStep::migratesToVersion), *migrationSteps.toTypedArray())
+            sortedSetOf(Comparator.comparingInt(MigrationStep::migratesToVersion), *migrationSteps)
     }
 
     /**
@@ -760,7 +753,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      * since a context is required when executing a command, Klerk needs a way to create such a context with the
      * SystemIdentity.
      */
-    public fun systemContextProvider(provider: (SystemIdentity) -> C) {
+    public fun systemContextProvider(provider: () -> C) {
         systemContextProviderValue = provider
     }
 
@@ -776,7 +769,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     /**
      * Declares the authorization rules that govern reads, commands, the event log, and attached data. Required — see
-     * [AuthorizationRulesBlock] for the sub-blocks, or [AuthorizationRulesBlock.insecureAllowEverything] to opt out
+     * [AuthorizationRulesBlock] for the sub-blocks, or [AuthorizationRulesBlock.allowEverythingInsecurely] to opt out
      * of authorization entirely (development/testing only).
      */
     public fun authorization(init: AuthorizationRulesBlock<C, V>.() -> Unit) {
@@ -852,7 +845,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     /**
      * The six independent authorization categories, each with a `positive { rule(...) }` / `negative { rule(...) }`
      * pair. A category with no rules denies everything in it. See the "Authorization" doc for how positive/negative
-     * rules combine, or [insecureAllowEverything] to disable authorization for development.
+     * rules combine, or [allowEverythingInsecurely] to disable authorization for development.
      *
      * Every rule must be a named function reference, e.g. `rule(::myRule)`. A lambda is rejected when Klerk starts.
      */
@@ -974,12 +967,16 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
-         * Returns an `init` block for [SpecificationBuilder.authorization] that allows every actor to do everything (read
-         * all models/properties/event log/attached data, trigger all commands). Logs a warning when applied.
+         * Allows every actor to do everything: read all models/properties/event log/attached data and trigger all
+         * commands. Logs a warning when applied.
+         *
+         * ```kotlin
+         * authorization { allowEverythingInsecurely() }
+         * ```
          *
          * For development/testing only — never use in production.
          */
-        public fun insecureAllowEverything(): AuthorizationRulesBlock<C, V>.() -> Unit = {
+        public fun allowEverythingInsecurely() {
             logger.warn { "The authorization rules allows everything. The application is insecure!" }
             readModels {
                 positive {
@@ -1321,8 +1318,8 @@ public data class KlerkSettings(
     val persistence: Persistence,
 
     /**
-     * Where the bytes of attached blobs are kept: [AttachedBlobStore.Database],
-     * [dev.klerkframework.klerk.storage.FileBlobStore] or [AttachedBlobStore.None].
+     * Where the bytes of attached blobs are kept: [AttachedBlobStore.Database] or
+     * [dev.klerkframework.klerk.storage.FileBlobStore]. Null means the application has no blobs.
      *
      * Required as soon as any model property or event parameter is an [AttachedBlobID] — the choice decides what a
      * database backup contains, so Klerk will not pick one for you. Attached *strings* are unaffected; they always

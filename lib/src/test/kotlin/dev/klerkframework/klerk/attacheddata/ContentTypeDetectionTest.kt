@@ -56,6 +56,6 @@ class ContentTypeDetectionTest {
     @Test
     fun `only the first bytes are needed`() {
         val large = png() + ByteArray(100_000) { it.toByte() }
-        assertEquals("image/png", DefaultContentTypeDetector.detect(large.copyOf(SNIFF_LENGTH)))
+        assertEquals("image/png", DefaultContentTypeDetector.detect(large.copyOf(ContentTypeDetector.SNIFF_LENGTH)))
     }
 }

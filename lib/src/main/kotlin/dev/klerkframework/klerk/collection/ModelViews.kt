@@ -51,7 +51,7 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     /**
      * A collection of all models in this view (i.e. all models of type T).
      */
-    public val all: AllModelView<T, C> = AllModelView(this, _all)
+    public val all: ModelView<T, C> = AllModelView(this, _all)
 
     private val modelViews = mutableListOf<ModelView<T, C>>(all)
 

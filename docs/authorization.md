@@ -43,8 +43,8 @@ categories and the `positive`/`negative` blocks inside them are optional, so dec
 Every rule must be a named function reference, such as `::everybodyCanRead`, since its name identifies the rule in
 problems and documentation. A lambda is rejected when Klerk starts.
 
-For prototyping, `insecureAllowEverything()` fills in all categories with "allow everybody" and logs a warning — never
-use it in production.
+For prototyping, `authorization { allowEverythingInsecurely() }` fills in all categories with "allow everybody" and
+logs a warning — never use it in production.
 
 ## What the rules guarantee
 

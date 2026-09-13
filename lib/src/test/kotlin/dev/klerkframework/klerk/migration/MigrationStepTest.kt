@@ -116,7 +116,7 @@ class MigrationStepTest {
 
     private fun klerkWith(persistence: Persistence, vararg steps: MigrationStep): Klerk<Ctx, Views> {
         val specification = SpecificationBuilder<Ctx, Views>(collections).build {
-            migrations(steps.toSet())
+            migrations(*steps)
             managedModels {
                 model(Book::class, bookStateMachine(collections), collections.books)
                 model(Author::class, authorStateMachine(collections), collections.authors)

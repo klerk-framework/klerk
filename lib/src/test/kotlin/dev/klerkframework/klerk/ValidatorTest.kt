@@ -156,7 +156,7 @@ class ValidatorTest {
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 apply(generousAuthRules())
-                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+                systemContextProvider { Ctx(SystemIdentity) }
             }
             val restrictedKlerk = Klerk.create(specification, testSettings())
             restrictedKlerk.meta.start()

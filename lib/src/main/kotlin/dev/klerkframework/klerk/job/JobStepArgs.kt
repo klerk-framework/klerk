@@ -7,13 +7,34 @@ import dev.klerkframework.klerk.read.ModelReader
 import kotlin.time.Instant
 
 /**
+ * The log entries a step or an end-of-life hook can build, all stamped with the step's own [time].
+ *
+ * Entries are returned on the [JobResult], not written directly, so that they commit with the step.
+ */
+public interface JobLogging {
+
+    /** The time this step is considered to happen at, taken from the configured clock. */
+    public val time: Instant
+
+    /** Builds a log entry stamped with this step's time. */
+    public fun log(message: String, level: JobLogLevel = JobLogLevel.Info): JobLogEntry =
+        JobLogEntry(time, level, message)
+
+    public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
+    public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
+    public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
+    public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
+}
+
+/**
  * Everything a step is given.
  *
  * The two variants differ only in whether a [ModelReader] is available: [Local] jobs run on the master node and may read;
  * [Portable] jobs must find everything they need in their cursor, which is what will later let them run on a remote
  * worker.
  */
-public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancellationRequested: Boolean) {
+public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancellationRequested: Boolean) :
+    JobLogging {
 
     /**
      * Re-read on every access while the step runs, so that a long step sees a cancellation that arrives after it
@@ -31,7 +52,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      * A [CommandResult.Failure] here is **data, not a job failure** — the model may simply have moved on while the job
      * was queued. The step still counted as completed; decide what to do and return normally.
      */
-    public abstract val previousResult: CommandResult<*, C, V>?
+    public abstract val previousResult: CommandResult<*>?
 
     /** Identity and bookkeeping for the running job: id, step number, attempt, priority, ancestry. */
     public abstract val job: JobInfo
@@ -60,17 +81,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      */
     public val cancellationRequested: Boolean get() = cancellationProvider()
 
-    /** The time this step is considered to happen at, taken from the configured clock. */
-    public val time: Instant get() = context.time
-
-    /** Builds a log entry stamped with this step's time. */
-    public fun log(message: String, level: JobLogLevel = JobLogLevel.Info): JobLogEntry =
-        JobLogEntry(time, level, message)
-
-    public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
-    public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
-    public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
-    public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
+    override val time: Instant get() = context.time
 
     /**
      * The arguments of a [JobType.Local] step. [reader] reads the models as they are committed right now; it is valid
@@ -82,7 +93,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
-        override val previousResult: CommandResult<*, C, V>?,
+        override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
         public val reader: ModelReader<C, V>,
@@ -94,7 +105,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
     /** The arguments of a [JobType.Portable] step. No [ModelReader] — everything the step needs is in the cursor. */
     public class Portable<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
-        override val previousResult: CommandResult<*, C, V>?,
+        override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
         override val children: List<ChildOutcome> = emptyList(),
@@ -116,12 +127,12 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
  * It starts out equal to [failedAtCursor].
  * @property reason why the job is ending: the `Fail`/`Abort` reason, or the cancellation reason.
  */
-public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
+public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
 
     public abstract val cursor: Cursor
     public abstract val failedAtCursor: Cursor
     public abstract val reason: String
-    public abstract val previousResult: CommandResult<*, C, V>?
+    public abstract val previousResult: CommandResult<*>?
     public abstract val job: JobInfo
     public abstract val context: C
     public abstract val children: List<ChildOutcome>
@@ -129,22 +140,14 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
     /** Which hook is running. */
     public val kind: JobHookKind get() = requireNotNull(job.hook) { "A JobEndArgs always belongs to a hook" }
 
-    public val time: Instant get() = context.time
-
-    public fun log(message: String, level: JobLogLevel = JobLogLevel.Info): JobLogEntry =
-        JobLogEntry(time, level, message)
-
-    public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
-    public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
-    public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
-    public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
+    override val time: Instant get() = context.time
 
     /** @property klerk as on [JobStepArgs.Local.klerk]. */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val failedAtCursor: Cursor,
         override val reason: String,
-        override val previousResult: CommandResult<*, C, V>?,
+        override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
         public val reader: ModelReader<C, V>,
@@ -156,7 +159,7 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
         override val cursor: Cursor,
         override val failedAtCursor: Cursor,
         override val reason: String,
-        override val previousResult: CommandResult<*, C, V>?,
+        override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
         override val children: List<ChildOutcome> = emptyList(),

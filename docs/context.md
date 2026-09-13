@@ -90,11 +90,11 @@ history (e.g. "imported from legacy system", a support ticket id, ...).
 
 Klerk sometimes needs to act without an actor supplying a context — most notably when a state machine's time trigger
 (`after(...)`, `atTime(...)`) fires in the background, or when a job runs. For these cases you must register a function
-in the specification that builds a `Ctx` from a `SystemIdentity`:
+in the specification that builds a `Ctx` for the system:
 
 ```kotlin
 SpecificationBuilder<Ctx, Views>(views).build {
-    systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+    systemContextProvider { Ctx(SystemIdentity) }
     // ...
 }
 ```

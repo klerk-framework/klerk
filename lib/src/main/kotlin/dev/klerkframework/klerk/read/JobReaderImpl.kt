@@ -53,7 +53,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
     }
 
     private fun authorized(job: JobInfo): Boolean =
-        isJobAuthorized(job, context, klerk.spec, withoutAuth)
+        isJobAuthorized(job, context, klerk.specification, withoutAuth)
 
     private fun checkUsable() {
         check(!finished) { "The reader cannot be used after its read has finished" }

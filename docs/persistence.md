@@ -140,7 +140,7 @@ is a setting:
 
 ```kotlin
 val specification = SpecificationBuilder<Ctx, Views>(views).build {
-    migrations(setOf(RenameCoAuthorsToCoWriters))
+    migrations(RenameCoAuthorsToCoWriters)
     managedModels {
         model(Book::class, bookStateMachine(collections), collections.books)
         model(Author::class, authorStateMachine(collections), collections.authors)

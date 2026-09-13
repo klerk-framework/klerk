@@ -69,9 +69,13 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
     val value = container.rawValue
     return when (kind) {
         ContainerKind.AttachedBlob, ContainerKind.AttachedString -> JsonPrimitive((container as AttachedDataContainer<*>).rawId)
-        ContainerKind.String, ContainerKind.Enum -> JsonPrimitive(value as String)
-        ContainerKind.Int, ContainerKind.Date -> JsonPrimitive(value as Int)
-        ContainerKind.Long, ContainerKind.Instant, ContainerKind.Duration -> JsonPrimitive(value as Long)
+        ContainerKind.String -> JsonPrimitive(value as String)
+        ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).enum.name)
+        ContainerKind.Int -> JsonPrimitive(value as Int)
+        ContainerKind.Date -> JsonPrimitive((container as DateContainer).date.toEpochDay().toInt())
+        ContainerKind.Long -> JsonPrimitive(value as Long)
+        ContainerKind.Instant -> JsonPrimitive((container as InstantContainer).instant.to64bitMicroseconds())
+        ContainerKind.Duration -> JsonPrimitive((container as DurationContainer).duration.inWholeMicroseconds)
         ContainerKind.Short -> JsonPrimitive(value as Short)
         ContainerKind.Byte -> JsonPrimitive(value as Byte)
         ContainerKind.ULong -> JsonPrimitive((value as ULong).toString())
@@ -81,7 +85,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.Float -> JsonPrimitive(value as Float)
         ContainerKind.Double -> JsonPrimitive(value as Double)
         ContainerKind.Boolean -> JsonPrimitive(value as Boolean)
-        ContainerKind.Geo -> JsonPrimitive((value as ULong).toLong())
+        ContainerKind.Geo -> JsonPrimitive((container as GeoPositionContainer).geoPosition.uLongEncoded.toLong())
     }
 }
 

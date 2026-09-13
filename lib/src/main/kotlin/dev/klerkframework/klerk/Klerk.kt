@@ -36,7 +36,7 @@ public interface Klerk<C : KlerkContext, V> {
         }
     }
 
-    public val spec: Specification<C, V>
+    public val specification: Specification<C, V>
     public val settings: KlerkSettings
     public val jobs: JobManager<C, V>
     public val models: KlerkModels<C, V>
@@ -62,7 +62,7 @@ public interface Klerk<C : KlerkContext, V> {
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions = ProcessingOptions(CommandToken.simple())
-    ): CommandResult<T, C, V>
+    ): CommandResult<T>
 
     /**
      * Acquires a read lock, runs [readFunction] with a [Reader] receiver, and returns its result.

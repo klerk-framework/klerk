@@ -83,7 +83,13 @@ public class JobQueueSnapshot internal constructor(
      */
     public fun overBudgetSince(priority: JobPriority): Instant? = overBudgetSince[priority]
 
-    /** How long a job of [priority] may sit ready before the class counts as over budget. */
+    /**
+     * How long a job of [priority] may sit ready before the class counts as over budget.
+     *
+     * Always [AdmissionPolicy.defaultBudgets]: the budgets are Klerk's, not the policy's, and it is these that
+     * [overBudgetSince] is computed from. A policy that wants different thresholds compares [oldestReadyAge] against
+     * its own instead.
+     */
     public fun budget(priority: JobPriority): Duration = AdmissionPolicy.defaultBudgets.getValue(priority)
 }
 

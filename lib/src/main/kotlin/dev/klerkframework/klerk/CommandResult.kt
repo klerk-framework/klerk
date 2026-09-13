@@ -9,14 +9,14 @@ import dev.klerkframework.klerk.read.isAuthorized
  * Outcome of `Klerk.handle`: either [Success] or [Failure]. Use a `when` on the sealed type, or [getOrThrow]/
  * [getOrElse] for a terser call site.
  */
-public sealed class CommandResult<T : Any, C : KlerkContext, V> {
+public sealed class CommandResult<T : Any> {
 
     /**
      * @return this as [Success].
      * @throws Exception the first [Problem]'s [Problem.asException] (e.g. [AuthorizationException],
      * [IllegalStateException], [IllegalArgumentException]) if this is a [Failure].
      */
-    public fun getOrThrow(): Success<T, C, V> {
+    public fun getOrThrow(): Success<T> {
         return when (this) {
             is Failure -> throw this.problems.firstOrNull()?.asException() ?: RuntimeException("Unknown problem")
             is Success -> this
@@ -24,7 +24,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
     }
 
     /** Returns this as [Success], or the [Success] produced by [onFailure] from this [Failure] otherwise. */
-    public fun getOrElse(onFailure: (Failure<T, C, V>) -> Success<T, C, V>): Success<T, C, V> {
+    public fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> {
         return when (this) {
             is Failure -> onFailure(this)
             is Success -> this
@@ -48,11 +48,12 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
      * @property jobs the ids of the managed jobs this command scheduled, in declaration order.
      * @property unmanagedJobs descriptions of the unmanaged jobs (actions) that were started by this command.
      * @property authorizedModels the affected models as they are after the command, keyed by ID. A model is present
-     * only if [context][C] is authorized to read it — absence does not mean the model wasn't affected.
+     * only if the context that issued the command is authorized to read it — absence does not mean the model wasn't
+     * affected.
      * @property log human-readable trace of processing steps, populated when requested via
      * [dev.klerkframework.klerk.command.DebugOptions].
      */
-    public data class Success<T : Any, C : KlerkContext, V>(
+    public data class Success<T : Any>(
         val primaryModel: ModelID<T>?,
         val createdModels: Set<ModelID<out Any>>,
         val updatedModels: Set<ModelID<out Any>>,
@@ -62,10 +63,10 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
         val unmanagedJobs: List<String>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
-    ) : CommandResult<T, C, V>()
+    ) : CommandResult<T>()
 
-    public data class Failure<T : Any, C : KlerkContext, V>(val problems: List<Problem>) :
-        CommandResult<T, C, V>()
+    public data class Failure<T : Any>(val problems: List<Problem>) :
+        CommandResult<T>()
 
     internal companion object {
         fun <T : Any, V, C : KlerkContext> from(
@@ -74,7 +75,7 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
             context: C,
             specification: Specification<C, V>,
             allowBypassAuthRead: Boolean,
-        ): CommandResult<T, C, V> {
+        ): CommandResult<T> {
             if (delta.problems.isNotEmpty()) {
                 return Failure(delta.problems)
             }

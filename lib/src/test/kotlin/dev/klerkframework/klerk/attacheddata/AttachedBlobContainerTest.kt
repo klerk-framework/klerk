@@ -40,7 +40,7 @@ class AttachedBlobContainerTest {
         klerk: Klerk<Ctx, Views>,
         image: AttachedBlobID,
         context: Ctx = Ctx.system(),
-    ): CommandResult<Painting, Ctx, Views> = klerk.handle(
+    ): CommandResult<Painting> = klerk.handle(
         Command(
             event = CreatePainting,
             model = null,
@@ -58,7 +58,7 @@ class AttachedBlobContainerTest {
                 model(Sketch::class, sketchStateMachine(), collections.sketches)
             }
             apply(generousAuthRules())
-            systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+            systemContextProvider { Ctx(SystemIdentity) }
         }
 
         val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }
@@ -132,7 +132,7 @@ class AttachedBlobContainerTest {
     private suspend fun count(
         klerk: Klerk<Ctx, Views>,
         rows: AttachedBlobID,
-    ): CommandResult<Inventory, Ctx, Views> = klerk.handle(
+    ): CommandResult<Inventory> = klerk.handle(
         Command(
             event = CreateInventory,
             model = null,
@@ -409,7 +409,7 @@ class AttachedBlobContainerTest {
                 model(Doodle::class, doodleStateMachine(), collections.doodles)
             }
             apply(generousAuthRules())
-            systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+            systemContextProvider { Ctx(SystemIdentity) }
         }
 
         val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }

@@ -25,7 +25,7 @@ class ActionTest {
                     model(Book::class, bookStateMachine(collections), collections.books)
                 }
                 apply(generousAuthRules())
-                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+                systemContextProvider { Ctx(SystemIdentity) }
             }
             val klerk = Klerk.create(specification, testSettings())
             klerk.meta.start()
@@ -43,7 +43,7 @@ class ActionTest {
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 apply(generousAuthRules())
-                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+                systemContextProvider { Ctx(SystemIdentity) }
             }
             val klerk = Klerk.create(specification, testSettings())
             klerk.meta.start()

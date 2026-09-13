@@ -38,7 +38,7 @@ internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessB
         val declaration = instantiateDeclaration(
             args.cursor.declaration,
             AttachedBlobID(args.cursor.blobId),
-            args.klerk.spec.attachedBlobContainers,
+            args.klerk.specification.attachedBlobContainers,
         )
         return try {
             when (val progress = attachedData.processNextStep(declaration)) {

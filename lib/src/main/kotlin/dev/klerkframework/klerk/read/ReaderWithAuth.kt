@@ -15,9 +15,9 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     internal val withoutAuth = ReaderWithoutAuth(klerk)
 
-    private val propertyAuth = PropertyAuthScope(context, klerk.spec, withoutAuth, klerk.settings.allowBypassAuthRead)
+    private val propertyAuth = PropertyAuthScope(context, klerk.specification, withoutAuth, klerk.settings.allowBypassAuthRead)
 
-    override val views = klerk.spec.views
+    override val views = klerk.specification.views
 
     private val jobReader = AuthorizingJobReader(klerk, context, withoutAuth)
 
@@ -60,7 +60,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     // the point of the plain (non-OrThrow) view reads. Lazy: only what the caller consumes is read.
     override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> =
         collection.withReader(withoutAuth)
-            .filter { isAuthorized(it, context, klerk.spec, withoutAuth) }
+            .filter { isAuthorized(it, context, klerk.specification, withoutAuth) }
             .map { propertyAuth.secure(it) }
 
     override fun <T : Any> query(
@@ -71,7 +71,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         // The authorization check goes into the same pass that cuts the page, so pages stay full and the cursors
         // describe what the actor can actually see. It also means `filter` never sees a model the actor may not read.
         withoutAuth.queryInternal(collection, options, filter) { model ->
-            model.takeIf { isAuthorized(it, context, klerk.spec, withoutAuth) }?.let { propertyAuth.secure(it) }
+            model.takeIf { isAuthorized(it, context, klerk.specification, withoutAuth) }?.let { propertyAuth.secure(it) }
         }
 
     override fun <T : Any> queryOrThrow(
@@ -88,7 +88,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         if (context.actor == SystemIdentity) {
             return model
         }
-        return if (isAuthorized(model, context, klerk.spec, withoutAuth)) propertyAuth.secure(model) else null
+        return if (isAuthorized(model, context, klerk.specification, withoutAuth)) propertyAuth.secure(model) else null
     }
 
 
@@ -97,7 +97,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             return model
         }
         // The readModels rules see the model as it is in the cache, not a secured copy.
-        when (val result = evaluateAuthorization(context, model, klerk.spec, withoutAuth)) {
+        when (val result = evaluateAuthorization(context, model, klerk.specification, withoutAuth)) {
             is ReadResult.Fail -> throw result.problem.asException()
             is ReadResult.Ok -> return propertyAuth.secure(model)
         }
@@ -115,13 +115,13 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     }
 
     override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
-        klerk.spec.getPossibleVoidEvents(clazz, context, visibility)
+        klerk.specification.getPossibleVoidEvents(clazz, context, visibility)
             .filter { klerk.validator.validateWithoutParameters<T>(it, context, null, withoutAuth) }
             .toSet()
 
     override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
         val model = get(id)
-        return klerk.spec.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
+        return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
             .filter { klerk.validator.validateWithoutParameters(it, context, model, withoutAuth) }
             .toSet()
     }

@@ -35,11 +35,11 @@ SpecificationBuilder<Ctx, Views>(views).build {
 
 ## `all`, and deriving views with `filter`
 
-`ModelViews<T, C>` gives every model type a view called `all` for free — an `AllModelView<T, C>` containing every
+`ModelViews<T, C>` gives every model type a view called `all` for free — a `ModelView<T, C>` containing every
 instance of that type, ordered by creation time. Everything else is built from it:
 
 ```kotlin
-class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
+class AuthorViews<V>(val allBooks: ModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     private val greatAuthorNames = setOf("Astrid", "Elsa")
 
@@ -86,7 +86,7 @@ Return all of them — a view defines order and membership only, and `query` doe
 ```kotlin
 class AuthorsWithAtLeastTwoBooks<V>(
     private val authors: ModelView<Author, Ctx>,
-    private val books: AllModelView<Book, Ctx>,
+    private val books: ModelView<Book, Ctx>,
 ) : ModelView<Author, Ctx>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {
@@ -131,7 +131,7 @@ different models may be constructed in an order you don't control. Use the `init
 once all managed models (and therefore all `ModelViews` instances) exist:
 
 ```kotlin
-class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
+class AuthorViews<V>(val allBooks: ModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     lateinit var establishedGreatWithAtLeastTwoBooks: AuthorsWithAtLeastTwoBooks<V>
 

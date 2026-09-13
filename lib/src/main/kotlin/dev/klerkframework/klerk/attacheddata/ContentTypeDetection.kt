@@ -1,12 +1,6 @@
 package dev.klerkframework.klerk.attacheddata
 
 /**
- * How many bytes from the start of a value Klerk keeps for detection, and therefore the most a
- * [ContentTypeDetector] will ever be given. [DefaultContentTypeDetector]'s signatures all fit well inside this.
- */
-public const val SNIFF_LENGTH: Int = 512
-
-/**
  * Works out what a value actually is, from its first bytes. Klerk calls this for every attached value as it is
  * written and reports the result as `metadata.contentType` — the only statement about a value's type Klerk itself
  * will make. What a client *said* it was uploading is kept separately, as application metadata, and is never
@@ -31,6 +25,14 @@ public fun interface ContentTypeDetector {
      * reject has to say what "unrecognised" means for it.
      */
     public fun detect(head: ByteArray): String?
+
+    public companion object {
+        /**
+         * How many bytes from the start of a value Klerk keeps for detection, and therefore the most a
+         * [ContentTypeDetector] will ever be given. [DefaultContentTypeDetector]'s signatures all fit well inside this.
+         */
+        public const val SNIFF_LENGTH: Int = 512
+    }
 }
 
 /**

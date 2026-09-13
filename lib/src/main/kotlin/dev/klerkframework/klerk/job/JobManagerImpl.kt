@@ -54,7 +54,7 @@ internal suspend fun currentJobId(): JobId? = coroutineContext[RunningJobElement
  */
 internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) : JobManagerInternal<C, V> {
 
-    private val specification get() = klerk.spec
+    private val specification get() = klerk.specification
     private val jobSpec get() = specification.jobs
     private val jobSettings get() = klerk.settings.jobs
 
@@ -89,7 +89,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * explicit that it is gone. A step that must know the outcome after a restart should record what it needs in its
      * own cursor.
      */
-    private val previousResults = ConcurrentHashMap<JobId, CommandResult<*, C, V>>()
+    private val previousResults = ConcurrentHashMap<JobId, CommandResult<*>>()
 
     private val random = SecureRandom()
 
@@ -132,7 +132,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
         handleUnloadable(unloadable, now)
         initialiseCronState(now)
-        logger.info { "Jobs ready (${records.size} jobs, ${jobSpec.types.size} registered types)" }
+        logger.info { "Jobs ready (${records.size} jobs, ${jobSpec.allTypes.size} registered types)" }
 
         if (jobSettings.execution == JobExecution.Automatic) {
             val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -164,7 +164,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun whyUnloadable(record: JobRecord): String? {
-        val type = jobSpec.types[record.name]
+        val type = jobSpec.allTypes[record.name]
             ?: return "there is no job type registered under the name '${record.name.value}'"
         return try {
             type.decodeCursor(record.activeCursor)
@@ -347,7 +347,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     }
 
     private fun hasConcurrencySlot(record: JobRecord, perType: Map<JobName, Int>): Boolean {
-        val max = jobSpec.types[record.name]?.maxConcurrent ?: return true
+        val max = jobSpec.allTypes[record.name]?.maxConcurrent ?: return true
         return (perType[record.name] ?: 0) < max
     }
 
@@ -383,7 +383,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     // ------------------------------------------------------------------ running one step
 
     private suspend fun runStep(record: JobRecord) {
-        val type = jobSpec.types[record.name]
+        val type = jobSpec.allTypes[record.name]
         if (type == null) {
             // Only reachable if the registry changed after startup, which it cannot; treated as a bug, not a job error.
             logger.error { "Job ${record.id} has the unregistered name '${record.name}'" }
@@ -487,7 +487,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     )
 
                     else -> {
-                        val args = JobEndArgs.Portable(
+                        val args = JobEndArgs.Portable<Any, C, V>(
                             cursor = cursor,
                             failedAtCursor = portable.decodeCursor(record.failedAtCursor ?: record.cursor),
                             reason = record.reason ?: "",
@@ -511,7 +511,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun buildContext(record: JobRecord, info: JobInfo, now: Instant): C {
         val provider = specification.jobContextProvider
-            ?: return specification.systemContextProvider.invoke(SystemIdentity)
+            ?: return specification.systemContextProvider.invoke()
         val actor = when (record.agent) {
             JobAgent.System -> SystemIdentity
             JobAgent.Scheduler -> record.rebuildOwner()
@@ -526,7 +526,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             // already exhausted by the time a hook runs.
             return null
         }
-        val type = jobSpec.types[record.name] ?: return null
+        val type = jobSpec.allTypes[record.name] ?: return null
         type.maxSteps?.let { if (record.stepNumber >= it) return "Reached maxSteps ($it)" }
         type.maxDuration?.let { max ->
             val since = record.firstAttemptStarted ?: return@let
@@ -1315,7 +1315,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return
         }
 
-        val context = specification.systemContextProvider.invoke(SystemIdentity)
+        val context = specification.systemContextProvider.invoke()
         repeat(fires) {
             val id = allocateId()
             // Jitter spreads the fire over a random window, so that many nodes (or many schedules on the same

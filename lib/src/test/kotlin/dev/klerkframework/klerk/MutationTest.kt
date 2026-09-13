@@ -45,7 +45,7 @@ class MutationTest {
                         }
                     }
                 }
-                systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+                systemContextProvider { Ctx(SystemIdentity) }
             }
             val klerk = Klerk.create(specification, testSettings())
             klerk.meta.start()

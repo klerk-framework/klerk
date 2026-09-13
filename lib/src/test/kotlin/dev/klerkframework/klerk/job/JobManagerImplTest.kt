@@ -57,7 +57,7 @@ class JobManagerImplTest {
         override val name = JobName("renamer")
         override val agent: JobAgent = JobAgent.System
 
-        var sawPreviousResult: CommandResult<*, Ctx, Views>? = null
+        var sawPreviousResult: CommandResult<*>? = null
 
         override suspend fun step(args: JobStepArgs.Local<NameCursor, Ctx, Views>): JobResult<NameCursor> {
             if (args.job.step == 0) {

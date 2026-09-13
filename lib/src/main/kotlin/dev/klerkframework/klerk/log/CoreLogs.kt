@@ -13,7 +13,7 @@ internal abstract class CoreLogEntry(minor: LogSourceMinor, val context: KlerkCo
     override val time: Instant = context?.time ?: getCurrentInstant()
     override val actor: dev.klerkframework.klerk.ActorIdentity? = context?.actor
     override val source: LogSource = LogSource(MajorSource.Core, minor.name)
-    override val logEventName: String = requireNotNull(this::class.simpleName)
+    override val kind: String = requireNotNull(this::class.simpleName)
     override val contentTemplate: String? = null
 }
 
@@ -41,10 +41,10 @@ internal class LogAccessedKlerkLog(context: KlerkContext) : CoreLogEntry(KlerkLo
     override val facts: List<Fact> = emptyList()
 }
 
-internal class LogCommandSucceeded<C : KlerkContext, V>(
+internal class LogCommandSucceeded<C : KlerkContext>(
     command: Command<out Any, *>,
     context: C,
-    result: CommandResult.Success<out Any, C, V>,
+    result: CommandResult.Success<out Any>,
 ) : CoreLogEntry(Event, context) {
     override val headingTemplate = "Command ${command.event} was successful."
 

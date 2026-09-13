@@ -21,7 +21,7 @@ class NestedPropsTest {
 
         val result = createBook(klerk, bookParams(author).copy(tags = setOf(BookTag("x".repeat(101)))))
 
-        val problem = assertIs<CommandResult.Failure<*, *, *>>(result).problems.single()
+        val problem = assertIs<CommandResult.Failure<*>>(result).problems.single()
         assertEquals("tags[0]", assertIs<InvalidPropertyProblem>(problem).propertyName)
         klerk.meta.stop()
     }
@@ -47,7 +47,7 @@ class NestedPropsTest {
         val notAnAuthor = ModelID<Author>(book.value)
         val result = createBook(klerk, bookParams(author).copy(coAuthors = setOf(author, notAnAuthor)))
 
-        val problem = assertIs<CommandResult.Failure<*, *, *>>(result).problems.single()
+        val problem = assertIs<CommandResult.Failure<*>>(result).problems.single()
         assertEquals("coAuthors[1]", assertIs<InvalidPropertyProblem>(problem).propertyName)
         klerk.meta.stop()
     }
@@ -117,7 +117,7 @@ class NestedPropsTest {
             state(BookStates.Published) {}
         }
         val specification = SpecificationBuilder<Ctx, Views>(views).build {
-            systemContextProvider { identity -> Ctx(actor = identity) }
+            systemContextProvider { Ctx(actor = SystemIdentity) }
             jobContextProvider(::myJobContextProvider)
             jobs { }
             managedModels {

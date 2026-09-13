@@ -57,7 +57,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private val settings: KlerkSettings,
 ) : KlerkAttachedData<C> {
 
-    private val specification get() = klerk.spec
+    private val specification get() = klerk.specification
 
     // Rebuilt from storage at startup, like ModelCache. Read and written from prepare (which deliberately runs outside
     // the serialized command path) as well as from commit, hence Concurrent. Blobs and strings share it, and thus
@@ -368,10 +368,10 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         }
         authorizeWrite(context, kind, requested)
         validateCustomMetadata(metadata)
-        if (kind == AttachedDataKind.Blob && settings.attachedBlobStore == AttachedBlobStore.None) {
+        if (kind == AttachedDataKind.Blob && settings.attachedBlobStore == null) {
             throw IllegalConfigurationException(
-                KlerkErrorCode.AttachedBlobStoreIsNone,
-                "The specification says attachedBlobStore(None), so this application cannot store blobs."
+                KlerkErrorCode.MissingAttachedBlobStore,
+                "KlerkSettings.attachedBlobStore is not set, so this application cannot store blobs."
             )
         }
         val createdAt = settings.now()
@@ -909,14 +909,14 @@ private class HashingInputStream(
     private var result: AttachedDataDigest? = null
 
     // The first bytes, kept so that the value's type can be recognised without reading it a second time.
-    private val head = ByteArrayOutputStream(SNIFF_LENGTH)
+    private val head = ByteArrayOutputStream(ContentTypeDetector.SNIFF_LENGTH)
 
     override fun read(): Int {
         val b = source.read()
         if (b != -1) {
             digest.update(b.toByte())
             size++
-            if (head.size() < SNIFF_LENGTH) {
+            if (head.size() < ContentTypeDetector.SNIFF_LENGTH) {
                 head.write(b)
             }
         }
@@ -928,7 +928,7 @@ private class HashingInputStream(
         if (read > 0) {
             digest.update(b, off, read)
             size += read
-            val wanted = minOf(read, SNIFF_LENGTH - head.size())
+            val wanted = minOf(read, ContentTypeDetector.SNIFF_LENGTH - head.size())
             if (wanted > 0) {
                 head.write(b, off, wanted)
             }

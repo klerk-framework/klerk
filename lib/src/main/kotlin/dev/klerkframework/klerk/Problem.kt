@@ -201,7 +201,6 @@ public enum class KlerkErrorCode(public val code: String) {
     InvalidMigration("ERROR-SPEC-16"),
 
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
-    AttachedBlobStoreIsNone("ERROR-SETTINGS-2"),
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),
 
     InvalidPropertyCollection("ERROR-VALIDATION-1"),

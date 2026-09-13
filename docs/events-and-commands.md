@@ -78,7 +78,7 @@ val command = Command(
 ## Submitting a command: `klerk.handle`
 
 ```kotlin
-val result: CommandResult<Book, Ctx, Views> = klerk.handle(
+val result: CommandResult<Book> = klerk.handle(
     command,
     Ctx.system(),
 )
@@ -119,8 +119,8 @@ has since changed" checks. `CommandToken` also round-trips through a compact str
 ## Handling the result
 
 ```kotlin
-public sealed class CommandResult<T : Any, C : KlerkContext, V> {
-    public data class Success<T : Any, C : KlerkContext, V>(
+public sealed class CommandResult<T : Any> {
+    public data class Success<T : Any>(
         val primaryModel: ModelID<T>?,
         val createdModels: Set<ModelID<out Any>>,
         val updatedModels: Set<ModelID<out Any>>,
@@ -130,9 +130,9 @@ public sealed class CommandResult<T : Any, C : KlerkContext, V> {
         val unmanagedJobs: List<String>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
-    ) : CommandResult<T, C, V>()
+    ) : CommandResult<T>()
 
-    public data class Failure<T : Any, C : KlerkContext, V>(val problems: List<Problem>) : CommandResult<T, C, V>()
+    public data class Failure<T : Any>(val problems: List<Problem>) : CommandResult<T>()
 }
 ```
 

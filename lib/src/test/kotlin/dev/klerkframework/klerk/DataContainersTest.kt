@@ -166,7 +166,7 @@ class DataContainersTest {
         val container = BookGenreContainer(BookGenre.Fiction)
         assertNull(container.validate("genre", DefaultTranslation))
         assertEquals(BookGenre.Fiction, container.enum)
-        assertEquals("Fiction", container.valueWithoutAuthorization)
+        assertEquals(BookGenre.Fiction, container.valueWithoutAuthorization)
     }
 
     @Test

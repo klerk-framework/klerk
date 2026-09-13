@@ -40,7 +40,7 @@ internal val instantToStringFormat = LocalDateTime.Format {
  *      Code that uses this function cannot misinterpret the unit.
  * 7. you can express default values by providing a no-params constructor.
  */
-public abstract class DataContainer<T>(internal val rawValue: T) : Cloneable {
+public abstract class DataContainer<T> internal constructor(internal val rawValue: T) : Cloneable {
 
     /**
      * The read authorization of *this particular instance*.
@@ -580,15 +580,9 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
  * default — use `validEnums` in the state machine's `event { }` block to restrict which values a given event
  * parameter accepts.
  */
-public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<String>(value.name) {
-    private val enumValue: E = value
-
-    /**
-     * The enum value in this container.
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val enum: E get() { this.value; return enumValue }
+public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<E>(value) {
+    /** Same as [value]. Kept as an alias so code reading enum containers doesn't need to change. */
+    public val enum: E get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -603,63 +597,45 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
  *
  * Handles years between -290308 and +294247. Instants earlier/later will be set to -290308/+294247 respectively.
  */
-public abstract class InstantContainer(value: Instant) : DataContainer<Long>(value.to64bitMicroseconds()) {
-    private val instantValue: Instant = value
-
-    /**
-     * The instant in this container.
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val instant: Instant get() { this.value; return instantValue }
+public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(value) {
+    /** Same as [value]. Kept as an alias so code reading instant containers doesn't need to change. */
+    public val instant: Instant get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** `yyyy-MM-dd HH:mm:ss` in the system default time zone, or the masked placeholder if unauthorized. */
     override fun toString(): String {
-        valueOrNullIfNotAuthorized ?: return super.toString()
-        return instantToStringFormat.format(instant.toLocalDateTime(TimeZone.currentSystemDefault()))
+        val v = valueOrNullIfNotAuthorized ?: return super.toString()
+        return instantToStringFormat.format(v.toLocalDateTime(TimeZone.currentSystemDefault()))
     }
 }
 
 /**
  * A container for a calendar date, without a time of day or time zone — e.g. a contract's start date.
  */
-public abstract class DateContainer(value: LocalDate) : DataContainer<Int>(value.toEpochDay().toInt()) {
-    private val dateValue: LocalDate = value
-
-    /**
-     * The date in this container.
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val date: LocalDate get() { this.value; return dateValue }
+public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>(value) {
+    /** Same as [value]. Kept as an alias so code reading date containers doesn't need to change. */
+    public val date: LocalDate get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** ISO-8601 calendar date (`yyyy-MM-dd`), or the masked placeholder if unauthorized. */
     override fun toString(): String {
-        valueOrNullIfNotAuthorized ?: return super.toString()
-        return date.toString()
+        val v = valueOrNullIfNotAuthorized ?: return super.toString()
+        return v.toString()
     }
 }
 
 /**
  * A container for Durations with microsecond resolution.
  */
-public abstract class DurationContainer(value: Duration) : DataContainer<Long>(value.inWholeMicroseconds) {
-    private val durationValue: Duration = value
-
-    /**
-     * The duration in this container.
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val duration: Duration get() { this.value; return durationValue }
+public abstract class DurationContainer(value: Duration) : DataContainer<Duration>(value) {
+    /** Same as [value]. Kept as an alias so code reading duration containers doesn't need to change. */
+    public val duration: Duration get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** The [Duration]'s default rendering (e.g. `1h 30m`), or the masked placeholder if unauthorized. */
     override fun toString(): String {
-        valueOrNullIfNotAuthorized ?: return super.toString()
-        return duration.toString()
+        val v = valueOrNullIfNotAuthorized ?: return super.toString()
+        return v.toString()
     }
 }
 
@@ -668,15 +644,9 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Long>(v
  *
  * The precision is at least 6 decimals, which translates to sub-meter precision.
  */
-public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<ULong>(value.uLongEncoded) {
-    private val geoPositionValue: GeoPosition = value
-
-    /**
-     * The position in this container.
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val geoPosition: GeoPosition get() { this.value; return geoPositionValue }
+public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<GeoPosition>(value) {
+    /** Same as [value]. Kept as an alias so code reading geo position containers doesn't need to change. */
+    public val geoPosition: GeoPosition get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -748,13 +718,6 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
     }
 }
 
-/** A ready-to-use [StringContainer] for examples/tests where a real domain-specific container isn't the point. */
-public class KlerkExampleDataContainer(value: String) : StringContainer(value) {
-    override val minLength: Int = 1
-    override val maxLength: Int = 100
-    override val maxLines: Int = 1
-}
-
 /**
  * A reference to an attached blob or attached string, together with what that value is allowed to be.
  *
@@ -817,7 +780,7 @@ public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
      *
      * @return null if it does, otherwise a description of what is wrong, for the command's problem.
      */
-    public fun reasonToReject(metadata: AttachedDataMetadata): String? {
+    internal fun reasonToReject(metadata: AttachedDataMetadata): String? {
         if (metadata.size > maxSize) {
             return "it is ${metadata.size} bytes, and at most $maxSize is allowed"
         }
@@ -860,7 +823,8 @@ public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataCo
      * ```kotlin
      * override val preAttachSteps = listOf(::scanForViruses, ::stripMacros, ::scanForViruses)
      *
-     * suspend fun stripMacros(args: BlobStepArgs): BlobStepResult = BlobStepResult.Replace(disarm(args.value))
+     * suspend fun stripMacros(args: BlobPreAttachStepArgs): BlobPreAttachStepResult =
+     *     BlobPreAttachStepResult.Replace(disarm(args.value))
      * ```
      *
      * Steps run in declared order, each on the current bytes, and **nothing re-runs implicitly** — if the scanner

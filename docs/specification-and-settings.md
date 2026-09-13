@@ -19,7 +19,7 @@ publishes metrics, and how hard the job dispatcher works.
 val specification = SpecificationBuilder<Ctx, Views>(views).build {
     managedModels { ... }
     authorization { ... }
-    systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+    systemContextProvider { Ctx(SystemIdentity) }
 }
 
 val settings = KlerkSettings(

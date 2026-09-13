@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
-import dev.klerkframework.klerk.collection.AllModelView
+import dev.klerkframework.klerk.collection.ModelView
 import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
@@ -164,9 +164,9 @@ fun createKlerk(
 ): Klerk<Ctx, Views> =
     Klerk.create(createConfig(collections, configureJobs), testSettings(storage, clock, blobStore, jobs))
 
-fun myContextProvider(actorIdentity: dev.klerkframework.klerk.ActorIdentity): Ctx {
+fun myContextProvider(): Ctx {
     return Ctx(
-        actor = actorIdentity,
+        actor = SystemIdentity,
 
         )
 }
@@ -250,7 +250,7 @@ class BookViews : ModelViews<Book, Ctx>() {
     }
 }
 
-class AuthorViews<V>(val allBooks: AllModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
+class AuthorViews<V>(val allBooks: ModelView<Book, Ctx>) : ModelViews<Author, Ctx>() {
 
     private val greatAuthorNames = setOf("Linus", "Bertil")
 
@@ -815,7 +815,7 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Ctx
                 negative {}
             }
         }
-        systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+        systemContextProvider { Ctx(SystemIdentity) }
         jobContextProvider(::myJobContextProvider)
         // The state machines used by the tests schedule these, so they have to be loadable on a restart.
         jobs {

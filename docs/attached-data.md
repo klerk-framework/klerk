@@ -145,16 +145,16 @@ KlerkSettings(
     persistence = SqlPersistence(dataSource),
     attachedBlobStore = AttachedBlobStore.Database,          // in the row, alongside everything else
     // attachedBlobStore = FileBlobStore(Path("/var/lib/myapp/blobs")),
-    // attachedBlobStore = AttachedBlobStore.None,           // this application has no blobs
+    // attachedBlobStore = null,                             // this application has no blobs
 )
 ```
 
-|                             | `Database`                                                                                            | `FileBlobStore`                     | `None`  |
-|-----------------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------|---------|
-| Where the bytes are         | the attached-data row                                                                                 | one file per blob under a directory | nowhere |
-| Largest value               | what the database can hold in one value — about 1 GB for SQLite, held in memory on the way in and out | whatever the filesystem allows      | —       |
-| A database backup is enough | yes                                                                                                   | **no**, back up the directory too   | yes     |
-| Delete is transactional     | yes                                                                                                   | no (see below)                      | —       |
+|                             | `Database`                                                                                            | `FileBlobStore`                     |
+|-----------------------------|-------------------------------------------------------------------------------------------------------|-------------------------------------|
+| Where the bytes are         | the attached-data row                                                                                 | one file per blob under a directory |
+| Largest value               | what the database can hold in one value — about 1 GB for SQLite, held in memory on the way in and out | whatever the filesystem allows      |
+| A database backup is enough | yes                                                                                                   | **no**, back up the directory too   |
+| Delete is transactional     | yes                                                                                                   | no (see below)                      |
 
 Required as soon as any model property or event parameter is an `AttachedBlobID` — including one contributed by a
 plugin, such as klerk-web's compressed assets. An application that declares none needs no store at all.

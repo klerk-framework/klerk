@@ -30,7 +30,7 @@ class AttachedStringContainerTest {
         klerk: Klerk<Ctx, Views>,
         body: AttachedStringID,
         context: Ctx = Ctx.system(),
-    ): CommandResult<Note, Ctx, Views> = klerk.handle(
+    ): CommandResult<Note> = klerk.handle(
         Command(
             event = CreateNote,
             model = null,
@@ -48,7 +48,7 @@ class AttachedStringContainerTest {
                 model(Scribble::class, scribbleStateMachine(), collections.scribbles)
             }
             apply(generousAuthRules())
-            systemContextProvider { systemIdentity -> Ctx(systemIdentity) }
+            systemContextProvider { Ctx(SystemIdentity) }
         }
 
         val e = assertFailsWith<IllegalConfigurationException> { Klerk.create(specification, testSettings()) }

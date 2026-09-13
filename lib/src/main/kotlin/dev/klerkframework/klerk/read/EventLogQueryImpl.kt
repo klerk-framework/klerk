@@ -67,7 +67,7 @@ internal fun <C : KlerkContext, V> checkEventLogAuthorization(
     withoutAuth: ReaderWithoutAuth<C, V>,
 ) {
     val args = ArgContextReader(context, withoutAuth)
-    val authorization = klerk.spec.authorization
+    val authorization = klerk.specification.authorization
     if (authorization.eventLogPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
         throw AuthorizationException(KlerkErrorCode.EventLogPositiveAuthorizationMissing, "Not allowed to read event log")
     }

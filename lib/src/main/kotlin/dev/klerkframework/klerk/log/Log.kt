@@ -132,7 +132,7 @@ public interface LogEntry {
     public val source: LogSource
 
     /** A short machine-readable name for this kind of entry, e.g. for filtering. Distinct from a Klerk [dev.klerkframework.klerk.Event]. */
-    public val logEventName: String       // would use the term 'event' if not that term already was taken
+    public val kind: String
 
     /**
      * The LogEntry may be rendered in (at least) two ways:
