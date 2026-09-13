@@ -255,7 +255,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         check(processingData.remainingCommands.isNotEmpty())
         val currentCommand = processingData.remainingCommands.first()
         val remaining = processingData.remainingCommands.drop(1)
-        logger.log(DebugOptions.sequence, options) { "Processing command ${currentCommand.event}" }
+        logger.log(DebugOptions.Sequence, options) { "Processing command ${currentCommand.event}" }
 
         val commandValidationProblems = klerk.validator.validateCommand(currentCommand, reader, context)
         if (commandValidationProblems.isNotEmpty()) {
@@ -297,7 +297,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
         val currentBlock = processingData.remainingBlocks.first()
         val remaining = processingData.remainingBlocks.drop(1)
-        logger.log(DebugOptions.sequence, options) { "Processing block ${currentBlock}" }
+        logger.log(DebugOptions.Sequence, options) { "Processing block ${currentBlock}" }
 
         val processingOptions = EventProcessingOptions(
             disregardPreventingRules = false,

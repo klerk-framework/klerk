@@ -2,7 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
 import dev.klerkframework.klerk.AuthorStates.*
-import dev.klerkframework.klerk.EventVisibility.EXTERNAL
+import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
@@ -853,25 +853,25 @@ object SQLiteInMemory {
 object CreateAuthor :
     VoidEventWithParameters<Author, CreateAuthorParams>(
         Author::class,
-        EXTERNAL, CreateAuthorParams::class
+        External, CreateAuthorParams::class
     )
 
 object UpdateAuthor : InstanceEventWithParameters<Author, Author>(
     Author::class,
-    EXTERNAL, Author::class
+    External, Author::class
 ) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, External)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, External)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, EXTERNAL)
+object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, External)
 
 object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
     Author::class,
-    EXTERNAL, ChangeNameParams::class
+    External, ChangeNameParams::class
 )
 
 sealed class AlwaysFalseDecisions(
@@ -927,7 +927,7 @@ data class Ctx(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, EXTERNAL)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, External)
 
 /**
  * Yields once per remaining step, so a test can watch a job progress through several checkpoints.
@@ -1013,14 +1013,14 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
 
 object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
     Book::class,
-    EXTERNAL, CreateBookParams::class
+    External, CreateBookParams::class
 )
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
 
-object UpdateBook : InstanceEventWithParameters<Book, Book>(Book::class, EXTERNAL, Book::class)
+object UpdateBook : InstanceEventWithParameters<Book, Book>(Book::class, External, Book::class)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
+object DeleteBook : InstanceEventNoParameters<Book>(Book::class, External)
 
 data class CreateBookParams(
     val title: BookTitle,
@@ -1069,10 +1069,10 @@ data class CreatePaintingParams(
 )
 
 object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(
-    Painting::class, EXTERNAL, CreatePaintingParams::class
+    Painting::class, External, CreatePaintingParams::class
 )
 
-object DeletePainting : InstanceEventNoParameters<Painting>(Painting::class, EXTERNAL)
+object DeletePainting : InstanceEventNoParameters<Painting>(Painting::class, External)
 
 fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> = stateMachine {
     event(CreatePainting) {}
@@ -1132,9 +1132,9 @@ class NoteBody(id: AttachedStringID) : AttachedStringContainer(id) {
 
 data class CreateNoteParams(val title: NoteTitle, val body: NoteBody)
 
-object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(Note::class, EXTERNAL, CreateNoteParams::class)
+object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(Note::class, External, CreateNoteParams::class)
 
-object DeleteNote : InstanceEventNoParameters<Note>(Note::class, EXTERNAL)
+object DeleteNote : InstanceEventNoParameters<Note>(Note::class, External)
 
 fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachine {
     event(CreateNote) {}
@@ -1155,7 +1155,7 @@ data class Sketch(val drawing: AttachedBlobID)
 
 enum class SketchStates { Drawn }
 
-object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(Sketch::class, EXTERNAL, Sketch::class)
+object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(Sketch::class, External, Sketch::class)
 
 fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = stateMachine {
     event(CreateSketch) {}
@@ -1172,7 +1172,7 @@ data class Scribble(val text: AttachedStringID)
 
 enum class ScribbleStates { Written }
 
-object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(Scribble::class, EXTERNAL, Scribble::class)
+object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(Scribble::class, External, Scribble::class)
 
 fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> = stateMachine {
     event(CreateScribble) {}
@@ -1193,7 +1193,7 @@ data class Doodle(val drawing: DoodleImage)
 
 enum class DoodleStates { Drawn }
 
-object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(Doodle::class, EXTERNAL, Doodle::class)
+object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(Doodle::class, External, Doodle::class)
 
 fun doodleStateMachine(): StateMachine<Doodle, DoodleStates, Ctx, Views> = stateMachine {
     event(CreateDoodle) {}
@@ -1244,7 +1244,7 @@ data class CreateInventoryParams(
 )
 
 object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(
-    Inventory::class, EXTERNAL, CreateInventoryParams::class
+    Inventory::class, External, CreateInventoryParams::class
 )
 
 fun inventoryStateMachine(): StateMachine<Inventory, InventoryStates, Ctx, Views> = stateMachine {

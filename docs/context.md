@@ -38,7 +38,7 @@ The type parameter `C` used throughout Klerk's API (`Klerk<C, V>`, `StateMachine
 ## actor
 
 `actor` is an `ActorIdentity` — who is performing the operation. This is what authorization rules and business rules key
-off of. The built-in identities are:
+off of. `ActorIdentity` is a sealed interface, so these are all of them:
 
 | Identity                     | Meaning                                                                                                                 |
 |------------------------------|-------------------------------------------------------------------------------------------------------------------------|
@@ -49,6 +49,11 @@ off of. The built-in identities are:
 | `SystemIdentity`             | Klerk itself, used when the framework executes something in the background (see `systemContextProvider` below).         |
 | `CustomIdentity`             | An escape hatch for identities that don't fit the other cases.                                                          |
 | `PluginIdentity(plugin)`     | Used by plugins acting on their own behalf.                                                                             |
+
+`ModelIdentity` and `ModelReferenceIdentity` are the same actor in two forms — the first when you already hold the
+model, the second when you only have its id. Compare `actor.id`, never `actor.type`, when deciding whether two
+identities are the same user. `actor.type` is an `ActorType` enum, and only exists to tell id-less actors apart and to
+record who did what in the event log.
 
 Business and authorization rules narrow on the concrete type, e.g.:
 

@@ -1,6 +1,13 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.ActorIdentity
+import dev.klerkframework.klerk.ActorType
+import dev.klerkframework.klerk.AuthenticationIdentity
+import dev.klerkframework.klerk.CustomIdentity
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.ModelReferenceIdentity
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.ModelID
 import kotlin.time.Instant
 
@@ -29,7 +36,7 @@ public data class JobRecord(
     val status: JobStatus,
     val priority: JobPriority,
     val agent: JobAgent,
-    val ownerActorType: Int,
+    val ownerActorType: ActorType,
     val ownerActorId: Int?,
     val ownerActorExternalId: Long?,
     val stepNumber: Int,
@@ -90,10 +97,20 @@ public data class JobRecord(
         cancellationRequested = cancellationRequested,
         reason = reason,
         log = log,
-        ownerActorId = ownerActorId?.let { ModelID(it) },
-        ownerActorType = ownerActorType,
-        ownerActorExternalId = ownerActorExternalId,
+        owner = rebuildOwner(),
     )
+
+    /**
+     * The scheduling actor, as far as storage remembers it. Only the id survives, so an actor that was a loaded model
+     * comes back as a [ModelReferenceIdentity].
+     */
+    internal fun rebuildOwner(): ActorIdentity = when (ownerActorType) {
+        ActorType.System -> SystemIdentity
+        ActorType.Unauthenticated -> Unauthenticated
+        ActorType.Authentication -> AuthenticationIdentity
+        else -> if (ownerActorId != null) ModelReferenceIdentity(ModelID<Any>(ownerActorId))
+        else CustomIdentity(null, ownerActorExternalId)
+    }
 
     internal fun toChildOutcome(): ChildOutcome =
         ChildOutcome(id = id, name = name, status = status, result = result, reason = reason)

@@ -166,3 +166,12 @@ public interface LogEntry {
     /** Renders [contentTemplate], analogous to [heading]. */
     public val content: String? get() = contentTemplate
 }
+
+/** How serious a log line is. Klerk's own mapping to the underlying logging framework is an implementation detail. */
+public enum class LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}

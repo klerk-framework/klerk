@@ -16,14 +16,14 @@ An event is a Kotlin `object` extending one of four base classes, chosen along t
 ```kotlin
 object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
     Book::class,
-    EXTERNAL, CreateBookParams::class
+    External, CreateBookParams::class
 )
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, EXTERNAL)
+object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
 
 object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
     Author::class,
-    EXTERNAL, ChangeNameParams::class
+    External, ChangeNameParams::class
 )
 ```
 
@@ -39,14 +39,14 @@ The second constructor argument controls where the event may be triggered from:
 
 | Level                   | Can be triggered from                                                                                                               |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `STATEMACHINE_INTERNAL` | Only from within the same state machine (e.g. `createCommands`, a secondary event fired by another event's handler).                |
-| `INTER_STATEMACHINE`    | From any state machine.                                                                                                             |
-| `SYSTEM`                | From any state machine, and from application code — intended for events triggered by the system itself, e.g. from a [job](jobs.md). |
-| `CODE`                  | From any state machine, and from application code.                                                                                  |
-| `EXTERNAL`              | Same as `CODE`, but signals to other tooling (generated UI/API) that this event is meant to be exposed to end users.                |
+| `StateMachineInternal` | Only from within the same state machine (e.g. `createCommands`, a secondary event fired by another event's handler).                |
+| `InterStateMachine`    | From any state machine.                                                                                                             |
+| `System`                | From any state machine, and from application code — intended for events triggered by the system itself, e.g. from a [job](jobs.md). |
+| `Code`                  | From any state machine, and from application code.                                                                                  |
+| `External`              | Same as `Code`, but signals to other tooling (generated UI/API) that this event is meant to be exposed to end users.                |
 
 Each level implies everything below it. `klerk.handle(...)` rejects any command whose event has a visibility lower than
-`CODE` (`KlerkErrorCode.EventVisibilityTooLow`) — `STATEMACHINE_INTERNAL` and `INTER_STATEMACHINE` events can only be
+`Code` (`KlerkErrorCode.EventVisibilityTooLow`) — `StateMachineInternal` and `InterStateMachine` events can only be
 produced by the state machine itself (e.g. via `createCommands`), never submitted directly.
 
 ## Building a Command
@@ -91,13 +91,13 @@ The third parameter, `ProcessingOptions`, controls how the command is processed.
 public data class ProcessingOptions(
     val token: CommandToken,
     val dryRun: Boolean = false,
-    val debugOptions: Map<DebugOptions, Level> = defaultDebugOptions
+    val debugOptions: Map<DebugOptions, LogLevel> = defaultDebugOptions
 )
 ```
 
 * **`dryRun`** — runs every validation and authorization check and computes what *would* happen, but doesn't persist
   anything or trigger jobs/effects. Useful for e.g. a "preview" UI action.
-* **`debugOptions`** — per-category log levels (`sequence`, `misc`, `result`) if you need to trace processing.
+* **`debugOptions`** — per-category `LogLevel` (`Sequence`, `Misc`, `Result`) if you need to trace processing.
 
 ### CommandToken
 

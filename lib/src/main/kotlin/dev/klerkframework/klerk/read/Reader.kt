@@ -120,7 +120,7 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
      */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
-        visibility: EventVisibility = EventVisibility.CODE
+        visibility: EventVisibility = EventVisibility.Code
     ): Set<EventReference>
 
     /**
@@ -131,7 +131,7 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
      */
     public fun <T : Any> getPossibleEvents(
         id: ModelID<T>,
-        visibility: EventVisibility = EventVisibility.CODE
+        visibility: EventVisibility = EventVisibility.Code
     ): Set<EventReference>
 
 }

@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkInstantSerializer
 import dev.klerkframework.klerk.ModelID
@@ -219,10 +220,12 @@ public data class JobInfo(
     val cancellationRequested: Boolean = false,
     val reason: String? = null,
     val log: List<JobLogEntry> = emptyList(),
-    /** The actor that scheduled the job, so that authorization rules can answer "is this the caller's own job?". */
-    val ownerActorId: ModelID<Any>? = null,
-    val ownerActorType: Int? = null,
-    val ownerActorExternalId: Long? = null,
+    /**
+     * The actor that scheduled the job, so that authorization rules can answer "is this the caller's own job?".
+     * Rebuilt from what was persisted, so an actor that was a loaded model comes back as a
+     * [dev.klerkframework.klerk.ModelReferenceIdentity].
+     */
+    val owner: ActorIdentity,
 )
 
 /**

@@ -583,15 +583,15 @@ public data class Specification<C : KlerkContext, V>(
      * The void events (i.e. events that create a new instance of [clazz]) that [context]'s actor is currently
      * allowed to trigger, restricted to [visibility]. Used by [dev.klerkframework.klerk.read.Reader.getPossibleVoidEvents].
      *
-     * @param visibility only [EventVisibility.CODE] and [EventVisibility.EXTERNAL] return results; anything else
+     * @param visibility only [EventVisibility.Code] and [EventVisibility.External] return results; anything else
      * yields an empty set.
      */
     public fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
         context: C,
-        visibility: EventVisibility = EventVisibility.CODE
+        visibility: EventVisibility = EventVisibility.Code
     ): Set<EventReference> {
-        if (visibility != EventVisibility.CODE && visibility != EventVisibility.EXTERNAL) {
+        if (visibility != EventVisibility.Code && visibility != EventVisibility.External) {
             return emptySet()
         }
         return getStateMachine(clazz).getEventsForVoidState(context, visibility)

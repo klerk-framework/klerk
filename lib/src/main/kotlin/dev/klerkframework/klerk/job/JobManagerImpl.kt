@@ -514,21 +514,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             ?: return specification.systemContextProvider.invoke(SystemIdentity)
         val actor = when (record.agent) {
             JobAgent.System -> SystemIdentity
-            JobAgent.Scheduler -> rebuildActor(record)
+            JobAgent.Scheduler -> record.rebuildOwner()
         }
         return provider.invoke(JobContextRequest(actor, now, info))
-    }
-
-    /**
-     * Rebuilds the scheduling actor from what was persisted. Only the id survives storage, so an actor that was a
-     * loaded model comes back as a [ModelReferenceIdentity].
-     */
-    private fun rebuildActor(record: JobRecord): ActorIdentity = when {
-        record.ownerActorType == ActorIdentity.systemType -> SystemIdentity
-        record.ownerActorType == ActorIdentity.unauthenticatedType -> Unauthenticated
-        record.ownerActorType == ActorIdentity.authentication -> AuthenticationIdentity
-        record.ownerActorId != null -> ModelReferenceIdentity(ModelID<Any>(record.ownerActorId))
-        else -> CustomIdentity(record.ownerActorType, null, record.ownerActorExternalId)
     }
 
     /** The caps that end a job regardless of what its step would have said. */
@@ -987,7 +975,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         id: JobId,
         scheduled: DeclaredJob<C, V>,
         priority: JobPriority,
-        ownerActorType: Int,
+        ownerActorType: ActorType,
         ownerActorId: Int?,
         ownerActorExternalId: Long?,
         now: Instant,

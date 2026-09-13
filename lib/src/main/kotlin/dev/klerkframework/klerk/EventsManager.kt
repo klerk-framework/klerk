@@ -17,6 +17,7 @@ import dev.klerkframework.klerk.read.withoutReadRestrictions
 import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
+import dev.klerkframework.klerk.log.LogLevel
 import dev.klerkframework.klerk.storage.ModelCache
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Mutex
@@ -56,13 +57,13 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         context: C,
         options: ProcessingOptions,
     ): CommandResult<T, C, V> {
-        logger.log(sequence, options) { "Executing command ${command.event}" }
+        logger.log(Sequence, options) { "Executing command ${command.event}" }
 
         validateToken(options.token, context)?.let {
             return Failure(listOf(it))
         }
 
-        if (command.event.visibility.level < EventVisibility.CODE.level) {
+        if (command.event.visibility.level < EventVisibility.Code.level) {
             return Failure(
                 listOf(
                     BadRequestProblem(
@@ -74,7 +75,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         if (options.dryRun) {
-            logger.log(misc, options) { "Aborting processing since dryRun" }
+            logger.log(Misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)
             val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
             return CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
@@ -83,7 +84,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         // Actions run outside the lock, so they are collected here and invoked after it is released.
         var actions: List<UnmanagedJob> = emptyList()
         val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
-            logger.log(misc, options) { "Processing event ${command.event}" }
+            logger.log(Misc, options) { "Processing event ${command.event}" }
 
             // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
             // is a slightly higher level description of the delta. We don't want to return the delta since it may
@@ -92,8 +93,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
             when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)) {
                 is Failure -> {
-                    logger.log(
-                        result,
+                    logger.log(Result,
                         options
                     ) { "Command ${command.event} failed: ${commandResult.problems.joinToString(", ") { it.toString() }}" }
                     commandResult
@@ -104,7 +104,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     // gone, or another model already owns it) must fail the command before anything is written.
                     when (val plan = attachedData.planFor(delta)) {
                         is AttachedDataPlan.Rejected -> {
-                            logger.log(result, options) {
+                            logger.log(Result, options) {
                                 "Command ${command.event} failed: ${plan.problems.joinToString(", ") { it.toString() }}"
                             }
                             Failure(plan.problems)
@@ -115,7 +115,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                             // while a refusal can still fail the command, and before anything has been written.
                             when (val jobPlan = jobs.planNewJobs(delta.newJobs, context)) {
                                 is NewJobPlan.Rejected -> {
-                                    logger.log(result, options) {
+                                    logger.log(Result, options) {
                                         "Command ${command.event} failed: " +
                                                 jobPlan.problems.joinToString(", ") { it.toString() }
                                     }
@@ -125,7 +125,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                 is NewJobPlan.Ok -> {
                                     processedCommandTokens.add(options.token)
                                     commit(delta, command, context, plan.delta, jobPlan.commit)
-                                    logger.log(result, options) { "Command ${command.event} succeeded" }
+                                    logger.log(Result, options) { "Command ${command.event} succeeded" }
                                     timeTriggerManager.handle(delta)
                                     actions = delta.unmanagedJobs
                                     commandResult
@@ -403,11 +403,20 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 }
 
 internal fun KLogger.log(debugCategory: DebugOptions, options: ProcessingOptions, function: () -> String) {
-    atLevel(options.debugOptions[debugCategory] ?: defaultDebugOptions[debugCategory]).log(function)
+    val level = options.debugOptions[debugCategory] ?: defaultDebugOptions.getValue(debugCategory)
+    atLevel(level.toSlf4j()).log(function)
 }
 
-internal val defaultDebugOptions = mapOf(
-    sequence to Level.DEBUG,
-    misc to Level.TRACE,
-    result to Level.DEBUG
+internal val defaultDebugOptions: Map<DebugOptions, LogLevel> = mapOf(
+    Sequence to LogLevel.Debug,
+    Misc to LogLevel.Trace,
+    Result to LogLevel.Debug
 )
+
+private fun LogLevel.toSlf4j(): Level = when (this) {
+    LogLevel.Trace -> Level.TRACE
+    LogLevel.Debug -> Level.DEBUG
+    LogLevel.Info -> Level.INFO
+    LogLevel.Warn -> Level.WARN
+    LogLevel.Error -> Level.ERROR
+}

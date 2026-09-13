@@ -145,7 +145,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[event] = command.event.id.toString()
                     it[modelId] = reference
                     it[params] = KlerkJson.encode(command.params)
-                    it[actorIdentityType] = context.actor.type.toByte()
+                    it[actorIdentityType] = context.actor.type.storedValue.toByte()
                     it[actorIdentityReference] = context.actor.id?.value
                     it[actorIdentityExternalId] = context.actor.externalId
                     it[extra] = context.eventLogExtra
@@ -264,7 +264,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         time = decode64bitMicroseconds(row[timestamp]),
         eventReference = EventReference.from(row[event]),
         reference = row[EventLog.modelId],
-        actorType = row[actorIdentityType],
+        actorType = ActorType.fromStoredValue(row[actorIdentityType].toInt()),
         actorReference = row[actorIdentityReference],
         actorExternalId = row[actorIdentityExternalId],
         params = row[EventLog.params],
@@ -294,7 +294,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[timestamp] = updated.time.to64bitMicroseconds()
                     it[event] = updated.eventReference.id()
                     it[params] = updated.params
-                    it[actorIdentityType] = updated.actorType
+                    it[actorIdentityType] = updated.actorType.storedValue.toByte()
                     it[actorIdentityReference] = updated.actorReference
                     it[actorIdentityExternalId] = updated.actorExternalId
                     it[extra] = updated.extra
@@ -554,7 +554,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.status] = record.status.ordinal.toByte()
         this[Jobs.priority] = record.priority.ordinal.toByte()
         this[Jobs.agent] = record.agent.ordinal.toByte()
-        this[Jobs.ownerActorType] = record.ownerActorType
+        this[Jobs.ownerActorType] = record.ownerActorType.storedValue
         this[Jobs.ownerActorId] = record.ownerActorId
         this[Jobs.ownerActorExternalId] = record.ownerActorExternalId
         this[Jobs.stepNumber] = record.stepNumber
@@ -591,7 +591,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     status = JobStatus.entries[row[Jobs.status].toInt()],
                     priority = JobPriority.entries[row[Jobs.priority].toInt()],
                     agent = JobAgent.entries[row[Jobs.agent].toInt()],
-                    ownerActorType = row[Jobs.ownerActorType],
+                    ownerActorType = ActorType.fromStoredValue(row[Jobs.ownerActorType]),
                     ownerActorId = row[Jobs.ownerActorId],
                     ownerActorExternalId = row[Jobs.ownerActorExternalId],
                     stepNumber = row[Jobs.stepNumber],

@@ -122,37 +122,37 @@ public data class EventReference(val modelName: String, val eventName: String) {
 }
 
 /**
- * The visibility level of an event. The higher levels expand on the lower levels, e.g. INTER_STATEMACHINE can be
- * created in all places where STATEMACHINE_INTERNAL is allowed.
+ * The visibility level of an event. The higher levels expand on the lower levels, e.g. InterStateMachine can be
+ * created in all places where StateMachineInternal is allowed.
  */
 public enum class EventVisibility(internal val level: Int) {
 
     /**
      * Can only be created within the same statemachine.
      */
-    STATEMACHINE_INTERNAL(1),
+    StateMachineInternal(1),
 
     /**
      * Can be created in any statemachine.
      */
-    INTER_STATEMACHINE(2),
+    InterStateMachine(2),
 
     /**
      * Can be created in any statemachine and in application code. This level can be used for events that are triggered
      * by the system, e.g. in a Job.
      */
-    SYSTEM(3),
+    System(3),
 
     /**
      * Can be created in any statemachine and in application code.
      */
-    CODE(4),
+    Code(4),
 
     /**
-     * Can be created in any statemachine and in application code. Klerk doesn't differentiate this from CODE, but this
+     * Can be created in any statemachine and in application code. Klerk doesn't differentiate this from Code, but this
      * level can be used as a signal to other code (e.g., auto-generated UI or API) that it should handle this event.
      */
-    EXTERNAL(5)
+    External(5)
 }
 
 /**
@@ -571,13 +571,15 @@ public data class ArgsForJobRead<C : KlerkContext, V>(
      * the job may have been read from storage under a different identity implementation since.
      */
     public fun isOwnedBy(actor: ActorIdentity): Boolean {
-        if (job.ownerActorType != actor.type) {
-            return false
+        val owner = job.owner
+        // ModelIdentity and ModelReferenceIdentity are the same actor, so the id decides whenever there is one.
+        if (owner.id != null || actor.id != null) {
+            return owner.id == actor.id
         }
-        if (job.ownerActorId != null || actor.id != null) {
-            return job.ownerActorId?.value == actor.id?.value
+        if (owner.externalId != null || actor.externalId != null) {
+            return owner.externalId == actor.externalId
         }
-        return job.ownerActorExternalId == actor.externalId
+        return owner.type == actor.type
     }
 
     /** True if [context]'s own actor scheduled the job. */

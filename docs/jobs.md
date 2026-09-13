@@ -585,8 +585,9 @@ fun usersCanSeeTheirOwnJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthoriza
     if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
 ```
 
-The owner is the actor whose context scheduled the job, recorded at scheduling time. `args.isOwnedByActor()` compares
-identities by id rather than by object, since the actor may have been read back under a different identity type since.
+The owner is the actor whose context scheduled the job, recorded at scheduling time and available as `args.job.owner`.
+Only the id survives storage, so an actor that was a `ModelIdentity` comes back as a `ModelReferenceIdentity`;
+`isOwnedByActor()` compares ids, so the same user is recognised either way.
 
 ### Restarts and deploys
 

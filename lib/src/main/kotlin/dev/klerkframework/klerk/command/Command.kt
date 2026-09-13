@@ -1,10 +1,10 @@
 package dev.klerkframework.klerk.command
 
+import dev.klerkframework.klerk.log.LogLevel
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.misc.getCurrentInstant
-import org.slf4j.event.Level
 import kotlin.time.Instant
 
 /**
@@ -32,14 +32,14 @@ public data class Command<T : Any, P>(
 public data class ProcessingOptions(
     public val token: CommandToken,
     public val dryRun: Boolean = false,
-    public val debugOptions: Map<DebugOptions, Level> = defaultDebugOptions
+    public val debugOptions: Map<DebugOptions, LogLevel> = defaultDebugOptions
 )
 
 /** Categories of extra logging that can be requested per-command via [ProcessingOptions.debugOptions]. */
 public enum class DebugOptions {
-    sequence,
-    misc,
-    result
+    Sequence,
+    Misc,
+    Result
 }
 
 /**
