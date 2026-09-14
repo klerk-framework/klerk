@@ -260,7 +260,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     @Suppress("UNCHECKED_CAST")
     private fun declare(
         event: Event<T, *>,
-        contextRules: Set<(C) -> PropertyCollectionValidity>,
+        contextRules: Set<(C) -> ContextValidity>,
         noParamRules: Set<*>,
         paramRules: Set<*> = emptySet<Any>(),
         validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
@@ -269,7 +269,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         require(declaredRules.put(
             event.id,
             DeclaredEventRules(
-                contextRules = contextRules as Set<(KlerkContext) -> PropertyCollectionValidity>,
+                contextRules = contextRules as Set<(KlerkContext) -> ContextValidity>,
                 noParamRules = noParamRules as Set<(Nothing) -> PropertyCollectionValidity>,
                 paramRules = paramRules as Set<(Nothing) -> PropertyCollectionValidity>,
                 validRefs = validRefs,
@@ -285,7 +285,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
  * back to the argument type its event kind uses.
  */
 internal data class DeclaredEventRules(
-    val contextRules: Set<(KlerkContext) -> PropertyCollectionValidity> = emptySet(),
+    val contextRules: Set<(KlerkContext) -> ContextValidity> = emptySet(),
     val noParamRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
     val paramRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
     val validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
@@ -306,8 +306,8 @@ internal data class DeclaredEventRules(
 
     /** The rules that run against the context alone. */
     @Suppress("UNCHECKED_CAST")
-    fun <C : KlerkContext> forContext(): Set<(C) -> PropertyCollectionValidity> =
-        contextRules as Set<(C) -> PropertyCollectionValidity>
+    fun <C : KlerkContext> forContext(): Set<(C) -> ContextValidity> =
+        contextRules as Set<(C) -> ContextValidity>
 }
 
 public inline fun <reified T : Any, reified ModelStates : Enum<*>, C : KlerkContext, V> stateMachine(init: StateMachine<T, ModelStates, C, V>.() -> Unit): StateMachine<T, ModelStates, C, V> {

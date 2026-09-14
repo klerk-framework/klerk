@@ -36,6 +36,15 @@ public class InvalidPropertyCollectionProblem(
     public override val recommendedHttpCode: Int = 400
 }
 
+/** A rule attached to the event with `validateWithContext` refused the command, based on the context alone. */
+public class PreventedByRuleProblem(
+    endUserTranslatedMessage: String,
+    override val violatedRule: RuleDescription? = null
+) : Problem(endUserTranslatedMessage, KlerkErrorCode.PreventedByRule) {
+    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    public override val recommendedHttpCode: Int = 400
+}
+
 /** A single property's [DataContainer] rejected the value passed to it (e.g. failed its own validation). */
 public class InvalidPropertyProblem(
     endUserTranslatedMessage: String,
@@ -212,6 +221,9 @@ public enum class KlerkErrorCode(public val code: String) {
 
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
+
+    /** A `validateWithContext` rule refused the command. No property was examined. */
+    PreventedByRule("ERROR-VALIDATION-3"),
 
     Internal("ERROR-INTERNAL-1"),
 

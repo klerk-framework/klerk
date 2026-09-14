@@ -14,10 +14,10 @@ import kotlin.reflect.KProperty1
  */
 @SpecificationMarker
 public abstract class EventRules<C : KlerkContext> {
-    internal val contextValidations: MutableSet<((C) -> PropertyCollectionValidity)> = mutableSetOf()
+    internal val contextValidations: MutableSet<((C) -> ContextValidity)> = mutableSetOf()
 
     /** Adds a rule that rejects the event based on the context alone (e.g. actor permissions independent of params). */
-    public fun validateWithContext(function: (C) -> PropertyCollectionValidity) {   // TODO: not PropertyCollectionValidity
+    public fun validateWithContext(function: (C) -> ContextValidity) {
         contextValidations.add(function)
     }
 }

@@ -77,6 +77,34 @@ class ValidatorTest {
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Ctx.unauthenticated(), options)
             assertTrue(result is CommandResult.Failure, result.toString())
+            val problem = result.problems.single()
+            // A context rule examined no property, so it is not an InvalidPropertyCollectionProblem.
+            assertIs<PreventedByRuleProblem>(problem)
+            assertEquals(KlerkErrorCode.PreventedByRule, problem.code)
+            // The message comes from the Translation, keyed on the rule's name.
+            assertEquals("Prevent unauthenticated", problem.endUserTranslatedMessage)
+            assertEquals(RuleType.ContextValidation, problem.violatedRule?.type)
+        }
+    }
+
+    @Test
+    fun `A rule never spells out its own message`() {
+        runBlocking {
+            // noAuthorCanBeNamedJamesClavell is a Validatable rule on CreateAuthorParams.
+            val params = CreateAuthorParams(
+                firstName = FirstName("James"),
+                lastName = LastName("Clavell"),
+                phone = PhoneNumber("234"),
+                age = PositiveEvenIntContainer(44),
+                secretToken = SecretPasscode(234)
+            )
+            val options = ProcessingOptions(CommandToken.simple())
+            val result = klerk.handle(Command(CreateAuthor, params), Ctx.system(), options)
+            assertTrue(result is CommandResult.Failure, result.toString())
+            val problem = result.problems.single()
+            // The message names the rule via the Translation, rather than a hardcoded sentence.
+            assertEquals("No author can be named james clavell", problem.endUserTranslatedMessage)
+            assertEquals(KlerkErrorCode.CommandModelValidation, problem.code)
         }
     }
 

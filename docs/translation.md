@@ -31,6 +31,8 @@ interface KlerkTranslation {
     fun mustBeAtLeast(value: Number): String
     fun mustBeAtMost(value: Number): String
     fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String
+    fun invalidPropertyCollection(functionName: String, translationInfo: String?): String
+    fun preventedByRule(functionName: String, translationInfo: String?): String
     val mustBeProvided: String
     fun tooShort(minLength: Int): String
     fun tooLong(maxLength: Int): String
@@ -45,9 +47,18 @@ interface KlerkTranslation {
 These are exactly the messages produced by the [validation](validation.md) and [authorization](authorization.md)
 pipelines — e.g. `tooShort`/`tooLong` come from a `StringContainer`'s length check, `mustBeAtLeast`/`mustBeAtMost`
 from a numeric container's range check, and `unauthorized`/`noAllowingRule` from failed authorization rules.
-`function(f)` supplies the fallback message for a failed `Validatable`/`PropertyCollectionValidity` rule when it didn't
-provide its own `endUserTranslatedMessage` — the default implementation prettifies the validator function's name (e.g.
-`mustBeEven` → "Must be even").
+A rule never spells out its own message. `invalidPropertyCollection` builds the one for a failed
+`Validatable`/`PropertyCollectionValidity` rule, and `preventedByRule` the one for a failed `validateWithContext`
+rule — both from the rule's name plus whatever `translationInfo` it passed. The default implementations prettify the
+name (e.g. `mustBeEven` → "Must be even"), so translating a rule means switching on its name:
+
+```kotlin
+override fun invalidPropertyCollection(functionName: String, translationInfo: String?): String =
+    when (functionName) {
+        "obligatoriskaFaltMasteVaraIfyllda" -> "Följande fält saknas: ${translationInfo.orEmpty()}"
+        else -> DefaultKlerkTranslation.invalidPropertyCollection(functionName, translationInfo)
+    }
+```
 
 ## DefaultTranslation
 

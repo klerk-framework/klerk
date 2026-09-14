@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.validation
 
+import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
@@ -70,12 +71,13 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         reader: ModelReader<C, V>
     ): List<Problem> {
         val rules = klerk.specification.rulesOf(event.id)
-        val propertyCollectionValidityList: List<PropertyCollectionValidity> = when (event) {
+        // The rule function is kept next to its result, so a failure can be named in the message and the problem.
+        val results: List<Pair<Function<Any>, PropertyCollectionValidity>> = when (event) {
 
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
                 val args = VoidEventArgs(command, context, reader)
-                rules.withoutParameters<VoidEventArgs<T, Nothing?, C, V>>().map { it.invoke(args) }
+                rules.withoutParameters<VoidEventArgs<T, Nothing?, C, V>>().map { it to it.invoke(args) }
             }
 
             is VoidEventWithParameters<T, *> -> {
@@ -83,12 +85,12 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val commandWithoutParams = Command(event as Event<T, Nothing?>, null, null)
                 val argsWithoutParams = VoidEventArgs(commandWithoutParams, context, reader)
                 val withoutParams = rules.withoutParameters<VoidEventArgs<T, Nothing?, C, V>>()
-                    .map { it.invoke(argsWithoutParams) }
+                    .map { it to it.invoke(argsWithoutParams) }
 
                 @Suppress("UNCHECKED_CAST")
                 val command = Command(event as Event<T, P>, null, params)
                 val argsWithParams = VoidEventArgs(command, context, reader)
-                val withParams = rules.withParameters<VoidEventArgs<T, P, C, V>>().map { it.invoke(argsWithParams) }
+                val withParams = rules.withParameters<VoidEventArgs<T, P, C, V>>().map { it to it.invoke(argsWithParams) }
 
                 withoutParams.union(withParams).toList()
             }
@@ -97,7 +99,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val command = Command(event, requireNotNull(id), null)
                 val model = reader.get(id)
                 val args = InstanceEventArgs(model, command, context, reader)
-                rules.withoutParameters<InstanceEventArgs<T, Nothing?, C, V>>().map { it.invoke(args) }
+                rules.withoutParameters<InstanceEventArgs<T, Nothing?, C, V>>().map { it to it.invoke(args) }
             }
 
             is InstanceEventWithParameters<T, *> -> {
@@ -106,31 +108,32 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val model = reader.get(id)
                 val argsWithoutParams = InstanceEventArgs(model, commandWithoutParams, context, reader)
                 val withoutParams = rules.withoutParameters<InstanceEventArgs<T, Nothing?, C, V>>()
-                    .map { it.invoke(argsWithoutParams) }
+                    .map { it to it.invoke(argsWithoutParams) }
 
                 @Suppress("UNCHECKED_CAST")
                 val command = Command(event as Event<T, P>, id, requireNotNull(params))
                 val argsWithParams = InstanceEventArgs(model, command, context, reader)
                 val withParams = rules.withParameters<InstanceEventArgs<T, P, C, V>>()
-                    .map { it.invoke(argsWithParams) }
+                    .map { it to it.invoke(argsWithParams) }
                 withoutParams.union(withParams).toList()
             }
 
         }
-        return propertyCollectionValidityList.filterIsInstance<PropertyCollectionValidity.Invalid>()
-            .map { it.toProblem(it.endUserTranslatedMessage ?: context.translation.klerk.invalid) }
+        return results.mapNotNull { (rule, result) ->
+            (result as? PropertyCollectionValidity.Invalid)?.toProblem(rule, context.translation)
+        }
     }
 
     private fun validateWithContext(context: C, eventReference: EventReference): Collection<Problem> {
-        return klerk.specification.rulesOf(eventReference).forContext<C>().mapNotNull {
-            val result = it.invoke(context)
-            if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = result.endUserTranslatedMessage ?: it::class.simpleName
-                ?: "Prevented by a context rule",
-                violatedRule = RuleDescription(
-                    it,
-                    RuleType.ContextValidation
-                )
+        val translation = context.translation
+        return klerk.specification.rulesOf(eventReference).forContext<C>().mapNotNull { rule ->
+            val result = rule.invoke(context)
+            if (result is ContextValidity.Invalid) PreventedByRuleProblem(
+                endUserTranslatedMessage = translation.klerk.preventedByRule(
+                    functionName(rule) ?: translation.klerk.invalid,
+                    result.translationInfo,
+                ),
+                violatedRule = RuleDescription(rule, RuleType.ContextValidation),
             ) else null
         }
     }
@@ -388,9 +391,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 }
 
 /** The result of a single [DataContainer] validator function (see `DataContainer.validators`). */
-public sealed class PropertyValidation {
-    public data object Valid : PropertyValidation()
+public sealed class PropertyValidity {
+    public data object Valid : PropertyValidity()
 
     /** @param translationInfo optional detail passed to [Translation] when building the end-user error message */
-    public class Invalid(public val translationInfo: String? = null) : PropertyValidation()
+    public class Invalid(public val translationInfo: String? = null) : PropertyValidity()
 }

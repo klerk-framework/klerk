@@ -23,7 +23,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
         val Any = f(args)
-        val validationProblems = validateModelProps(Any)
+        val validationProblems = validateModelProps(Any, args.context.translation)
         if (validationProblems.isNotEmpty()) {
             return ProcessingData(problems = validationProblems)
         }
@@ -58,16 +58,19 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
 
 }
 
-internal fun validateModelProps(Any: Any): List<Problem> {
+internal fun validateModelProps(Any: Any, translation: Translation): List<Problem> {
     if (Any !is Validatable) {
         return emptyList()
     }
-    return Any.validators().filter { it.invoke() is PropertyCollectionValidity.Invalid }.map {
-        StateProblem(
-            "The command would result in an invalid model",
-            "The command would result in an invalid model",
-            violatedRule = RuleDescription(it, RuleType.ModelValidation),
-            code = KlerkErrorCode.CommandModelValidation
-        )
+    // Its own error code: the parameters were fine, it is the model they would produce that is not.
+    return Any.validators().mapNotNull { rule ->
+        (rule.invoke() as? PropertyCollectionValidity.Invalid)?.message(rule, translation)?.let { message ->
+            StateProblem(
+                message,
+                message,
+                violatedRule = RuleDescription(rule, RuleType.ModelValidation),
+                code = KlerkErrorCode.CommandModelValidation
+            )
+        }
     }
 }

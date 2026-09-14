@@ -625,6 +625,12 @@ public interface KlerkTranslation {
     public fun mustBeAtLeast(value: Number): String
     public fun mustBeAtMost(value: Number): String
     public fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String
+
+    /** The message when a [Validatable] or event validation rule rejects a class as a whole. */
+    public fun invalidPropertyCollection(functionName: String, translationInfo: String?): String
+
+    /** The message when a `validateWithContext` rule refuses a command based on the context alone. */
+    public fun preventedByRule(functionName: String, translationInfo: String?): String
     public val mustBeProvided: String
     public fun tooShort(minLength: Int): String
     public fun tooLong(maxLength: Int): String
@@ -665,6 +671,12 @@ public object DefaultKlerkTranslation : KlerkTranslation {
         return camelCaseToPretty(functionName)
     }
 
+    override fun invalidPropertyCollection(functionName: String, translationInfo: String?): String =
+        camelCaseToPretty(functionName)
+
+    override fun preventedByRule(functionName: String, translationInfo: String?): String =
+        camelCaseToPretty(functionName)
+
     override val mustBeProvided: String = "Must be provided"
     override fun tooShort(minLength: Int): String = "Must be at least $minLength characters"
     override fun tooLong(maxLength: Int): String = "Must be at most $maxLength characters"
@@ -685,21 +697,55 @@ public object DefaultKlerkTranslation : KlerkTranslation {
  */
 public sealed class PropertyCollectionValidity {
     public data object Valid : PropertyCollectionValidity()
+
+    /**
+     * @param translationInfo optional detail passed to [KlerkTranslation.invalidPropertyCollection] when building the
+     * end-user message. The message itself comes from the [Translation], so a rule never spells it out.
+     * @param fieldMustBeNull the property the rule requires to be null, e.g. to grey out an input.
+     * @param fieldMustNotBeNull the property the rule requires to be non-null.
+     */
     public class Invalid(
-        public val endUserTranslatedMessage: String? = null,
+        public val translationInfo: String? = null,
         public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
         public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
     ) : PropertyCollectionValidity() {
-        internal fun toProblem(f: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
-            toProblem(this.endUserTranslatedMessage ?: translation.klerk.function(f))
+        /**
+         * The end-user message for this result, as [Translation] builds it from the rule's name and [translationInfo].
+         *
+         * @param rule the validator function that returned this, whose name identifies it to the [Translation]
+         */
+        public fun message(rule: Function<Any>, translation: Translation): String =
+            translation.klerk.invalidPropertyCollection(
+                functionName(rule) ?: translation.klerk.invalid,
+                translationInfo,
+            )
 
-        internal fun toProblem(message: String): InvalidPropertyCollectionProblem =
+        /**
+         * The problem Klerk reports when a parameters class rejects itself. Use it when evaluating
+         * [Validatable.validators] yourself, e.g. to show the errors in a form before submitting the command, so the
+         * message is built the same way.
+         */
+        public fun toProblem(rule: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
             InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = message,
+                endUserTranslatedMessage = message(rule, translation),
                 fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
-                fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull)
+                fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull),
             )
     }
+}
+
+/**
+ * Describes whether a command may proceed given the context alone — no property is examined. Returned by a rule
+ * registered with `validateWithContext`.
+ */
+public sealed class ContextValidity {
+    public data object Valid : ContextValidity()
+
+    /**
+     * @param translationInfo optional detail passed to [KlerkTranslation.preventedByRule] when building the end-user
+     * message.
+     */
+    public class Invalid(public val translationInfo: String? = null) : ContextValidity()
 }
 
 /**

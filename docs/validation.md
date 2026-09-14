@@ -31,14 +31,14 @@ class BookTitle(value: String) : StringContainer(value) {
     override val maxLines = 1
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
-        return PropertyValidation.Valid // or PropertyValidation.Invalid("optional translation info")
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
+        return PropertyValidity.Valid // or PropertyValidity.Invalid("optional translation info")
     }
 }
 ```
 
-A validator function takes the value and the current `Translation`, and returns `PropertyValidation.Valid` or
-`PropertyValidation.Invalid(translationInfo)`. This check happens purely on the container's own value — it never sees
+A validator function takes the value and the current `Translation`, and returns `PropertyValidity.Valid` or
+`PropertyValidity.Invalid(translationInfo)`. This check happens purely on the container's own value — it never sees
 sibling properties, the context, or the model. Since the value is passed in, a rule can be a top-level function shared
 by several containers.
 See [models](models.md) for the full list of built-in containers.
@@ -68,7 +68,8 @@ data class CreateAuthorParams(
 Each validator returns `PropertyCollectionValidity.Valid` or `PropertyCollectionValidity.Invalid(...)`.
 `Invalid` optionally carries:
 
-* `endUserTranslatedMessage` — overrides the default translated message for this rule.
+* `translationInfo` — a detail handed to the `Translation` when it builds the message, e.g. which field is missing.
+  The message itself always comes from the `Translation`, keyed on the rule's name; a rule never spells it out.
 * `fieldMustBeNull` / `fieldMustNotBeNull` — a `KProperty0<DataContainer<*>?>` pointing at the offending field (s), so
   that the error can be attributed to a specific field instead of just the object as a whole.
 
@@ -93,12 +94,14 @@ event(CreateBook) {
 }
 ```
 
-* **`validateWithContext(function: (C) -> PropertyCollectionValidity)`** — runs against the `Ctx` alone, before
-  parameters are even looked at. Use it for rules like "this event requires an authenticated actor":
+* **`validateWithContext(function: (C) -> ContextValidity)`** — runs against the `Ctx` alone, before
+  parameters are even looked at. Use it for rules like "this event requires an authenticated actor". It returns
+  `ContextValidity` rather than `PropertyCollectionValidity`, since no property is examined; a failure is a
+  `PreventedByRuleProblem` (`KlerkErrorCode.PreventedByRule`):
 
   ```kotlin
-  fun preventUnauthenticated(context: Ctx): PropertyCollectionValidity =
-      if (context.actor == Unauthenticated) Invalid() else Valid
+  fun preventUnauthenticated(context: Ctx): ContextValidity =
+      if (context.actor == Unauthenticated) ContextValidity.Invalid() else ContextValidity.Valid
   ```
 
 * **`validReferences(property, view)`** — every `ModelID` in the parameters must be declared here, pointing at the

@@ -2,8 +2,8 @@ package dev.klerkframework.klerk.datatypes
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.job.JobId
-import dev.klerkframework.klerk.validation.PropertyValidation
-import dev.klerkframework.klerk.validation.PropertyValidation.Invalid
+import dev.klerkframework.klerk.validation.PropertyValidity
+import dev.klerkframework.klerk.validation.PropertyValidity.Invalid
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
@@ -100,7 +100,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     /**
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
      * Override to add rules like "must be even". Each function is called with the value and the current [Translation]
-     * and returns [PropertyValidation.Valid] or [PropertyValidation.Invalid].
+     * and returns [PropertyValidity.Valid] or [PropertyValidity.Invalid].
      *
      * Each must be a named function reference, e.g. `setOf(::mustBeEven)`, since its name identifies the rule in
      * messages and translations. A lambda is rejected when Klerk starts.
@@ -108,7 +108,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
      * The value is passed in rather than read from the container, so a rule can be a top-level function shared by
      * several containers.
      */
-    public open val validators: Set<(value: T, translation: Translation) -> PropertyValidation> =
+    public open val validators: Set<(value: T, translation: Translation) -> PropertyValidity> =
         emptySet()
 
     /** @throws IllegalConfigurationException if [validator] is not a named function reference */

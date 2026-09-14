@@ -23,7 +23,8 @@ internal class InstanceLifecycleUpdateModel<T : Any, C : KlerkContext, V>(
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
-        process(f(args), args.model, args.time, args.reader, view, extractNameFromFunction(f))
+        // LifecycleArgs carries no context, so the application's Translation cannot be reached from here.
+        process(f(args), args.model, args.time, DefaultTranslation, args.reader, view, extractNameFromFunction(f))
 
 }
 
@@ -39,7 +40,7 @@ internal class InstanceEventUpdateModel<T : Any, P, C : KlerkContext, V>(
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> =
-        process(f(args), args.model, args.context.time, args.reader, view, extractNameFromFunction(f))
+        process(f(args), args.model, args.context.time, args.context.translation, args.reader, view, extractNameFromFunction(f))
 
 }
 
@@ -47,11 +48,12 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     newProperties: T,
     model: Model<T>,
     time: Instant,
+    translation: Translation,
     reader: ModelReader<C, V>,
     view: ModelViews<T, C>,
     functionName: String,
 ): ProcessingData<Primary, C, V> {
-    val validationProblems = validateModelProps(newProperties)
+    val validationProblems = validateModelProps(newProperties, translation)
     if (validationProblems.isNotEmpty()) {
         return ProcessingData(problems = validationProblems)
     }

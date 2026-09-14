@@ -25,7 +25,7 @@ import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.storage.SqlPersistence
-import dev.klerkframework.klerk.validation.PropertyValidation
+import dev.klerkframework.klerk.validation.PropertyValidity
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
@@ -561,8 +561,8 @@ fun secretTokenShouldBeZeroIfNameStartsWithM(args: VoidEventArgs<Author, CreateA
     return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
 }
 
-fun preventUnauthenticated(context: Ctx): PropertyCollectionValidity {
-    return if (context.actor == dev.klerkframework.klerk.Unauthenticated) Invalid() else Valid
+fun preventUnauthenticated(context: Ctx): ContextValidity {
+    return if (context.actor == dev.klerkframework.klerk.Unauthenticated) ContextValidity.Invalid() else ContextValidity.Valid
 }
 
 fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
@@ -708,11 +708,11 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(value: Int, t: Translation): PropertyValidation {
+    fun mustBeEven(value: Int, t: Translation): PropertyValidity {
         if (value % 2 == 0) {
-            return PropertyValidation.Valid
+            return PropertyValidity.Valid
         }
-        return PropertyValidation.Invalid()
+        return PropertyValidity.Invalid()
     }
 
 }
@@ -737,8 +737,8 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
-        return PropertyValidation.Valid
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
+        return PropertyValidity.Valid
     }
 }
 

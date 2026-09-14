@@ -12,7 +12,7 @@ import dev.klerkframework.klerk.datatypes.UByteContainer
 import dev.klerkframework.klerk.datatypes.UIntContainer
 import dev.klerkframework.klerk.datatypes.ULongContainer
 import dev.klerkframework.klerk.datatypes.UShortContainer
-import dev.klerkframework.klerk.validation.PropertyValidation
+import dev.klerkframework.klerk.validation.PropertyValidity
 import kotlin.test.*
 
 data class SchemaAddress(val street: Street, val owner: ModelID<Author>?)
@@ -39,7 +39,7 @@ data class SchemaWithDefault(val street: Street, val other: Street = Street("def
 class LambdaValidated(value: Int) : IntContainer(value) {
     override val min = 0
     override val max = 10
-    override val validators = setOf<(Int, Translation) -> PropertyValidation>({ _, _ -> PropertyValidation.Invalid() })
+    override val validators = setOf<(Int, Translation) -> PropertyValidity>({ _, _ -> PropertyValidity.Invalid() })
 }
 
 data class SchemaLambdaValidated(val number: LambdaValidated)

@@ -118,8 +118,8 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
     override val max = Int.MAX_VALUE
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(value: Int, t: Translation): PropertyValidation {
-        return if (value % 2 == 0) PropertyValidation.Valid else PropertyValidation.Invalid()
+    fun mustBeEven(value: Int, t: Translation): PropertyValidity {
+        return if (value % 2 == 0) PropertyValidity.Valid else PropertyValidity.Invalid()
     }
 }
 ```

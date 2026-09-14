@@ -519,7 +519,7 @@ public data class Specification<C : KlerkContext, V>(
      * The rules declared with `validateWithContext(...)` for [eventReference] — the ones that run against the
      * context alone, before anything is read. Mainly for tooling that documents an event.
      */
-    public fun contextRulesFor(eventReference: EventReference): Set<(C) -> PropertyCollectionValidity> =
+    public fun contextRulesFor(eventReference: EventReference): Set<(C) -> ContextValidity> =
         rulesOf(eventReference).forContext()
 
     /** The views declared with `validReferences` for the event, by property. A null view accepts any id. */
