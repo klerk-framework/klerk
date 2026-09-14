@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ReaderWithAuth
+import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -90,12 +91,7 @@ class EventProcessorTest {
 
         // Bypass validation to get a property that no longer satisfies FirstName's minLength onto disk.
         val corrupted = validAuthor.copy(props = validAuthor.props.copy(firstName = FirstName("")))
-        storage.store<Author, Nothing?, Ctx, Views>(
-            ProcessingData(aggregatedModelState = mapOf(authorId to corrupted), updatedModels = listOf(authorId)),
-            command = null,
-            context = null,
-            sequenceNumber = 1,
-        )
+        storage.store(CommitBatch(updatedModels = listOf(corrupted)))
         first.meta.stop()
 
         val second = Klerk.create(specification, testSettings(storage)) as KlerkImpl

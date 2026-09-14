@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.misc.MutableClock
+import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
@@ -92,19 +93,12 @@ class JobAtomicityTest {
         private var crashOnCommit = 0
         private var commits = 0
 
-        override fun <T : Any, P, C : KlerkContext, V> commitJobStep(
-            delta: ProcessingData<out T, C, V>?,
-            command: Command<T, P>?,
-            context: C?,
-            attachedData: AttachedDataDelta,
-            jobs: JobCommit,
-            sequenceNumber: Long,
-        ) {
+        override fun commitJobStep(batch: CommitBatch) {
             commits++
             if (commits == crashOnCommit) {
                 throw SimulatedCrash()
             }
-            super.commitJobStep(delta, command, context, attachedData, jobs, sequenceNumber)
+            super.commitJobStep(batch)
         }
 
         /** Arms the crash for the nth commit from now, so that scheduling the job itself is not the one that dies. */

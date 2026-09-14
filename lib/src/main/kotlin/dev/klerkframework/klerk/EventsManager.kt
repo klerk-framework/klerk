@@ -14,6 +14,8 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.withoutReadRestrictions
+import dev.klerkframework.klerk.misc.KlerkJson
+import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.log.LogLevel
@@ -220,9 +222,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      */
     private suspend fun commitJobsOnly(jobCommit: JobCommit) {
         // No command, so no event log entry and no sequence number is consumed.
-        settings.persistence.commitJobStep<Any, Nothing, C, V>(
-            null, null, null, AttachedDataDelta(), jobCommit, sequenceNumber = 0
-        )
+        settings.persistence.commitJobStep(CommitBatch(jobs = jobCommit))
         readWriteLock.withWrite { jobs.applyToMemory(jobCommit) }
         jobs.notifyCommitted(jobCommit)
     }
@@ -253,10 +253,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         val sequenceNumber = assignedSequenceNumber.incrementAndGet()
         ModelCache.beginCommit(touchedIds)
         try {
+            val batch = toCommitBatch(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
             if (isJobStep) {
-                settings.persistence.commitJobStep(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
+                settings.persistence.commitJobStep(batch)
             } else {
-                settings.persistence.store(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
+                settings.persistence.store(batch)
             }
         } catch (e: Exception) {
             ModelCache.endCommit()
@@ -274,6 +275,39 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobs.notifyCommitted(jobCommit)
         notifySubscribers(delta)
         maybeEraseEventLog(specification, delta.deletedModels)
+    }
+
+    /** Turns the pipeline's delta into the narrow shape storage sees. */
+    private fun <T : Any, P> toCommitBatch(
+        delta: ProcessingData<out T, C, V>,
+        command: Command<T, P>?,
+        context: C?,
+        attachedDataDelta: AttachedDataDelta,
+        jobCommit: JobCommit,
+        sequenceNumber: Long,
+    ): CommitBatch {
+        fun model(id: ModelID<out Any>) =
+            requireNotNull(delta.aggregatedModelState[id]) { "Could not find $id among the modified models" }
+
+        return CommitBatch(
+            createdModels = delta.createdModels.map(::model),
+            updatedModels = delta.updatedModels.union(delta.transitions).minus(delta.createdModels.toSet())
+                .map(::model),
+            deletedModels = delta.deletedModels,
+            eventLogEntry = if (command == null || context == null) null else EventLogEntry(
+                sequenceNumber = sequenceNumber,
+                time = context.time,
+                eventReference = command.event.id,
+                model = command.model ?: delta.primaryModel ?: delta.createdModels.firstOrNull() ?: ModelID(0),
+                actorType = context.actor.type,
+                actorReference = context.actor.id?.value,
+                actorExternalId = context.actor.externalId,
+                params = KlerkJson.encode(command.params),
+                extra = context.eventLogExtra,
+            ),
+            attachedData = attachedDataDelta,
+            jobs = jobCommit,
+        )
     }
 
     private fun <T : Any> updateViews(delta: ProcessingData<T, C, V>) {

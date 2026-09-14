@@ -140,6 +140,7 @@ public data class Specification<C : KlerkContext, V>(
         rulesMustBeNamed()
         parametersWithReferencesMustHaveValidReferences()
         stateMachinesMustBeComplete()
+        viewStateFiltersMustUseTheModelsStateEnum()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
         checkContextProviderExistIfConfigContainsTimeTriggers()
@@ -151,6 +152,25 @@ public data class Specification<C : KlerkContext, V>(
         blobContainersMustDeclareAPreAttachStep()
         stringsMustBeDeclaredInAContainer()
         plugins.forEach { require(!it.name.contains(" ")) { "Plugin name cannot contain space: ${it.name}" } }
+    }
+
+    /**
+     * A `filterStates` on a view takes enum values, but nothing stops them being some other model's states — which
+     * would silently match nothing.
+     */
+    private fun viewStateFiltersMustUseTheModelsStateEnum() {
+        getViews().forEach { registered ->
+            val expected = getStateMachine(registered.modelClass).statesEnumClass ?: return@forEach
+            val foreign = registered.view.allFilteredStates().filterNot { it.declaringClass() == expected }
+            if (foreign.isNotEmpty()) {
+                throw IllegalConfigurationException(
+                    KlerkErrorCode.InvalidView,
+                    "The view '${registered.view.registeredId}' filters ${registered.modelClass.simpleName} on " +
+                            "${foreign.joinToString(", ") { "${it.declaringClass().simpleName}.${it.name}" }}, which is " +
+                            "not a state of ${expected.simpleName}"
+                )
+            }
+        }
     }
 
     /**

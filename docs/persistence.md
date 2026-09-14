@@ -43,6 +43,12 @@ Keeps everything in a set of in-memory maps. It is explicitly documented as "sho
 survives a restart, and `migrate()` is a no-op because a fresh `RamStorage` is always empty on startup. This is the
 default in the test suite (`testSettings(storage: Persistence = RamStorage())`).
 
+## Implementing a backend
+
+`Persistence` is an SPI: implement it to store models, the event log, jobs and attached data somewhere else. Writes
+arrive as a `CommitBatch` — created, updated and deleted models, the event-log entry, the attached-data delta and the
+job rows — and must be applied in one transaction. A store that cannot do that must not be used for jobs.
+
 ## Wiring persistence into settings
 
 ```kotlin

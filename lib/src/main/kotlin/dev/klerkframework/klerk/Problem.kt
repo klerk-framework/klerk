@@ -215,6 +215,7 @@ public enum class KlerkErrorCode(public val code: String) {
     RuleMustBeNamed("ERROR-SPEC-14"),
     InvalidStateMachine("ERROR-SPEC-15"),
     InvalidMigration("ERROR-SPEC-16"),
+    InvalidView("ERROR-SPEC-17"),
 
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),

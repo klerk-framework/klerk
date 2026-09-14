@@ -105,3 +105,6 @@ internal fun makeExactSerializable(instant: Instant): Instant =
  * Get an Instant which is guaranteed to be the same after serialization and deserialization.
  */
 internal fun getCurrentInstant(): Instant = makeExactSerializable(kotlin.time.Clock.System.now())
+
+/** The enum class a constant was declared in, also when the constant has a class body of its own. */
+internal fun Enum<*>.declaringClass(): Class<*> = (this as java.lang.Enum<*>).declaringClass

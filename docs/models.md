@@ -38,7 +38,19 @@ data class Model<T : Any>(
 )
 ```
 
-`props` is your data class. `state` is the current state name from its [state machine](state-machines.md). `id` is a
+`props` is your data class. `state` is the current state name from its [state machine](state-machines.md) — compare it
+with `isIn`, or get the enum value with `stateAs`, rather than with the name:
+
+```kotlin
+if (book.isIn(BookStates.Published)) { ... }
+
+when (book.stateAs<BookStates>()) {
+    BookStates.Draft -> ...
+    BookStates.Published -> ...
+}
+```
+
+`id` is a
 `ModelID<T>` — a typed, `Int`-backed reference to the model, safe to hold onto and pass around (e.g. `Book::author:
 ModelID<Author>` above is how one model refers to another).
 

@@ -227,9 +227,9 @@ class AuthorViews<V>(val allBooks: ModelView<Book, Ctx>) : ModelViews<Author, Ct
     private val greatAuthorNames = setOf("Linus", "Bertil")
 
     val greatAuthors = this.all.filter { greatAuthorNames.contains(it.props.firstName.value) }.register("greatAuthors")
-    val establishedAuthors = this.all.filter { it.state == Established.name }.register("establishedAuthors")
+    val establishedAuthors = this.all.filterStates(included = setOf(Established)).register("establishedAuthors")
     val establishedGreatAuthors =
-        greatAuthors.filter { it.state == Established.name }.register("establishedGreatAuthors")
+        greatAuthors.filterStates(included = setOf(Established)).register("establishedGreatAuthors")
     lateinit var establishedGreatWithAtLeastTwoBooks: AuthorsWithAtLeastTwoBooks<V>
 
     val midrangeAuthors = this.all.filter {

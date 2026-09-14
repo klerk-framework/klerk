@@ -46,7 +46,7 @@ internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
 }
 
 /** A pending fire-and-forget job produced by [Block.VoidEventBlock.unmanagedJob] / [Block.InstanceLifecycleBlock.unmanagedJob] / [Block.InstanceEventBlock.unmanagedJob], to be run after the command commits. */
-public class UnmanagedJob internal constructor(internal val f: () -> Unit, public val description: String)
+internal class UnmanagedJob(internal val f: () -> Unit, val description: String)
 
 @SpecificationMarker
 public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(

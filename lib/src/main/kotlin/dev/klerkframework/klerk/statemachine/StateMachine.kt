@@ -37,6 +37,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     private val declaredModelStates = mutableSetOf<ModelStates>()
     private var modelStatesClass: Class<out ModelStates>? = null
 
+    /** The enum the states were declared from, or null if no state was declared. */
+    internal val statesEnumClass: Class<out ModelStates>? get() = modelStatesClass
+
     // internal lateinit var externalEvents: ExternalEvents<V, T>
 
     internal fun setView(view: ModelViews<*, C>) {

@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.SqlPersistence
 import kotlinx.coroutines.Dispatchers
@@ -33,15 +34,8 @@ class EventLogTest {
         @Volatile
         var block = false
 
-        override fun <T : Any, P, C : KlerkContext, V> store(
-            delta: ProcessingData<out T, C, V>,
-            command: Command<T, P>?,
-            context: C?,
-            attachedData: AttachedDataDelta,
-            jobs: JobCommit,
-            sequenceNumber: Long,
-        ) {
-            delegate.store(delta, command, context, attachedData, jobs, sequenceNumber)
+        override fun store(batch: CommitBatch) {
+            delegate.store(batch)
             if (block) {
                 entered.countDown()
                 release.await()

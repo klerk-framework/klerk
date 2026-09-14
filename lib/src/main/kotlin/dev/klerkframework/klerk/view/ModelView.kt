@@ -59,6 +59,12 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     internal open val isIndexable: Boolean
         get() = narrowsByPredicate && parent?.isIndexable == true
 
+    /** The states this view filters on, if any. See [filterStates]. */
+    internal open val filteredStates: Set<Enum<*>> get() = emptySet()
+
+    /** The states this view and every view it is derived from filter on. Checked at startup. */
+    internal fun allFilteredStates(): Set<Enum<*>> = filteredStates + (parent?.allFilteredStates() ?: emptySet())
+
     /** Whether this view narrows its parent by a predicate on a single model. */
     internal open val narrowsByPredicate: Boolean
         get() = false
@@ -146,10 +152,16 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     }
 
     /**
-     * Returns a new view restricted by [Model.state] name: keep only [included] (if given), and drop any in
-     * [excluded] (if given). Both may be provided together.
+     * Returns a new view restricted by [Model.state]: keep only [included] (if given), and drop any in [excluded] (if
+     * given). Both may be provided together, and both take the state machine's own enum:
+     *
+     * ```
+     * val published = all.filterStates(included = setOf(BookStates.Published))
+     * ```
+     *
+     * Klerk fails at startup if a state does not belong to the state machine of this view's model.
      */
-    public fun filterStates(included: Set<String>? = null, excluded: Set<String>? = null): ModelView<T, C> {
+    public fun filterStates(included: Set<Enum<*>>? = null, excluded: Set<Enum<*>>? = null): ModelView<T, C> {
         val new = IncludeStatesModelView(this, included, excluded)
         return new
     }
@@ -226,6 +238,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         return this
     }
 
+    /** The id given to [register], or null for a view that was never registered. Available before startup. */
+    internal val registeredId: String? get() = _id
+
     internal fun setIdBase(idBase: String?) {
         this.idBase = idBase
     }
@@ -268,14 +283,20 @@ internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
 /** The result of [ModelView.filterStates]. */
 internal class IncludeStatesModelView<T : Any, C : KlerkContext>(
     private val previous: ModelView<T, C>,
-    private val included: Set<String>?,
-    private val excluded: Set<String>?
+    private val included: Set<Enum<*>>?,
+    private val excluded: Set<Enum<*>>?
 ) : ModelView<T, C>(previous) {
+
+    private val includedNames = included?.map { it.name }?.toSet()
+    private val excludedNames = excluded?.map { it.name }?.toSet()
 
     override val narrowsByPredicate: Boolean get() = true
 
+    override val filteredStates: Set<Enum<*>> get() = (included ?: emptySet()) + (excluded ?: emptySet())
+
     override fun matches(model: Model<T>): Boolean =
-        (included == null || included.contains(model.state)) && (excluded == null || !excluded.contains(model.state))
+        (includedNames == null || includedNames.contains(model.state)) &&
+                (excludedNames == null || !excludedNames.contains(model.state))
 
     override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
         indexedMemberIds(reader)

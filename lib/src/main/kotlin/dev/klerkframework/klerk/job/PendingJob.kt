@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.KlerkContext
  *
  * If the command fails, no job is scheduled — which is why an id is allocated during processing rather than after.
  */
-public class PendingJob<C : KlerkContext, V> internal constructor(
+internal class PendingJob<C : KlerkContext, V> internal constructor(
     public val id: JobId,
     internal val scheduled: DeclaredJob<C, V>,
 ) {

@@ -48,19 +48,22 @@ class AuthorViews<V>(val allBooks: ModelView<Book, Ctx>) : ModelViews<Author, Ct
         .register("greatAuthors")
 
     val establishedAuthors = this.all
-        .filter { it.state == Established.name }
+        .filterStates(included = setOf(Established))
         .register("establishedAuthors")
 
     val establishedGreatAuthors = greatAuthors
-        .filter { it.state == Established.name }
+        .filterStates(included = setOf(Established))
         .register("establishedGreatAuthors")
 }
 ```
 
 `filter` takes a predicate on `Model<T>` (so you can filter on `props`, `state`, `createdAt`, etc.) and returns a new
 `ModelView` wrapping the previous one — views compose, as `establishedGreatAuthors` above shows by filtering an
-already-filtered view. `ModelView` also has `sorted { selector }` and `filterStates(included, excluded)` for the same
-purpose.
+already-filtered view. `ModelView` also has `sorted { selector }` for the same purpose.
+
+`filterStates(included, excluded)` narrows by state instead, taking the state machine's own enum. Either set may be
+given, or both. A state that does not belong to the view's model fails at startup
+(`KlerkErrorCode.InvalidView`), so a view cannot silently match nothing.
 
 The predicate must be a pure function of the model it is given. Klerk evaluates it when a model changes and remembers
 the answer (see [How views are kept](#how-views-are-kept)); a predicate that consults anything else — a mutable

@@ -90,100 +90,66 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         return maxRow[toVersion]
     }
 
-    override fun <T : Any, P, C : KlerkContext, V> store(
-        delta: ProcessingData<out T, C, V>,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobs: JobCommit,
-        sequenceNumber: Long,
-    ) {
+    override fun store(batch: CommitBatch) {
         transaction(database) {
-            writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
+            writeAll(batch)
         }
     }
 
-    override fun <T : Any, P, C : KlerkContext, V> commitJobStep(
-        delta: ProcessingData<out T, C, V>?,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobs: JobCommit,
-        sequenceNumber: Long,
-    ) {
+    override fun commitJobStep(batch: CommitBatch) {
         // One Exposed transaction, so the whole contract on Persistence.commitJobStep holds: models, event log entry,
         // attached data and every job row either land together or not at all.
         transaction(database) {
-            writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
+            writeAll(batch)
         }
     }
 
     /**
      * The body shared by [store] and [commitJobStep]. Must be called inside a transaction.
      */
-    private fun <T : Any, P, C : KlerkContext, V> writeAll(
-        delta: ProcessingData<out T, C, V>?,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobCommit: JobCommit,
-        sequenceNumber: Long,
-    ) {
-        run {
-            applyAttachedDataDelta(attachedData)
-            applyJobCommit(jobCommit)
+    private fun writeAll(batch: CommitBatch) {
+        applyAttachedDataDelta(batch.attachedData)
+        applyJobCommit(batch.jobs)
 
-            if (delta == null) {
-                return
+        batch.eventLogEntry?.let { entry ->
+            EventLog.insert {
+                it[sequenceNumber] = entry.sequenceNumber
+                it[timestamp] = entry.time.to64bitMicroseconds()
+                it[event] = entry.eventReference.toString()
+                it[modelId] = entry.model.value
+                it[params] = entry.params
+                it[actorIdentityType] = entry.actorType.storedValue.toByte()
+                it[actorIdentityReference] = entry.actorReference
+                it[actorIdentityExternalId] = entry.actorExternalId
+                it[extra] = entry.extra
             }
+        }
 
-            if (command != null) {
-                requireNotNull(context)
-                val reference = command.model?.value ?: delta.primaryModel?.value ?: 0
-                EventLog.insert {
-                    it[EventLog.sequenceNumber] = sequenceNumber
-                    it[timestamp] = context.time.to64bitMicroseconds()
-                    it[event] = command.event.id.toString()
-                    it[modelId] = reference
-                    it[params] = KlerkJson.encode(command.params)
-                    it[actorIdentityType] = context.actor.type.storedValue.toByte()
-                    it[actorIdentityReference] = context.actor.id?.value
-                    it[actorIdentityExternalId] = context.actor.externalId
-                    it[extra] = context.eventLogExtra
-                }
+        batch.createdModels.forEach { model ->
+            Models.insert {
+                it[id] = model.id.value
+                it[type] = model.props::class.simpleName!!
+                it[createdAt] = model.createdAt.to64bitMicroseconds()
+                it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
+                it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
+                it[state] = model.state
+                it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
+                it[properties] = KlerkJson.encode(model.props)
             }
+        }
 
-            delta.createdModels.forEach { modelId ->
-                val model = requireNotNull(delta.aggregatedModelState[modelId])
-                Models.insert {
-                    it[id] = model.id.value
-                    it[type] = model.props::class.simpleName!!
-                    it[createdAt] = model.createdAt.to64bitMicroseconds()
-                    it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
-                    it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
-                    it[state] = model.state
-                    it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
-                    it[properties] = KlerkJson.encode(model.props)
-                }
+        batch.updatedModels.forEach { model ->
+            Models.update({ Models.id eq model.id.value }) {
+                it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
+                it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
+                it[state] = model.state
+                it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
+                it[properties] = KlerkJson.encode(model.props)
             }
+        }
 
-            delta.updatedModels
-                .union(delta.transitions)
-                .minus(delta.createdModels.toSet()) //  We have already stored these above
-                .forEach { modelId ->
-                    val model = requireNotNull(delta.aggregatedModelState[modelId])
-                    Models.update({ Models.id eq modelId.value }) {
-                        it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
-                        it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
-                        it[state] = model.state
-                        it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
-                        it[properties] = KlerkJson.encode(model.props)
-                    }
-                }
-
-            delta.deletedModels.forEach { modelId ->
-                Models.deleteWhere { id eq modelId.value }
-            }
+        batch.deletedModels.forEach { modelId ->
+            Models.deleteWhere { id eq modelId.value }
         }
     }
 

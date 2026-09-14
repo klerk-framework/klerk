@@ -2,10 +2,8 @@ package dev.klerkframework.klerk.storage
 
 import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.migration.MigrationStep
-import dev.klerkframework.klerk.misc.KlerkJson
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
@@ -31,6 +29,24 @@ public data class EventLogEntry(
 )
 
 /**
+ * Everything one commit writes, as storage sees it: the model delta, the event-log entry, the attached-data delta and
+ * the job rows. A [Persistence] implementation writes exactly what it is given here, in one transaction.
+ *
+ * @property createdModels models that did not exist before, to be inserted.
+ * @property updatedModels models that existed before, to be replaced. Never overlaps [createdModels].
+ * @property deletedModels ids of the models to remove.
+ * @property eventLogEntry the entry to append, or null when the commit came from no command (e.g. a job checkpoint).
+ */
+public data class CommitBatch(
+    val createdModels: List<Model<out Any>> = emptyList(),
+    val updatedModels: List<Model<out Any>> = emptyList(),
+    val deletedModels: List<ModelID<out Any>> = emptyList(),
+    val eventLogEntry: EventLogEntry? = null,
+    val attachedData: AttachedDataDelta = AttachedDataDelta(),
+    val jobs: JobCommit = JobCommit(),
+)
+
+/**
  * Storage backend SPI: implement this to durably store models, the event log, jobs and attached data. Klerk owns the
  * schema; implementations only need to persist and retrieve the shapes below. Provided implementations are
  * [dev.klerkframework.klerk.storage.SqlPersistence] and [RamStorage]. Wire an instance in via
@@ -43,17 +59,8 @@ public interface Persistence {
     /**
      * Commits everything one command implies: the model delta, its event-log entry, the attached-data delta, and any
      * jobs the command scheduled. All of it in a single transaction.
-     *
-     * @param sequenceNumber the number to store on the event-log entry, see [EventLogEntry.sequenceNumber].
      */
-    public fun <T : Any, P, C : KlerkContext, V> store(
-        delta: ProcessingData<out T, C, V>,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta = AttachedDataDelta(),
-        jobs: JobCommit = JobCommit(),
-        sequenceNumber: Long,
-    ): Unit
+    public fun store(batch: CommitBatch): Unit
 
     /**
      * Commits one step of a job.
@@ -62,7 +69,8 @@ public interface Persistence {
      * reduces to "these writes happen together or not at all". An implementation that gets it subtly wrong produces
      * duplicated children, double-applied commands or lost checkpoints — none of which show up in ordinary testing.
      *
-     * It differs from [store] only in that [delta] may be null, because most steps emit no command at all.
+     * It differs from [store] only in that most steps emit no command at all, so the batch then carries neither a
+     * model delta nor an event-log entry.
      *
      * **The contract.** `commitJobStep` MUST apply all of the following in a single atomic unit, and the result MUST
      * NOT be observable in a partial state by any reader, or by a subsequent [getAllJobs] after a crash:
@@ -77,18 +85,8 @@ public interface Persistence {
      *
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**
-     *
-     * @param sequenceNumber the number to store on the event-log entry, see [EventLogEntry.sequenceNumber]. Irrelevant
-     * when [command] is null, since then there is no entry to write.
      */
-    public fun <T : Any, P, C : KlerkContext, V> commitJobStep(
-        delta: ProcessingData<out T, C, V>?,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta = AttachedDataDelta(),
-        jobs: JobCommit,
-        sequenceNumber: Long,
-    ): Unit
+    public fun commitJobStep(batch: CommitBatch): Unit
 
     /** Reads every stored model. Used once at startup to populate the model cache. */
     public fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit
@@ -277,54 +275,23 @@ public open class RamStorage : Persistence {
      */
     private val lock = Any()
 
-    override fun <T : Any, P, C : KlerkContext, V> store(
-        delta: ProcessingData<out T, C, V>,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobs: JobCommit,
-        sequenceNumber: Long,
-    ): Unit = synchronized(lock) {
-        writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
+    override fun store(batch: CommitBatch): Unit = synchronized(lock) {
+        writeAll(batch)
     }
 
-    override fun <T : Any, P, C : KlerkContext, V> commitJobStep(
-        delta: ProcessingData<out T, C, V>?,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobs: JobCommit,
-        sequenceNumber: Long,
-    ): Unit = synchronized(lock) {
-        writeAll(delta, command, context, attachedData, jobs, sequenceNumber)
+    override fun commitJobStep(batch: CommitBatch): Unit = synchronized(lock) {
+        writeAll(batch)
     }
 
-    private fun <T : Any, P, C : KlerkContext, V> writeAll(
-        delta: ProcessingData<out T, C, V>?,
-        command: Command<T, P>?,
-        context: C?,
-        attachedData: AttachedDataDelta,
-        jobCommit: JobCommit,
-        sequenceNumber: Long,
-    ) {
-        applyAttachedDataDelta(attachedData)
-        applyJobCommit(jobCommit)
-        if (delta == null) {
-            return
+    private fun writeAll(batch: CommitBatch) {
+        applyAttachedDataDelta(batch.attachedData)
+        applyJobCommit(batch.jobs)
+        batch.eventLogEntry?.let { eventLog.add(it) }
+        batch.createdModels.plus(batch.updatedModels).forEach { model ->
+            @Suppress("UNCHECKED_CAST")
+            models[model.id.value] = model as Model<Any>
         }
-        if (command != null && context != null) {
-            eventLog.add(createEventLogEntry(command, delta, context, sequenceNumber))
-        }
-        delta.createdModels
-            .union(delta.aggregatedModelState.keys)
-            .union(delta.transitions).forEach { modelId ->
-                val model =
-                    requireNotNull(delta.aggregatedModelState[modelId]) { "Could not find $modelId in modifiedModels" }
-                @Suppress("UNCHECKED_CAST")
-                models[model.id.value] = model as Model<Any>
-            }
-
-        delta.deletedModels.forEach { models.remove(it.value) }
+        batch.deletedModels.forEach { models.remove(it.value) }
     }
 
     private fun applyJobCommit(commit: JobCommit) {
@@ -471,25 +438,4 @@ public open class RamStorage : Persistence {
     override fun setCronFired(scheduleId: String, firedAt: Instant): Unit = synchronized(lock) {
         cronState[scheduleId] = firedAt
     }
-
-    internal fun <T : Any, P, C : KlerkContext, V> createEventLogEntry(
-        command: Command<T, P>,
-        result: ProcessingData<out T, C, V>,
-        context: C,
-        sequenceNumber: Long,
-    ): EventLogEntry {
-        val model = command.model ?: result.createdModels.single { true }
-        return EventLogEntry(
-            sequenceNumber,
-            context.time,
-            command.event.id,
-            model,
-            context.actor.type,
-            context.actor.id?.value,
-            context.actor.externalId,
-            KlerkJson.encode(command.params),
-            extra = context.eventLogExtra
-        )
-    }
-
 }

@@ -205,15 +205,8 @@ class EvictionTest {
             return delegate.readModel(id)
         }
 
-        override fun <T : Any, P, C : KlerkContext, V> store(
-            delta: ProcessingData<out T, C, V>,
-            command: Command<T, P>?,
-            context: C?,
-            attachedData: AttachedDataDelta,
-            jobs: JobCommit,
-            sequenceNumber: Long,
-        ) {
-            delegate.store(delta, command, context, attachedData, jobs, sequenceNumber)
+        override fun store(batch: CommitBatch) {
+            delegate.store(batch)
             if (block) {
                 entered.countDown()
                 release.await()

@@ -15,7 +15,6 @@ class StorageTest {
     @Test
     fun `Can store and retrieve models`() {
         val storage = RamStorage()
-        val context = Ctx.unauthenticated()
 
         val authorProps = Author(
             firstName = FirstName("Pelle"),
@@ -35,24 +34,8 @@ class StorageTest {
             timeTrigger = null,
             props = authorProps
         )
-        val command1 = Command(ImproveAuthor, author.id)
-        val result1 = ProcessingData<Author, Ctx, Views>(
-            createdModels = listOf(author.id),
-            aggregatedModelState = mapOf(author.id to author)
-        )
+        storage.store(CommitBatch(createdModels = listOf(author)))
 
-        storage.store(result1, command1, context, sequenceNumber = 1)
-
-        val command2 = Command(
-            CreateBook,
-            CreateBookParams(
-                title = BookTitle("The Hobbit"),
-                author = author.id,
-                averageScore = AverageScore(0f),
-                readingTime = ReadingTime(3.minutes)
-            )
-        
-        )
         val bookProps = Book(
             title = BookTitle("The Hobbit"),
             author = author.id,
@@ -77,11 +60,7 @@ class StorageTest {
             lastStateTransitionAt = now
         )
 
-        val result2 = ProcessingData<Book, Ctx, Views>(
-            createdModels = listOf(ModelID(123)),
-            aggregatedModelState = mapOf(book.id to book)
-        )
-        storage.store(result2, command2, context, sequenceNumber = 2)
+        storage.store(CommitBatch(createdModels = listOf(book)))
 
         var modelsRead = 0
         storage.readAllModels { modelsRead++ }
@@ -91,8 +70,7 @@ class StorageTest {
         assertEquals(book, storage.readModel(book.id.value))
         assertNull(storage.readModel(999), "readModel must return null for an id that does not exist")
 
-        val deletion = ProcessingData<Book, Ctx, Views>(deletedModels = listOf(book.id))
-        storage.store<Book, Nothing, Ctx, Views>(deletion, null, null, sequenceNumber = 3)
+        storage.store(CommitBatch(deletedModels = listOf(book.id)))
         assertNull(storage.readModel(book.id.value), "readModel must not return a deleted model")
     }
 

@@ -421,7 +421,7 @@ internal class EventProcessor<C : KlerkContext, V>(
  * @property transitions models that changed state. Note that they may have been modified after the transition, which means
  * that the model in this map may NOT be the final outcome for this model. See modifiedModels instead.
  */
-public data class ProcessingData<Primary : Any, C : KlerkContext, V>(
+internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     val primaryModel: ModelID<Primary>? = null,
     val currentModel: ModelID<out Any>? = null,
     val unmanagedJobs: List<UnmanagedJob> = emptyList(),
