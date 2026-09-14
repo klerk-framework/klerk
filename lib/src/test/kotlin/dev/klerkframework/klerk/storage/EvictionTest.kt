@@ -224,22 +224,12 @@ class EvictionTest {
     @Test
     fun `a read during a commit never sees the new state early`() = runBlocking {
         val storage = BlockingStore(SQLiteInMemory.create())
-        val (klerk, views) = start(storage, tiny)
+        val (klerk, _) = start(storage, tiny)
         klerk.meta.start()
         generateSampleData(12, 2, klerk)
 
         val author = createAuthor(klerk)
         val before = klerk.read(Ctx.system()) { get(author) }.props.firstName
-
-        // Churn the tiny cache until the author's body is genuinely gone, so the read below has to repair a miss.
-        // Caffeine evicts on its own schedule and favours recently-used entries, so this cannot be a single pass.
-        suspend fun evictAuthor() {
-            repeat(50) {
-                if (!ModelCache.isResident(author.value)) return
-                klerk.read(Ctx.system()) { views.books.all.asSequence().toList().map { it.props.title } }
-            }
-            error("could not evict the author, so this test would not exercise a cache miss")
-        }
 
         storage.block = true
         val committing = launch(Dispatchers.Default) {
@@ -258,8 +248,9 @@ class EvictionTest {
                 // Wait until the new name is durably in storage but the cache has not been updated yet.
                 withContext(Dispatchers.IO) { storage.entered.await() }
                 // Evict the author, so the read below has to repair a miss -- the exact case that would otherwise go
-                // to storage and come back with the not-yet-applied new name.
-                evictAuthor()
+                // to storage and come back with the not-yet-applied new name. Dropped outright rather than churned
+                // out: what is under test is the miss, not when Caffeine decides to evict.
+                ModelCache.evictBody(author.value)
                 assertFalse(ModelCache.isResident(author.value), "the author should not be resident at this point")
                 val during = klerk.read(Ctx.system()) { get(author) }.props.firstName
                 assertEquals(before, during, "a read saw the new state before the commit was applied to the cache")

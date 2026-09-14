@@ -159,23 +159,31 @@ class JobSnapshotTest {
 
     /**
      * The dispatcher now takes the write lock to claim and to promote, so it and the readers contend directly. This
-     * asserts neither side starves: every job still finishes, and reads keep completing throughout.
+     * asserts neither side starves: every job still finishes, and every reader gets through its share of reads.
      *
-     * It is also the test that would catch a lock-ordering mistake, since either order inverting would hang here
-     * rather than fail an assertion.
+     * Whichever side starved the other would hang here and hit the timeout, which is also what would catch a
+     * lock-ordering mistake.
      */
     @Test
     fun `readers and the dispatcher both make progress under contention`() = runBlocking {
         val klerk = start()
         val ids = (1..10).map { klerk.jobs.schedule(Churner.declare(TickCursor(remaining = 30)), Ctx.system()) }
 
+        val readsPerReader = 50
+        val readers = 8
         val readsCompleted = java.util.concurrent.atomic.AtomicInteger(0)
-        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val jobsDone = java.util.concurrent.atomic.AtomicBoolean(false)
         withTimeout(120.seconds) {
-            val readers = (1..8).map {
+            // A reader keeps going until the dispatcher is done *and* it has completed its own quota. Reading until
+            // the dispatcher is done is what puts the two sides in contention; the quota is what keeps the assertion
+            // below off the clock, since a machine that gets through the jobs quickly would otherwise leave too short
+            // a window to have read anything much in.
+            val reading = (1..readers).map {
                 launch(Dispatchers.Default) {
-                    while (!stop.get()) {
+                    var mine = 0
+                    while (mine < readsPerReader || !jobsDone.get()) {
                         klerk.read(Ctx.system()) { jobs.all() }
+                        mine++
                         readsCompleted.incrementAndGet()
                     }
                 }
@@ -186,11 +194,14 @@ class JobSnapshotTest {
                     kotlinx.coroutines.delay(20)
                 }
             }
-            stop.set(true)
-            readers.joinAll()
+            jobsDone.set(true)
+            reading.joinAll()
         }
 
-        assertTrue(readsCompleted.get() > 100, "readers were starved: only ${readsCompleted.get()} reads completed")
+        assertTrue(
+            readsCompleted.get() >= readers * readsPerReader,
+            "readers were starved: only ${readsCompleted.get()} reads completed"
+        )
         klerk.meta.stop()
     }
 

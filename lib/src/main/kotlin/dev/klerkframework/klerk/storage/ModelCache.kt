@@ -59,6 +59,14 @@ internal object ModelCache {
     /** Whether this model's body is in memory right now. For tests that need to act on an actual cache miss. */
     internal fun isResident(id: Int): Boolean = bodies.asMap().containsKey(id)
 
+    /**
+     * Drops this model's body from memory, keeping the model itself. For tests that need an actual cache miss without
+     * depending on when Caffeine gets around to evicting.
+     */
+    internal fun evictBody(id: Int) {
+        bodies.invalidate(id)
+    }
+
     private val log = KotlinLogging.logger {}
 
     /**
