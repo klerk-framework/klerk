@@ -719,10 +719,11 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             jobs = jobsValue,
             jobContextProvider = jobContextProviderValue,
             eraseEventLogAfterModelDeletion = eraseEventLogValue,
-        )
+        ).let { spec -> pluginsValue.fold(spec) { acc, plugin -> acc.withPlugin(plugin) } }
     }
 
     private var migrationStepsValue: SortedSet<MigrationStep> = sortedSetOf()
+    private var pluginsValue: List<KlerkPlugin<C, V>> = emptyList()
     private var jobsValue: JobsSpecification<C, V> = JobsSpecification.empty()
     private var jobContextProviderValue: ((JobContextRequest) -> C)? = null
     private var eraseEventLogValue: Duration? = null
@@ -736,6 +737,23 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      */
     public fun eraseEventLogAfterModelDeletion(after: Duration) {
         eraseEventLogValue = after
+    }
+
+    /**
+     * Registers [KlerkPlugin]s. Each plugin contributes its own models, events, rules and jobs, and is started and
+     * stopped together with Klerk. They are merged in the order given, so a plugin that builds on another must come
+     * after it.
+     *
+     * ```kotlin
+     * val images = ImagesPlugin()
+     * SpecificationBuilder<Ctx, Views>(views).build {
+     *     plugins(images, AssetsPlugin(setOf(css), images = images))
+     *     // ...
+     * }
+     * ```
+     */
+    public fun plugins(vararg plugin: KlerkPlugin<C, V>) {
+        pluginsValue = pluginsValue + plugin
     }
 
     /**

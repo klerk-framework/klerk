@@ -208,13 +208,13 @@ internal object ModelCache {
     /**
      * Finds all models that have a relation to the specified model.
      */
-    internal fun getAllRelated(id: ModelID<*>): Set<ModelID<*>> {
+    internal fun referencingIds(id: ModelID<*>): Set<ModelID<*>> {
         val relations = relationsTo[id.value] ?: emptySet()
         return relations.map { ModelID<Any>(it) }.toSet()
     }
 
-    internal fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
-        return getAllRelated(id).map {
+    internal fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
+        return referencingIds(id).map {
             val model = getBody(it.value) ?: return@map null
             if (model.props::class == clazz) {
                 @Suppress("UNCHECKED_CAST")
@@ -224,7 +224,7 @@ internal object ModelCache {
         }.filterNotNull().toSet()
     }
 
-    internal fun <T : Any, U : Any> getRelated(
+    internal fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>
     ): Set<Model<T>> {
@@ -232,14 +232,14 @@ internal object ModelCache {
         return relatedThrough(PropertyKey.of(property), id)
     }
 
-    internal fun <T : Any, U : Any> getRelatedInCollection(
+    internal fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>
     ): Set<Model<T>> = relatedThrough(PropertyKey.of(property), id)
 
     /** The models that refer to [id] through the property [key], wherever in their props it is. */
     private fun <T : Any> relatedThrough(key: PropertyKey, id: ModelID<*>): Set<Model<T>> =
-        getAllRelated(id).mapNotNull { relatedId ->
+        referencingIds(id).mapNotNull { relatedId ->
             val related = getBody(relatedId.value)?.copy() ?: return@mapNotNull null
             var refers = false
             ObjectSchema.of(related.props::class).forEachLeaf(related.props) { leaf ->

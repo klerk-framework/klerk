@@ -93,15 +93,14 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
     for (i in 1..numberOfAuthors) {
         val result = klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName(firstNames.random()),
                     lastName = LastName(i.toString()),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(23290409),
                     //address = Address(Street("Lugna gatan"))
-                ),
+                )
             ),
             Ctx.system(),
         )
@@ -109,9 +108,8 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
         if (i % 10 == 0) {
             klerk.handle(
                 Command(
-                    event = ImproveAuthor,
-                    model = result.getOrThrow().primaryModel,
-                    params = null
+                    ImproveAuthor,
+                    requireNotNull(result.getOrThrow().primaryModel)
                 ),
                 context = Ctx.system(),
                 ProcessingOptions(
@@ -128,9 +126,8 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
         for (j in 1..booksPerAuthor) {
             klerk.handle(
                 Command(
-                    event = CreateBook,
-                    model = null,
-                    params = CreateBookParams(
+                    CreateBook,
+                    CreateBookParams(
                         title = BookTitle("Book $j"),
                         author = authorRef,
                         coAuthors = emptySet(),
@@ -138,7 +135,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
                         averageScore = AverageScore(0f),
                         readingTime = ReadingTime(1.days)
-                    ),
+                    )
                 ),
                 Ctx.system(),
             )

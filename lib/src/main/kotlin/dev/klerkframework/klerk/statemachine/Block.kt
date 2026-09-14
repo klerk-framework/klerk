@@ -82,7 +82,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * Returns commands produced by [function] to be submitted as part of the same transaction as the triggering
          * command — e.g. cascading a creation into related models.
          */
-        public fun createCommands(
+        public fun commands(
             function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
         ) {
@@ -188,7 +188,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * Returns commands produced by [function] to be submitted as part of the same transaction — e.g. cascading
          * a deletion to related models.
          */
-        public fun createCommands(
+        public fun commands(
             function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
         ) {
@@ -295,7 +295,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * Returns commands produced by [function] to be submitted as part of the same transaction — e.g. cascading
          * this event to related models.
          */
-        public fun createCommands(
+        public fun commands(
             function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
             onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
         ) {

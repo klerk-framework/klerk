@@ -156,7 +156,7 @@ klerk.read(Ctx.system()) {
     assertTrue { astrid in collections.authors.all }
 }
 
-klerk.handle(Command(DeleteAuthor, astrid, null), Ctx.system())
+klerk.handle(Command(DeleteAuthor, astrid), Ctx.system())
 
 klerk.read(Ctx.system()) {
     assertFalse { astrid in collections.authors.all }

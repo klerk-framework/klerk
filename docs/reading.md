@@ -52,7 +52,7 @@ The reader answers questions about a single model:
 * `get(id)` — the model. Throws `NoSuchElementException` if it does not exist, `AuthorizationException` if the actor
   may not read it.
 * `getOrNull(id)` — null in both those cases.
-* `getRelated(...)` / `getRelatedInCollection(...)` — the models that reference this one.
+* `referencing(...)` / `referencingInCollection(...)` — the models that reference this one.
 * `attachedData.metadata(id)` / `metadataOrNull(id)` — what is known about an
   [attached value](attached-data.md) apart from the value itself. The value is read after the block.
 
@@ -215,7 +215,7 @@ string:
 
 ```kotlin
 val param = page.cursorNextPage?.toString()      // e.g. "bzoyMCxhOjE4NA"
-val cursor = QueryListCursor.fromString(param)   // throws IllegalArgumentException if malformed
+val cursor = QueryListCursor.parse(param)   // throws IllegalArgumentException if malformed
 ```
 
 Do not construct one yourself, and do not read anything into its contents — the encoding is not part of the API.
@@ -243,7 +243,7 @@ two requests gives no such guarantee.
 |-----------------------------------------------------------|-------------------------------------------|
 | `get(id)`                                                 | throws `AuthorizationException`           |
 | `getOrNull(id)`                                           | returns `null` (also for a missing model) |
-| `getRelated(...)` / `getRelatedInCollection(...)`         | throws `AuthorizationException`           |
+| `referencing(...)` / `referencingInCollection(...)`         | throws `AuthorizationException`           |
 | `attachedData.metadata(id)`                               | throws `AuthorizationException`           |
 | `attachedData.metadataOrNull(id)`                         | returns `null` (also for missing data)    |
 | `view.asSequence()` / `view.query(options)`               | silently skips it                         |

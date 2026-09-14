@@ -35,7 +35,7 @@ Use `Ctx.system()` (or another actor via `ActorIdentity`, see [context.md](conte
 
 ```kotlin
 val result = klerk.handle(
-    Command(event = CreateAuthor, model = null, params = createAstridParameters),
+    Command(CreateAuthor, createAstridParameters),
     Ctx.system(),
 )
 ```
@@ -75,7 +75,7 @@ var amateurTriggered = false
 onEnterAmateurStateActionCallback = { amateurTriggered = true }
 
 val result =
-    klerk.handle(Command(ImproveAuthor, rowling, null), Ctx.system())
+    klerk.handle(Command(ImproveAuthor, rowling), Ctx.system())
 
 when (result) {
     is CommandResult.Failure -> fail(result.problems.first().toString())

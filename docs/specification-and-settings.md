@@ -31,6 +31,27 @@ val settings = KlerkSettings(
 `persistence` is the only `KlerkSettings` parameter without a default, so it cannot be forgotten. Everything else has a
 production-sane default.
 
+## Plugins
+
+A plugin packages models, events, rules and jobs so an application can add a whole feature at once. Declare them with
+`plugins`:
+
+```kotlin
+val images = ImagesPlugin()
+
+val specification = SpecificationBuilder<Ctx, Views>(views).build {
+    plugins(images, AssetsPlugin(setOf(css), images = images))
+    managedModels { ... }
+    authorization { ... }
+    systemContextProvider { Ctx(SystemIdentity) }
+}
+```
+
+Plugins are merged in the order given, so a plugin that builds on another comes after it. Each is started after
+`klerk.meta.start()` and stopped during `klerk.meta.stop()`, in reverse order.
+
+`specification.withPlugin(plugin)` does the same to an already built specification.
+
 ## From environment variables
 
 To make it easier to change the settings, Klerk supports reading them from environment variables.

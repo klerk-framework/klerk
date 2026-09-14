@@ -82,26 +82,25 @@ public interface ModelReader<C : KlerkContext, V> {
     /**
      * Finds the IDs of all models that reference [id] through any relation property (regardless of model type).
      */
-    public fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>>
+    public fun referencingIds(id: ModelID<*>): Set<ModelID<*>>
 
     /**
      * Finds all models of type [clazz] that reference [id] through any relation property.
      */
-    public fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>>
+    public fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>>
 
     /**
      * Finds all models whose [property] equals [id].
      */
-    public fun <T : Any, U : Any> getRelated(
+    public fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
-
-        ): Set<Model<T>>
+    ): Set<Model<T>>
 
     /**
      * Finds all models whose [property] (a collection of IDs) contains [id].
      */
-    public fun <T : Any, U : Any> getRelatedInCollection(
+    public fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
     ): Set<Model<T>>

@@ -17,7 +17,6 @@ class FunctionTest {
     fun testingADslFunction() {
         val command = Command(
             CreateAuthor,
-            null,
             CreateAuthorParams(
                 firstName = FirstName("Mike"),
                 lastName = LastName("Litoris"),
@@ -25,6 +24,7 @@ class FunctionTest {
                 age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
+        
         )
         val args = ArgForVoidEvent(command, Ctx.system(), DummyReader)
 
@@ -57,19 +57,19 @@ object DummyReader : Reader<Ctx, Views> {
         throw exception
     }
 
-    override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> {
+    override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> {
         throw exception
     }
 
-    override fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
+    override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
         throw exception
     }
 
-    override fun <T : Any, U : Any> getRelated(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>> {
+    override fun <T : Any, U : Any> referencing(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>> {
         throw exception
     }
 
-    override fun <T : Any, U : Any> getRelatedInCollection(
+    override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>
     ): Set<Model<T>> {

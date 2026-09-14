@@ -64,9 +64,8 @@ class InstanceNonInstanceEventBlockTest {
 
             val result2 = klerk.handle(
                 Command(
-                    event = PublishBook,
-                    model = harryPotter1,
-                    params = null
+                    PublishBook,
+                    harryPotter1
                 ),
                 Ctx.system(),
             )

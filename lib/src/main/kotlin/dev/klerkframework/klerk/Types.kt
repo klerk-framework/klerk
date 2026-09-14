@@ -38,14 +38,17 @@ public data class CollectionId(val modelName: String, val shortId: String) {
 
     public companion object {
         /**
-         * @throws IllegalArgumentException if [string] is not of the form `c.<modelName>.<shortId>`
+         *  IllegalArgumentException if [string] is not of the form `c.<modelName>.<shortId>`
          */
-        public fun from(string: String): CollectionId {
+        public fun parse(string: String): CollectionId {
             val parts = string.split(".")
             require(parts.size == 3) { "CollectionId must contain three parts separated by dots" }
             require(parts.first() == "c") { "CollectionId must start with 'c.'" }
             return CollectionId(parts[1], parts[2])
         }
+
+        /** The id in [string], or null if it is not one. */
+        public fun parseOrNull(string: String): CollectionId? = runCatching { parse(string) }.getOrNull()
     }
 }
 
@@ -113,11 +116,15 @@ public data class EventReference(val modelName: String, val eventName: String) {
     override fun toString(): String = id()
 
     public companion object {
-        public fun from(eventId: EventId): EventReference {
+        /** @throws IllegalArgumentException if [eventId] is not of the form `<modelName>:<eventName>` */
+        public fun parse(eventId: EventId): EventReference {
             val splitted = eventId.split(":")
             require(splitted.size == 2)
             return EventReference(splitted.first(), splitted.last())
         }
+
+        /** The reference in [eventId], or null if it is not one. */
+        public fun parseOrNull(eventId: EventId): EventReference? = runCatching { parse(eventId) }.getOrNull()
     }
 }
 
@@ -333,9 +340,10 @@ public data class ArgForInstanceNonEvent<T : Any, C : KlerkContext, V>(
 public typealias EventId = String
 
 /**
- * Model IDs are represented internally using Int but only the positive part, so the maximum amount of simultaneous models is about
- * 2 billion (we should find a way to use UInt).
- * It is recommended to use a String (base36) externally.
+ * An identifier of a model of type [T].
+ *
+ * Model IDs are represented internally using Int but only the positive part, so the maximum amount of simultaneous
+ * models is about 2 billion (we should find a way to use UInt).
  *
  * Implementation details: We first used UInt, but it seems that there is a problem when making this @JvmInline and
  * value class in combination with ULong and UInt (see KT-69674).
@@ -347,9 +355,6 @@ public typealias EventId = String
 public value class ModelID<T : Any>(public val value: Int) {
 
     override fun toString(): String = value.toString()
-
-    public companion object {
-    }
 }
 
 /**
@@ -366,11 +371,11 @@ public value class ModelID<T : Any>(public val value: Int) {
  */
 @Serializable(with = AttachedBlobIDSerializer::class)
 @JvmInline
-public value class AttachedBlobID(internal val id: Int) {
-    override fun toString(): String = id.toString()
+public value class AttachedBlobID(public val value: Int) {
+    override fun toString(): String = value.toString()
 
     /** The same reference, with the kind forgotten — see [AttachedDataID]. */
-    public fun untyped(): AttachedDataID = AttachedDataID(id)
+    public fun untyped(): AttachedDataID = AttachedDataID(value)
 }
 
 /**
@@ -387,11 +392,11 @@ public value class AttachedBlobID(internal val id: Int) {
  */
 @Serializable(with = AttachedStringIDSerializer::class)
 @JvmInline
-public value class AttachedStringID(internal val id: Int) {
-    override fun toString(): String = id.toString()
+public value class AttachedStringID(public val value: Int) {
+    override fun toString(): String = value.toString()
 
     /** The same reference, with the kind forgotten — see [AttachedDataID]. */
-    public fun untyped(): AttachedDataID = AttachedDataID(id)
+    public fun untyped(): AttachedDataID = AttachedDataID(value)
 }
 
 /**
@@ -421,8 +426,12 @@ public value class AttachedDataID(public val value: Int) {
     public fun asString(): AttachedStringID = AttachedStringID(value)
 
     public companion object {
+        /** @throws IllegalArgumentException if [value] is not an id */
+        public fun parse(value: String): AttachedDataID =
+            AttachedDataID(requireNotNull(value.toIntOrNull()) { "Not an attached data id: '$value'" })
+
         /** The id in [value], or null if it is not one. For parsing a path parameter. */
-        public fun parse(value: String?): AttachedDataID? = value?.toIntOrNull()?.let { AttachedDataID(it) }
+        public fun parseOrNull(value: String?): AttachedDataID? = value?.toIntOrNull()?.let { AttachedDataID(it) }
     }
 }
 
@@ -751,13 +760,21 @@ internal fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant =
 /**
  * A packaged extension that contributes specification (managed models, events, rules, ...) to a host application.
  * [mergeSpecification] should return previous augmented with the plugin's own configuration; [start] is called once
- * after [KlerkMeta.start].
+ * after [KlerkMeta.start], and [stop] once during [KlerkMeta.stop].
  */
 public interface KlerkPlugin<C : KlerkContext, V> {
     public val name: String
     public val description: String
     public fun mergeSpecification(previous: Specification<C, V>): Specification<C, V>
+
+    /** Called once after Klerk has started. Use it to kick off whatever background work the plugin needs. */
     public suspend fun start(klerk: Klerk<C, V>): Unit
+
+    /**
+     * Called once when Klerk stops, before Klerk shuts down its own machinery and in reverse plugin order.
+     * Override it if the plugin has background work to wind down. Must not block for long.
+     */
+    public fun stop(): Unit {}
 }
 
 /**

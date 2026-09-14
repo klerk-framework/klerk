@@ -46,15 +46,14 @@ open class AttachedDataTest {
     ): ModelID<Author> {
         val result = klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Astrid"),
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
                     picture = picture?.let { AuthorPicture(it) },
-                ),
+                )
             ),
             context,
         )
@@ -70,9 +69,10 @@ open class AttachedDataTest {
         val author = klerk.read(context) { get(authorID) }
         return klerk.handle(
             Command(
-                event = UpdateAuthor,
-                model = authorID,
-                params = author.props.copy(picture = picture?.let { AuthorPicture(it) })
+                UpdateAuthor,
+                authorID,
+                author.props.copy(picture = picture?.let { AuthorPicture(it) })
+            
             ),
             context,
         )
@@ -88,9 +88,8 @@ open class AttachedDataTest {
     private suspend fun hangPainting(klerk: Klerk<Ctx, Views>, image: AttachedBlobID): ModelID<Painting> {
         val result = klerk.handle(
             Command(
-                event = CreatePainting,
-                model = null,
-                params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
+                CreatePainting,
+                CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image))
             ),
             Ctx.system(),
         )
@@ -165,16 +164,16 @@ open class AttachedDataTest {
         val stringID = prepareString(klerk, "text")
 
         assertFailsWith<NoSuchElementException> {
-            klerk.attachedData.get(AttachedStringID(blobID.id), Ctx.system())
+            klerk.attachedData.get(AttachedStringID(blobID.value), Ctx.system())
         }
         assertFailsWith<NoSuchElementException> {
-            klerk.attachedData.getMetadata(AttachedStringID(blobID.id), Ctx.system())
+            klerk.attachedData.getMetadata(AttachedStringID(blobID.value), Ctx.system())
         }
         assertFailsWith<NoSuchElementException> {
-            klerk.attachedData.get(AttachedBlobID(stringID.id), Ctx.system())
+            klerk.attachedData.get(AttachedBlobID(stringID.value), Ctx.system())
         }
         assertFailsWith<NoSuchElementException> {
-            klerk.attachedData.getMetadata(AttachedBlobID(stringID.id), Ctx.system())
+            klerk.attachedData.getMetadata(AttachedBlobID(stringID.value), Ctx.system())
         }
         klerk.meta.stop()
     }
@@ -187,7 +186,7 @@ open class AttachedDataTest {
 
         // the wrong kind would also fail, but authorization is what decides, and it comes first
         assertFailsWith<AuthorizationException> {
-            klerk.attachedData.getMetadata(AttachedStringID(id.id), Ctx.unauthenticated())
+            klerk.attachedData.getMetadata(AttachedStringID(id.value), Ctx.unauthenticated())
         }
         klerk.meta.stop()
     }
@@ -269,7 +268,7 @@ open class AttachedDataTest {
         // drop the thumbnail; the cover still points at the same data
         val book = klerk.read(Ctx.system()) { get(bookID) }
         klerk.handle(
-            Command(event = UpdateBook, model = bookID, params = book.props.copy(thumbnail = null)),
+            Command(UpdateBook, bookID, book.props.copy(thumbnail = null)),
             Ctx.system(),
         ).getOrThrow()
 
@@ -284,7 +283,7 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, id)
 
         klerk.handle(
-            Command(event = DeleteAuthor, model = authorID, params = null),
+            Command(DeleteAuthor, authorID),
             Ctx.system(),
         ).getOrThrow()
 
@@ -303,13 +302,14 @@ open class AttachedDataTest {
         val newPicture = klerk.attachedData.prepare(blob("never attached"), AuthorPicture::class, Ctx.system())
         val result = klerk.handle(
             Command(
-                event = UpdateAuthor,
-                model = authorID,
-                params = author.props.copy(
+                UpdateAuthor,
+                authorID,
+                author.props.copy(
                     firstName = FirstName("James"),
                     lastName = LastName("Clavell"),
                     picture = newPicture?.let { AuthorPicture(it) }
                 )
+            
             ),
             Ctx.system(),
         )
@@ -526,7 +526,7 @@ open class AttachedDataTest {
     fun `Custom metadata is stored as given`() = runBlocking {
         val klerk = start()
         val custom = mapOf("contentType" to "image/webp", "width" to "1200")
-        val id = klerk.attachedData.prepare(blob("an image"), AuthorPicture::class, Ctx.system(), metadata = custom)
+        val id = klerk.attachedData.prepare(blob("an image"), AuthorPicture::class, Ctx.system(), custom = custom)
         createAuthorWithPicture(klerk, id)
 
         assertEquals(custom, klerk.attachedData.getMetadata(id, Ctx.system()).custom)
@@ -541,7 +541,7 @@ open class AttachedDataTest {
                 blob("x"),
                 AuthorPicture::class,
                 Ctx.system(),
-                metadata = mapOf("big" to "y".repeat(1000))
+                custom = mapOf("big" to "y".repeat(1000))
             )
         }
         klerk.meta.stop()
@@ -552,7 +552,7 @@ open class AttachedDataTest {
         val storage = SQLiteInMemory.create()
         val klerk = start(storage)
         val custom = mapOf("claimedBy" to "the uploader")
-        val id = klerk.attachedData.prepare(png(), AuthorPicture::class, Ctx.system(), metadata = custom)
+        val id = klerk.attachedData.prepare(png(), AuthorPicture::class, Ctx.system(), custom = custom)
         // attached to a property that declares Public, so that the visibility is worth checking after a restart
         hangPainting(klerk, id)
         val before = klerk.attachedData.getMetadata(id, Ctx.system())
@@ -669,9 +669,10 @@ open class AttachedDataTest {
         val book = klerk.read(Ctx.system()) { get(bookID) }
         klerk.handle(
             Command(
-                event = UpdateBook,
-                model = bookID,
-                params = book.props.copy(chapters = listOf(BookChapter(second)))
+                UpdateBook,
+                bookID,
+                book.props.copy(chapters = listOf(BookChapter(second)))
+            
             ),
             Ctx.system(),
         ).getOrThrow()
@@ -690,9 +691,9 @@ open class AttachedDataTest {
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
         val authorJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(authorID) }.props)
-        assertTrue(authorJson.contains("\"picture\":${picture.id}"), "Unexpected JSON: $authorJson")
+        assertTrue(authorJson.contains("\"picture\":${picture.value}"), "Unexpected JSON: $authorJson")
         val bookJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(bookID) }.props)
-        assertTrue(bookJson.contains("\"chapters\":[${chapter.id}]"), "Unexpected JSON: $bookJson")
+        assertTrue(bookJson.contains("\"chapters\":[${chapter.value}]"), "Unexpected JSON: $bookJson")
         klerk.meta.stop()
     }
 
@@ -731,7 +732,7 @@ open class AttachedDataTest {
             readingTime = ReadingTime(2.hours),
         )
         val result = klerk.handle(
-            Command(event = CreateBook, model = null, params = params(base)),
+            Command(CreateBook, params(base)),
             Ctx.system(),
         )
         return requireNotNull(result.getOrThrow().primaryModel)
@@ -762,15 +763,14 @@ open class AttachedDataTest {
     ): CommandResult.Failure<Author> {
         val result = klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Selma"),
                     lastName = LastName("Lagerlöf"),
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
                     picture = picture?.let { AuthorPicture(it) },
-                ),
+                )
             ),
             context,
         )

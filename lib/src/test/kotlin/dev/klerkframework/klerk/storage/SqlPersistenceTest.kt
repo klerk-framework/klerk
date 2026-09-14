@@ -28,14 +28,14 @@ class SqlPersistenceTest {
 
             generateSampleData(50, 2, klerk)
             val command = Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Pelle"),
                     lastName = LastName("Andersson"),
                     phone = PhoneNumber("345"),
                     secretToken = SecretPasscode(99)
                 )
+            
             )
             val options = ProcessingOptions(token = CommandToken.simple())
             val result = klerk.handle(command, Ctx.system(), options)
@@ -83,14 +83,14 @@ class SqlPersistenceTest {
         runBlocking {
             klerk.meta.start()
             val command = Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Pelle"),
                     lastName = LastName("Andersson"),
                     phone = PhoneNumber("345"),
                     secretToken = SecretPasscode(99)
                 )
+            
             )
             val authorRef = requireNotNull(
                 klerk.handle(command, Ctx.system()).getOrThrow().primaryModel
@@ -98,7 +98,7 @@ class SqlPersistenceTest {
             assertNotNull(persistence.readModel(authorRef.value))
 
             klerk.handle(
-                Command(event = DeleteAuthor, model = authorRef, params = null),
+                Command(DeleteAuthor, authorRef),
                 Ctx.system(),
             ).getOrThrow()
             assertNull(persistence.readModel(authorRef.value))

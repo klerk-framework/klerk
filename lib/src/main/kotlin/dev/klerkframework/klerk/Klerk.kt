@@ -79,19 +79,6 @@ public interface Klerk<C : KlerkContext, V> {
     public suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T
 
     /**
-     * Like [read], but the context is produced by [contextProvider] instead of being passed directly. Useful when
-     * obtaining the context has its own suspending cost (e.g. resolving an actor from a token) and should only be
-     * paid once the read lock is about to be acquired.
-     *
-     * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
-     * readFunction (see [Reader]).
-     * @param readFunction a function literal with a Reader receiver
-     * @return whatever the readFunction returns
-     * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
-     */
-    public suspend fun <T> read(contextProvider: suspend (Klerk<C, V>) -> C, readFunction: Reader<C, V>.() -> T): T
-
-    /**
      * Like [read], but [readFunction] is itself `suspend`, so it may perform other suspending work (e.g. network
      * calls) while the read lock is held.
      *
@@ -106,22 +93,6 @@ public interface Klerk<C : KlerkContext, V> {
      * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
      */
     public suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T
-
-    /**
-     * Combines [readSuspend] and the contextProvider variant of [read]: the context comes from [contextProvider],
-     * and [readFunction] may itself suspend while the read lock is held. See both for the caveats that apply.
-     *
-     * @param contextProvider a function that provides the context for the read operation. This actor can be overridden inside
-     * readFunction (see [Reader]).
-     * @param readFunction a function literal with a Reader receiver
-     * @return whatever the readFunction returns
-     * @throws AuthorizationException if the actor tries to read a model it is not authorized to access
-     */
-    public suspend fun <T> readSuspend(
-        contextProvider: suspend (Klerk<C, V>) -> C,
-        readFunction: suspend Reader<C, V>.() -> T
-    ): T
-
 }
 
 /**
@@ -398,7 +369,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      *
      * @param declaration the property this value is being prepared for. It decides what the value must be and what
      * must happen to it first, so it is required — a blob is always prepared for somewhere.
-     * @param metadata anything the application wants to store alongside the data, such as a content type. It is handed
+     * @param custom anything the application wants to store alongside the data, such as a content type. It is handed
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
      * @param lease how long the data survives without being claimed. Defaults to
@@ -410,14 +381,14 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * @return the ID to be stored in a model property by a subsequent command. If no command does so before the lease
      * runs out, the data is deleted.
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large, if the lease exceeds the maximum, or if
+     * @throws IllegalArgumentException if [custom] is too large, if the lease exceeds the maximum, or if
      * [declaration] cannot be built from an id alone
      */
     public suspend fun prepare(
         value: InputStream,
         declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        metadata: Map<String, String> = emptyMap(),
+        custom: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedBlobID
 
@@ -438,7 +409,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
         file: Path,
         declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        metadata: Map<String, String> = emptyMap(),
+        custom: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedBlobID
 
@@ -490,14 +461,14 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * as a blob instead.
      *
      * @throws AuthorizationException if the actor isn't authorized
-     * @throws IllegalArgumentException if the metadata is too large, or if [declaration] cannot be built from an id
+     * @throws IllegalArgumentException if [custom] is too large, or if [declaration] cannot be built from an id
      * alone
      */
     public suspend fun prepare(
         value: String,
         declaration: KClass<out AttachedStringContainer>,
         context: C,
-        metadata: Map<String, String> = emptyMap(),
+        custom: Map<String, String> = emptyMap(),
         lease: Duration? = null,
     ): AttachedStringID
 
@@ -626,7 +597,8 @@ public interface KlerkMeta {
     public suspend fun start(installShutdownHook: Boolean = true)
 
     /**
-     * Shuts down the framework in an ordered manner. It is recommended to stop clients (Ktor, gRPC etc.) first.
+     * Shuts down the framework in an ordered manner. Plugins are stopped first, in reverse order. It is recommended
+     * to stop clients (Ktor, gRPC etc.) first.
      */
     public fun stop()
 

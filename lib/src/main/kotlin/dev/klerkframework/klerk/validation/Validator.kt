@@ -144,9 +144,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         ObjectSchema.of(parameters::class).forEachLeaf(parameters) { leaf ->
             val container = leaf.value as? EnumContainer<*> ?: return@forEachLeaf
             val validValues = validEnums[leaf.field.key] ?: return@forEachLeaf
-            if (problem == null && !validValues.contains(container.enum)) {
+            if (problem == null && !validValues.contains(container.value)) {
                 problem = InvalidPropertyProblem(
-                    "'${container.enum}' is not a valid value for parameter ${leaf.path}",
+                    "'${container.value}' is not a valid value for parameter ${leaf.path}",
                     propertyName = leaf.path
                 )
             }

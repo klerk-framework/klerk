@@ -72,14 +72,13 @@ class EvictionTest {
     private suspend fun createAuthor(klerk: Klerk<Ctx, Views>): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Solo"),
                     lastName = LastName("Author"),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(42),
-                ),
+                )
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!
@@ -114,7 +113,7 @@ class EvictionTest {
         assertTrue(expectedBooks.isNotEmpty())
 
         // By now the author and its books are long evicted; the relation index must still find them.
-        val related = klerk.read(Ctx.system()) { getRelated(Book::class, author.id).map { it.id }.toSet() }
+        val related = klerk.read(Ctx.system()) { referencing(Book::class, author.id).map { it.id }.toSet() }
         assertEquals(expectedBooks, related)
         klerk.meta.stop()
     }
@@ -131,7 +130,7 @@ class EvictionTest {
         assertTrue(ModelCache.residentCount < klerk.meta.modelsCount)
 
         klerk.handle(
-            Command(event = ImproveAuthor, model = author, params = null),
+            Command(ImproveAuthor, author),
             Ctx.system(),
         ).getOrThrow()
 
@@ -153,7 +152,7 @@ class EvictionTest {
         val countBefore = klerk.meta.modelsCount
 
         klerk.handle(
-            Command(event = DeleteAuthor, model = author, params = null),
+            Command(DeleteAuthor, author),
             Ctx.system(),
         ).getOrThrow()
 
@@ -246,9 +245,9 @@ class EvictionTest {
         val committing = launch(Dispatchers.Default) {
             klerk.handle(
                 Command(
-                    event = ChangeName,
-                    model = author,
-                    params = ChangeNameParams(FirstName("Renamed"), LastName("Author")),
+                    ChangeName,
+                    author,
+                    ChangeNameParams(FirstName("Renamed"), LastName("Author"))
                 ),
                 Ctx.system(),
             ).getOrThrow()
@@ -298,9 +297,9 @@ class EvictionTest {
 
         suspend fun rename(to: String) = klerk.handle(
             Command(
-                event = ChangeName,
-                model = author,
-                params = ChangeNameParams(FirstName(to), LastName("Author")),
+                ChangeName,
+                author,
+                ChangeNameParams(FirstName(to), LastName("Author"))
             ),
             Ctx.system(),
         ).getOrThrow()
@@ -353,7 +352,7 @@ class EvictionTest {
             val writer = launch(Dispatchers.Default) {
                 repeat(20) {
                     klerk.handle(
-                        Command(event = ImproveAuthor, model = target, params = null),
+                        Command(ImproveAuthor, target),
                         Ctx.system(),
                     )
                 }

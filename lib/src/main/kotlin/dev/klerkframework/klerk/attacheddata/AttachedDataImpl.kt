@@ -153,7 +153,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         value: InputStream,
         declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        metadata: Map<String, String>,
+        custom: Map<String, String>,
         lease: Duration?,
     ): AttachedBlobID =
     // Private until a command attaches it: the property it lands in is what decides, and until then nothing can
@@ -164,7 +164,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 AttachedDataKind.Blob,
                 context,
                 AttachedDataVisibility.Private,
-                metadata,
+                custom,
                 lease,
                 declaration = declaration,
             )
@@ -174,7 +174,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         file: Path,
         declaration: KClass<out AttachedBlobContainer>,
         context: C,
-        metadata: Map<String, String>,
+        custom: Map<String, String>,
         lease: Duration?,
     ): AttachedBlobID = AttachedBlobID(
         insert(
@@ -182,7 +182,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             AttachedDataKind.Blob,
             context,
             AttachedDataVisibility.Private,
-            metadata,
+            custom,
             lease,
             adoptFrom = file,
             declaration = declaration,
@@ -193,7 +193,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         value: String,
         declaration: KClass<out AttachedStringContainer>,
         context: C,
-        metadata: Map<String, String>,
+        custom: Map<String, String>,
         lease: Duration?,
     ): AttachedStringID {
         // Fails fast, the same way the blob overload does: a declaration that cannot be built is a programming error,
@@ -205,7 +205,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 AttachedDataKind.String,
                 context,
                 AttachedDataVisibility.Private,
-                metadata,
+                custom,
                 lease,
             )
         )
@@ -226,7 +226,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * @throws IllegalStateException if the value has already been claimed by a model.
      */
     internal suspend fun processNextStep(declaration: AttachedBlobContainer): BlobProcessing {
-        val id = declaration.id.id
+        val id = declaration.id.value
         val entry = entries[id] ?: throw NoSuchElementException("No data found for id ${declaration.id}")
         check(entry.owner == null) {
             "The attached data ${declaration.id} is already claimed by model ${entry.owner}, and a claimed value " +
@@ -277,7 +277,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     override suspend fun awaitProcessing(id: AttachedBlobID, timeout: Duration) {
         // No waiter means there is nothing to wait for: the declaration had no steps, or they have already run.
-        val waiter = waiters[id.id] ?: return
+        val waiter = waiters[id.value] ?: return
         if (klerk.settings.jobs.execution == JobExecution.Manual) {
             // Nothing runs on its own here, so waiting would be waiting for a step nobody is going to take.
             jobs.runUntilIdle()
@@ -285,7 +285,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val rejection = try {
             withTimeout(timeout) { waiter.await() }
         } finally {
-            waiters.remove(id.id)
+            waiters.remove(id.value)
         }
         rejection?.let { throw BlobRejected(it) }
     }
@@ -467,13 +467,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     }
 
     override suspend fun get(id: AttachedBlobID, context: C): InputStream =
-        read(id.id, AttachedDataKind.Blob, id, context)
+        read(id.value, AttachedDataKind.Blob, id, context)
 
     override suspend fun get(id: AttachedStringID, context: C): String =
-        read(id.id, AttachedDataKind.String, id, context).readBytes().decodeToString()
+        read(id.value, AttachedDataKind.String, id, context).readBytes().decodeToString()
 
     override suspend fun getStream(id: AttachedStringID, context: C): InputStream =
-        read(id.id, AttachedDataKind.String, id, context)
+        read(id.value, AttachedDataKind.String, id, context)
 
     /**
      * The one read path: authorize, check that the id was used as the kind it actually is, then fetch the value.
@@ -503,10 +503,10 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     }
 
     override suspend fun getMetadata(id: AttachedBlobID, context: C): AttachedDataMetadata =
-        readMetadata(id.id, AttachedDataKind.Blob, id, context)
+        readMetadata(id.value, AttachedDataKind.Blob, id, context)
 
     override suspend fun getMetadata(id: AttachedStringID, context: C): AttachedDataMetadata =
-        readMetadata(id.id, AttachedDataKind.String, id, context)
+        readMetadata(id.value, AttachedDataKind.String, id, context)
 
     override suspend fun getMetadata(id: AttachedDataID, context: C): AttachedDataMetadata =
         readMetadata(id.value, expected = null, id, context)

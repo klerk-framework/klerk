@@ -309,7 +309,7 @@ An `AttachedDataID` is a reference whose kind is not known yet — what a URL su
 `getMetadata` resolves it, and `asBlob()`/`asString()` then give the typed ID needed to read the value:
 
 ```kotlin
-val id = AttachedDataID.parse(idFromTheUrl) ?: return notFound()
+val id = AttachedDataID.parseOrNull(idFromTheUrl) ?: return notFound()
 val meta = klerk.attachedData.getMetadata(id, context)
 val stream = when (meta.kind) {
     AttachedDataKind.Blob -> klerk.attachedData.get(id.asBlob(), context)
@@ -324,7 +324,7 @@ You can attach your own metadata when preparing:
 ```kotlin
 val blobID = klerk.attachedData.prepare(
     inputStream, Portrait::class, context,
-    metadata = mapOf("filename" to "rose.webp", "clientContentType" to "image/webp"),
+    custom = mapOf("filename" to "rose.webp", "clientContentType" to "image/webp"),
 )
 ```
 

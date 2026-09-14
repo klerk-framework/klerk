@@ -33,14 +33,13 @@ class ViewOperationsTest {
     private suspend fun createAuthor(klerk: Klerk<Ctx, Views>, firstName: String, lastName: String): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName(firstName),
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                ),
+                )
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!

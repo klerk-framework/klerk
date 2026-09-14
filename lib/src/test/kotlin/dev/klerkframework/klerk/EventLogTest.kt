@@ -64,14 +64,13 @@ class EventLogTest {
     private suspend fun createAuthor(klerk: Klerk<Ctx, Views>, context: Ctx = Ctx.system()): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Solo"),
                     lastName = LastName("Author"),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(42),
-                ),
+                )
             ),
             context,
         ).getOrThrow().primaryModel!!
@@ -79,9 +78,9 @@ class EventLogTest {
     private suspend fun rename(klerk: Klerk<Ctx, Views>, author: ModelID<Author>, to: String, context: Ctx = Ctx.system()) =
         klerk.handle(
             Command(
-                event = ChangeName,
-                model = author,
-                params = ChangeNameParams(FirstName(to), LastName("Author")),
+                ChangeName,
+                author,
+                ChangeNameParams(FirstName(to), LastName("Author"))
             ),
             context,
         ).getOrThrow()

@@ -39,20 +39,20 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     internal val modelsRead = mutableSetOf<Model<*>>()
 
-    override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.getAllRelatedIds(id)
+    override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.referencingIds(id)
 
-    override fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
-        withoutAuth.getRelated(clazz, id).map { checkAuth(it) }.toSet()
+    override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
+        withoutAuth.referencing(clazz, id).map { checkAuth(it) }.toSet()
 
-    override fun <T : Any, U : Any> getRelated(
+    override fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = withoutAuth.getRelated(property, id).map { checkAuth(it) }.toSet()
+    ): Set<Model<T>> = withoutAuth.referencing(property, id).map { checkAuth(it) }.toSet()
 
-    override fun <T : Any, U : Any> getRelatedInCollection(
+    override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = withoutAuth.getRelatedInCollection(property, id).map { checkAuth(it) }.toSet()
+    ): Set<Model<T>> = withoutAuth.referencingInCollection(property, id).map { checkAuth(it) }.toSet()
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
 

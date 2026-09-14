@@ -44,13 +44,12 @@ class JobAtomicityTest {
                 cursor = WriteCursor(args.cursor.remaining - 1),
                 command = Command(
                     CreateAuthor,
-                    null,
                     CreateAuthorParams(
                         firstName = FirstName("Author"),
                         lastName = LastName("Number${args.cursor.remaining}"),
                         phone = PhoneNumber("+46123456"),
                         secretToken = SecretPasscode(234234902359245345),
-                    ),
+                    )
                 ),
             )
         }

@@ -21,9 +21,8 @@ class RelatedTest {
             klerk.meta.start()
 
             val command = Command(
-                event = CreateBook,
-                model = null,
-                params = CreateBookParams(
+                CreateBook,
+                CreateBookParams(
                     title = BookTitle("Pelle"),
                     author = ModelID<Author>(99),
                     coAuthors = emptySet(),
@@ -31,7 +30,7 @@ class RelatedTest {
                     tags = emptySet(),
                     averageScore = AverageScore(0f),
                     readingTime = ReadingTime(1.days)
-                ),
+                )
             )
 
             when (val result = klerk.handle(

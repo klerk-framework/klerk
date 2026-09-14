@@ -218,8 +218,6 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
      */
     public open val regexPattern: String? = null
 
-    public val string: String get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
@@ -268,8 +266,6 @@ public abstract class IntContainer(value: Int) :
     public abstract val min: Int
     public abstract val max: Int
 
-    public val int: Int get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
 
         check(max >= min) { "max < min" }
@@ -301,8 +297,6 @@ public abstract class ShortContainer(value: Short) : DataContainer<Short>(value)
     public abstract val min: Short
     public abstract val max: Short
 
-    public val short: Short get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
@@ -331,8 +325,6 @@ public abstract class ShortContainer(value: Short) : DataContainer<Short>(value)
 public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
     public abstract val min: Byte
     public abstract val max: Byte
-
-    public val byte: Byte get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -363,8 +355,6 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
     public abstract val min: Long
     public abstract val max: Long
 
-    public val long: Long get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
@@ -393,8 +383,6 @@ public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
 public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value) {
     public abstract val min: ULong
     public abstract val max: ULong
-
-    public val uLong: ULong get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -425,8 +413,6 @@ public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
     public abstract val min: UInt
     public abstract val max: UInt
 
-    public val uInt: UInt get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
@@ -455,8 +441,6 @@ public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
 public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(value) {
     public abstract val min: UShort
     public abstract val max: UShort
-
-    public val uShort: UShort get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -487,8 +471,6 @@ public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value)
     public abstract val min: UByte
     public abstract val max: UByte
 
-    public val uByte: UByte get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
@@ -518,8 +500,6 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
     public abstract val min: Float
     public abstract val max: Float
 
-    public val float: Float get() = value
-
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
@@ -548,8 +528,6 @@ public abstract class FloatContainer(value: Float) : DataContainer<Float>(value)
 public abstract class DoubleContainer(value: Double) : DataContainer<Double>(value) {
     public abstract val min: Double
     public abstract val max: Double
-
-    public val double: Double get() = value
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
@@ -581,14 +559,11 @@ public abstract class DoubleContainer(value: Double) : DataContainer<Double>(val
  * parameter accepts.
  */
 public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<E>(value) {
-    /** Same as [value]. Kept as an alias so code reading enum containers doesn't need to change. */
-    public val enum: E get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
 /** A [DataContainer] wrapping a [Boolean]. No built-in constraints. */
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
-    public val boolean: Boolean get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -598,8 +573,6 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
  * Handles years between -290308 and +294247. Instants earlier/later will be set to -290308/+294247 respectively.
  */
 public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(value) {
-    /** Same as [value]. Kept as an alias so code reading instant containers doesn't need to change. */
-    public val instant: Instant get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** `yyyy-MM-dd HH:mm:ss` in the system default time zone, or the masked placeholder if unauthorized. */
@@ -613,8 +586,6 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(
  * A container for a calendar date, without a time of day or time zone — e.g. a contract's start date.
  */
 public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>(value) {
-    /** Same as [value]. Kept as an alias so code reading date containers doesn't need to change. */
-    public val date: LocalDate get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** ISO-8601 calendar date (`yyyy-MM-dd`), or the masked placeholder if unauthorized. */
@@ -628,8 +599,6 @@ public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>
  * A container for Durations with microsecond resolution.
  */
 public abstract class DurationContainer(value: Duration) : DataContainer<Duration>(value) {
-    /** Same as [value]. Kept as an alias so code reading duration containers doesn't need to change. */
-    public val duration: Duration get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
     /** The [Duration]'s default rendering (e.g. `1h 30m`), or the masked placeholder if unauthorized. */
@@ -645,8 +614,6 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Duratio
  * The precision is at least 6 decimals, which translates to sub-meter precision.
  */
 public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<GeoPosition>(value) {
-    /** Same as [value]. Kept as an alias so code reading geo position containers doesn't need to change. */
-    public val geoPosition: GeoPosition get() = value
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 }
 
@@ -700,8 +667,9 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
 
         /**
          * Deserializes a GeoPosition from an ISO 6709 string, e.g. "+48.8577+002.2950/".
+         * @throws IllegalArgumentException if [iso6709] is not such a string
          */
-        public fun fromISO6709(iso6709: String): GeoPosition {
+        public fun parse(iso6709: String): GeoPosition {
             val s = iso6709.trimEnd('/')
             // Find the second sign character (+ or -) which starts the longitude
             val lonStart = s.indexOfFirst { it == '+' || it == '-' }.let { first ->
@@ -715,6 +683,9 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
             val longitude = s.substring(lonStart).toDouble()
             return GeoPosition(latitude, longitude)
         }
+
+        /** The position in [iso6709], or null if it is not an ISO 6709 string. */
+        public fun parseOrNull(iso6709: String): GeoPosition? = runCatching { parse(iso6709) }.getOrNull()
     }
 }
 
@@ -814,7 +785,7 @@ public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
  */
 public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataContainer<AttachedBlobID>(id) {
 
-    override val rawId: Int get() = id.id
+    override val rawId: Int get() = id.value
 
     /**
      * What has to happen to a file before this property will hold it: looking at the bytes, and where necessary
@@ -894,7 +865,7 @@ public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataCo
  * ```
  */
 public abstract class AttachedStringContainer(id: AttachedStringID) : AttachedDataContainer<AttachedStringID>(id) {
-    override val rawId: Int get() = id.id
+    override val rawId: Int get() = id.value
 }
 
 /**

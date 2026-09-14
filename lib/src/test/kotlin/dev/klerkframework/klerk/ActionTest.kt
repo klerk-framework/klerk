@@ -54,9 +54,8 @@ class ActionTest {
             }
             val result = klerk.handle(
                 Command(
-                    event = CreateBook,
-                    model = null,
-                    params = CreateBookParams(
+                    CreateBook,
+                    CreateBookParams(
                         title = BookTitle("Harry Potter and the Philosopher's Stone"),
                         author = author,
                         coAuthors = emptySet(),
@@ -64,7 +63,7 @@ class ActionTest {
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
                         averageScore = AverageScore(0f),
                         readingTime = ReadingTime(200.minutes)
-                    ),
+                    )
                 ),
                 Ctx.system(),
             ).getOrThrow()

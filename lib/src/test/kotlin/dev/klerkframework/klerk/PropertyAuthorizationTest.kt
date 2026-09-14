@@ -122,7 +122,7 @@ class PropertyAuthorizationTest {
             val klerk = startKlerk()
 
             val result = klerk.handle(
-                Command(event = AnEventWithoutParameters, model = null, params = null),
+                Command(AnEventWithoutParameters),
                 Ctx.unauthenticated(),
             ).getOrThrow()
 
@@ -175,7 +175,7 @@ class PropertyAuthorizationTest {
             val klerk = startKlerk()
 
             val result = klerk.handle(
-                Command(event = AnEventWithoutParameters, model = null, params = null),
+                Command(AnEventWithoutParameters),
                 Ctx.unauthenticated(),
             ).getOrThrow()
 
@@ -193,14 +193,13 @@ class PropertyAuthorizationTest {
 
             val result = klerk.handle(
                 Command(
-                    event = CreateAuthor,
-                    model = null,
-                    params = CreateAuthorParams(
+                    CreateAuthor,
+                    CreateAuthorParams(
                         firstName = readByAnonymous.props.firstName,
                         lastName = readByAnonymous.props.lastName,
                         phone = PhoneNumber("+46123456"),
                         secretToken = SecretPasscode(234234902359245345),
-                    ),
+                    )
                 ),
                 Ctx.system(),
             ).getOrThrow()

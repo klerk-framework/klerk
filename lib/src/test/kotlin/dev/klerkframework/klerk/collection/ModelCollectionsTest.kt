@@ -26,7 +26,7 @@ class ModelCollectionsTest {
             }
 
             klerk.handle(
-                Command(DeleteAuthor, astrid, null),
+                Command(DeleteAuthor, astrid),
                 Ctx.system(),
             )
             klerk.read(Ctx.system()) {

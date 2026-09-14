@@ -48,8 +48,8 @@ class ValidatorTest {
             )
             val command = Command(
                 CreateAuthor,
-                null,
                 params
+            
             )
             val options = ProcessingOptions(CommandToken.simple())
             when (val result = klerk.handle(command, Ctx.system(), options)) {
@@ -71,8 +71,8 @@ class ValidatorTest {
             )
             val command = Command(
                 CreateAuthor,
-                null,
                 params
+            
             )
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Ctx.unauthenticated(), options)
@@ -92,8 +92,8 @@ class ValidatorTest {
             )
             val command = Command(
                 CreateAuthor,
-                null,
                 params
+            
             )
             val options = ProcessingOptions(CommandToken.simple())
             val result = klerk.handle(command, Ctx.system(), options)
@@ -115,7 +115,7 @@ class ValidatorTest {
                 readingTime = ReadingTime(kotlin.time.Duration.ZERO),
                 genre = BookGenreContainer(BookGenre.Mystery)
             )
-            val command = Command(CreateBook, null, params)
+            val command = Command(CreateBook, params)
             val options = ProcessingOptions(CommandToken.simple())
             // BookStatemachine declares validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
             // so Mystery should be valid (all entries allowed)
@@ -172,7 +172,7 @@ class ValidatorTest {
                 readingTime = ReadingTime(kotlin.time.Duration.ZERO),
                 genre = BookGenreContainer(BookGenre.Mystery)  // not in validEnums
             )
-            val command = Command(CreateBook, null, params)
+            val command = Command(CreateBook, params)
             val options = ProcessingOptions(CommandToken.simple())
             val result = restrictedKlerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Failure, "Expected failure but got: $result")

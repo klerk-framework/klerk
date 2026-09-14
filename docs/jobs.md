@@ -69,7 +69,7 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
 
         return JobResult.Yield(
             cursor = cursor.copy(remaining = cursor.remaining.drop(1), done = cursor.done + 1),
-            command = Command(CreateBook, model = null, params = parsed),
+            command = Command(CreateBook, parsed),
             progress = JobProgress(
                 completed = cursor.done,
                 total = cursor.total,
@@ -195,7 +195,7 @@ To make a step conditional on the model not having changed, use the existing opt
 ```kotlin
 JobResult.Yield(
     cursor = ...,
-command = Command(AddRow, model = target, params = ...),
+command = Command(AddRow, target, ...),
 options = ProcessingOptions(CommandToken.requireUnmodifiedModel(target)),
 )
 ```

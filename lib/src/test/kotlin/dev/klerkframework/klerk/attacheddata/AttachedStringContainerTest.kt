@@ -32,9 +32,8 @@ class AttachedStringContainerTest {
         context: Ctx = Ctx.system(),
     ): CommandResult<Note> = klerk.handle(
         Command(
-            event = CreateNote,
-            model = null,
-            params = CreateNoteParams(NoteTitle("Reminder"), NoteBody(body)),
+            CreateNote,
+            CreateNoteParams(NoteTitle("Reminder"), NoteBody(body))
         ),
         context,
     )

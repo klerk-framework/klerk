@@ -42,14 +42,13 @@ class ViewIndexTest {
     private suspend fun createAuthor(klerk: Klerk<Ctx, Views>, firstName: String, lastName: String): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName(firstName),
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                ),
+                )
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!
@@ -118,19 +117,19 @@ class ViewIndexTest {
 
         // An update that changes whether the predicate matches must move it in or out.
         klerk.handle(
-            Command(event = ChangeName, model = great, params = ChangeNameParams(FirstName("Kalle"), LastName("1"))),
+            Command(ChangeName, great, ChangeNameParams(FirstName("Kalle"), LastName("1"))),
             Ctx.system(),
         ).getOrThrow()
         assertEquals(listOf(alsoGreat), members())
 
         klerk.handle(
-            Command(event = ChangeName, model = great, params = ChangeNameParams(FirstName("Linus"), LastName("1"))),
+            Command(ChangeName, great, ChangeNameParams(FirstName("Linus"), LastName("1"))),
             Ctx.system(),
         ).getOrThrow()
         assertEquals(listOf(great, alsoGreat), members())
 
         klerk.handle(
-            Command(event = DeleteAuthor, model = great, params = null),
+            Command(DeleteAuthor, great),
             Ctx.system(),
         ).getOrThrow()
         assertEquals(listOf(alsoGreat), members())
@@ -157,7 +156,7 @@ class ViewIndexTest {
 
         // ImproveAuthor moves the author on towards Established.
         klerk.handle(
-            Command(event = ImproveAuthor, model = author, params = null),
+            Command(ImproveAuthor, author),
             Ctx.system(),
         ).getOrThrow()
 

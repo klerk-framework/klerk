@@ -41,21 +41,20 @@ class QueryPaginationTest {
     ): ModelID<Author> =
         klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName(firstName),
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                ),
+                )
             ),
             context,
         ).getOrThrow().primaryModel!!
 
     private suspend fun deleteAuthor(klerk: Klerk<Ctx, Views>, id: ModelID<Author>) {
         klerk.handle(
-            Command(event = DeleteAuthor, model = id, params = null),
+            Command(DeleteAuthor, id),
             Ctx.system(),
         ).getOrThrow()
     }
@@ -229,7 +228,7 @@ class QueryPaginationTest {
         assertEquals(7, cursors.size, "the fixture must produce every kind of cursor")
         cursors.forEach { cursor ->
             val text = cursor.toString()
-            assertEquals(cursor, QueryListCursor.fromString(text), "did not survive '$text'")
+            assertEquals(cursor, QueryListCursor.parse(text), "did not survive '$text'")
             assertEquals(text, text.filter { it.isLetterOrDigit() || it == '-' || it == '_' }, "must be URL-safe")
         }
     }
@@ -237,7 +236,7 @@ class QueryPaginationTest {
     @Test
     fun `a malformed cursor is rejected`() {
         listOf("", "!!!!", "Zm9v", "bzotMQ").forEach {
-            assertFailsWith<IllegalArgumentException>("should have rejected '$it'") { QueryListCursor.fromString(it) }
+            assertFailsWith<IllegalArgumentException>("should have rejected '$it'") { QueryListCursor.parse(it) }
         }
     }
 

@@ -33,8 +33,8 @@ internal fun collectAttachedData(props: Any): Map<Int, AttachedDataReference> {
     val found = mutableMapOf<Int, AttachedDataReference>()
     ObjectSchema.of(props::class).forEachLeaf(props) { leaf ->
         when (val value = leaf.value) {
-            is AttachedBlobID -> found.putIfAbsent(value.id, AttachedDataReference(value.id))
-            is AttachedStringID -> found.putIfAbsent(value.id, AttachedDataReference(value.id))
+            is AttachedBlobID -> found.putIfAbsent(value.value, AttachedDataReference(value.value))
+            is AttachedStringID -> found.putIfAbsent(value.value, AttachedDataReference(value.value))
             is AttachedDataContainer<*> -> found[value.rawId] = AttachedDataReference(value.rawId, value)
             else -> Unit
         }

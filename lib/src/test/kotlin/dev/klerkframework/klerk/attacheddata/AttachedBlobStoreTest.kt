@@ -39,15 +39,14 @@ class AttachedBlobStoreTest {
     private suspend fun createAuthorWithPicture(klerk: Klerk<Ctx, Views>, picture: AttachedBlobID): ModelID<Author> {
         val result = klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Astrid"),
                     lastName = LastName("Lindgren"),
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
                     picture = picture?.let { AuthorPicture(it) },
-                ),
+                )
             ),
             Ctx.system(),
         )
@@ -130,15 +129,14 @@ class AttachedBlobStoreTest {
         createAuthorWithPicture(klerk, leased)
         val failure = klerk.handle(
             Command(
-                event = CreateAuthor,
-                model = null,
-                params = CreateAuthorParams(
+                CreateAuthor,
+                CreateAuthorParams(
                     firstName = FirstName("Selma"),
                     lastName = LastName("Lagerlöf"),
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
                     picture = AuthorPicture(unleased),
-                ),
+                )
             ),
             Ctx.system(),
         )
@@ -156,7 +154,7 @@ class AttachedBlobStoreTest {
             png.inputStream(),
             AuthorPicture::class,
             Ctx.system(),
-            metadata = mapOf("filename" to "totally-a-document.pdf"),
+            custom = mapOf("filename" to "totally-a-document.pdf"),
         )
         createAuthorWithPicture(klerk, id)
 
@@ -177,11 +175,11 @@ class AttachedBlobStoreTest {
         val klerk = start(SQLiteInMemory.create(), AttachedBlobStore.Database)
         val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)
 
-        val id = klerk.attachedData.prepare(png.inputStream(), AuthorPicture::class, Ctx.system(), metadata = mapOf("origin" to "camera"))
+        val id = klerk.attachedData.prepare(png.inputStream(), AuthorPicture::class, Ctx.system(), custom = mapOf("origin" to "camera"))
         createAuthorWithPicture(klerk, id)
 
         // read back through the row rather than from the in-memory entry
-        val row = requireNotNull(klerk.settings.persistence.readAllAttachedDataMetadata()[id.id])
+        val row = requireNotNull(klerk.settings.persistence.readAllAttachedDataMetadata()[id.value])
         assertEquals("image/png", row.metadata.contentType)
         assertEquals(mapOf("origin" to "camera"), row.metadata.custom)
         klerk.meta.stop()
@@ -195,7 +193,7 @@ class AttachedBlobStoreTest {
                 "<html>evil</html>".byteInputStream(),
                 AuthorPicture::class,
                 Ctx.system(),
-                metadata = mapOf("__contentType" to "image/png"),
+                custom = mapOf("__contentType" to "image/png"),
             )
         }
         klerk.meta.stop()
@@ -257,14 +255,14 @@ class AttachedBlobStoreTest {
 
         val id = klerk.attachedData.prepare("bytes".byteInputStream(), AuthorPicture::class, Ctx.system())
         val authorID = createAuthorWithPicture(klerk, id)
-        assertTrue(store.listIds()!!.contains(id.id))
+        assertTrue(store.listIds()!!.contains(id.value))
 
         klerk.handle(
-            Command(event = DeleteAuthor, model = authorID, params = null),
+            Command(DeleteAuthor, authorID),
             Ctx.system(),
         ).getOrThrow()
 
-        assertNull(store.get(id.id))
+        assertNull(store.get(id.value))
         klerk.meta.stop()
     }
 }

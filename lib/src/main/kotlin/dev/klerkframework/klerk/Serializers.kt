@@ -50,7 +50,7 @@ public object AttachedBlobIDSerializer : KSerializer<AttachedBlobID> {
         PrimitiveSerialDescriptor("dev.klerkframework.klerk.AttachedBlobID", PrimitiveKind.INT)
 
     override fun serialize(encoder: Encoder, value: AttachedBlobID) {
-        encoder.encodeInt(value.id)
+        encoder.encodeInt(value.value)
     }
 
     override fun deserialize(decoder: Decoder): AttachedBlobID = AttachedBlobID(decoder.decodeInt())
@@ -62,7 +62,7 @@ public object AttachedStringIDSerializer : KSerializer<AttachedStringID> {
         PrimitiveSerialDescriptor("dev.klerkframework.klerk.AttachedStringID", PrimitiveKind.INT)
 
     override fun serialize(encoder: Encoder, value: AttachedStringID) {
-        encoder.encodeInt(value.id)
+        encoder.encodeInt(value.value)
     }
 
     override fun deserialize(decoder: Decoder): AttachedStringID = AttachedStringID(decoder.decodeInt())

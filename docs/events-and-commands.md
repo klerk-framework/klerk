@@ -39,7 +39,7 @@ The second constructor argument controls where the event may be triggered from:
 
 | Level                   | Can be triggered from                                                                                                               |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `StateMachineInternal` | Only from within the same state machine (e.g. `createCommands`, a secondary event fired by another event's handler).                |
+| `StateMachineInternal` | Only from within the same state machine (e.g. `commands`, a secondary event fired by another event's handler).                |
 | `InterStateMachine`    | From any state machine.                                                                                                             |
 | `System`                | From any state machine, and from application code — intended for events triggered by the system itself, e.g. from a [job](jobs.md). |
 | `Code`                  | From any state machine, and from application code.                                                                                  |
@@ -47,26 +47,25 @@ The second constructor argument controls where the event may be triggered from:
 
 Each level implies everything below it. `klerk.handle(...)` rejects any command whose event has a visibility lower than
 `Code` (`KlerkErrorCode.EventVisibilityTooLow`) — `StateMachineInternal` and `InterStateMachine` events can only be
-produced by the state machine itself (e.g. via `createCommands`), never submitted directly.
+produced by the state machine itself (e.g. via `commands`), never submitted directly.
 
 ## Building a Command
 
+A `Command` is built with a factory that takes exactly what the event kind needs:
+
 ```kotlin
-public data class Command<T : Any, P>(
-    val event: Event<T, P>,
-    val model: ModelID<T>?,
-    val params: P,
-)
+Command(CreateBook, params)          // void event with parameters
+Command(ImportBooks)                 // void event without parameters
+Command(UpdateBook, bookId, params)  // instance event with parameters
+Command(PublishBook, bookId)         // instance event without parameters
 ```
 
-* `model` is `null` for Void events, and the target model's id for Instance events.
-* `params` is `null`/`Nothing?` for the `NoParameters` variants.
+Passing a model to a void event, or forgetting it for an instance event, does not compile.
 
 ```kotlin
 val command = Command(
-    event = CreateBook,
-    model = null,
-    params = CreateBookParams(
+    CreateBook,
+    CreateBookParams(
         title = BookTitle("Harry Potter and the Philosopher's Stone"),
         author = author,
         averageScore = AverageScore(0f),
@@ -74,6 +73,10 @@ val command = Command(
     ),
 )
 ```
+
+Tooling that only knows the event at runtime — a form renderer, a GraphQL or MCP endpoint — uses
+`Command.dynamic(event, model, params)`, which checks the same thing and throws `IllegalArgumentException` if the
+model does not match the event kind.
 
 ## Submitting a command: `klerk.handle`
 
@@ -114,7 +117,7 @@ A token can only be used once — reusing one fails with `IdempotenceProblem`. I
 (s) were changed by another command in the meantime, handling fails with a `StateProblem`
 (`ModelModifiedSinceTokenCreation`). This is the mechanism for optimistic-concurrency-style "the record you're editing
 has since changed" checks. `CommandToken` also round-trips through a compact string via `.toString()` /
-`CommandToken.from(string)`, so a client can hold on to one across a request/response cycle.
+`CommandToken.parse(string)`, so a client can hold on to one across a request/response cycle.
 
 ## Handling the result
 
@@ -137,7 +140,7 @@ public sealed class CommandResult<T : Any> {
 ```
 
 `primaryModel` is the model directly created/updated by your command (as opposed to models affected only as a side
-effect, e.g. via `createCommands` in the state machine). `authorizedModels` contains the resulting models the *current
+effect, e.g. via `commands` in the state machine). `authorizedModels` contains the resulting models the *current
 context* is allowed to read — anything it isn't authorized for is simply absent, so it is safe to hand this map to a
 caller without leaking data.
 
@@ -242,14 +245,13 @@ layer rather than an expected outcome.
 suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Author>): ModelID<Book> {
     val result = klerk.handle(
         Command(
-            event = CreateBook,
-            model = null,
-            params = CreateBookParams(
+            CreateBook,
+            CreateBookParams(
                 title = BookTitle("Harry Potter and the Philosopher's Stone"),
                 author = author,
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(2.hours),
-            ),
+            )
         ),
         Ctx.system(),
     )

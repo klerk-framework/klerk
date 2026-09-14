@@ -42,7 +42,7 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     requireNotNull(model)
-    val other = ModelCache.getAllRelated(model.id)
+    val other = ModelCache.referencingIds(model.id)
     if (other.isNotEmpty()) {
         val currentReferencesToModel = other.filter { !processingDataSoFar.deletedModels.contains(it) }
         if (currentReferencesToModel.isNotEmpty()) {

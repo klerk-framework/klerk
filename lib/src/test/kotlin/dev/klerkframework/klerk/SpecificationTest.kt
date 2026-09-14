@@ -4,9 +4,12 @@ import dev.klerkframework.klerk.collection.ModelViews
 import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
-import dev.klerkframework.klerk.storage.RamStorage
 import kotlin.reflect.KClass
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 
@@ -98,3 +101,62 @@ private enum class States {}
 
 private val illegalStateMachine = stateMachine<IllegalModel, States, Ctx, ViewWithIllegal> { }
 
+
+private class TestPlugin(override val name: String) : KlerkPlugin<Ctx, Views> {
+    override val description: String = "for tests"
+    var started = false
+    var stopped = false
+    val mergedAfter = mutableListOf<String>()
+
+    override fun mergeSpecification(previous: Specification<Ctx, Views>): Specification<Ctx, Views> {
+        mergedAfter.addAll(previous.plugins.map { it.name })
+        return previous
+    }
+
+    override suspend fun start(klerk: Klerk<Ctx, Views>) {
+        started = true
+    }
+
+    override fun stop() {
+        stopped = true
+    }
+}
+
+class PluginTest {
+
+    private fun specWith(vararg plugin: KlerkPlugin<Ctx, Views>): Specification<Ctx, Views> {
+        val bc = BookViews()
+        val views = Views(bc, AuthorViews(bc.all))
+        return SpecificationBuilder<Ctx, Views>(views).build {
+            plugins(*plugin)
+            systemContextProvider(::myContextProvider)
+            jobContextProvider(::myJobContextProvider)
+            managedModels {
+                model(Book::class, bookStateMachine(views), views.books)
+                model(Author::class, authorStateMachine(views), views.authors)
+            }
+            authorization { }
+        }
+    }
+
+    @Test
+    fun `plugins are merged in declaration order`() {
+        val first = TestPlugin("first")
+        val second = TestPlugin("second")
+        val spec = specWith(first, second)
+        assertEquals(listOf("first", "second"), spec.plugins.map { it.name })
+        assertEquals(emptyList(), first.mergedAfter)
+        assertEquals(listOf("first"), second.mergedAfter)
+    }
+
+    @Test
+    fun `plugins are started and stopped with Klerk`() = runBlocking {
+        val plugin = TestPlugin("p")
+        val klerk = Klerk.create(specWith(plugin), testSettings())
+        klerk.meta.start(installShutdownHook = false)
+        assertTrue(plugin.started)
+        assertFalse(plugin.stopped)
+        klerk.meta.stop()
+        assertTrue(plugin.stopped)
+    }
+}

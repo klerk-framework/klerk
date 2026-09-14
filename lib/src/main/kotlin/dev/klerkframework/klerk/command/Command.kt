@@ -10,15 +10,59 @@ import kotlin.time.Instant
 /**
  * Describes a single request to run [event][Event], passed to `Klerk.handle`.
  *
- * @param model the model (if any) on which this event should apply. Must be non-null for instance events and null
- * for void events.
+ * Build it with one of the `Command(...)` factories, which take exactly the arguments the event kind needs:
+ *
+ * ```kotlin
+ * Command(CreateBook, params)          // void event with parameters
+ * Command(ImportBooks)                 // void event without parameters
+ * Command(UpdateBook, bookId, params)  // instance event with parameters
+ * Command(PublishBook, bookId)         // instance event without parameters
+ * ```
+ *
+ * @param model the model this event applies to: non-null for instance events, null for void events.
  * @param params the event's parameter object, or `Nothing?` (pass `null`) if the event declares no parameters.
  */
-public data class Command<T : Any, P>(
+@ConsistentCopyVisibility
+public data class Command<T : Any, P> internal constructor(
     public val event: Event<T, P>,
     public val model: ModelID<T>?,
     public val params: P,
-)
+) {
+    public companion object {
+        /**
+         * Builds a command when the event kind is only known at runtime, as in generic tooling (forms, GraphQL, MCP).
+         * Application code should use the `Command(...)` factories instead, which check the shape at compile time.
+         *
+         * @throws IllegalArgumentException if [model] is null for an instance event, or non-null for a void event.
+         */
+        public fun <T : Any, P> dynamic(event: Event<T, P>, model: ModelID<T>?, params: P): Command<T, P> {
+            when (event) {
+                is VoidEvent -> require(model == null) { "$event is a void event, so it takes no model" }
+                is InstanceEvent -> require(model != null) { "$event is an instance event, so it needs a model" }
+            }
+            return Command(event, model, params)
+        }
+    }
+}
+
+/** A command running the void event [event] with [params]. */
+public fun <T : Any, P : Any> Command(event: VoidEventWithParameters<T, P>, params: P): Command<T, P> =
+    Command.dynamic(event, null, params)
+
+/** A command running the parameterless void event [event]. */
+public fun <T : Any> Command(event: VoidEventNoParameters<T>): Command<T, Nothing?> =
+    Command.dynamic(event, null, null)
+
+/** A command running the instance event [event] on [model], with [params]. */
+public fun <T : Any, P : Any> Command(
+    event: InstanceEventWithParameters<T, P>,
+    model: ModelID<T>,
+    params: P,
+): Command<T, P> = Command.dynamic(event, model, params)
+
+/** A command running the parameterless instance event [event] on [model]. */
+public fun <T : Any> Command(event: InstanceEventNoParameters<T>, model: ModelID<T>): Command<T, Nothing?> =
+    Command.dynamic(event, model, null)
 
 /**
  * @param token ensures idempotency: a given token can be used to successfully process a command only once: any
@@ -46,7 +90,7 @@ public enum class DebugOptions {
  * An opaque, serializable idempotency/concurrency token for [ProcessingOptions.token].
  *
  * Construct via the companion factory functions rather than directly. The [toString] output is a compact
- * base64 encoding that can be sent to a client and round-tripped back through [from] (e.g. to let a client hold a
+ * base64 encoding that can be sent to a client and round-tripped back through [parse] (e.g. to let a client hold a
  * token across a request/response cycle before submitting the actual command).
  */
 public class CommandToken private constructor(
@@ -70,7 +114,7 @@ public class CommandToken private constructor(
          * Parses a token previously produced by [CommandToken.toString].
          * @throws IllegalArgumentException if [string] is not a validly encoded token.
          */
-        public fun from(string: String): CommandToken {
+        public fun parse(string: String): CommandToken {
             var time: Instant? = null
             var models: Set<ModelID<Any>>? = null
             string.decodeBase64String()
@@ -90,6 +134,9 @@ public class CommandToken private constructor(
                 }
             return CommandToken(requireNotNull(time), requireNotNull(models))
         }
+
+        /** The token in [string], or null if it is not one. */
+        public fun parseOrNull(string: String): CommandToken? = runCatching { parse(string) }.getOrNull()
     }
 
     override fun toString(): String =

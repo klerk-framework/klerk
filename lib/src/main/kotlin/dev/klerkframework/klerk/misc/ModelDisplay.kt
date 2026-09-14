@@ -61,7 +61,7 @@ public class ModelDisplay<T : Any>(public val original: Model<T>) {
         }
         idsOfModelsWithReferencesToThis =
             @Suppress("UNCHECKED_CAST")
-            getAllRelatedIds(id).map { ModelDisplay(get(it as ModelID<Any>)) }
+            referencingIds(id).map { ModelDisplay(get(it as ModelID<Any>)) }
     }
 
     /** [Model]'s own fields (id, state, timestamps — everything except [Model.props]). */

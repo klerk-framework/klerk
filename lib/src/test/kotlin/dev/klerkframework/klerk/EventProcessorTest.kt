@@ -26,7 +26,7 @@ class EventProcessorTest {
 
         val klerk = Klerk.create(specification, testSettings()) as KlerkImpl
         val eventProcessor = EventProcessor(klerk, testSettings(), ReadWriteLock(), MyTimeTriggerManager)
-        val createAuthor = Command(CreateAuthor, null, createAstridParameters)
+        val createAuthor = Command(CreateAuthor, createAstridParameters)
         val context = Ctx.system()
         val reader = ReaderWithAuth(klerk, context)
         val result = eventProcessor.processPrimaryCommand(createAuthor, context, reader, options)
@@ -54,9 +54,8 @@ class EventProcessorTest {
 
             val willFail = klerk.handle(
                 Command(
-                    event = DeleteAuthor,
-                    model = rowling,
-                    params = null
+                    DeleteAuthor,
+                    rowling
                 ),
                 context,
             )
@@ -67,9 +66,8 @@ class EventProcessorTest {
 
             val willNotFail = klerk.handle(
                 Command(
-                    event = DeleteAuthorAndBooks,
-                    model = rowling,
-                    params = null
+                    DeleteAuthorAndBooks,
+                    rowling
                 ),
                 context,
             ).getOrElse {

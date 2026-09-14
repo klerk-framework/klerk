@@ -26,11 +26,6 @@ class StorageTest {
 
         val now = Clock.System.now()
 
-        val command1 = Command(
-            event = ImproveAuthor,
-            model = null,
-            params = null
-        )
         val author = Model(
             id = ModelID(234),
             createdAt = now,
@@ -40,6 +35,7 @@ class StorageTest {
             timeTrigger = null,
             props = authorProps
         )
+        val command1 = Command(ImproveAuthor, author.id)
         val result1 = ProcessingData<Author, Ctx, Views>(
             createdModels = listOf(author.id),
             aggregatedModelState = mapOf(author.id to author)
@@ -48,14 +44,14 @@ class StorageTest {
         storage.store(result1, command1, context, sequenceNumber = 1)
 
         val command2 = Command(
-            event = CreateBook,
-            model = null,
-            params = CreateBookParams(
+            CreateBook,
+            CreateBookParams(
                 title = BookTitle("The Hobbit"),
                 author = author.id,
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(3.minutes)
             )
+        
         )
         val bookProps = Book(
             title = BookTitle("The Hobbit"),

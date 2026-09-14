@@ -22,9 +22,8 @@ class ValidatableTest {
 
             val result = klerk.handle(
                 Command(
-                    event = CreateAuthor,
-                    model = null,
-                    params = CreateAuthorParams(
+                    CreateAuthor,
+                    CreateAuthorParams(
                         FirstName("James"),
                         LastName("Clavell"),
                         PhoneNumber("123"),
@@ -32,6 +31,7 @@ class ValidatableTest {
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
                     )
+                
                 ),
                 context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())
@@ -56,14 +56,15 @@ class ValidatableTest {
 
             val result = klerk.handle(
                 Command(
-                    event = UpdateAuthor,
-                    model = astrid,
-                    params = Author(
+                    UpdateAuthor,
+                    astrid,
+                    Author(
                         FirstName("James"),
                         LastName("Clavell"),
                         Address(Street("Some street")),
                         picture = null
                     )
+                
                 ),
                 context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())
@@ -86,9 +87,8 @@ class ValidatableTest {
 
             val result = klerk.handle(
                 Command(
-                    event = CreateAuthor,
-                    model = null,
-                    params = CreateAuthorParams(
+                    CreateAuthor,
+                    CreateAuthorParams(
                         FirstName("August"),
                         LastName("Strindberg"),
                         PhoneNumber("123456"),
@@ -96,6 +96,7 @@ class ValidatableTest {
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
                     )
+                
                 ),
                 context = Ctx.system(),
                 options = ProcessingOptions(CommandToken.simple())

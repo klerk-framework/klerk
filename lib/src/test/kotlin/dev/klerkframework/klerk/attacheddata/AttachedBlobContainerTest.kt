@@ -42,9 +42,8 @@ class AttachedBlobContainerTest {
         context: Ctx = Ctx.system(),
     ): CommandResult<Painting> = klerk.handle(
         Command(
-            event = CreatePainting,
-            model = null,
-            params = CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
+            CreatePainting,
+            CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image))
         ),
         context,
     )
@@ -86,7 +85,7 @@ class AttachedBlobContainerTest {
             "<html><script>alert(1)</script></html>".byteInputStream(),
             PaintingImage::class,
             Ctx.system(),
-            metadata = mapOf("filename" to "innocent.png", "clientContentType" to "image/png"),
+            custom = mapOf("filename" to "innocent.png", "clientContentType" to "image/png"),
         )
 
         val result = hang(klerk, id)
@@ -134,9 +133,8 @@ class AttachedBlobContainerTest {
         rows: AttachedBlobID,
     ): CommandResult<Inventory> = klerk.handle(
         Command(
-            event = CreateInventory,
-            model = null,
-            params = CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows)),
+            CreateInventory,
+            CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows))
         ),
         Ctx.system(),
     )

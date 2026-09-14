@@ -158,7 +158,7 @@ Inside `onEvent`, `onEnter`, `onExit`, `after`, and `atTime` blocks you can call
 | `delete(onCondition = ...)`                                                 | Deletes the model. At most one per block.                                                                                     |
 | `transitionTo(State, onCondition = ...)`                                    | Moves the model to `State`. At most one per block.                                                                            |
 | `transitionWhen(linkedMapOf(::decision to State, ...), otherwise = State?)` | Evaluates each decision function in order and transitions to the first match; `otherwise` if none match.                      |
-| `createCommands(::fn)`                                                      | Returns a `List<Command<*, *>>` to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
+| `commands(::fn)`                                                            | Returns a `List<Command<*, *>>` to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
 | `job(::fn)` / `jobs(::fn)` / `unmanagedJob(::fn, onCondition = ...)`        | Schedule background work — `job` for a single job, `jobs` for a list; see [jobs.md](jobs.md) for the distinction from `unmanagedJob`. |
 
 All of these accept an optional `onCondition` predicate with the same argument type as the main function — if it returns
@@ -178,19 +178,19 @@ state(AuthorStates.Improving) {
 }
 ```
 
-`createCommands` is how one event cascades into others. Here, deleting an author also deletes all their books, as part
+`commands` is how one event cascades into others. Here, deleting an author also deletes all their books, as part
 of the same command:
 
 ```kotlin
 onEvent(DeleteAuthorAndBooks) {
-    createCommands(::eventsToDeleteAuthorAndBooks)
+    commands(::eventsToDeleteAuthorAndBooks)
 }
 
 fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
-        val books = getRelated(Book::class, requireNotNull(args.model.id))
-        return books.map { Command(event = DeleteBook, model = it.id, null) } +
-                Command(event = DeleteAuthor, model = requireNotNull(args.model.id), null)
+        val books = referencing(Book::class, requireNotNull(args.model.id))
+        return books.map { Command(DeleteBook, it.id) } +
+                Command(DeleteAuthor, requireNotNull(args.model.id))
     }
 }
 ```

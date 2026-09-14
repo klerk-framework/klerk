@@ -32,7 +32,7 @@ class BlockTriggeringInstanceNonInstanceEventBlockTest {
             val rowlingId = createAuthorJKRowling(klerk)
 
             val result = klerk.handle(
-                Command(ImproveAuthor, rowlingId, null),
+                Command(ImproveAuthor, rowlingId),
                 Ctx.system(),
             ).getOrElse { fail() }
 

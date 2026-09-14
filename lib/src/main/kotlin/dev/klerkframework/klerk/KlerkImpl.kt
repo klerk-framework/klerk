@@ -107,17 +107,10 @@ internal class KlerkImpl<C : KlerkContext, V>(
     override suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T =
         models.read(context, readFunction)
 
-    override suspend fun <T> read(contextProvider: suspend (Klerk<C, V>) -> C, readFunction: Reader<C, V>.() -> T): T =
-        models.read(contextProvider(this), readFunction)
 
     override suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T =
         models.readSuspend(context, readFunction)
 
-    override suspend fun <T> readSuspend(
-        contextProvider: suspend (Klerk<C, V>) -> C,
-        readFunction: suspend Reader<C, V>.() -> T
-    ): T =
-        models.readSuspend(contextProvider(this), readFunction)
 
 }
 
@@ -166,6 +159,13 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
         }
         if (previousState == 2) {
             return  // already stopped
+        }
+        klerk.specification.plugins.asReversed().forEach {
+            try {
+                it.stop()
+            } catch (e: Exception) {
+                logger.error(e) { "Plugin ${it.name} failed to stop" }
+            }
         }
         klerk.eventsManager.stop()
         klerk.jobs.stop()    // stopping jobs after events in case a job is created that must execute on this instance.

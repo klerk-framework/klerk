@@ -54,14 +54,13 @@ class JobAttachedDataClaimTest {
             return JobResult.Success(
                 command = Command(
                     CreateAuthor,
-                    null,
                     CreateAuthorParams(
                         firstName = FirstName("Astrid"),
                         lastName = LastName("Lindgren"),
                         phone = PhoneNumber("+4699999"),
                         secretToken = SecretPasscode(1),
                         picture = AuthorPicture(prepared),
-                    ),
+                    )
                 ),
             )
         }

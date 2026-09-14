@@ -66,7 +66,7 @@ class JobManagerImplTest {
                     command = Command(
                         ChangeName,
                         args.cursor.author,
-                        ChangeNameParams(FirstName(args.cursor.name), LastName("Renamed")),
+                        ChangeNameParams(FirstName(args.cursor.name), LastName("Renamed"))
                     ),
                 )
             }

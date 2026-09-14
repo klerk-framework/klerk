@@ -38,7 +38,7 @@ class FlowChartAlgorithmTest {
 
     @Test
     fun `Basic algorithm`() {
-        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, ModelID(34), null), Ctx.system(), reader)
+        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, ModelID(34)), Ctx.system(), reader)
         assertEquals(4, MyAlgoWhichReturnsInt.execute(args))
         val resultWithLogs = MyAlgoWhichReturnsInt.executeWithLogs(args)
         assertEquals(4, resultWithLogs.first)
@@ -50,7 +50,7 @@ class FlowChartAlgorithmTest {
 
     @Test
     fun `Advanced algorithm`() {
-        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, null, null), Ctx.system(), reader)
+        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, model.id), Ctx.system(), reader)
         assertEquals(true, ShouldSendNotificationAlgorithm.execute(args))
         val resultWithLogs = ShouldSendNotificationAlgorithm.executeWithLogs(args)
         assertEquals(true, resultWithLogs.first)

@@ -390,7 +390,7 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
             }
 
             onEvent(DeleteAuthorAndBooks) {
-                createCommands(::eventsToDeleteAuthorAndBooks)
+                commands(::eventsToDeleteAuthorAndBooks)
             }
 
             onEvent(ImproveAuthor) {
@@ -517,15 +517,15 @@ fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, 
 fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
         val result: MutableList<Command<Any, Any>> = mutableListOf()
-        val books = getRelated(Book::class, requireNotNull(args.model.id))
+        val books = referencing(Book::class, requireNotNull(args.model.id))
 
         @Suppress("UNCHECKED_CAST")
-        books.map { Command(event = DeleteBook, model = it.id, null) }
+        books.map { Command(DeleteBook, it.id) }
             .forEach { result.add(it as Command<Any, Any>) }
 
         @Suppress("UNCHECKED_CAST")
         result.add(
-            Command(event = DeleteAuthor, model = requireNotNull(args.model.id), null)
+            Command(DeleteAuthor, requireNotNull(args.model.id))
                     as Command<Any, Any>
         )
 
@@ -624,15 +624,14 @@ data class Views(
 suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
     val result = klerk.handle(
         Command(
-            event = CreateAuthor,
-            model = null,
-            params = CreateAuthorParams(
+            CreateAuthor,
+            CreateAuthorParams(
                 firstName = FirstName("J.K"),
                 lastName = LastName("Rowling"),
                 phone = PhoneNumber("+46123456"),
                 secretToken = SecretPasscode(234234902359245345),
                 //       address = Address(Street("Storgatan"))
-            ),
+            )
         ),
         Ctx.system(),
     )
@@ -642,9 +641,8 @@ suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
 suspend fun createAuthorAstrid(klerk: Klerk<Ctx, Views>): ModelID<Author> {
     val result = klerk.handle(
         Command(
-            event = CreateAuthor,
-            model = null,
-            params = createAstridParameters,
+            CreateAuthor,
+            createAstridParameters
         ),
         Ctx.system(),
     )
@@ -662,9 +660,8 @@ val createAstridParameters = CreateAuthorParams(
 suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Author>): ModelID<Book> {
     val result = klerk.handle(
         Command(
-            event = CreateBook,
-            model = null,
-            params = CreateBookParams(
+            CreateBook,
+            CreateBookParams(
                 title = BookTitle("Harry Potter and the Philosopher's Stone"),
                 author = author,
                 coAuthors = emptySet(),
@@ -672,7 +669,7 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Aut
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(2.hours)
-            ),
+            )
         ),
         Ctx.system(),
     )
@@ -687,9 +684,8 @@ suspend fun createBookHarryPotter2(
 ): ModelID<Book> {
     val result = klerk.handle(
         Command(
-            event = CreateBook,
-            model = null,
-            params = CreateBookParams(
+            CreateBook,
+            CreateBookParams(
                 title = BookTitle("Harry Potter and the Chamber of Secrets"),
                 author = author,
                 coAuthors = coAuthors,
@@ -697,7 +693,7 @@ suspend fun createBookHarryPotter2(
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(2.hours)
-            ),
+            )
         ),
         Ctx.system(),
     )

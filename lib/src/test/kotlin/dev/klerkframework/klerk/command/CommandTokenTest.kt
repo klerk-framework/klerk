@@ -16,7 +16,7 @@ class CommandTokenTest {
 
         fun testToken(token: CommandToken) {
             val str = token.toString()
-            val parsed = CommandToken.from(str)
+            val parsed = CommandToken.parse(str)
             assertEquals(token, parsed)
         }
 
@@ -40,9 +40,8 @@ class CommandTokenTest {
 
             klerk.handle(
                 Command(
-                    event = CreateAuthor,
-                    model = null,
-                    params = createAstridParameters,
+                    CreateAuthor,
+                    createAstridParameters
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),
@@ -50,9 +49,8 @@ class CommandTokenTest {
 
             val result = klerk.handle(
                 Command(
-                    event = CreateAuthor,
-                    model = null,
-                    params = createAstridParameters,
+                    CreateAuthor,
+                    createAstridParameters
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),
@@ -80,18 +78,16 @@ class CommandTokenTest {
 
             klerk.handle(
                 Command(
-                    event = ImproveAuthor,
-                    model = astrid,
-                    null
+                    ImproveAuthor,
+                    astrid
                 ),
                 Ctx.system(),
             ).getOrThrow()
 
             val result = klerk.handle(
                 Command(
-                    event = DeleteAuthor,
-                    model = astrid,
-                    null
+                    DeleteAuthor,
+                    astrid
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),

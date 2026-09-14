@@ -149,7 +149,7 @@ class DataContainersTest {
         positions.forEach { original ->
             val iso = original.toISO6709()
             assertTrue(iso.endsWith("/"), "ISO 6709 string should end with /")
-            val decoded = GeoPosition.fromISO6709(iso)
+            val decoded = GeoPosition.parse(iso)
             assertEquals(original.latitude, decoded.latitude, 0.000001)
             assertEquals(original.longitude, decoded.longitude, 0.000001)
         }
@@ -165,7 +165,7 @@ class DataContainersTest {
     fun enumContainerValidation() {
         val container = BookGenreContainer(BookGenre.Fiction)
         assertNull(container.validate("genre", DefaultTranslation))
-        assertEquals(BookGenre.Fiction, container.enum)
+        assertEquals(BookGenre.Fiction, container.value)
         assertEquals(BookGenre.Fiction, container.valueWithoutAuthorization)
     }
 
@@ -229,7 +229,7 @@ class DataContainersTest {
         )
         val deserialized = KlerkJson.decode(NumberHolder::class, KlerkJson.encode(original))
         assertEquals(original, deserialized)
-        assertEquals(ULong.MAX_VALUE, deserialized.uLong.uLong)
+        assertEquals(ULong.MAX_VALUE, deserialized.uLong.value)
     }
 
     @Test
@@ -237,7 +237,7 @@ class DataContainersTest {
         val original = GenreHolder(BookGenreContainer(BookGenre.Mystery))
         val deserialized = KlerkJson.decode(GenreHolder::class, KlerkJson.encode(original))
         assertEquals(original, deserialized)
-        assertEquals(BookGenre.Mystery, deserialized.genre.enum)
+        assertEquals(BookGenre.Mystery, deserialized.genre.value)
     }
 
 }

@@ -58,8 +58,8 @@ private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
     return when (val shape = type.shape) {
         is Shape.Container -> encodeContainer(shape.kind, value as DataContainer<*>)
         Shape.Reference -> JsonPrimitive((value as ModelID<*>).value)
-        Shape.BlobId -> JsonPrimitive((value as AttachedBlobID).id)
-        Shape.StringId -> JsonPrimitive((value as AttachedStringID).id)
+        Shape.BlobId -> JsonPrimitive((value as AttachedBlobID).value)
+        Shape.StringId -> JsonPrimitive((value as AttachedStringID).value)
         is Shape.Many -> JsonArray((value as Collection<*>).map { encodeValue(shape.element, it) })
         is Shape.Nested -> encodeObject(shape.schema, value)
     }
@@ -70,12 +70,12 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
     return when (kind) {
         ContainerKind.AttachedBlob, ContainerKind.AttachedString -> JsonPrimitive((container as AttachedDataContainer<*>).rawId)
         ContainerKind.String -> JsonPrimitive(value as String)
-        ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).enum.name)
+        ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).value.name)
         ContainerKind.Int -> JsonPrimitive(value as Int)
-        ContainerKind.Date -> JsonPrimitive((container as DateContainer).date.toEpochDay().toInt())
+        ContainerKind.Date -> JsonPrimitive((container as DateContainer).value.toEpochDay().toInt())
         ContainerKind.Long -> JsonPrimitive(value as Long)
-        ContainerKind.Instant -> JsonPrimitive((container as InstantContainer).instant.to64bitMicroseconds())
-        ContainerKind.Duration -> JsonPrimitive((container as DurationContainer).duration.inWholeMicroseconds)
+        ContainerKind.Instant -> JsonPrimitive((container as InstantContainer).value.to64bitMicroseconds())
+        ContainerKind.Duration -> JsonPrimitive((container as DurationContainer).value.inWholeMicroseconds)
         ContainerKind.Short -> JsonPrimitive(value as Short)
         ContainerKind.Byte -> JsonPrimitive(value as Byte)
         ContainerKind.ULong -> JsonPrimitive((value as ULong).toString())
@@ -85,7 +85,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.Float -> JsonPrimitive(value as Float)
         ContainerKind.Double -> JsonPrimitive(value as Double)
         ContainerKind.Boolean -> JsonPrimitive(value as Boolean)
-        ContainerKind.Geo -> JsonPrimitive((container as GeoPositionContainer).geoPosition.uLongEncoded.toLong())
+        ContainerKind.Geo -> JsonPrimitive((container as GeoPositionContainer).value.uLongEncoded.toLong())
     }
 }
 

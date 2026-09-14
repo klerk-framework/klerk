@@ -400,7 +400,7 @@ public data class QueryResponse<T : Any>(
 }
 
 /**
- * An opaque position in a [ModelView]. Serializes to and from a URL-safe string via [toString]/[fromString]; treat
+ * An opaque position in a [ModelView]. Serializes to and from a URL-safe string via [toString]/[parse]; treat
  * that string as meaningless and don't build one yourself.
  *
  * A cursor is a position, not a snapshot: it resolves to the item it was cut at whenever that item is still in the
@@ -424,7 +424,7 @@ public class QueryListCursor internal constructor(
          * Parses a cursor previously serialized with [QueryListCursor.toString].
          * @throws IllegalArgumentException if [s] is not a validly encoded cursor
          */
-        public fun fromString(s: String): QueryListCursor {
+        public fun parse(s: String): QueryListCursor {
             val fields = try {
                 s.decodeBase64UrlSafeString().split(",").associate { field ->
                     val separator = field.indexOf(':')
@@ -442,6 +442,9 @@ public class QueryListCursor internal constructor(
             }
             return QueryListCursor(offset, anchor)
         }
+
+        /** The cursor in [s], or null if it is not one. */
+        public fun parseOrNull(s: String): QueryListCursor? = runCatching { parse(s) }.getOrNull()
     }
 
     override fun toString(): String =

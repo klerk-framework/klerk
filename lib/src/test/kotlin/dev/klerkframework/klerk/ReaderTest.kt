@@ -45,25 +45,25 @@ class ReaderTest {
             val harryPotter2 = createBookHarryPotter2(klerk, rowling, listOf(harryPotter1), setOf(astrid))
 
             klerk.read(context) {
-                assertEquals(2, getAllRelatedIds(rowling).size)
+                assertEquals(2, referencingIds(rowling).size)
 
-                val booksRelatedToRowling = getRelated(Book::class, rowling)
+                val booksRelatedToRowling = referencing(Book::class, rowling)
                 assertEquals(2, booksRelatedToRowling.size)
                 assertEquals(
                     "Harry Potter and the Philosopher's Stone",
                     booksRelatedToRowling.first().props.title.value
                 )
 
-                val authorsRelatedToRowling = getRelated(Author::class, rowling)
+                val authorsRelatedToRowling = referencing(Author::class, rowling)
                 assert(authorsRelatedToRowling.isEmpty())
 
-                val booksWhereRowlingIsAuthor = getRelated(Book::author, rowling)
+                val booksWhereRowlingIsAuthor = referencing(Book::author, rowling)
                 assertEquals(2, booksWhereRowlingIsAuthor.size)
 
-                val booksWhereLinusIsAuthor = getRelated(Book::author, astrid)
+                val booksWhereLinusIsAuthor = referencing(Book::author, astrid)
                 assertEquals(0, booksWhereLinusIsAuthor.size)
 
-                val booksWhereLinusIsCoAuthor = getRelatedInCollection(Book::coAuthors, astrid)
+                val booksWhereLinusIsCoAuthor = referencingInCollection(Book::coAuthors, astrid)
                 assertEquals(1, booksWhereLinusIsCoAuthor.size)
                 assertEquals(
                     "Harry Potter and the Chamber of Secrets",
@@ -140,7 +140,7 @@ class ReaderTest {
             ModelCache.store(ida)
 
             val recommendedBooksForIda = klerk.read(Ctx.system()) {
-                get(idaRef).props.favouriteAuthors.flatMap { author -> getRelated(Book::author, author) }
+                get(idaRef).props.favouriteAuthors.flatMap { author -> referencing(Book::author, author) }
             }
 
             assertEquals(2, recommendedBooksForIda.size)
@@ -157,7 +157,7 @@ class ReaderTest {
             val rowling = createAuthorJKRowling(klerk)
             val astrid = createAuthorAstrid(klerk)
             klerk.handle(
-                Command(ImproveAuthor, astrid, null),
+                Command(ImproveAuthor, astrid),
                 Ctx.system(),
                 ProcessingOptions(
                     CommandToken.simple()

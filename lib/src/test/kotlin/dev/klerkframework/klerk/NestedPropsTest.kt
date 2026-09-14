@@ -98,7 +98,7 @@ class NestedPropsTest {
     )
 
     private suspend fun createBook(klerk: Klerk<Ctx, Views>, params: CreateBookParams) =
-        klerk.handle(Command(CreateBook, null, params), Ctx.system())
+        klerk.handle(Command(CreateBook, params), Ctx.system())
 
     private fun startWithBookRules(
         rules: VoidEventRulesWithParameters<Book, CreateBookParams, Ctx, Views>.(Views) -> Unit

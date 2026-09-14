@@ -41,20 +41,20 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         sequenceNumber: Long?,
     ): EventLogQuery = eventLogQuery(klerk, id, after, before, sequenceNumber)
 
-    override fun getAllRelatedIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.getAllRelated(id)
+    override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.referencingIds(id)
 
-    override fun <T : Any, U : Any> getRelatedInCollection(
+    override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = ModelCache.getRelatedInCollection(property, id)
+    ): Set<Model<T>> = ModelCache.referencingInCollection(property, id)
 
-    override fun <T : Any, U : Any> getRelated(
+    override fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = ModelCache.getRelated(property, id)
+    ): Set<Model<T>> = ModelCache.referencing(property, id)
 
-    override fun <T : Any> getRelated(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
-        return ModelCache.getRelated(clazz, id)
+    override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
+        return ModelCache.referencing(clazz, id)
     }
 
     override fun <T : Any> query(

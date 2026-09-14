@@ -262,7 +262,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
     private fun toEventLogEntry(row: ResultRow): EventLogEntry = EventLogEntry(
         sequenceNumber = row[EventLog.sequenceNumber],
         time = decode64bitMicroseconds(row[timestamp]),
-        eventReference = EventReference.from(row[event]),
+        eventReference = EventReference.parse(row[event]),
         reference = row[EventLog.modelId],
         actorType = ActorType.fromStoredValue(row[actorIdentityType].toInt()),
         actorReference = row[actorIdentityReference],
