@@ -1,19 +1,19 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
+import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
 import kotlin.time.Instant
 
-internal class InstanceNonEventTransitionWhen<ModelStates : Enum<*>, T : Any, C : KlerkContext, V>(
-    internal val branches: LinkedHashMap<(args: ArgForInstanceNonEvent<T, C, V>) -> Boolean, ModelStates>,
+internal class InstanceLifecycleTransitionWhen<ModelStates : Enum<*>, T : Any, C : KlerkContext, V>(
+    internal val branches: LinkedHashMap<(args: LifecycleArgs<T, C, V>) -> Boolean, ModelStates>,
     internal val otherwise: ModelStates?
 ) :
-    InstanceNonEventExecutable<T, C, V> {
+    InstanceLifecycleExecutable<T, C, V> {
     override fun <Primary : Any> process(
-        args: ArgForInstanceNonEvent<T, C, V>,
+        args: LifecycleArgs<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -30,7 +30,7 @@ internal class InstanceNonEventTransitionWhen<ModelStates : Enum<*>, T : Any, C 
         return ProcessingData()
     }
 
-    override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean) = { true }
+    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean) = { true }
 
 }
 

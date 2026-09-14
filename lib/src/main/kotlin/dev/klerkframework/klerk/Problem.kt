@@ -145,6 +145,13 @@ public class InternalException(code: KlerkErrorCode = KlerkErrorCode.Internal, m
 public class IllegalConfigurationException(code: KlerkErrorCode, message: String) : KlerkException(code, message)
 
 /**
+ * Thrown by `JobManager.schedule` when the job was refused, by the admission policy or by the hard queue cap.
+ * [problem] is the same one a command that scheduled the job would have failed with.
+ */
+public class JobRejectedException(public val problem: Problem) :
+    KlerkException(problem.code, problem.endUserTranslatedMessage)
+
+/**
  * Thrown by `klerk.meta.start()` when a stored model does not match its model class, e.g. because a property has been
  * renamed, removed, added or has changed type since the model was stored. Register a
  * [dev.klerkframework.klerk.migration.MigrationStep] that makes the stored data match.

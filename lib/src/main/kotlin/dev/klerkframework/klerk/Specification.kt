@@ -4,20 +4,21 @@ import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.attacheddata.ContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.misc.*
+import dev.klerkframework.klerk.statemachine.DeclaredEventRules
 import dev.klerkframework.klerk.statemachine.Block
 import dev.klerkframework.klerk.statemachine.InstanceState
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.VoidState
 import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransition
 import dev.klerkframework.klerk.statemachine.executables.InstanceEventTransitionWhen
-import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransition
-import dev.klerkframework.klerk.statemachine.executables.InstanceNonEventTransitionWhen
+import dev.klerkframework.klerk.statemachine.executables.InstanceLifecycleTransition
+import dev.klerkframework.klerk.statemachine.executables.InstanceLifecycleTransitionWhen
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.Persistence
@@ -85,22 +86,18 @@ public data class Specification<C : KlerkContext, V>(
         managedModels.forEach { KlerkJson.requireStorable(it.kClass) }
         managedModels
             .flatMap { it.stateMachine.getAllEvents() }
-            .mapNotNull { getParameters(it)?.kClass }
+            .mapNotNull { parametersSchema(it)?.kClass }
             .forEach { KlerkJson.requireStorable(it) }
     }
 
     private fun rulesMustBeNamed() {
         managedModels.flatMap { it.stateMachine.getAllEvents() }.forEach { reference ->
-            val event = getEvent(reference)
-            val rules = mutableListOf<Function<*>>()
-            rules.addAll(event.getContextRules<C>())
-            when (event) {
-                is VoidEventWithParameters<*, *> -> rules.addAll(event.noParamRules + event.paramRulesForVoidEvent)
-                is VoidEvent<*, *> -> rules.addAll(event.noParamRules)
-                is InstanceEventWithParameters<*, *> -> rules.addAll(event.noParamRules + event.paramRulesForInstanceEvent)
-                is InstanceEvent<*, *> -> rules.addAll(event.noParamRules)
+            rulesOf(reference).allRules.forEach {
+                requireNamedRule(it, "A validation rule of the event $reference")
             }
-            rules.forEach { requireNamedRule(it, "A validation rule of the event $reference") }
+        }
+        transitionDecisions().forEach { (state, decision) ->
+            requireNamedRule(decision, "A transitionWhen decision in the state $state")
         }
         with(authorization) {
             listOf(
@@ -141,7 +138,7 @@ public data class Specification<C : KlerkContext, V>(
     private fun validate(settings: KlerkSettings) {
         modelsAndParametersMustBeStorable()
         rulesMustBeNamed()
-        parametersWithReferencesMustHaveCollectionValidation()
+        parametersWithReferencesMustHaveValidReferences()
         stateMachinesMustBeComplete()
         allEventsMustBeDeclared()
         noTransitionToCurrentState()
@@ -340,13 +337,13 @@ public data class Specification<C : KlerkContext, V>(
                             it is InstanceEventTransitionWhen<*, *, *, *, *> && it.branches.any { branch -> branch.value.name == state.stateName }
                 }
 
-                is Block.InstanceNonEventBlock -> block.executables.any {
-                    it is InstanceNonEventTransition<*, *, *, *> && it.targetState.name == state.stateName ||
-                            it is InstanceNonEventTransitionWhen<*, *, *, *> && it.branches.any { branch -> branch.value.name == state.stateName }
+                is Block.InstanceLifecycleBlock -> block.executables.any {
+                    it is InstanceLifecycleTransition<*, *, *, *> && it.targetState.name == state.stateName ||
+                            it is InstanceLifecycleTransitionWhen<*, *, *, *> && it.branches.any { branch -> branch.value.name == state.stateName }
                 }
 
                 is Block.VoidEventBlock<*, *, *, *, *> -> false         // there can be no transitions in void-states
-                is Block.VoidNonEventBlock -> false                     // there can be no transitions in void-states
+                is Block.VoidLifecycleBlock -> false                     // there can be no transitions in void-states
             }
             check(!problem) { "State ${state.withoutPrefix()} has a transition to itself" }
         }
@@ -362,17 +359,36 @@ public data class Specification<C : KlerkContext, V>(
         }
     }
 
-    /**
-     * Makes sure that events has been declared before used in onEvent(). This is important because of two reasons:
-     * 1. We want to make explicit all validation rules. If undeclared, it is not visible that the event has no
-     * validation.
-     * 2. The Event is the container of the declared rules. This is perhaps not optimal, but it means that the Event
-     * has state. If the event is not declared, old state may be used, causing unit tests to fail.
-     */
     private fun stateMachinesMustBeComplete() {
         managedModels.forEach { it.stateMachine.validateStatesAreComplete() }
     }
 
+    /** Every decision function passed to a `transitionWhen { on(...) }`, with the state it was declared in. */
+    private fun transitionDecisions(): List<Pair<StateId, Function<*>>> {
+        fun decisionsIn(block: Block<*, *, *, *>): List<Function<*>> = when (block) {
+            is Block.InstanceEventBlock<*, *, *, *, *> -> block.executables
+                .filterIsInstance<InstanceEventTransitionWhen<*, *, *, *, *>>().flatMap { it.branches.keys }
+
+            is Block.InstanceLifecycleBlock -> block.executables
+                .filterIsInstance<InstanceLifecycleTransitionWhen<*, *, *, *>>().flatMap { it.branches.keys }
+
+            else -> emptyList()
+        }
+        return managedModels.flatMap { managed ->
+            managed.stateMachine.mutableStates.flatMap { state ->
+                val blocks = listOf(state.enterBlock, state.exitBlock) + when (state) {
+                    is VoidState -> state.onEventBlocks.map { it.second }
+                    is InstanceState -> state.onEventBlocks.map { it.second }
+                }
+                blocks.flatMap { decisionsIn(it) }.map { state.id to it }
+            }
+        }
+    }
+
+    /**
+     * Makes sure that events have been declared before used in `onEvent()`: we want all validation rules to be
+     * explicit, and an undeclared event does not make it visible that it has none.
+     */
     private fun allEventsMustBeDeclared() {
         managedModels.map { it.stateMachine }.forEach { sm ->
             sm.mutableStates.flatMap { state ->
@@ -392,7 +408,7 @@ public data class Specification<C : KlerkContext, V>(
         }
     }
 
-    private fun parametersWithReferencesMustHaveCollectionValidation() {
+    private fun parametersWithReferencesMustHaveValidReferences() {
         managedModels.map { it.stateMachine }.forEach { sm ->
             sm.mutableStates.flatMap { state ->
                 when (state) {
@@ -401,12 +417,13 @@ public data class Specification<C : KlerkContext, V>(
                 }
             }
                 .forEach { event ->
-                    when (event) {
-                        is InstanceEventNoParameters -> {}
-                        is InstanceEventWithParameters -> checkRefParam(event.parametersClass, event.validRefs.keys, event.validEnums.keys, event)
-                        is VoidEventNoParameters -> {}
-                        is VoidEventWithParameters -> checkRefParam(event.parametersClass, event.validRefs.keys, event.validEnums.keys, event)
+                    val parametersClass = when (event) {
+                        is InstanceEventWithParameters -> event.parametersClass
+                        is VoidEventWithParameters -> event.parametersClass
+                        else -> return@forEach
                     }
+                    val rules = sm.rulesFor(event.id)
+                    checkRefParam(parametersClass, rules.validRefs.keys, rules.validEnums.keys, event)
                 }
         }
     }
@@ -458,31 +475,27 @@ public data class Specification<C : KlerkContext, V>(
      *
      * @throws NoSuchElementException if [clazz] is not a managed model
      */
-    public fun <T : Any> getView(clazz: KClass<*>): ModelViews<T, C> {
+    public fun <T : Any> getModelViews(clazz: KClass<T>): ModelViews<T, C> {
         val mm = managedModels.find { it.kClass == clazz }
-            ?: throw NoSuchElementException("Cannot find view for ${clazz.qualifiedName}")
+            ?: throw NoSuchElementException("Cannot find views for ${clazz.qualifiedName}")
         @Suppress("UNCHECKED_CAST")
-        return mm.collections as ModelViews<T, C>
+        return mm.views as ModelViews<T, C>
     }
 
-    /**
-     * Every [ModelView] declared on any managed model's [ModelViews], paired with the model class it belongs to.
-     */
-    public fun getCollections(): List<Pair<KClass<out Any>, ModelView<out Any, C>>> {
-        return managedModels.flatMap { managed ->
-            managed.collections.getCollections().map { Pair(managed.kClass, it) }
+    /** Every [ModelView] declared on any managed model's [ModelViews], with the model class it belongs to. */
+    public fun getViews(): List<RegisteredView<C>> =
+        managedModels.flatMap { managed ->
+            managed.views.getViews().map { RegisteredView(managed.kClass, it) }
         }
-    }
 
     /**
-     * Looks up a single [ModelView] by its [CollectionId].
+     * Looks up a single [ModelView] by its [ViewId].
      *
-     * @throws NoSuchElementException if no view, or no managed model, matches [id]
+     * @throws NoSuchElementException if no view matches [id]
      */
-    public fun getCollection(id: CollectionId): ModelView<out Any, C> {
-        val managed = managedModels.single { it.kClass.simpleName == id.modelName }
-        return managed.collections.getCollections().single { it.getFullId() == id }
-    }
+    public fun getView(id: ViewId): ModelView<out Any, C> =
+        getViews().firstOrNull { it.view.id == id }?.view
+            ?: throw NoSuchElementException("Cannot find view '$id'")
 
     /**
      * The [ModelView] declared with `validReferences(...)` for [parameter] of the event [eventReference], or null if
@@ -490,7 +503,7 @@ public data class Specification<C : KlerkContext, V>(
      * [dev.klerkframework.klerk.statemachine.InstanceEventRulesWithParameters] /
      * [dev.klerkframework.klerk.statemachine.VoidEventRulesWithParameters]).
      */
-    public fun getValidationCollectionFor(
+    public fun validReferencesFor(
         eventReference: EventReference,
         parameter: SchemaField
     ): ModelView<out Any, C>? {
@@ -498,24 +511,25 @@ public data class Specification<C : KlerkContext, V>(
         return validReferencesOf(eventReference)[PropertyKey(parametersClass, parameter.name)]
     }
 
+    /** What the `event(...)` block declared for [eventReference], looked up in the state machine that declared it. */
+    internal fun rulesOf(eventReference: EventReference): DeclaredEventRules =
+        getStateMachine(eventReference).rulesFor(eventReference)
+
+    /**
+     * The rules declared with `validateWithContext(...)` for [eventReference] — the ones that run against the
+     * context alone, before anything is read. Mainly for tooling that documents an event.
+     */
+    public fun contextRulesFor(eventReference: EventReference): Set<(C) -> PropertyCollectionValidity> =
+        rulesOf(eventReference).forContext()
+
     /** The views declared with `validReferences` for the event, by property. A null view accepts any id. */
-    internal fun validReferencesOf(eventReference: EventReference): Map<PropertyKey, ModelView<out Any, C>?> {
-        val validRefs = when (val event = getEvent(eventReference)) {
-            is InstanceEventWithParameters<*, *> -> event.validRefs
-            is VoidEventWithParameters<*, *> -> event.validRefs
-            else -> emptyMap()
-        }
-        @Suppress("UNCHECKED_CAST")
-        return validRefs as Map<PropertyKey, ModelView<out Any, C>?>
-    }
+    @Suppress("UNCHECKED_CAST")
+    internal fun validReferencesOf(eventReference: EventReference): Map<PropertyKey, ModelView<out Any, C>?> =
+        rulesOf(eventReference).validRefs as Map<PropertyKey, ModelView<out Any, C>?>
 
     /** The values declared with `validEnums` for the event, by property. */
     internal fun validEnumsOf(eventReference: EventReference): Map<PropertyKey, Set<Enum<*>>> =
-        when (val event = getEvent(eventReference)) {
-            is InstanceEventWithParameters<*, *> -> event.validEnums
-            is VoidEventWithParameters<*, *> -> event.validEnums
-            else -> emptyMap()
-        }
+        rulesOf(eventReference).validEnums
 
     private fun parametersClassOf(eventReference: EventReference): KClass<*>? =
         when (val event = getEvent(eventReference)) {
@@ -528,7 +542,7 @@ public data class Specification<C : KlerkContext, V>(
      * The set of allowed values declared with `validEnums(...)` for [parameter] of the event [eventReference], or
      * null if none was declared (in which case all enum values are allowed).
      */
-    public fun getValidEnumsFor(
+    public fun validEnumsFor(
         eventReference: EventReference,
         parameter: SchemaField
     ): Set<Enum<*>>? {
@@ -569,26 +583,19 @@ public data class Specification<C : KlerkContext, V>(
      * The [ObjectSchema] of the parameters class of the event [eventReference], or null if the event takes no
      * parameters.
      */
-    public fun getParameters(eventReference: EventReference): ObjectSchema<*>? =
+    public fun parametersSchema(eventReference: EventReference): ObjectSchema<*>? =
         parametersClassOf(eventReference)?.let { ObjectSchema.of(it) }
 
     /**
-     * The void events (i.e. events that create a new instance of [clazz]) that [context]'s actor is currently
-     * allowed to trigger, restricted to [visibility]. Used by [dev.klerkframework.klerk.read.Reader.getPossibleVoidEvents].
-     *
-     * @param visibility only [EventVisibility.Code] and [EventVisibility.External] return results; anything else
-     * yields an empty set.
+     * The void events (i.e. events that create a new instance of [clazz]) declared at or above [visibility], without
+     * consulting the validation rules. Internal, because that last part makes it the wrong answer for everyone except
+     * [dev.klerkframework.klerk.read.Reader.getPossibleVoidEvents], which adds validation on top.
      */
-    public fun <T : Any> getPossibleVoidEvents(
+    internal fun <T : Any> getPossibleVoidEvents(
         clazz: KClass<T>,
         context: C,
         visibility: EventVisibility = EventVisibility.Code
-    ): Set<EventReference> {
-        if (visibility != EventVisibility.Code && visibility != EventVisibility.External) {
-            return emptySet()
-        }
-        return getStateMachine(clazz).getEventsForVoidState(context, visibility)
-    }
+    ): Set<EventReference> = getStateMachine(clazz).getEventsForVoidState(context, visibility)
 
     @Suppress("UNCHECKED_CAST")
     internal fun <T : Any, P> getStateMachineForEvent(event: Event<T, P>): StateMachine<T, out Enum<*>, C, V> =
@@ -840,7 +847,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
         /**
          * Registers [clazz] as a managed model with its [stateMachine] and [view] (the [ModelViews] holding its
-         * collections). [clazz] must be a data class that Klerk can handle (see [ObjectSchema]); every managed model's
+         * Kotlin collections). [clazz] must be a data class that Klerk can handle (see [ObjectSchema]); every managed model's
          * simple name must be unique within the specification.
          *
          * @throws IllegalArgumentException if [clazz] is not a data class, or another managed model already has the
@@ -1388,10 +1395,10 @@ public data class KlerkSettings(
     val allowBypassAuthRead: Boolean = false,
 
     /**
-     * How long attached data that has been prepared but not yet claimed by a command survives (see
-     * [KlerkAttachedData.prepare]). Mainly here so that tests don't have to wait a minute.
+     * The lease [KlerkAttachedData.prepare] grants when the caller does not ask for one: how long prepared data
+     * survives before a command claims it. Mainly here so that tests do not have to wait a minute.
      */
-    val unclaimedAttachedDataLifetime: Duration = 1.minutes,
+    val defaultAttachedDataLease: Duration = 1.minutes,
 
     /**
      * The longest lease [KlerkAttachedData.prepare] will grant. A lease keeps storage occupied by data that no model
@@ -1447,8 +1454,8 @@ public data class KlerkSettings(
                 modelCache = modelCache,
                 allowUnsafeOperations = envBoolean("KLERK_ALLOW_UNSAFE_OPERATIONS") ?: defaults.allowUnsafeOperations,
                 allowBypassAuthRead = envBoolean("KLERK_ALLOW_BYPASS_AUTH_READ") ?: defaults.allowBypassAuthRead,
-                unclaimedAttachedDataLifetime = envDuration("KLERK_UNCLAIMED_ATTACHED_DATA_LIFETIME")
-                    ?: defaults.unclaimedAttachedDataLifetime,
+                defaultAttachedDataLease = envDuration("KLERK_DEFAULT_ATTACHED_DATA_LEASE")
+                    ?: defaults.defaultAttachedDataLease,
                 maxAttachedDataLease = envDuration("KLERK_MAX_ATTACHED_DATA_LEASE") ?: defaults.maxAttachedDataLease,
                 contentTypeDetector = contentTypeDetector,
             )

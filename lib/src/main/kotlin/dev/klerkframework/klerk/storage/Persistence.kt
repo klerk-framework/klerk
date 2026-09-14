@@ -23,7 +23,7 @@ public data class EventLogEntry(
     val sequenceNumber: Long,
     val time: Instant,
     val eventReference: EventReference,
-    val reference: Int,
+    val model: ModelID<out Any>,
     val actorType: ActorType,
     val actorReference: Int?,
     val actorExternalId: Long?,
@@ -409,7 +409,7 @@ public open class RamStorage : Persistence {
         sequenceNumber: Long?,
     ): Iterable<EventLogEntry> = synchronized(lock) {
         return eventLog
-            .filter { modelId == null || modelId == it.reference }
+            .filter { modelId == null || modelId == it.model.value }
             .filter { it.time >= from && it.time <= until }
             .filter { it.sequenceNumber <= upToSequenceNumber }
             .filter { sequenceNumber == null || it.sequenceNumber == sequenceNumber }
@@ -533,13 +533,12 @@ public open class RamStorage : Persistence {
         context: C,
         sequenceNumber: Long,
     ): EventLogEntry {
-        val reference = command.model?.value
-            ?: result.createdModels.single { true }.value
+        val model = command.model ?: result.createdModels.single { true }
         return EventLogEntry(
             sequenceNumber,
             context.time,
             command.event.id,
-            reference,
+            model,
             context.actor.type,
             context.actor.id?.value,
             context.actor.externalId,

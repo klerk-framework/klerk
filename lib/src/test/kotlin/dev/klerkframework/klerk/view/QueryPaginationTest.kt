@@ -1,4 +1,4 @@
-package dev.klerkframework.klerk.collection
+package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
@@ -13,7 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 class QueryPaginationTest {
 

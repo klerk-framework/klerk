@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.QueryListCursor
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.QueryListCursor
 import dev.klerkframework.klerk.read.ModelReader
 
 /**

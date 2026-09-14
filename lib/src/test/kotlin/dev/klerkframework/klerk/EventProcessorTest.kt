@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.fail
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 
 class EventProcessorTest {

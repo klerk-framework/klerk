@@ -18,7 +18,7 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 /**
  * The job suite runs entirely on manual execution and a [MutableClock], so there is no sleeping anywhere and repeat
@@ -531,9 +531,10 @@ class JobManagerImplTest {
             register(Counter)
             admission(::denyEverything)
         }
-        assertFailsWith<IllegalStateException> {
+        val refusal = assertFailsWith<JobRejectedException> {
             f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         }
+        assertEquals(KlerkErrorCode.JobQueueOverloaded, refusal.code)
     }
 
     @Test
@@ -544,9 +545,10 @@ class JobManagerImplTest {
         }
         f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
-        assertFailsWith<IllegalStateException> {
+        val refusal = assertFailsWith<JobRejectedException> {
             f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         }
+        assertEquals(KlerkErrorCode.JobQueueOverloaded, refusal.code)
     }
 
     @Test

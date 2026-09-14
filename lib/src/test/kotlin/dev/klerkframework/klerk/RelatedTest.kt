@@ -8,7 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.fail
 import kotlin.time.Duration.Companion.days
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 class RelatedTest {
 

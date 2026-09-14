@@ -19,7 +19,7 @@ You register it as a *managed model* in the specification, together with its [st
 
 ```kotlin
 managedModels {
-    model(Book::class, bookStateMachine(collections), collections.books)
+    model(Book::class, bookStateMachine(views), views.books)
 }
 ```
 

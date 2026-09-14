@@ -1,4 +1,4 @@
-package dev.klerkframework.klerk.collection
+package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command

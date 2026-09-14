@@ -1,11 +1,11 @@
-package dev.klerkframework.klerk.collection
+package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.logger
 
 /**
- * Base class for the collection of [ModelView]s belonging to one managed model type `T`. Subclass it, add
+ * Base class for the set of [ModelView]s belonging to one managed model type `T`. Subclass it, add
  * `val`s built from [all] via `filter`/`sorted`/`filterStates`/`register` (or, for views that don't fit a property
  * initializer, override [initialize]). See docs/views.md.
  */
@@ -49,7 +49,7 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     public open fun initialize(): Unit = Unit
 
     /**
-     * A collection of all models in this view (i.e. all models of type T).
+     * A view of all models of this type (i.e. all models of type T).
      */
     public val all: ModelView<T, C> = AllModelView(this, _all)
 
@@ -98,6 +98,6 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     }
 
     /** All views of this model type that were [ModelView.register]ed, including [all]. */
-    public fun getCollections(): List<ModelView<T, C>> = modelViews
+    public fun getViews(): List<ModelView<T, C>> = modelViews
 
 }

@@ -21,7 +21,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 /**
  * Everything here runs with a cache far smaller than the data, so practically every read is a miss that has to be

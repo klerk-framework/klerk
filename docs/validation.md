@@ -82,11 +82,11 @@ The remaining layers are declared per-event, inside the `event(...) { }` block i
 event(CreateAuthor) {
     validateWithContext(::preventUnauthenticated)
     validateWithParameters(::cannotHaveAnAwfulName)
-    validReferences(CreateAuthorParams::favouriteColleague, collections.authors.all)
+    validReferences(CreateAuthorParams::favouriteColleague, views.authors.all)
 }
 
 event(CreateBook) {
-    validReferences(CreateBookParams::author, collections.authors.all)
+    validReferences(CreateBookParams::author, views.authors.all)
     validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
 }
 ```
@@ -108,9 +108,9 @@ event(CreateBook) {
   data class Placement(val nextTo: ModelID<Book>)
 
   event(CreateBook) {
-      validReferences(CreateBookParams::author, collections.authors.all)
-      validReferences(CreateBookParams::coAuthors, collections.authors.all)
-      validReferences(Placement::nextTo, collections.books.all)
+      validReferences(CreateBookParams::author, views.authors.all)
+      validReferences(CreateBookParams::coAuthors, views.authors.all)
+      validReferences(Placement::nextTo, views.books.all)
   }
   ```
 

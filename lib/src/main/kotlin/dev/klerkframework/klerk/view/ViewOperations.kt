@@ -1,4 +1,4 @@
-package dev.klerkframework.klerk.collection
+package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model

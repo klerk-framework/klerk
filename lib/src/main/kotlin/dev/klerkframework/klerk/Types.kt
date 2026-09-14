@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.LongContainer
@@ -18,8 +18,8 @@ import java.math.BigInteger
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty0
 import kotlin.reflect.KProperty1
+import kotlin.reflect.full.allSupertypes
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
@@ -31,24 +31,24 @@ public data class StateId(val modelName: String, val stateName: String) {
 }
 
 /**
- * Identifies a [ModelView][dev.klerkframework.klerk.collection.ModelView] within a [ModelViews][dev.klerkframework.klerk.collection.ModelViews] collection, e.g. `c.Book.all`.
+ * Identifies a [ModelView][dev.klerkframework.klerk.view.ModelView] within a [ModelViews][dev.klerkframework.klerk.view.ModelViews] container, e.g. `v.Book.all`.
  */
-public data class CollectionId(val modelName: String, val shortId: String) {
-    override fun toString(): String = "c.$modelName.$shortId"
+public data class ViewId(val modelName: String, val shortId: String) {
+    override fun toString(): String = "v.$modelName.$shortId"
 
     public companion object {
         /**
-         *  IllegalArgumentException if [string] is not of the form `c.<modelName>.<shortId>`
+         * @throws IllegalArgumentException if [string] is not of the form `v.<modelName>.<shortId>`
          */
-        public fun parse(string: String): CollectionId {
+        public fun parse(string: String): ViewId {
             val parts = string.split(".")
-            require(parts.size == 3) { "CollectionId must contain three parts separated by dots" }
-            require(parts.first() == "c") { "CollectionId must start with 'c.'" }
-            return CollectionId(parts[1], parts[2])
+            require(parts.size == 3) { "ViewId must contain three parts separated by dots" }
+            require(parts.first() == "v") { "ViewId must start with 'v.'" }
+            return ViewId(parts[1], parts[2])
         }
 
         /** The id in [string], or null if it is not one. */
-        public fun parseOrNull(string: String): CollectionId? = runCatching { parse(string) }.getOrNull()
+        public fun parseOrNull(string: String): ViewId? = runCatching { parse(string) }.getOrNull()
     }
 }
 
@@ -59,7 +59,15 @@ public data class CollectionId(val modelName: String, val shortId: String) {
 public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     val kClass: KClass<T>,
     val stateMachine: StateMachine<T, ModelStates, C, V>,
-    val collections: ModelViews<T, C>,
+    val views: ModelViews<T, C>,
+)
+
+/**
+ * A registered [ModelView] together with the model class it holds, as returned by `Specification.getViews()`.
+ */
+public data class RegisteredView<C : KlerkContext>(
+    val modelClass: KClass<out Any>,
+    val view: ModelView<out Any, C>,
 )
 
 /**
@@ -111,20 +119,18 @@ public data class EventReference(val modelName: String, val eventName: String) {
         require(!eventName.contains(":"))
     }
 
-    public fun id(): EventId = "$modelName:$eventName"
-
-    override fun toString(): String = id()
+    override fun toString(): String = "$modelName:$eventName"
 
     public companion object {
         /** @throws IllegalArgumentException if [eventId] is not of the form `<modelName>:<eventName>` */
-        public fun parse(eventId: EventId): EventReference {
+        public fun parse(eventId: String): EventReference {
             val splitted = eventId.split(":")
             require(splitted.size == 2)
             return EventReference(splitted.first(), splitted.last())
         }
 
         /** The reference in [eventId], or null if it is not one. */
-        public fun parseOrNull(eventId: EventId): EventReference? = runCatching { parse(eventId) }.getOrNull()
+        public fun parseOrNull(eventId: String): EventReference? = runCatching { parse(eventId) }.getOrNull()
     }
 }
 
@@ -166,8 +172,18 @@ public enum class EventVisibility(internal val level: Int) {
  * Base class of the four event kinds ([VoidEventNoParameters], [VoidEventWithParameters],
  * [InstanceEventNoParameters], [InstanceEventWithParameters]). Application code declares events as `object`s
  * extending one of those four, then registers them in a [StateMachine] with `event(...)` / `onEvent(...)`.
+ *
+ * ```kotlin
+ * object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)
+ * object PublishBook : InstanceEventNoParameters<Book>(External)
+ * ```
+ *
+ * The model class and the parameters class are read from the type arguments, so they are written once.
  */
-public sealed class Event<T : Any, P>(private val forModel: KClass<T>, public val visibility: EventVisibility) {
+public sealed class Event<T : Any, P>(public val visibility: EventVisibility) {
+
+    /** The `T` of the event kind this was declared as. */
+    internal val forModel: KClass<*> = typeArgument(0)
 
     public val id: EventReference
         get() = EventReference(forModel.simpleName!!, name)
@@ -175,100 +191,73 @@ public sealed class Event<T : Any, P>(private val forModel: KClass<T>, public va
     public val name: String
         get() = this::class.simpleName!!
 
-    /*
-    It may seem pointless to have contextRules since barely any latency is saved by
-    evaluating context rules before getting a Reader (getAvailableEvents will require
-    a Reader). But that is not the reason! The point is that you can reuse rules
-    in the state machine over different kind of events!
+    /**
+     * The [index]th type argument of the event-kind supertype. An `object` (or a class) that names its type arguments
+     * concretely — which an event declaration always does — records them in its supertype, so nothing has to be
+     * passed to the constructor.
      */
-    private var _contextRules: Set<(KlerkContext) -> PropertyCollectionValidity> = emptySet()
-
-    public fun <C : KlerkContext> getContextRules(): Set<(C) -> PropertyCollectionValidity> =
-        _contextRules
-
-    internal fun <C : KlerkContext> setContextRules(rules: Set<(C) -> PropertyCollectionValidity>) {
-        @Suppress("UNCHECKED_CAST")
-        _contextRules = rules as Set<(KlerkContext) -> PropertyCollectionValidity>
+    protected fun typeArgument(index: Int): KClass<*> {
+        val supertype = this::class.allSupertypes.firstOrNull { (it.classifier as? KClass<*>) in eventKinds }
+            ?: throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "${this::class.simpleName} does not extend one of the four event kinds directly"
+            )
+        return (supertype.arguments.getOrNull(index)?.type?.classifier as? KClass<*>)
+            ?: throw IllegalConfigurationException(
+                KlerkErrorCode.InvalidStateMachine,
+                "Could not work out the type arguments of the event '${this::class.simpleName}'. Declare it as an " +
+                        "object (or a class) that names them concretely, e.g. " +
+                        "'object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)'."
+            )
     }
 
     override fun toString(): String = id.toString()
 
 }
 
-public sealed class VoidEvent<T : Any, P>(forModel: KClass<T>, visibility: EventVisibility) :
-    Event<T, P>(forModel, visibility) {
+private val eventKinds = setOf(
+    VoidEventWithParameters::class,
+    VoidEventNoParameters::class,
+    InstanceEventWithParameters::class,
+    InstanceEventNoParameters::class,
+)
 
-    internal var noParamRules: Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
+public sealed class VoidEvent<T : Any, P>(visibility: EventVisibility) : Event<T, P>(visibility)
 
-    internal fun <C : KlerkContext, V> getNoParamRulesForVoidEvent() =
-        noParamRules as Set<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity>
-
-}
-
-public sealed class InstanceEvent<T : Any, P>(forModel: KClass<T>, visibility: EventVisibility) :
-    Event<T, P>(forModel, visibility) {
-
-    internal var noParamRules: Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity> = setOf()
-
-    internal fun <C : KlerkContext, V> getNoParamRulesForInstanceEvent() =
-        noParamRules as Set<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity>
-}
+public sealed class InstanceEvent<T : Any, P>(visibility: EventVisibility) : Event<T, P>(visibility)
 
 /**
  * A void event (creates a new model of type [T]) that takes parameters of type [P] when handled. Declare a
  * handler function `fun create(arg: ArgForVoidEvent<T, P, C, V>): T`.
  */
-public abstract class VoidEventWithParameters<T : Any, P : Any>(
-    forModel: KClass<T>,
-    visibility: EventVisibility,
-    public val parametersClass: KClass<P>
-) : VoidEvent<T, P>(forModel, visibility) {
-
-    internal var paramRulesForVoidEvent: Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity> = setOf()
-    internal var validRefs: Map<PropertyKey, ModelView<out Any, *>?> = mapOf()
-    internal var validEnums: Map<PropertyKey, Set<Enum<*>>> = mapOf()
-
-    internal fun <C : KlerkContext, V> getParamRules() =
-        paramRulesForVoidEvent as Set<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity>
-
-
-
+public abstract class VoidEventWithParameters<T : Any, P : Any>(visibility: EventVisibility) :
+    VoidEvent<T, P>(visibility) {
+    @Suppress("UNCHECKED_CAST")
+    public val parametersClass: KClass<P> = typeArgument(1) as KClass<P>
 }
 
 /**
  * A void event (creates a new model of type [T]) that takes no parameters. Declare a handler function
  * `fun create(arg: ArgForVoidEvent<T, Nothing?, C, V>): T`.
  */
-public abstract class VoidEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
-    VoidEvent<T, Nothing?>(forModel, visibility)
+public abstract class VoidEventNoParameters<T : Any>(visibility: EventVisibility) :
+    VoidEvent<T, Nothing?>(visibility)
 
 /**
  * An instance event (acts on an existing model of type [T]) that takes parameters of type [P] when handled.
  * Declare a handler function `fun update(arg: ArgForInstanceEvent<T, P, C, V>): T`.
  */
-public open class InstanceEventWithParameters<T : Any, P : Any>(
-    forModel: KClass<T>,
-    visibility: EventVisibility,
-    public val parametersClass: KClass<P>
-) : InstanceEvent<T, P>(forModel, visibility) {
-
-    internal var paramRulesForInstanceEvent: Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity> =
-        setOf()
-    internal var validRefs: Map<PropertyKey, ModelView<out Any, *>?> = mapOf()
-    internal var validEnums: Map<PropertyKey, Set<Enum<*>>> = mapOf()
-
-    internal fun <C : KlerkContext, V> getParamRules() =
-        paramRulesForInstanceEvent as Set<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity>
-
-
+public abstract class InstanceEventWithParameters<T : Any, P : Any>(visibility: EventVisibility) : InstanceEvent<T, P>(visibility) {
+    @Suppress("UNCHECKED_CAST")
+    public val parametersClass: KClass<P> = typeArgument(1) as KClass<P>
 }
 
 /**
  * An instance event (acts on an existing model of type [T]) that takes no parameters. Declare a handler function
  * `fun archive(arg: ArgForInstanceEvent<T, Nothing?, C, V>): T`.
  */
-public abstract class InstanceEventNoParameters<T : Any>(forModel: KClass<T>, visibility: EventVisibility) :
-    InstanceEvent<T, Nothing?>(forModel, visibility)
+public abstract class InstanceEventNoParameters<T : Any>(visibility: EventVisibility) :
+    InstanceEvent<T, Nothing?>(visibility)
 
 
 /**
@@ -331,13 +320,12 @@ public data class ArgForInstanceEvent<T : Any, P, C : KlerkContext, V>(
  * @param model The model as it is in the un-committed state. I.e. the model you see may differ from the model as it was
  * before the current processing (of an event or time-trigger).
  */
-public data class ArgForInstanceNonEvent<T : Any, C : KlerkContext, V>(
+public data class LifecycleArgs<T : Any, C : KlerkContext, V>(
     val model: Model<T>,
     val time: Instant,
     val reader: ModelReader<C, V>
 )
 
-public typealias EventId = String
 
 /**
  * An identifier of a model of type [T].
@@ -450,7 +438,8 @@ public enum class AttachedDataKind {
 }
 
 /**
- * Who may read a piece of attached data, decided once and for all when it is uploaded (see [KlerkAttachedData.prepare]).
+ * Who may read a piece of attached data. Declared by the [dev.klerkframework.klerk.datatypes.AttachedDataContainer]
+ * the value is prepared for, and fixed for the life of the value.
  *
  * The point of [Public] is that it is a *static* property of the data. Authorization rules answer "may this actor read
  * this right now", which says nothing about the next request, so a rule-based decision can never be cached. A value
@@ -506,6 +495,9 @@ public data class AttachedDataMetadata(
     /**
      * The qualified name of the [dev.klerkframework.klerk.datatypes.AttachedBlobContainer] the value was prepared
      * for, or null if it was prepared without one.
+     *
+     * A name rather than a `KClass`, because it is read back from storage: a value prepared for a container the
+     * application has since renamed or removed must still be readable, not a `ClassNotFoundException`.
      */
     val preparedFor: String? = null,
 )
@@ -542,7 +534,7 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
      * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
      * the place to decide who may ask for one.
      */
-    val lease: Duration = 1.minutes,
+    val lease: Duration,
 )
 
 /**

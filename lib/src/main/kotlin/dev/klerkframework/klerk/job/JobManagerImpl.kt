@@ -1029,7 +1029,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         val id = allocateId()
         try {
             when (val plan = planNewJobs(listOf(PendingJob(id, job)), context)) {
-                is NewJobPlan.Rejected -> throw (plan.problems.first().asException())
+                is NewJobPlan.Rejected -> throw JobRejectedException(plan.problems.first())
                 is NewJobPlan.Ok -> {
                     val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
                     klerk.settings.persistence.commitJobStep<Any, Nothing, C, V>(null, null, null, jobs = commit, sequenceNumber = 0)

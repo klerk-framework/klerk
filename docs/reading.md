@@ -115,9 +115,9 @@ reader is the receiver, you never write it out. In a DSL function, where the rea
 They are extension functions, so import the ones you use:
 
 ```kotlin
-import dev.klerkframework.klerk.collection.asSequence
-import dev.klerkframework.klerk.collection.count
-import dev.klerkframework.klerk.collection.query
+import dev.klerkframework.klerk.view.asSequence
+import dev.klerkframework.klerk.view.count
+import dev.klerkframework.klerk.view.query
 ```
 
 ```kotlin

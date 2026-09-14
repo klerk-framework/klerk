@@ -7,8 +7,8 @@ import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
 import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -41,7 +41,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
@@ -414,12 +414,10 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
         state(Improving) {
             onEnter {
                 unmanagedJob(::onEnterImprovingStateAction)
-                transitionWhen(
-                    linkedMapOf(
-                        ::isAnImpostor to Amateur,
-                        ::hasTalent to Established,
-                    )
-                )
+                transitionWhen {
+                    on(::isAnImpostor, Amateur)
+                    on(::hasTalent, Established)
+                }
                 jobs(::aJob)
             }
 
@@ -432,11 +430,9 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
             }
 
             onEvent(ImproveAuthor) {
-                transitionWhen(
-                    linkedMapOf(
-                        ShouldSendNotificationAlgorithm::execute to Improving
-                    )
-                )
+                transitionWhen {
+                    on(ShouldSendNotificationAlgorithm::execute, Improving)
+                }
             }
 
             onEvent(DeleteAuthor) {
@@ -446,31 +442,31 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
 
     }
 
-fun someUpdate(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Author {
+fun someUpdate(args: LifecycleArgs<Author, Ctx, Views>): Author {
     return args.model.props.copy(lastName = LastName("efter"))
 }
 
-fun onExitUpdate(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Author {
+fun onExitUpdate(args: LifecycleArgs<Author, Ctx, Views>): Author {
     return args.model.props.copy(FirstName("Changed name after exit"))
 }
 
-fun sayHello(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
+fun sayHello(args: LifecycleArgs<Author, Ctx, Views>) {
     println("Hello!")
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant {
+fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant {
     return args.time.plus(30.seconds)
 }
 
-fun hasTalent(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = true
-fun isAnImpostor(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Boolean = false
+fun hasTalent(args: LifecycleArgs<Author, Ctx, Views>): Boolean = true
+fun isAnImpostor(args: LifecycleArgs<Author, Ctx, Views>): Boolean = false
 
-fun aJob(args: ArgForInstanceNonEvent<Author, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+fun aJob(args: LifecycleArgs<Author, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
     return listOf(MyJob.declare(MyJobCursor(greeting = "pelle")))
 }
 
 
-fun onEnterImprovingStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
+fun onEnterImprovingStateAction(args: LifecycleArgs<Author, Ctx, Views>) {
     if (onEnterImprovingStateActionCallback != null) {
         onEnterImprovingStateActionCallback!!()
     }
@@ -481,7 +477,7 @@ fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>) {
     println("It was decided that we should show a notification")
 }
 
-fun onEnterAmateurStateAction(args: ArgForInstanceNonEvent<Author, Ctx, Views>) {
+fun onEnterAmateurStateAction(args: LifecycleArgs<Author, Ctx, Views>) {
     if (onEnterAmateurStateActionCallback != null) {
         onEnterAmateurStateActionCallback!!()
     }
@@ -847,28 +843,19 @@ object SQLiteInMemory {
 }
 
 object CreateAuthor :
-    VoidEventWithParameters<Author, CreateAuthorParams>(
-        Author::class,
-        External, CreateAuthorParams::class
-    )
+    VoidEventWithParameters<Author, CreateAuthorParams>(External)
 
-object UpdateAuthor : InstanceEventWithParameters<Author, Author>(
-    Author::class,
-    External, Author::class
-) {
+object UpdateAuthor : InstanceEventWithParameters<Author, Author>(External) {
 
 }
 
-object DeleteAuthor : InstanceEventNoParameters<Author>(Author::class, External)
+object DeleteAuthor : InstanceEventNoParameters<Author>(External)
 
-object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(Author::class, External)
+object DeleteAuthorAndBooks : InstanceEventNoParameters<Author>(External)
 
-object ImproveAuthor : InstanceEventNoParameters<Author>(Author::class, External)
+object ImproveAuthor : InstanceEventNoParameters<Author>(External)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
-    Author::class,
-    External, ChangeNameParams::class
-)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(External)
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
@@ -923,7 +910,7 @@ data class Ctx(
 
 data class User(val name: FirstName)
 
-object AnEventWithoutParameters : VoidEventNoParameters<Author>(Author::class, External)
+object AnEventWithoutParameters : VoidEventNoParameters<Author>(External)
 
 /**
  * Yields once per remaining step, so a test can watch a job progress through several checkpoints.
@@ -1007,16 +994,13 @@ class EnglishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
 }
 
 
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
-    Book::class,
-    External, CreateBookParams::class
-)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
+object PublishBook : InstanceEventNoParameters<Book>(External)
 
-object UpdateBook : InstanceEventWithParameters<Book, Book>(Book::class, External, Book::class)
+object UpdateBook : InstanceEventWithParameters<Book, Book>(External)
 
-object DeleteBook : InstanceEventNoParameters<Book>(Book::class, External)
+object DeleteBook : InstanceEventNoParameters<Book>(External)
 
 data class CreateBookParams(
     val title: BookTitle,
@@ -1064,11 +1048,9 @@ data class CreatePaintingParams(
     val document: dev.klerkframework.klerk.attacheddata.FlakyDocument? = null,
 )
 
-object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(
-    Painting::class, External, CreatePaintingParams::class
-)
+object CreatePainting : VoidEventWithParameters<Painting, CreatePaintingParams>(External)
 
-object DeletePainting : InstanceEventNoParameters<Painting>(Painting::class, External)
+object DeletePainting : InstanceEventNoParameters<Painting>(External)
 
 fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> = stateMachine {
     event(CreatePainting) {}
@@ -1128,9 +1110,9 @@ class NoteBody(id: AttachedStringID) : AttachedStringContainer(id) {
 
 data class CreateNoteParams(val title: NoteTitle, val body: NoteBody)
 
-object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(Note::class, External, CreateNoteParams::class)
+object CreateNote : VoidEventWithParameters<Note, CreateNoteParams>(External)
 
-object DeleteNote : InstanceEventNoParameters<Note>(Note::class, External)
+object DeleteNote : InstanceEventNoParameters<Note>(External)
 
 fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachine {
     event(CreateNote) {}
@@ -1151,7 +1133,7 @@ data class Sketch(val drawing: AttachedBlobID)
 
 enum class SketchStates { Drawn }
 
-object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(Sketch::class, External, Sketch::class)
+object CreateSketch : VoidEventWithParameters<Sketch, Sketch>(External)
 
 fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = stateMachine {
     event(CreateSketch) {}
@@ -1168,7 +1150,7 @@ data class Scribble(val text: AttachedStringID)
 
 enum class ScribbleStates { Written }
 
-object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(Scribble::class, External, Scribble::class)
+object CreateScribble : VoidEventWithParameters<Scribble, Scribble>(External)
 
 fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> = stateMachine {
     event(CreateScribble) {}
@@ -1189,7 +1171,7 @@ data class Doodle(val drawing: DoodleImage)
 
 enum class DoodleStates { Drawn }
 
-object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(Doodle::class, External, Doodle::class)
+object CreateDoodle : VoidEventWithParameters<Doodle, Doodle>(External)
 
 fun doodleStateMachine(): StateMachine<Doodle, DoodleStates, Ctx, Views> = stateMachine {
     event(CreateDoodle) {}
@@ -1239,9 +1221,7 @@ data class CreateInventoryParams(
     val tally: dev.klerkframework.klerk.attacheddata.CountedTwice? = null,
 )
 
-object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(
-    Inventory::class, External, CreateInventoryParams::class
-)
+object CreateInventory : VoidEventWithParameters<Inventory, CreateInventoryParams>(External)
 
 fun inventoryStateMachine(): StateMachine<Inventory, InventoryStates, Ctx, Views> = stateMachine {
     event(CreateInventory) {}

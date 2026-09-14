@@ -2,9 +2,9 @@ package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.QueryOptions
-import dev.klerkframework.klerk.collection.QueryResponse
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.QueryOptions
+import dev.klerkframework.klerk.view.QueryResponse
 
 /**
  * How a view is actually read. Not part of [Reader]'s public surface: reading a view is done on the view

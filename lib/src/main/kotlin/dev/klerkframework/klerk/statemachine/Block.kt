@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.statemachine.executables.*
@@ -19,17 +19,17 @@ internal interface VoidEventExecutable<T : Any, P, C : KlerkContext, V> {
     val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
 }
 
-internal interface InstanceNonEventExecutable<T : Any, C : KlerkContext, V> {
+internal interface InstanceLifecycleExecutable<T : Any, C : KlerkContext, V> {
 
     fun <Primary : Any> process(
-        args: ArgForInstanceNonEvent<T, C, V>,
+        args: LifecycleArgs<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V>
 
-    val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
+    val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
 }
 
 internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
@@ -45,7 +45,7 @@ internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
     val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
 }
 
-/** A pending fire-and-forget job produced by [Block.VoidEventBlock.unmanagedJob] / [Block.InstanceNonEventBlock.unmanagedJob] / [Block.InstanceEventBlock.unmanagedJob], to be run after the command commits. */
+/** A pending fire-and-forget job produced by [Block.VoidEventBlock.unmanagedJob] / [Block.InstanceLifecycleBlock.unmanagedJob] / [Block.InstanceEventBlock.unmanagedJob], to be run after the command commits. */
 public class UnmanagedJob internal constructor(internal val f: () -> Unit, public val description: String)
 
 @SpecificationMarker
@@ -54,14 +54,14 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val type: BlockType
 ) {
 
-    internal class VoidNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
+    internal class VoidLifecycleBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         name: String,
         type: BlockType
     ) :
         Block<T, ModelStates, C, V>(name, type) {
     }
 
-    public class VoidEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V>(name: String, type: BlockType) :
+    public class VoidEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(name: String, type: BlockType) :
         Block<T, ModelStates, C, V>(name, type) {
         internal val executables = mutableListOf<VoidEventExecutable<T, P, C, V>>()
 
@@ -134,13 +134,13 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
     }
 
-    public class InstanceNonEventBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
+    public class InstanceLifecycleBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(
         name: String,
-        type: BlockType
+        type: BlockType,
     ) :
         Block<T, ModelStates, C, V>(name, type) {
 
-        internal val executables = mutableListOf<InstanceNonEventExecutable<T, C, V>>()
+        internal val executables = mutableListOf<InstanceLifecycleExecutable<T, C, V>>()
 
         /**
          * Moves the model to [targetState] once this block finishes. At most one transition per block (`transitionTo`
@@ -149,39 +149,46 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun transitionTo(
             targetState: ModelStates,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            require(executables.none { it is InstanceNonEventTransition<T, *, C, V> }) { "A block can only have one transition" }
-            executables.add(InstanceNonEventTransition(targetState, onCondition))
+            require(executables.none { it is InstanceLifecycleTransition<T, *, C, V> }) { "A block can only have one transition" }
+            executables.add(InstanceLifecycleTransition(targetState, onCondition))
         }
 
         /**
-         * Evaluates each key in [branches], in iteration order, and transitions to the first value whose key returns
-         * `true`; transitions to [otherwise] if none match (does nothing if [otherwise] is null and none match).
+         * Transitions to the target of the first `on` whose decision returns `true`, in declaration order, or to
+         * `otherwise` if none match (does nothing when no `otherwise` was given).
+         *
+         * ```kotlin
+         * transitionWhen {
+         *     on(::isAnImpostor, Amateur)
+         *     on(::hasTalent, Established)
+         *     otherwise(Improving)
+         * }
+         * ```
          */
-        public fun transitionWhen(
-            branches: LinkedHashMap<(args: ArgForInstanceNonEvent<T, C, V>) -> Boolean, ModelStates>,
-            otherwise: ModelStates? = null
-        ) {
-            executables.add(InstanceNonEventTransitionWhen(branches, otherwise))
+        public fun transitionWhen(init: TransitionBranches<LifecycleArgs<T, C, V>, ModelStates>.() -> Unit) {
+            val branches = TransitionBranches<LifecycleArgs<T, C, V>, ModelStates>()
+            branches.init()
+            executables.add(InstanceLifecycleTransitionWhen(branches.branches, branches.otherwise))
         }
 
         /**
          * Deletes the model. At most one `delete` per block — a second call throws `IllegalArgumentException`.
          */
-        public fun delete(onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null) {
-            require(executables.none { it is InstanceNonEventDelete<*, C, V> }) { "A block can only have one delete" }
-            executables.add(InstanceNonEventDelete(onCondition))
+        public fun delete(onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null) {
+            require(executables.none { it is InstanceLifecycleDelete<*, C, V> }) { "A block can only have one delete" }
+            executables.add(InstanceLifecycleDelete(onCondition))
         }
 
         /**
          * Replaces the model's properties with whatever [function] returns.
          */
         public fun update(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> T,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            function: (args: LifecycleArgs<T, C, V>) -> T,
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventUpdateModel(function, onCondition))
+            executables.add(InstanceLifecycleUpdateModel(function, onCondition))
         }
 
         /**
@@ -189,10 +196,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * a deletion to related models.
          */
         public fun commands(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<Command<out Any, out Any?>>,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            function: (args: LifecycleArgs<T, C, V>) -> List<Command<out Any, out Any?>>,
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventCreateEvents(function, onCondition))
+            executables.add(InstanceLifecycleCreateEvents(function, onCondition))
         }
 
         /**
@@ -205,10 +212,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
         public fun unmanagedJob(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> Unit,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            function: (args: LifecycleArgs<T, C, V>) -> Unit,
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventUnmanagedJob(function, onCondition))
+            executables.add(InstanceLifecycleUnmanagedJob(function, onCondition))
         }
 
         /**
@@ -217,10 +224,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun jobs(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> List<DeclaredJob<C, V>>,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            function: (args: LifecycleArgs<T, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventJobs(function, onCondition))
+            executables.add(InstanceLifecycleJobs(function, onCondition))
         }
 
         /**
@@ -229,10 +236,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(
-            function: (args: ArgForInstanceNonEvent<T, C, V>) -> DeclaredJob<C, V>,
-            onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)? = null
+            function: (args: LifecycleArgs<T, C, V>) -> DeclaredJob<C, V>,
+            onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)? = null
         ) {
-            executables.add(InstanceNonEventJob(function, onCondition))
+            executables.add(InstanceLifecycleJob(function, onCondition))
         }
 
         override fun toString(): String {
@@ -241,9 +248,9 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
     }
 
-    public class InstanceEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V>(
+    public class InstanceEventBlock<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(
         name: String,
-        type: BlockType
+        type: BlockType,
     ) :
         Block<T, ModelStates, C, V>(name, type) {
         internal val executables = mutableListOf<InstanceEventExecutable<T, P, C, V>>()
@@ -262,15 +269,20 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
 
         /**
-         * Evaluates each key in [branches], in iteration order, and transitions to the first value whose key returns
-         * `true`; transitions to [otherwise] if none match (does nothing if [otherwise] is null and none match).
+         * Transitions to the target of the first `on` whose decision returns `true`, in declaration order, or to
+         * `otherwise` if none match (does nothing when no `otherwise` was given).
+         *
+         * ```kotlin
+         * transitionWhen {
+         *     on(::isOverdue, Overdue)
+         *     otherwise(Active)
+         * }
+         * ```
          */
-        public fun transitionWhen(
-            branches: LinkedHashMap<(args: ArgForInstanceEvent<T, P, C, V>) -> Boolean, ModelStates>,
-            otherwise: ModelStates? = null
-        ) {
-            // TODO: check that target != current state
-            executables.add(InstanceEventTransitionWhen(branches, otherwise))
+        public fun transitionWhen(init: TransitionBranches<ArgForInstanceEvent<T, P, C, V>, ModelStates>.() -> Unit) {
+            val branches = TransitionBranches<ArgForInstanceEvent<T, P, C, V>, ModelStates>()
+            branches.init()
+            executables.add(InstanceEventTransitionWhen(branches.branches, branches.otherwise))
         }
 
         /**
@@ -349,10 +361,34 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 }
 
 /** Which kind of block an executable belongs to: `onEnter`, `onExit`, an `onEvent` handler, or a time trigger. */
-public enum class BlockType {
+internal enum class BlockType {
     Enter,
     Exit,
     Event,
     Time
 }
 
+
+/**
+ * The branches of a `transitionWhen { }`. Each [on] is evaluated in declaration order, and the model transitions to
+ * the target of the first decision that returns `true`.
+ */
+@SpecificationMarker
+public class TransitionBranches<Args, ModelStates : Enum<*>> internal constructor() {
+
+    internal val branches = LinkedHashMap<(Args) -> Boolean, ModelStates>()
+    internal var otherwise: ModelStates? = null
+
+    /**
+     * Transitions to [targetState] when [decision] returns true. Must be a named function reference, like every other
+     * rule in a specification.
+     */
+    public fun on(decision: (Args) -> Boolean, targetState: ModelStates) {
+        branches[decision] = targetState
+    }
+
+    /** Transitions to [targetState] when no [on] matched. Optional: without it, nothing happens when none match. */
+    public fun otherwise(targetState: ModelStates) {
+        otherwise = targetState
+    }
+}

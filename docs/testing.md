@@ -10,8 +10,8 @@ start a real `Klerk` instance backed by in-memory storage, submit commands, and 
 ```kotlin
 runBlocking {
     val bookViews = BookViews()
-    val collections = Views(bookViews, AuthorViews(bookViews.all))
-    val klerk = Klerk.create(createSpecification(collections), KlerkSettings(persistence = RamStorage()))
+    val views = Views(bookViews, AuthorViews(bookViews.all))
+    val klerk = Klerk.create(createSpecification(views), KlerkSettings(persistence = RamStorage()))
     klerk.meta.start()
 
     // ... submit commands, read data, assert

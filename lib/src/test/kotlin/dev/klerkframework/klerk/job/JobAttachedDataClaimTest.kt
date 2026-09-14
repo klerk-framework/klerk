@@ -12,7 +12,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 /**
  * Attached data has two independent claims: a reference from a model, and a claim by a job. The orphan reaper deletes

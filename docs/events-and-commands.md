@@ -14,18 +14,15 @@ An event is a Kotlin `object` extending one of four base classes, chosen along t
 | **Instance** (model already exists) | `InstanceEventNoParameters<T>` | `InstanceEventWithParameters<T, P>` |
 
 ```kotlin
-object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(
-    Book::class,
-    External, CreateBookParams::class
-)
+object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)
 
-object PublishBook : InstanceEventNoParameters<Book>(Book::class, External)
+object PublishBook : InstanceEventNoParameters<Book>(External)
 
-object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(
-    Author::class,
-    External, ChangeNameParams::class
-)
+object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(External)
 ```
+
+The only thing an event declares is its [visibility](#eventvisibility). The model class and the parameters class are read
+from the type arguments, so they are written once.
 
 A "Void" event is one that isn't tied to an existing model instance — the archetypal example is creating one.
 "Instance" events act on a specific, already-existing model and require its `ModelID` in the command.

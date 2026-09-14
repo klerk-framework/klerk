@@ -3,7 +3,7 @@ package dev.klerkframework.klerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 
 class StateMachineTest {
@@ -26,7 +26,7 @@ class StateMachineTest {
             val voidEvents = klerk.specification.managedModels.single { it.kClass == Book::class }.stateMachine
                 .getEventsForVoidState(Ctx.unauthenticated(), EventVisibility.External)
 
-            val parameters = klerk.specification.getParameters(CreateBook.id)
+            val parameters = klerk.specification.parametersSchema(CreateBook.id)
             requireNotNull(parameters)
             val p = parameters.fields.first()
             println(p.name)

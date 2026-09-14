@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOptions
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -57,8 +57,8 @@ internal class EventProcessor<C : KlerkContext, V>(
 
         val allLists = mutableMapOf<String, MutableList<Int>>()
         klerk.specification.managedModels.forEach {
-            it.collections.prepareForLoad()
-            allLists[it.kClass.simpleName!!] = it.collections._all
+            it.views.prepareForLoad()
+            allLists[it.kClass.simpleName!!] = it.views._all
         }
 
         val clock = Clock.System
@@ -94,7 +94,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
 
         // The load filled the 'all' lists directly, so the matching id sets have to catch up.
-        klerk.specification.managedModels.forEach { it.collections.indexLoadedModels() }
+        klerk.specification.managedModels.forEach { it.views.indexLoadedModels() }
 
         val timeTriggerTime = measureTime {
             updateTimeTriggerOnAllModels()
@@ -102,7 +102,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         logger.info { "Checked timeTriggers in ${timeTriggerTime.inWholeMilliseconds} ms" }
 
         // From here on the set of views is fixed. Views derived later are not indexed and not retained.
-        klerk.specification.managedModels.forEach { it.collections.freeze() }
+        klerk.specification.managedModels.forEach { it.views.freeze() }
 
         timerStartup.record(readModelsMilliS, TimeUnit.MILLISECONDS)
     }
@@ -149,8 +149,8 @@ internal class EventProcessor<C : KlerkContext, V>(
         val state = klerk.specification.getStateMachine(model).getStateByName(model.state)
         check(state is InstanceState)
         @Suppress("UNCHECKED_CAST")
-        var instant = (state.atTimeFunction as? (ArgForInstanceNonEvent<out Any, C, V>) -> Instant)?.invoke(
-            ArgForInstanceNonEvent(model, time, reader)
+        var instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
+            LifecycleArgs(model, time, reader)
         )
         if (instant == null && state.afterDuration != null) {
             instant = time.plus(state.afterDuration!!)
@@ -316,7 +316,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         val view = stateMachine.modelViews as ModelViews<T, C>
         val result = when (currentBlock) {
 
-            is Block.VoidNonEventBlock -> {
+            is Block.VoidLifecycleBlock -> {
                 ProcessingData(currentBlock = currentBlock)
             }
 
@@ -351,10 +351,10 @@ internal class EventProcessor<C : KlerkContext, V>(
                     ?: ProcessingData(currentBlock = currentBlock)
             }
 
-            is Block.InstanceNonEventBlock -> {
-                val args = ArgForInstanceNonEvent(requireNotNull(model), time, reader)
+            is Block.InstanceLifecycleBlock -> {
+                val args = LifecycleArgs(requireNotNull(model), time, reader)
                 @Suppress("UNCHECKED_CAST")
-                currentBlock.executables.map { it as InstanceNonEventExecutable<T, C, V> }
+                currentBlock.executables.map { it as InstanceLifecycleExecutable<T, C, V> }
                     .filter { it.onCondition?.invoke(args) ?: true }
                     .map { it.process(args, processingOptions, view, klerk.specification, processingData) }
                     .reduceOrNull { acc, delta -> acc.merge(delta) }
@@ -380,18 +380,18 @@ internal class EventProcessor<C : KlerkContext, V>(
                 .map { processingData.aggregatedModelState[it]!! }
                 .map { model ->
                     @Suppress("UNCHECKED_CAST")
-                    Pair(model.id, findTimeTrigger(model as Model<T>, ArgForInstanceNonEvent(model, time, reader)))
+                    Pair(model.id, findTimeTrigger(model as Model<T>, LifecycleArgs(model, time, reader)))
                 }
 
         return processingData.copy(timeTriggers = newTimeTriggers.associate { it })/*        return processingData.copy(modifiedModels = processingData.modifiedModels
                     .filter { processingData.transitions.keys.contains(it.key) || processingData.createdModels.keys.contains(it.key) }
-                    .map { (id, model) -> id to model.copy(timeTrigger = findTimeTrigger(model as Model<T>, ArgForInstanceNonEvent(model, context, reader))) }
+                    .map { (id, model) -> id to model.copy(timeTrigger = findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader))) }
                     .toMap())
          */
     }
 
     private fun <T : Any> findTimeTrigger(
-        newModel: Model<T>, transformedArgs: ArgForInstanceNonEvent<T, C, V>
+        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>
     ): Instant? {
         val state = klerk.specification.getStateMachine(newModel).getStateByName(newModel.state)
         check(state is InstanceState)

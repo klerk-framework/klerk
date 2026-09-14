@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelView
+import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.PropertyKey
 import kotlin.reflect.KProperty1

@@ -204,8 +204,8 @@ failing; the job is called `klerk-process-attached-data` in the admin UI.
 Nothing forces you to wait: a longer-running application can prepare the value now and issue the command when the job
 has finished. What is not allowed is attaching a value whose steps have not run — that command is rejected.
 
-If you call `prepare` but no committed command references the ID within **1 minute**, the data is deleted. A later
-attempt to use that ID fails the command.
+If you call `prepare` but no committed command references the ID within **1 minute**
+(`KlerkSettings.defaultAttachedDataLease`), the data is deleted. A later attempt to use that ID fails the command.
 
 ### When a minute is not enough
 

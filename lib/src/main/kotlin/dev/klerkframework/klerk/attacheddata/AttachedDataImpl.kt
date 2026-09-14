@@ -361,7 +361,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         require(steps.isEmpty() || declaration?.qualifiedName in specification.attachedBlobContainers) {
             "${declaration?.qualifiedName ?: declaration} is not the type of any model property or event parameter"
         }
-        val requested = lease ?: settings.unclaimedAttachedDataLifetime
+        val requested = lease ?: settings.defaultAttachedDataLease
         require(requested <= settings.maxAttachedDataLease) {
             "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +
                     "(KlerkSettings.maxAttachedDataLease)"
@@ -614,7 +614,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private fun maybeReap() {
         val now = settings.now()
         val previous = lastReap.get()
-        if (now < previous.plus(settings.unclaimedAttachedDataLifetime)) {
+        if (now < previous.plus(settings.defaultAttachedDataLease)) {
             return
         }
         if (!lastReap.compareAndSet(previous, now)) {

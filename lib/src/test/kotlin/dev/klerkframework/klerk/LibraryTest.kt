@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.days
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 
 class LibraryTest {

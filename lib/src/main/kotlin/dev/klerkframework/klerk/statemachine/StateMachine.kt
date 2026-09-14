@@ -1,7 +1,9 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.misc.PropertyKey
+import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlin.reflect.KClass
 
@@ -13,11 +15,23 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal lateinit var modelViews: ModelViews<T, C>
     internal val mutableStates: MutableList<State<T, ModelStates, C, V>> = mutableListOf<State<T, ModelStates, C, V>>()
     public val states: List<State<T, ModelStates, C, V>> get() = mutableStates
-    public lateinit var voidState: VoidState<T, ModelStates, C, V>
+    private lateinit var _voidState: VoidState<T, ModelStates, C, V>
+
+    /** The void state — where a model of type [T] is before it exists. Declared with `voidState { }`. */
+    public val voidState: VoidState<T, ModelStates, C, V> get() = _voidState
     public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
         get() = mutableStates.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
 
     internal val declaredEvents = mutableListOf<Event<T, *>>()
+
+    /**
+     * What each `event(...)` block declared, keyed by event. Kept here rather than on the `Event` object: an event is
+     * a singleton `object`, so state written onto it would outlive the state machine that declared it and leak between
+     * specifications — which is exactly what used to make tests order-dependent.
+     */
+    private val declaredRules = mutableMapOf<EventReference, DeclaredEventRules>()
+
+    internal fun rulesFor(event: EventReference): DeclaredEventRules = declaredRules[event] ?: DeclaredEventRules()
 
     private var voidStateDeclared = false
     private val declaredModelStates = mutableSetOf<ModelStates>()
@@ -127,7 +141,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         }
         val state = VoidState<T, ModelStates, C, V>("void", type.simpleName!!)
         state.init()
-        voidState = state
+        _voidState = state
         voidStateDeclared = true
         mutableStates.add(state)
     }
@@ -178,10 +192,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         declaredEvents.add(event)
         val rules = VoidEventRulesNoParameters<T, C, V>()
         rules.init()
-        event.setContextRules(rules.contextValidations)
-        @Suppress("UNCHECKED_CAST")
-        event.noParamRules =
-            (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        declare(event, rules.contextValidations, rules.withoutParametersValidationRules)
     }
 
     /**
@@ -197,15 +208,14 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         declaredEvents.add(event)
         val rules = VoidEventRulesWithParameters<T, P, C, V>()
         rules.init()
-        event.setContextRules(rules.contextValidations)
-        @Suppress("UNCHECKED_CAST")
-        event.noParamRules =
-            (rules.withoutParametersValidationRules as Set<(ArgForVoidEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
-        @Suppress("UNCHECKED_CAST")
-        event.paramRulesForVoidEvent =
-            (rules.withParametersValidationRules as Set<(ArgForVoidEvent<T, P, *, *>) -> PropertyCollectionValidity>)
-        event.validRefs = rules.validRefs
-        event.validEnums = rules.validEnumsMap
+        declare(
+            event,
+            rules.contextValidations,
+            rules.withoutParametersValidationRules,
+            rules.withParametersValidationRules,
+            rules.validRefs,
+            rules.validEnumsMap,
+        )
     }
 
     /**
@@ -217,10 +227,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         declaredEvents.add(event)
         val rules = InstanceEventRulesNoParameters<T, C, V>()
         rules.init()
-        event.setContextRules(rules.contextValidations)
-        @Suppress("UNCHECKED_CAST")
-        event.noParamRules =
-            (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
+        declare(event, rules.contextValidations, rules.withoutParametersValidationRules)
     }
 
     /**
@@ -236,17 +243,71 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         declaredEvents.add(event)
         val rules = InstanceEventRulesWithParameters<T, P, C, V>()
         rules.init()
-        event.setContextRules(rules.contextValidations)
-        @Suppress("UNCHECKED_CAST")
-        event.noParamRules =
-            (rules.withoutParametersValidationRules as Set<(ArgForInstanceEvent<T, Nothing?, *, *>) -> PropertyCollectionValidity>)
-        @Suppress("UNCHECKED_CAST")
-        event.paramRulesForInstanceEvent =
-            (rules.withParametersValidationRules as Set<(ArgForInstanceEvent<T, P, *, *>) -> PropertyCollectionValidity>)
-        event.validRefs = rules.validRefs
-        event.validEnums = rules.validEnumsMap
+        declare(
+            event,
+            rules.contextValidations,
+            rules.withoutParametersValidationRules,
+            rules.withParametersValidationRules,
+            rules.validRefs,
+            rules.validEnumsMap,
+        )
     }
 
+    /**
+     * Records what an `event(...)` block declared. The rule sets are stored erased: every consumer already knows the
+     * event kind it is asking about, and casts back to it.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun declare(
+        event: Event<T, *>,
+        contextRules: Set<(C) -> PropertyCollectionValidity>,
+        noParamRules: Set<*>,
+        paramRules: Set<*> = emptySet<Any>(),
+        validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
+        validEnums: Map<PropertyKey, Set<Enum<*>>> = emptyMap(),
+    ) {
+        require(declaredRules.put(
+            event.id,
+            DeclaredEventRules(
+                contextRules = contextRules as Set<(KlerkContext) -> PropertyCollectionValidity>,
+                noParamRules = noParamRules as Set<(Nothing) -> PropertyCollectionValidity>,
+                paramRules = paramRules as Set<(Nothing) -> PropertyCollectionValidity>,
+                validRefs = validRefs,
+                validEnums = validEnums,
+            )
+        ) == null) { "The event ${event.id} is declared more than once in this state machine" }
+    }
+
+}
+
+/**
+ * The rules one `event(...)` block declared, as stored by [StateMachine]. Erased: each consumer casts the rule sets
+ * back to the argument type its event kind uses.
+ */
+internal data class DeclaredEventRules(
+    val contextRules: Set<(KlerkContext) -> PropertyCollectionValidity> = emptySet(),
+    val noParamRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
+    val paramRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
+    val validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
+    val validEnums: Map<PropertyKey, Set<Enum<*>>> = emptyMap(),
+) {
+    /** Every rule declared here, for the "rules must be named" check. */
+    val allRules: List<Function<*>> get() = contextRules.toList() + noParamRules + paramRules
+
+    /** The rules that run without the event's parameters, as the argument type [A] of this event kind. */
+    @Suppress("UNCHECKED_CAST")
+    fun <A> withoutParameters(): Set<(A) -> PropertyCollectionValidity> =
+        noParamRules as Set<(A) -> PropertyCollectionValidity>
+
+    /** The rules that run with the event's parameters, as the argument type [A] of this event kind. */
+    @Suppress("UNCHECKED_CAST")
+    fun <A> withParameters(): Set<(A) -> PropertyCollectionValidity> =
+        paramRules as Set<(A) -> PropertyCollectionValidity>
+
+    /** The rules that run against the context alone. */
+    @Suppress("UNCHECKED_CAST")
+    fun <C : KlerkContext> forContext(): Set<(C) -> PropertyCollectionValidity> =
+        contextRules as Set<(C) -> PropertyCollectionValidity>
 }
 
 public inline fun <reified T : Any, reified ModelStates : Enum<*>, C : KlerkContext, V> stateMachine(init: StateMachine<T, ModelStates, C, V>.() -> Unit): StateMachine<T, ModelStates, C, V> {

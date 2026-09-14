@@ -193,7 +193,7 @@ public interface JobManager<C : KlerkContext, V> {
      *
      * @param context whose actor is recorded as the job's owner, and is what the job authorization rules see.
      * @return the id of the scheduled job.
-     * @throws IllegalStateException if the job was refused by the admission policy or the hard queue cap.
+     * @throws JobRejectedException if the job was refused by the admission policy or the hard queue cap.
      */
     public suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobId
 
@@ -373,7 +373,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * back by [getMetadata] and is *not* given to the authorization rules. Must not exceed 1000 characters when
      * JSON-encoded, since it is kept in memory for the lifetime of the data.
      * @param lease how long the data survives without being claimed. Defaults to
-     * [KlerkSettings.unclaimedAttachedDataLifetime] (one minute), which is right when the command follows
+     * [KlerkSettings.defaultAttachedDataLease] (one minute), which is right when the command follows
      * immediately. Ask for a longer one when it cannot — an upload that is prepared as its last byte arrives but is
      * not attached until the user submits a form, say. A lease may not exceed
      * [KlerkSettings.maxAttachedDataLease], and the `writeAttachedData` rules see it, so who may hold data for a
@@ -548,6 +548,10 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * Retrieves what is known about a value whose kind is not known yet, e.g. one named by nothing but an id in a
      * URL. [AttachedDataMetadata.kind] says which kind it turned out to be; [AttachedDataID.asBlob] and
      * [AttachedDataID.asString] then give the typed id needed to read it.
+     *
+     * This overload could serve every case, since [AttachedBlobID.untyped] and [AttachedStringID.untyped] convert.
+     * The typed overloads exist because they also check the kind: asking through an [AttachedBlobID] for something
+     * that turned out to be a string is a bug, and they report it here rather than letting it travel.
      *
      * Authorized exactly like [get].
      *

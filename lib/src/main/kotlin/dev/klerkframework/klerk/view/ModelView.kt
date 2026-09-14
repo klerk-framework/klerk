@@ -1,4 +1,4 @@
-package dev.klerkframework.klerk.collection
+package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
@@ -46,7 +46,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     private fun attach(child: ModelView<T, C>) {
         // Views are part of the application's shape and are built before Klerk starts. One built later -- typically a
         // `filter` inside a read block -- is left detached: it would otherwise be maintained, and retained, forever.
-        if (getView().isFrozen) {
+        if (modelViews.isFrozen) {
             return
         }
         children.add(child)
@@ -186,23 +186,20 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         ensureIndex(reader)?.isEmpty() ?: memberIds(reader).none()
 
     /**
-     * @return the id this view was [register]ed under, combined with the owning model class's name (e.g.
-     * `c.Author.establishedAuthors`)
+     * The id this view was [register]ed under, combined with the owning model class's name (e.g.
+     * `v.Author.establishedAuthors`). Use [ViewId.shortId] for the id on its own.
+     *
      * @throws IllegalStateException if this view was never registered
      */
-    public open fun getFullId(): CollectionId {
-        check(idBase != null && _id != null)
-        return CollectionId(idBase!!, _id!!)
-    }
-
-    /**
-     * @return the id this view was [register]ed under
-     * @throws IllegalStateException if this view was never registered
-     */
-    public open fun getId(): String = _id ?: error("Collection is missing ID")
+    public open val id: ViewId
+        get() {
+            check(idBase != null && _id != null) { "This view was never registered" }
+            return ViewId(idBase!!, _id!!)
+        }
 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
-    public open fun getView(): ModelViews<T, C> = parent?.getView() ?: throw IllegalStateException()
+    public open val modelViews: ModelViews<T, C>
+        get() = parent?.modelViews ?: throw IllegalStateException("This view has no ModelViews")
     /** Answered from the index when there is one, so no model is read. */
     public open fun <V> count(reader: ModelReader<C, V>): Int =
         ensureIndex(reader)?.size ?: memberIds(reader).count()
@@ -219,17 +216,17 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     }
 
     /**
-     * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.getCollections()`, so it can be
-     * looked up by [CollectionId] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
+     * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.getViews()`, so it can be
+     * looked up by [ViewId] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
      * that is never registered still works if you hold a reference to it, but can't be looked up by id.
      *
      * @param id must not contain `.` or spaces
      * @throws IllegalArgumentException if [id] contains `.` or a space
      */
     public fun register(id: String): ModelView<T, C> {
-        require(!id.contains(".") && !id.contains(" ")) { "Illegal collection ID: $id" }
+        require(!id.contains(".") && !id.contains(" ")) { "Illegal view id: $id" }
         this._id = id
-        getView().register(this)
+        modelViews.register(this)
         return this
     }
 
@@ -315,7 +312,7 @@ internal class AllModelView<T : Any, C : KlerkContext>(
         _id = "all"
     }
 
-    override fun getView(): ModelViews<T, C> = view
+    override val modelViews: ModelViews<T, C> get() = view
 
     // The set of every id of this type is maintained by ModelViews, so this view is always indexed and never builds
     // anything.

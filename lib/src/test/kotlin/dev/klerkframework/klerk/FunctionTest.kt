@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.QueryOptions
-import dev.klerkframework.klerk.collection.QueryResponse
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.QueryOptions
+import dev.klerkframework.klerk.view.QueryResponse
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.read.Reader
 import kotlin.reflect.KClass

@@ -8,6 +8,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.statemachine.DeclaredEventRules
 import dev.klerkframework.klerk.misc.getStateMachine
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
@@ -68,26 +69,26 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         params: P,
         reader: ModelReader<C, V>
     ): List<Problem> {
+        val rules = klerk.specification.rulesOf(event.id)
         val propertyCollectionValidityList: List<PropertyCollectionValidity> = when (event) {
 
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
                 val args = ArgForVoidEvent(command, context, reader)
-                event.getNoParamRulesForVoidEvent<C, V>().map { it.invoke(args) }
+                rules.withoutParameters<ArgForVoidEvent<T, Nothing?, C, V>>().map { it.invoke(args) }
             }
 
             is VoidEventWithParameters<T, *> -> {
                 @Suppress("UNCHECKED_CAST")
                 val commandWithoutParams = Command(event as Event<T, Nothing?>, null, null)
                 val argsWithoutParams = ArgForVoidEvent(commandWithoutParams, context, reader)
-                val withoutParams = event.getNoParamRulesForVoidEvent<C, V>().map { it.invoke(argsWithoutParams) }
-
-                val command = Command(event as Event<T, P>, null, params)
-                val argsWithParams = ArgForVoidEvent(command, context, reader)
+                val withoutParams = rules.withoutParameters<ArgForVoidEvent<T, Nothing?, C, V>>()
+                    .map { it.invoke(argsWithoutParams) }
 
                 @Suppress("UNCHECKED_CAST")
-                val withParams =
-                    (event as VoidEventWithParameters).getParamRules<C, V>().map { it.invoke(argsWithParams) }
+                val command = Command(event as Event<T, P>, null, params)
+                val argsWithParams = ArgForVoidEvent(command, context, reader)
+                val withParams = rules.withParameters<ArgForVoidEvent<T, P, C, V>>().map { it.invoke(argsWithParams) }
 
                 withoutParams.union(withParams).toList()
             }
@@ -96,7 +97,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val command = Command(event, requireNotNull(id), null)
                 val model = reader.get(id)
                 val args = ArgForInstanceEvent(model, command, context, reader)
-                event.getNoParamRulesForInstanceEvent<C, V>().map { it.invoke(args) }
+                rules.withoutParameters<ArgForInstanceEvent<T, Nothing?, C, V>>().map { it.invoke(args) }
             }
 
             is InstanceEventWithParameters<T, *> -> {
@@ -104,14 +105,14 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 val commandWithoutParams = Command(event as Event<T, Nothing?>, requireNotNull(id), null)
                 val model = reader.get(id)
                 val argsWithoutParams = ArgForInstanceEvent(model, commandWithoutParams, context, reader)
-                val withoutParams = event.getNoParamRulesForInstanceEvent<C, V>().map { it.invoke(argsWithoutParams) }
-
-                val command = Command(event as Event<T, P>, id, requireNotNull(params))
-                val argsWithParams = ArgForInstanceEvent(model, command, context, reader)
+                val withoutParams = rules.withoutParameters<ArgForInstanceEvent<T, Nothing?, C, V>>()
+                    .map { it.invoke(argsWithoutParams) }
 
                 @Suppress("UNCHECKED_CAST")
-                val withParams =
-                    (event as InstanceEventWithParameters).getParamRules<C, V>().map { it.invoke(argsWithParams) }
+                val command = Command(event as Event<T, P>, id, requireNotNull(params))
+                val argsWithParams = ArgForInstanceEvent(model, command, context, reader)
+                val withParams = rules.withParameters<ArgForInstanceEvent<T, P, C, V>>()
+                    .map { it.invoke(argsWithParams) }
                 withoutParams.union(withParams).toList()
             }
 
@@ -121,7 +122,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     }
 
     private fun validateWithContext(context: C, eventReference: EventReference): Collection<Problem> {
-        return klerk.specification.getEvent(eventReference).getContextRules<C>().mapNotNull {
+        return klerk.specification.rulesOf(eventReference).forContext<C>().mapNotNull {
             val result = it.invoke(context)
             if (result is PropertyCollectionValidity.Invalid) InvalidPropertyCollectionProblem(
                 endUserTranslatedMessage = result.endUserTranslatedMessage ?: it::class.simpleName
@@ -180,7 +181,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             val view = validReferences[leaf.field.key] ?: return@forEachLeaf
             if (!view.contains(id, reader)) {
                 problem = InvalidPropertyProblem(
-                    "Did not find $id in ${view.getFullId()} for parameter ${leaf.path}",
+                    "Did not find $id in ${view.id} for parameter ${leaf.path}",
                     propertyName = leaf.path
                 )
             }
@@ -351,26 +352,27 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         model: Model<T>?,
         reader: ReaderWithoutAuth<C, V>
     ): List<PropertyCollectionValidity> {
+        val rules = klerk.specification.rulesOf(event.id)
         return when (event) {
 
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
                 val args = ArgForVoidEvent(command, context, reader)
-                event.getNoParamRulesForVoidEvent<C, V>().map { it.invoke(args) }
+                rules.withoutParameters<ArgForVoidEvent<T, Nothing?, C, V>>().map { it.invoke(args) }
             }
 
             is VoidEventWithParameters<T, *> -> {
                 @Suppress("UNCHECKED_CAST")
                 val commandWithoutParams = Command(event as Event<T, Nothing?>, null, null)
                 val argsWithoutParams = ArgForVoidEvent(commandWithoutParams, context, reader)
-                event.getNoParamRulesForVoidEvent<C, V>().map { it.invoke(argsWithoutParams) }
+                rules.withoutParameters<ArgForVoidEvent<T, Nothing?, C, V>>().map { it.invoke(argsWithoutParams) }
             }
 
             is InstanceEventNoParameters<T> -> {
                 requireNotNull(model)
                 val command = Command(event, model.id, null)
                 val args = ArgForInstanceEvent(model, command, context, reader)
-                event.getNoParamRulesForInstanceEvent<C, V>().map { it.invoke(args) }
+                rules.withoutParameters<ArgForInstanceEvent<T, Nothing?, C, V>>().map { it.invoke(args) }
             }
 
             is InstanceEventWithParameters<T, *> -> {
@@ -378,7 +380,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 @Suppress("UNCHECKED_CAST")
                 val commandWithoutParams = Command(event as Event<T, Nothing?>, model.id, null)
                 val argsWithoutParams = ArgForInstanceEvent(model, commandWithoutParams, context, reader)
-                event.getNoParamRulesForInstanceEvent<C, V>().map { it.invoke(argsWithoutParams) }
+                rules.withoutParameters<ArgForInstanceEvent<T, Nothing?, C, V>>().map { it.invoke(argsWithoutParams) }
             }
         }
     }

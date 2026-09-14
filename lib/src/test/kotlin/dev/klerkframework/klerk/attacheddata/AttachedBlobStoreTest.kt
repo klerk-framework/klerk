@@ -117,7 +117,7 @@ class AttachedBlobStoreTest {
         val klerk = Klerk.create(
             createConfig(Views(BookViews(), AuthorViews(BookViews().all))),
             // an unclaimed value normally dies almost immediately here
-            testSettings().copy(unclaimedAttachedDataLifetime = 1.milliseconds),
+            testSettings().copy(defaultAttachedDataLease = 1.milliseconds),
         )
         klerk.meta.start(installShutdownHook = false)
 

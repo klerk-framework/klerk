@@ -10,7 +10,7 @@ import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.*
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 /**
  * The read authorization of a property must belong to the read that produced the model, not to the container

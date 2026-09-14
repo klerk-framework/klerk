@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
@@ -158,5 +158,18 @@ class PluginTest {
         assertFalse(plugin.stopped)
         klerk.meta.stop()
         assertTrue(plugin.stopped)
+    }
+}
+
+class EventDeclarationTest {
+
+    @Test
+    fun `the model class and parameters class come from the type arguments`() {
+        assertEquals(EventReference("Book", "CreateBook"), CreateBook.id)
+        assertEquals(CreateBookParams::class, CreateBook.parametersClass)
+
+        assertEquals(EventReference("Book", "PublishBook"), PublishBook.id)
+        assertEquals(EventReference("Author", "ChangeName"), ChangeName.id)
+        assertEquals(ChangeNameParams::class, ChangeName.parametersClass)
     }
 }

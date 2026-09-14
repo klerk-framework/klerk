@@ -17,7 +17,7 @@ import java.nio.file.Files
 import kotlin.test.*
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
-import dev.klerkframework.klerk.collection.*
+import dev.klerkframework.klerk.view.*
 
 /**
  * What a blob property declares is enforced where it counts: in the command pipeline, against what Klerk found the

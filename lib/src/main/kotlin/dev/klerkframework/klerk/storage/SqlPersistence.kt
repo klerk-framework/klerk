@@ -263,7 +263,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         sequenceNumber = row[EventLog.sequenceNumber],
         time = decode64bitMicroseconds(row[timestamp]),
         eventReference = EventReference.parse(row[event]),
-        reference = row[EventLog.modelId],
+        model = ModelID(row[EventLog.modelId]),
         actorType = ActorType.fromStoredValue(row[actorIdentityType].toInt()),
         actorReference = row[actorIdentityReference],
         actorExternalId = row[actorIdentityExternalId],
@@ -280,7 +280,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 deletedEntries.add(original.sequenceNumber)
                 return@forEach
             }
-            require(updated.reference == original.reference) { "Updating of ID is not supported" }
+            require(updated.model == original.model) { "Updating of ID is not supported" }
             require(updated.sequenceNumber == original.sequenceNumber) { "Updating of sequenceNumber is not supported" }
             updatedEntries.add(updated)
         }
@@ -292,7 +292,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             updatedEntries.forEach { updated ->
                 EventLog.update({ EventLog.sequenceNumber eq updated.sequenceNumber }) {
                     it[timestamp] = updated.time.to64bitMicroseconds()
-                    it[event] = updated.eventReference.id()
+                    it[event] = updated.eventReference.toString()
                     it[params] = updated.params
                     it[actorIdentityType] = updated.actorType.storedValue.toByte()
                     it[actorIdentityReference] = updated.actorReference

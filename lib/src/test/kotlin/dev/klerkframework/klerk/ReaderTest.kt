@@ -1,8 +1,8 @@
 package dev.klerkframework.klerk
 
 
-import dev.klerkframework.klerk.collection.asSequence
-import dev.klerkframework.klerk.collection.query
+import dev.klerkframework.klerk.view.asSequence
+import dev.klerkframework.klerk.view.query
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions

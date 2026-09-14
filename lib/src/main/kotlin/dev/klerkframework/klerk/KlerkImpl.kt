@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobManagerImpl
@@ -54,16 +54,16 @@ internal class KlerkImpl<C : KlerkContext, V>(
          */
 
         specification.managedModels.forEach { managed ->
-            managed.collections.initialize()
-            managed.collections.getCollections().forEach { it.setIdBase(managed.kClass.simpleName) }
-            managed.stateMachine.setView(managed.collections)
+            managed.views.initialize()
+            managed.views.getViews().forEach { it.setIdBase(managed.kClass.simpleName) }
+            managed.stateMachine.setView(managed.views)
         }
 
     }
 
 
     private fun modelViewProvider(modelType: String): ModelViews<*, C> {
-        return specification.managedModels.find { it.kClass.simpleName == modelType }?.collections
+        return specification.managedModels.find { it.kClass.simpleName == modelType }?.views
             ?: throw RuntimeException("Can't find model view for type '$modelType'")
     }
 

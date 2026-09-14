@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 

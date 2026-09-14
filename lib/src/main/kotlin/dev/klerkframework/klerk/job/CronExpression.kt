@@ -16,7 +16,7 @@ import kotlin.time.Instant
  *
  * There is deliberately no timezone support — see [CronSchedule].
  */
-public class CronExpression private constructor(
+internal class CronExpression private constructor(
     private val minutes: Set<Int>,
     private val hours: Set<Int>,
     private val daysOfMonth: Set<Int>,
@@ -31,7 +31,7 @@ public class CronExpression private constructor(
      * The first occurrence strictly after [after], or null if there is none within the next four years (which only
      * happens for an expression such as `0 0 30 2 *` that can never match).
      */
-    public fun nextAfter(after: Instant): Instant? {
+    fun nextAfter(after: Instant): Instant? {
         // Start at the beginning of the minute after `after`, so a fire is never returned twice.
         var candidate = after.toUtcDateTime().withSecond(0).withNano(0).plusMinutes(1)
         val limit = candidate.plusYears(SEARCH_YEARS)
@@ -61,7 +61,7 @@ public class CronExpression private constructor(
      * Every occurrence in `(after, until]`, oldest first, at most [limit] of them. Used to work out what was missed
      * while the node was down.
      */
-    public fun occurrencesBetween(after: Instant, until: Instant, limit: Int): List<Instant> {
+    fun occurrencesBetween(after: Instant, until: Instant, limit: Int): List<Instant> {
         val result = mutableListOf<Instant>()
         var cursor = after
         while (result.size < limit) {
@@ -92,14 +92,14 @@ public class CronExpression private constructor(
 
     override fun toString(): String = expression
 
-    public companion object {
+    companion object {
 
         private const val SEARCH_YEARS = 4L
 
         /**
          * @throws IllegalArgumentException if [expression] is not a valid five-field cron expression.
          */
-        public fun parse(expression: String): CronExpression {
+        fun parse(expression: String): CronExpression {
             val fields = expression.trim().split(Regex("\\s+"))
             require(fields.size == 5) {
                 "A cron expression must have five fields (minute hour day-of-month month day-of-week), " +

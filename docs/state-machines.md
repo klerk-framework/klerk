@@ -7,15 +7,15 @@ logic of your application lives — Klerk will refuse to change a model in any w
 A state machine is built with the `stateMachine { }` DSL and wired to its model type in the specification:
 
 ```kotlin
-fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> =
+fun bookStateMachine(views: Views): StateMachine<Book, BookStates, Ctx, Views> =
     stateMachine {
         // ...
     }
 
 SpecificationBuilder<Ctx, Views>(views).build {
     managedModels {
-        model(Book::class, bookStateMachine(collections), collections.books)
-        model(Author::class, authorStateMachine(collections), collections.authors)
+        model(Book::class, bookStateMachine(views), views.books)
+        model(Author::class, authorStateMachine(views), views.authors)
     }
     // ...
 }
@@ -30,7 +30,7 @@ Every event a model can react to must be declared with `event(...)` before it is
 
 ```kotlin
 event(CreateBook) {
-    validReferences(CreateBookParams::author, collections.authors.all)
+    validReferences(CreateBookParams::author, views.authors.all)
     validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
 }
 
@@ -131,7 +131,7 @@ state(AuthorStates.Established) {
     }
 }
 
-fun later(args: ArgForInstanceNonEvent<Author, Ctx, Views>): Instant = args.time.plus(30.seconds)
+fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant = args.time.plus(30.seconds)
 ```
 
 - `after(duration) { }` fires `duration` after the model entered the current state.
@@ -144,7 +144,7 @@ and won't be retried. Avoid triggers that create loops (e.g. a state whose time 
 with the same trigger), as this can put continuous load on the system.
 
 A time trigger fires on its own, in the background, with no command and no caller-supplied context — notice
-`ArgForInstanceNonEvent` has no `context` field. To even have `after`/`atTime` (or jobs) in your specification, Klerk
+`LifecycleArgs` has no `context` field. To even have `after`/`atTime` (or jobs) in your specification, Klerk
 needs a way to manufacture a `Ctx` for this situation, which is what `systemContextProvider` is for — see
 [context.md](context.md#systemcontextprovider).
 
@@ -157,7 +157,7 @@ Inside `onEvent`, `onEnter`, `onExit`, `after`, and `atTime` blocks you can call
 | `update(::fn)`                                                              | Replaces the model's properties with whatever `fn` returns. At most one per block.                                            |
 | `delete(onCondition = ...)`                                                 | Deletes the model. At most one per block.                                                                                     |
 | `transitionTo(State, onCondition = ...)`                                    | Moves the model to `State`. At most one per block.                                                                            |
-| `transitionWhen(linkedMapOf(::decision to State, ...), otherwise = State?)` | Evaluates each decision function in order and transitions to the first match; `otherwise` if none match.                      |
+| `transitionWhen { on(::decision, State); otherwise(State) }`                 | Evaluates each decision in declaration order and transitions to the first match; `otherwise` if none match.                   |
 | `commands(::fn)`                                                            | Returns a `List<Command<*, *>>` to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
 | `job(::fn)` / `jobs(::fn)` / `unmanagedJob(::fn, onCondition = ...)`        | Schedule background work — `job` for a single job, `jobs` for a list; see [jobs.md](jobs.md) for the distinction from `unmanagedJob`. |
 
@@ -168,15 +168,15 @@ like `::hasTalent` or `::isAnImpostor` against the same arguments:
 ```kotlin
 state(AuthorStates.Improving) {
     onEnter {
-        transitionWhen(
-            linkedMapOf(
-                ::isAnImpostor to AuthorStates.Amateur,
-                ::hasTalent to AuthorStates.Established,
-            )
-        )
+        transitionWhen {
+            on(::isAnImpostor, AuthorStates.Amateur)
+            on(::hasTalent, AuthorStates.Established)
+        }
     }
 }
 ```
+
+Each decision must be a named function reference, like every other rule in a specification.
 
 `commands` is how one event cascades into others. Here, deleting an author also deletes all their books, as part
 of the same command:
@@ -208,7 +208,7 @@ describing everything available at that point:
   ([context.md](context.md)), and `reader` ([reading.md](reading.md)). There is no `model` yet — it doesn't exist.
 - `ArgForInstanceEvent<T, P, C, V>` — used in `onEvent` inside `state { }`. Adds `model: Model<T>`
   ([models.md](models.md)), the (uncommitted) model the event is acting on.
-- `ArgForInstanceNonEvent<T, C, V>` — used in `onEnter`, `onExit`, `after`, `atTime`, i.e. anywhere there's no
+- `LifecycleArgs<T, C, V>` — used in `onEnter`, `onExit`, `after`, `atTime`, i.e. anywhere there's no
   triggering event. Has `model`, `time`, and `reader`, but no `command`.
 
 `P` is `Nothing?` for events without parameters. The reader you get here reads data as it was *before* the current

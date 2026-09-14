@@ -142,8 +142,8 @@ is a setting:
 val specification = SpecificationBuilder<Ctx, Views>(views).build {
     migrations(RenameCoAuthorsToCoWriters)
     managedModels {
-        model(Book::class, bookStateMachine(collections), collections.books)
-        model(Author::class, authorStateMachine(collections), collections.authors)
+        model(Book::class, bookStateMachine(views), views.books)
+        model(Author::class, authorStateMachine(views), views.authors)
     }
     // authorization, systemContextProvider, ...
 }

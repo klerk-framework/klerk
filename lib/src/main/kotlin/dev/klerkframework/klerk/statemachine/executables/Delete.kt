@@ -1,17 +1,17 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
+import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
 import dev.klerkframework.klerk.storage.ModelCache
 
-internal class InstanceNonEventDelete<T : Any, C : KlerkContext, V>(
-    override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
-) : InstanceNonEventExecutable<T, C, V> {
+internal class InstanceLifecycleDelete<T : Any, C : KlerkContext, V>(
+    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
+) : InstanceLifecycleExecutable<T, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceNonEvent<T, C, V>,
+        args: LifecycleArgs<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

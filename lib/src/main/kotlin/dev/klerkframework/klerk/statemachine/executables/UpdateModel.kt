@@ -1,23 +1,23 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelViews
+import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 
 import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceNonEventExecutable
+import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
 import kotlin.time.Instant
 
-internal class InstanceNonEventUpdateModel<T : Any, C : KlerkContext, V>(
-    val f: (ArgForInstanceNonEvent<T, C, V>) -> T,
-    override val onCondition: ((args: ArgForInstanceNonEvent<T, C, V>) -> Boolean)?
-) : InstanceNonEventExecutable<T, C, V> {
+internal class InstanceLifecycleUpdateModel<T : Any, C : KlerkContext, V>(
+    val f: (LifecycleArgs<T, C, V>) -> T,
+    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
+) : InstanceLifecycleExecutable<T, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceNonEvent<T, C, V>,
+        args: LifecycleArgs<T, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

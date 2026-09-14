@@ -1,9 +1,9 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.QueryOptions
-import dev.klerkframework.klerk.collection.QueryResponse
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.QueryOptions
+import dev.klerkframework.klerk.view.QueryResponse
 import kotlin.reflect.KClass
 import kotlin.time.Instant
 import kotlin.reflect.KProperty1
@@ -14,7 +14,7 @@ import kotlin.reflect.KProperty1
  * `args.reader`.
  *
  * Reading a *view* is done on the view — `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends, in
- * `dev.klerkframework.klerk.collection`. Those take this reader as a context parameter, so inside a read block, or a
+ * `dev.klerkframework.klerk.view`. Those take this reader as a context parameter, so inside a read block, or a
  * `with(args.reader) { }` block in a DSL function, you never write it out. See docs/reading.md.
  *
  * A read block gets the larger [Reader], which can additionally answer which events are possible right now.

@@ -322,7 +322,7 @@ open class AttachedDataTest {
 
     @Test
     fun `Unclaimed data disappears when it expires`() = runBlocking {
-        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 1.milliseconds) }
+        val klerk = start { it.copy(defaultAttachedDataLease = 1.milliseconds) }
         val id = klerk.attachedData.prepare(blob("too slow"), AuthorPicture::class, Ctx.system())
         Thread.sleep(30)
 
@@ -335,7 +335,7 @@ open class AttachedDataTest {
 
     @Test
     fun `A context clock in the future does not extend the claim window`() = runBlocking {
-        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 1.milliseconds) }
+        val klerk = start { it.copy(defaultAttachedDataLease = 1.milliseconds) }
         val distantFuture = Ctx(SystemIdentity, time = Clock.System.now().plus(365.days))
         val id = klerk.attachedData.prepare(blob("no time travel"), AuthorPicture::class, distantFuture)
         Thread.sleep(30)
@@ -347,7 +347,7 @@ open class AttachedDataTest {
 
     @Test
     fun `A context clock in the past does not shorten the claim window`() = runBlocking {
-        val klerk = start { it.copy(unclaimedAttachedDataLifetime = 10.minutes) }
+        val klerk = start { it.copy(defaultAttachedDataLease = 10.minutes) }
         val distantPast = Ctx(SystemIdentity, time = Clock.System.now().minus(365.days))
         val id = klerk.attachedData.prepare(blob("still here"), AuthorPicture::class, distantPast)
 

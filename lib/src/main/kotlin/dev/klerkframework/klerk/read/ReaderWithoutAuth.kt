@@ -1,11 +1,11 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.collection.ModelView
-import dev.klerkframework.klerk.collection.PageDirection
-import dev.klerkframework.klerk.collection.QueryListCursor
-import dev.klerkframework.klerk.collection.QueryOptions
-import dev.klerkframework.klerk.collection.QueryResponse
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.PageDirection
+import dev.klerkframework.klerk.view.QueryListCursor
+import dev.klerkframework.klerk.view.QueryOptions
+import dev.klerkframework.klerk.view.QueryResponse
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1

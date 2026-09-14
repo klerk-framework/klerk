@@ -144,7 +144,7 @@ val id = klerk.jobs.schedule(ImportBooks.declare(ImportCursor(...), scheduleAt =
 
 The context is what decides the job's **owner** — the actor the [authorization rules](#who-can-see-a-job) see — and what
 the [admission policy](#priority-backpressure-and-overload) is given, so scheduling this way can be refused when the
-queue is not draining.
+queue is not draining — `schedule` then throws `JobRejectedException`, whose `code` and `problem` say why.
 
 Jobs scheduled by a command are persisted in that command's transaction. If the command fails, no job is scheduled.
 `CommandResult.Success.jobs` lists the ids of what was scheduled.

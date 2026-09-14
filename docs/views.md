@@ -26,8 +26,8 @@ data class Views(
 
 SpecificationBuilder<Ctx, Views>(views).build {
     managedModels {
-        model(Book::class, bookStateMachine(collections), collections.books)
-        model(Author::class, authorStateMachine(collections), collections.authors)
+        model(Book::class, bookStateMachine(views), views.books)
+        model(Author::class, authorStateMachine(views), views.authors)
     }
     // ...
 }
@@ -69,12 +69,12 @@ immutable value, as `greatAuthorNames` does above, is fine. If membership genuin
 custom `ModelView` instead: those are evaluated on every query.
 
 Every view you want to expose must be registered with `.register("someId")`. Registering does two things: it gives the
-view a stable string id, combined with the owning model's class name into a `CollectionId(modelName, shortId)`
-(rendered as `c.Author.establishedAuthors`); and it adds the view to `Specification.getCollections()`, which is how
-Klerk knows the view exists at all. That `CollectionId` is what `Specification.getCollection(id)` uses to look a view up
+view a stable string id, combined with the owning model's class name into a `ViewId(modelName, shortId)`
+(rendered as `v.Author.establishedAuthors`); and it adds the view to `Specification.getViews()`, which is how
+Klerk knows the view exists at all. That `ViewId` is what `Specification.getView(id)` uses to look a view up
 by id, and it's what shows up in the error message when a `validReferences` check rejects a command (`"Did not find 42 in
-c.Author.all for parameter favouriteColleague"`). An unregistered `filter`/`sorted` result still works if you hold a
-reference to it, but it won't show up in `Specification.getCollections()` and can't be looked up by id. Ids may not
+v.Author.all for parameter favouriteColleague"`). An unregistered `filter`/`sorted` result still works if you hold a
+reference to it, but it won't show up in `Specification.getViews()` and can't be looked up by id. Ids may not
 contain `.` or spaces.
 
 ## Views that need more than a property initializer
@@ -153,13 +153,13 @@ built on top of `all` immediately:
 ```kotlin
 val astrid = createAuthorAstrid(klerk)
 klerk.read(Ctx.system()) {
-    assertTrue { astrid in collections.authors.all }
+    assertTrue { astrid in views.authors.all }
 }
 
 klerk.handle(Command(DeleteAuthor, astrid), Ctx.system())
 
 klerk.read(Ctx.system()) {
-    assertFalse { astrid in collections.authors.all }
+    assertFalse { astrid in views.authors.all }
 }
 ```
 
@@ -203,7 +203,7 @@ allowed to come from, using `validReferences` in the state machine DSL:
 
 ```kotlin
 event(CreateBook) {
-    validReferences(CreateBookParams::author, collections.authors.all)
+    validReferences(CreateBookParams::author, views.authors.all)
 }
 ```
 
