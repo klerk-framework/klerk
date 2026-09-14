@@ -33,7 +33,7 @@ class StateMachineTest {
             println(p.isNullable)
             println(p.type)
             println(p.referencedModel)
-            println(p.recommendedDefaultValue)
+            println(p.defaultContainer)
             assertTrue(parameters.kClass == CreateBookParams::class)
 
         }

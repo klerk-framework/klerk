@@ -33,7 +33,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     override val jobs = JobManagerImpl<C, V>(this)
 
     internal val readWriteLock = ReadWriteLock()
-    private val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
+    internal val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
     internal val eventsManager = EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
@@ -77,7 +77,8 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
 
 
-    override val models = modelsManager
+    override val modelChanges = modelsManager
+    override val unsafe = modelsManager
 
     override val meta = klerkMeta
 
@@ -105,11 +106,11 @@ internal class KlerkImpl<C : KlerkContext, V>(
     }
 
     override suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T =
-        models.read(context, readFunction)
+        modelsManager.read(context, readFunction)
 
 
     override suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T =
-        models.readSuspend(context, readFunction)
+        modelsManager.readSuspend(context, readFunction)
 
 
 }

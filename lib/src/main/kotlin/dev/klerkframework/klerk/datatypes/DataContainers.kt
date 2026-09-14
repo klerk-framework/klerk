@@ -99,13 +99,16 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
 
     /**
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
-     * Override to add rules like "must be even". Each function is called with the current [Translation] and returns
-     * [PropertyValidation.Valid] or [PropertyValidation.Invalid].
+     * Override to add rules like "must be even". Each function is called with the value and the current [Translation]
+     * and returns [PropertyValidation.Valid] or [PropertyValidation.Invalid].
      *
      * Each must be a named function reference, e.g. `setOf(::mustBeEven)`, since its name identifies the rule in
      * messages and translations. A lambda is rejected when Klerk starts.
+     *
+     * The value is passed in rather than read from the container, so a rule can be a top-level function shared by
+     * several containers.
      */
-    public open val validators: Set<(translator: Translation) -> PropertyValidation> =
+    public open val validators: Set<(value: T, translation: Translation) -> PropertyValidation> =
         emptySet()
 
     /** @throws IllegalConfigurationException if [validator] is not a named function reference */
@@ -119,6 +122,21 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
      * @return null if valid, otherwise the first failing rule as an [InvalidPropertyProblem]
      */
     public abstract fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem?
+
+    /** The first [validators] rule that rejects the value, or null if they all accept it. */
+    protected fun firstInvalidValidator(propertyName: String, translation: Translation): InvalidPropertyProblem? =
+        validators.firstNotNullOfOrNull { validator ->
+            (validator(rawValue, translation) as? Invalid)?.let {
+                InvalidPropertyProblem(
+                    endUserTranslatedMessage = translation.klerk.invalidProperty(
+                        propertyName,
+                        nameOf(validator),
+                        it.translationInfo,
+                    ),
+                    propertyName = propertyName,
+                )
+            }
+        }
 
     /**
      * Returns a copy of this container that carries the provided authorization. The copy is made with [clone] rather
@@ -154,8 +172,9 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     public open val tags: Set<String> = emptySet()
 
     /**
-     * This value indicates a good default value for the property. Note that the application developer can choose to ignore this value and provide
-     * a different default value (e.g. when rendering a form).
+     * A good default value for the property, e.g. to prefill a form. Read it through
+     * [dev.klerkframework.klerk.misc.SchemaField.defaultContainer]. The application developer can choose to ignore it
+     * and provide a different default value.
      */
     public open val recommendedDefault: T? = null
 
@@ -172,30 +191,6 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
 
     override fun hashCode(): Int = rawValue.hashCode()
 
-    public companion object {
-        /**
-         * Creates an instance of the container class [kClass] holding [value], for code that only knows the class at
-         * runtime (e.g. a form). [value] is what the constructor takes, e.g. an `Instant` for an [InstantContainer]
-         * or an enum constant for an [EnumContainer].
-         *
-         * @throws IllegalArgumentException if [kClass] cannot be created from [value], or its constructor throws
-         */
-        public fun <C : DataContainer<*>> create(kClass: kotlin.reflect.KClass<out C>, value: Any): C {
-            val container = try {
-                dev.klerkframework.klerk.misc.Shape.Container.of(kClass)
-            } catch (e: dev.klerkframework.klerk.IllegalConfigurationException) {
-                throw IllegalArgumentException(e.message, e)
-            }
-            @Suppress("UNCHECKED_CAST")
-            return try {
-                container.create(value) as C
-            } catch (e: IllegalArgumentException) {
-                throw e
-            } catch (e: Exception) {
-                throw IllegalArgumentException("Could not create ${kClass.simpleName}", e)
-            }
-        }
-    }
 }
 
 /**
@@ -241,19 +236,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
                 .matches(rawValue)) {
             return InvalidPropertyProblem(translation.klerk.invalid, propertyName)
         }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
+        return firstInvalidValidator(propertyName, translation)
     }
 
 }
@@ -261,297 +244,104 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
 // So we don't have to build a Regex every time we validate
 private val regexPatterns: MutableMap<String, Regex> = mutableMapOf()
 
-/** A [DataContainer] wrapping an [Int], constrained to the inclusive range [min]..[max]. */
-public abstract class IntContainer(value: Int) :
-    DataContainer<Int>(value) {       // can we support Int stuff (e.g. newScore = score + Score(3)
-    public abstract val min: Int
-    public abstract val max: Int
+/**
+ * A [DataContainer] wrapping a number, constrained to the inclusive range [min]..[max].
+ *
+ * Extend one of the concrete kinds ([IntContainer], [LongContainer], [ShortContainer], [ByteContainer],
+ * [UIntContainer], [ULongContainer], [UShortContainer], [UByteContainer], [FloatContainer], [DoubleContainer])
+ * rather than this class. Code that handles any number generically — a form, an exporter — can use [minAsText],
+ * [maxAsText] and [hasDecimals] without knowing which kind it has.
+ */
+public abstract class NumberContainer<T : Comparable<T>> internal constructor(value: T) : DataContainer<T>(value) {
+
+    /** The smallest allowed value, inclusive. */
+    public abstract val min: T
+
+    /** The largest allowed value, inclusive. */
+    public abstract val max: T
+
+    /** True if the value can have a fractional part, i.e. for [FloatContainer] and [DoubleContainer]. */
+    public abstract val hasDecimals: Boolean
+
+    /** [min] as text, e.g. for an HTML `min` attribute. */
+    public val minAsText: String get() = min.toString()
+
+    /** [max] as text, e.g. for an HTML `max` attribute. */
+    public val maxAsText: String get() = max.toString()
+
+    /** Lossy for values above [Long.MAX_VALUE]; only used to build messages. */
+    internal abstract fun asNumber(value: T): Number
 
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-
         check(max >= min) { "max < min" }
         if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(asNumber(min)), propertyName)
         }
         if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(asNumber(max)), propertyName)
         }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
+        return firstInvalidValidator(propertyName, translation)
     }
+}
 
+/** A [DataContainer] wrapping an [Int], constrained to the inclusive range [min]..[max]. */
+public abstract class IntContainer(value: Int) : NumberContainer<Int>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: Int): Number = value
 }
 
 /** A [DataContainer] wrapping a [Short], constrained to the inclusive range [min]..[max]. */
-public abstract class ShortContainer(value: Short) : DataContainer<Short>(value) {
-    public abstract val min: Short
-    public abstract val max: Short
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class ShortContainer(value: Short) : NumberContainer<Short>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: Short): Number = value
 }
 
 /** A [DataContainer] wrapping a [Byte], constrained to the inclusive range [min]..[max]. */
-public abstract class ByteContainer(value: Byte) : DataContainer<Byte>(value) {
-    public abstract val min: Byte
-    public abstract val max: Byte
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class ByteContainer(value: Byte) : NumberContainer<Byte>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: Byte): Number = value
 }
 
 /** A [DataContainer] wrapping a [Long], constrained to the inclusive range [min]..[max]. */
-public abstract class LongContainer(value: Long) : DataContainer<Long>(value) {
-    public abstract val min: Long
-    public abstract val max: Long
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class LongContainer(value: Long) : NumberContainer<Long>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: Long): Number = value
 }
 
 /** A [DataContainer] wrapping a [ULong], constrained to the inclusive range [min]..[max]. */
-public abstract class ULongContainer(value: ULong) : DataContainer<ULong>(value) {
-    public abstract val min: ULong
-    public abstract val max: ULong
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toDouble()), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toDouble()), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class ULongContainer(value: ULong) : NumberContainer<ULong>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: ULong): Number = value.toDouble()
 }
 
 /** A [DataContainer] wrapping a [UInt], constrained to the inclusive range [min]..[max]. */
-public abstract class UIntContainer(value: UInt) : DataContainer<UInt>(value) {
-    public abstract val min: UInt
-    public abstract val max: UInt
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toLong()), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toLong()), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class UIntContainer(value: UInt) : NumberContainer<UInt>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: UInt): Number = value.toLong()
 }
 
 /** A [DataContainer] wrapping a [UShort], constrained to the inclusive range [min]..[max]. */
-public abstract class UShortContainer(value: UShort) : DataContainer<UShort>(value) {
-    public abstract val min: UShort
-    public abstract val max: UShort
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class UShortContainer(value: UShort) : NumberContainer<UShort>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: UShort): Number = value.toInt()
 }
 
 /** A [DataContainer] wrapping a [UByte], constrained to the inclusive range [min]..[max]. */
-public abstract class UByteContainer(value: UByte) : DataContainer<UByte>(value) {
-    public abstract val min: UByte
-    public abstract val max: UByte
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min.toInt()), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max.toInt()), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class UByteContainer(value: UByte) : NumberContainer<UByte>(value) {
+    override val hasDecimals: Boolean = false
+    override fun asNumber(value: UByte): Number = value.toInt()
 }
 
 /** A [DataContainer] wrapping a [Float], constrained to the inclusive range [min]..[max]. */
-public abstract class FloatContainer(value: Float) : DataContainer<Float>(value) {
-    public abstract val min: Float
-    public abstract val max: Float
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class FloatContainer(value: Float) : NumberContainer<Float>(value) {
+    override val hasDecimals: Boolean = true
+    override fun asNumber(value: Float): Number = value
 }
 
 /** A [DataContainer] wrapping a [Double], constrained to the inclusive range [min]..[max]. */
-public abstract class DoubleContainer(value: Double) : DataContainer<Double>(value) {
-    public abstract val min: Double
-    public abstract val max: Double
-
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
-        check(max >= min) { "max < min" }
-        if (rawValue < min) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
-        }
-        if (rawValue > max) {
-            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
-        }
-        return validators
-            .map { Pair(it, it.invoke(translation)) }
-            .filter { it.second is Invalid }
-            .map { functionAndResult ->
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(functionAndResult.first),
-                        (functionAndResult.second as Invalid).translationInfo
-                    ), propertyName = propertyName
-                )
-            }
-            .firstOrNull()
-    }
+public abstract class DoubleContainer(value: Double) : NumberContainer<Double>(value) {
+    override val hasDecimals: Boolean = true
+    override fun asNumber(value: Double): Number = value
 }
 
 /**

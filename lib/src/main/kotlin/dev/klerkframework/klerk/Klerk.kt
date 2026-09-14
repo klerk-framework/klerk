@@ -40,7 +40,16 @@ public interface Klerk<C : KlerkContext, V> {
     public val specification: Specification<C, V>
     public val settings: KlerkSettings
     public val jobs: JobManager<C, V>
-    public val models: KlerkModels<C, V>
+    /**
+     * Subscriptions to model changes.
+     */
+    public val modelChanges: KlerkModelChanges<C, V>
+
+    /**
+     * Escape hatches that bypass the state machine, validation and authorization. Requires
+     * [KlerkSettings.allowUnsafeOperations].
+     */
+    public val unsafe: KlerkUnsafe<C>
 
     /**
      * Large immutable data (blobs and strings) attached to models.
@@ -129,45 +138,40 @@ public interface EventLogEntryQuery {
     public suspend fun get(): EventLogEntry?
 }
 
-public interface KlerkModels<C : KlerkContext, V> {
+/**
+ * Subscriptions to model changes, as [Klerk.modelChanges].
+ */
+public interface KlerkModelChanges<C : KlerkContext, V> {
 
     /**
      * Subscribes to model changes.
      *
      * If a model is changed but the actor is not authorized to read it, the model will be ignored.
      *
-     * @param context containing the actor that will be used for authorization
      * @param id if provided, subscribes only to changes of the referenced model. If null, subscribes to all models.
+     * @param context containing the actor that will be used for authorization
      */
-    public fun subscribe(context: C, id: ModelID<out Any>?): Flow<ModelModification>
+    public fun subscribe(id: ModelID<out Any>?, context: C): Flow<ModelModification>
+}
 
-    /**
-     * Creates a model without using a state machine.
-     * This is an 'escape hatch', and should be used only as a last resort.
-     * No validation and no authorization rules will be applied.
-     *
-     * The setting allowUnsafeOperations must be enabled in order to use this.
-     */
-    public suspend fun <T : Any> unsafeCreate(context: C, model: Model<T>)
+/**
+ * Writes models without using a state machine, as [Klerk.unsafe].
+ *
+ * This is an 'escape hatch', and should be used only as a last resort: no validation and no authorization rules are
+ * applied, nothing is written to the event log and no subscriber is notified.
+ *
+ * [KlerkSettings.allowUnsafeOperations] must be enabled in order to use this.
+ */
+public interface KlerkUnsafe<C : KlerkContext> {
 
-    /**
-     * Updates a model without using a state machine.
-     * This is an 'escape hatch', and should be used only as a last resort.
-     * No validation and no authorization rules will be applied.
-     *
-     * The setting allowUnsafeOperations must be enabled in order to use this.
-     */
-    public suspend fun <T : Any> unsafeUpdate(context: C, model: Model<T>)
+    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model already exists. */
+    public suspend fun <T : Any> create(model: Model<T>, context: C)
 
-    /**
-     * Deletes a model without using a state machine.
-     * This is an 'escape hatch', and should be used only as a last resort.
-     * No validation and no authorization rules will be applied.
-     *
-     * The setting allowUnsafeOperations must be enabled in order to use this.
-     */
-    public suspend fun <T : Any> unsafeDelete(context: C, id: ModelID<T>)
+    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model does not exist. */
+    public suspend fun <T : Any> update(model: Model<T>, context: C)
 
+    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model does not exist. */
+    public suspend fun <T : Any> delete(id: ModelID<T>, context: C)
 }
 
 /**
@@ -229,7 +233,7 @@ public interface JobManager<C : KlerkContext, V> {
      *
      * @param id if provided, only that job's changes are emitted. If null, every visible job's are.
      */
-    public fun subscribe(context: C, id: JobId?): Flow<JobInfo>
+    public fun subscribe(id: JobId?, context: C): Flow<JobInfo>
 
     /**
      * Requests cancellation, and returns as soon as the request has been recorded.

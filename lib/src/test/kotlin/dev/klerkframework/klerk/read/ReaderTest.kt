@@ -39,19 +39,19 @@ class ReaderTest {
                 props = originalAuthorProps
             )
 
-            klerk.models.unsafeCreate(Ctx.unauthenticated(), originalAuthor)
+            klerk.unsafe.create(originalAuthor, Ctx.unauthenticated())
 
             val storedOriginal = klerk.read(Ctx.unauthenticated()) { get(ref) }
             assertEquals(storedOriginal, originalAuthor)
             val updatedAuthorProps =
                 originalAuthorProps.copy(firstName = FirstName("Darth"), lastName = LastName("Vader"))
             val updatedAuthor = originalAuthor.copy(state = "updated", props = updatedAuthorProps)
-            klerk.models.unsafeUpdate(Ctx.unauthenticated(), updatedAuthor)
+            klerk.unsafe.update(updatedAuthor, Ctx.unauthenticated())
             val storedUpdated = klerk.read(Ctx.unauthenticated()) { get(ref) }
             assertNotEquals(storedUpdated.state, storedOriginal.state)
             assertNotEquals(storedUpdated.props, storedOriginal.props)
 
-            klerk.models.unsafeDelete(Ctx.unauthenticated(), ref)
+            klerk.unsafe.delete(ref, Ctx.unauthenticated())
             val storedDeleted = klerk.read(Ctx.unauthenticated()) { getOrNull(ref) }
             assertNull(storedDeleted)
         }

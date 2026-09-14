@@ -286,7 +286,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         if (processedCommandTokens.contains(token)) {
             return IdempotenceProblem("CommandToken has already been used", KlerkErrorCode.CommandTokenAlreadyUsed)
         }
-        val anyModified = klerk.models.read(context) {
+        val anyModified = klerk.modelsManager.read(context) {
             token.models.any { modelId ->
                 ModelCache.read(modelId).getOrNull()?.lastModifiedAt?.let { it > token.time } ?: false
             }
@@ -315,16 +315,16 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
     private suspend fun <T : Any> notifySubscribers(result: ProcessingData<T, C, V>) {
         result.createdModels.forEach {
-            klerk.models.modelWasModified(ModelModification.Created(it))
+            klerk.modelsManager.modelWasModified(ModelModification.Created(it))
         }
         result.updatedModels.forEach {
-            klerk.models.modelWasModified(ModelModification.PropsUpdated(it))
+            klerk.modelsManager.modelWasModified(ModelModification.PropsUpdated(it))
         }
         result.transitions.forEach {
-            klerk.models.modelWasModified(ModelModification.Transitioned(it))
+            klerk.modelsManager.modelWasModified(ModelModification.Transitioned(it))
         }
         result.deletedModels.forEach {
-            klerk.models.modelWasModified(ModelModification.Deleted(it))
+            klerk.modelsManager.modelWasModified(ModelModification.Deleted(it))
         }
     }
 

@@ -319,27 +319,32 @@ public class SchemaField internal constructor(
         (elementType.shape as? Shape.Container)?.dummy()?.let { describeRules(it) } ?: emptyMap()
     }
 
-    /** The container's [DataContainer.recommendedDefault], or null if it has none or is not a container. */
-    public val recommendedDefaultValue: Any? by lazy { (elementType.shape as? Shape.Container)?.dummy()?.recommendedDefault }
-
     /**
-     * What the Kotlin default expression of the constructor parameter evaluates to (e.g. `= Score(0)`), or null if it
-     * has none, is not a [DataContainer] or could not be evaluated.
+     * The value to prefill the field with, e.g. in a form, or null if there is none.
      *
-     * It is evaluated by calling the constructor with placeholders for the other fields, so the class's `init` blocks
-     * and the default expression run. Takes precedence over [recommendedDefaultValue], since it is specific to this
-     * field.
+     * It is the Kotlin default expression of the constructor parameter (e.g. `= Score(0)`) when there is one, since
+     * that is specific to this field, and otherwise the container's [DataContainer.recommendedDefault].
+     *
+     * The Kotlin default is evaluated by calling the constructor with placeholders for the other fields, so the
+     * class's `init` blocks and the default expression run.
      */
-    public val kotlinDefaultInstance: DataContainer<*>? by lazy {
+    public val defaultContainer: DataContainer<*>? by lazy { kotlinDefault() ?: recommendedDefault() }
+
+    private fun kotlinDefault(): DataContainer<*>? {
         if (isRequired) {
-            return@lazy null
+            return null
         }
-        try {
+        return try {
             schema.kotlinDefaultOf(this) as? DataContainer<*>
         } catch (e: Exception) {
             logger.warn(e) { "Could not evaluate the Kotlin default value of '$name'" }
             null
         }
+    }
+
+    private fun recommendedDefault(): DataContainer<*>? {
+        val container = elementType.shape as? Shape.Container ?: return null
+        return container.dummy().recommendedDefault?.let { container.create(it) }
     }
 
     private fun containerShape(): Shape.Container =
@@ -353,7 +358,14 @@ public enum class PropertyType {
     String,
     Int,
     Long,
+    Short,
+    Byte,
+    UInt,
+    ULong,
+    UShort,
+    UByte,
     Float,
+    Double,
     Boolean,
     Ref,
     AttachedDataRef,
@@ -492,8 +504,13 @@ internal sealed class Shape {
             ContainerKind.Date -> PropertyType.Date
             ContainerKind.Duration -> PropertyType.Duration
             ContainerKind.Geo -> PropertyType.Geo
-            ContainerKind.Short, ContainerKind.Byte, ContainerKind.ULong, ContainerKind.UInt, ContainerKind.UShort,
-            ContainerKind.UByte, ContainerKind.Double -> null
+            ContainerKind.Short -> PropertyType.Short
+            ContainerKind.Byte -> PropertyType.Byte
+            ContainerKind.UInt -> PropertyType.UInt
+            ContainerKind.ULong -> PropertyType.ULong
+            ContainerKind.UShort -> PropertyType.UShort
+            ContainerKind.UByte -> PropertyType.UByte
+            ContainerKind.Double -> PropertyType.Double
         }
     }
 }

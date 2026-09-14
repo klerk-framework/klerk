@@ -35,7 +35,7 @@ class JobAttachedDataClaimTest {
         override val name = JobName("uploader")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<UploadCursor, Ctx, Views>): JobResult<UploadCursor> {
+        override suspend fun step(args: JobStepArgs.Local<UploadCursor, Ctx, Views>): JobResult<UploadCursor, Ctx, Views> {
             val prepared = args.cursor.prepared
             if (prepared == null) {
                 val id = klerkForTest!!.attachedData.prepare(

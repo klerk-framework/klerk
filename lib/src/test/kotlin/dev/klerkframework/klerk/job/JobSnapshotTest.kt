@@ -34,7 +34,7 @@ class JobSnapshotTest {
         override val name = JobName("churner")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<TickCursor, Ctx, Views>): JobResult<TickCursor> {
+        override suspend fun step(args: JobStepArgs.Local<TickCursor, Ctx, Views>): JobResult<TickCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) return JobResult.Success()
             return JobResult.Yield(
                 cursor = TickCursor(args.cursor.remaining - 1),

@@ -61,7 +61,7 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
     override val agent = JobAgent.System
     override val priority = JobPriority.Bulk
 
-    override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
+    override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor, Ctx, Views> {
         val cursor = args.cursor
         val next = cursor.remaining.firstOrNull() ?: return JobResult.Success()
 
@@ -223,7 +223,7 @@ a terminal state — `Succeeded`, `DeadLettered` or `Cancelled`. A child that di
 The next step receives the outcomes:
 
 ```kotlin
-override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> {
+override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor, Ctx, Views> {
     val failed = args.children.filter { it.status != JobStatus.Succeeded }
     if (failed.isNotEmpty()) {
         return JobResult.Abort("${failed.size} of ${args.children.size} files failed")
@@ -342,8 +342,8 @@ data.
 
 ```kotlin
 // on JobType.Local — the Portable variants take JobEndArgs.Portable, which has no Reader
-override suspend fun onCancelled(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor>
-override suspend fun onDeadLettered(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor>
+override suspend fun onCancelled(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor, C, V>
+override suspend fun onDeadLettered(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor, C, V>
 ```
 
 Both hooks are **step machines themselves** — same `Yield`/`Success`/`Fail`/`Abort` vocabulary, same

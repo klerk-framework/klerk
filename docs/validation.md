@@ -31,14 +31,16 @@ class BookTitle(value: String) : StringContainer(value) {
     override val maxLines = 1
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(translation: Translation): PropertyValidation {
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
         return PropertyValidation.Valid // or PropertyValidation.Invalid("optional translation info")
     }
 }
 ```
 
-A validator function returns `PropertyValidation.Valid` or `PropertyValidation.Invalid(translationInfo)`. This check
-happens purely on the container's own value — it never sees sibling properties, the context, or the model.
+A validator function takes the value and the current `Translation`, and returns `PropertyValidation.Valid` or
+`PropertyValidation.Invalid(translationInfo)`. This check happens purely on the container's own value — it never sees
+sibling properties, the context, or the model. Since the value is passed in, a rule can be a top-level function shared
+by several containers.
 See [models](models.md) for the full list of built-in containers.
 
 ## 2. Cross-property rules (Validatable)

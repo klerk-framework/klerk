@@ -42,7 +42,7 @@ public interface CursorCodec<Cursor : Any> {
  *     override val name = JobName("import-books")
  *     override val priority = JobPriority.Bulk
  *
- *     override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor> { ... }
+ *     override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): JobResult<ImportCursor, Ctx, Views> { ... }
  * }
  *
  * // in the specification
@@ -190,14 +190,14 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
     public abstract class Local<Cursor : Any, C : KlerkContext, V> : JobType<Cursor, C, V>() {
 
         /** Does one step's worth of work and reports what should happen next. */
-        public abstract suspend fun step(args: JobStepArgs.Local<Cursor, C, V>): JobResult<Cursor>
+        public abstract suspend fun step(args: JobStepArgs.Local<Cursor, C, V>): JobResult<Cursor, C, V>
 
         /** Runs after the job has been cancelled, as a step machine over the same cursor type. */
-        public open suspend fun onCancelled(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor> =
+        public open suspend fun onCancelled(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor, C, V> =
             JobResult.Success()
 
         /** Runs after the job has been dead-lettered, as a step machine over the same cursor type. */
-        public open suspend fun onDeadLettered(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor> =
+        public open suspend fun onDeadLettered(args: JobEndArgs.Local<Cursor, C, V>): JobResult<Cursor, C, V> =
             JobResult.Success()
     }
 
@@ -211,12 +211,12 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
      */
     public abstract class Portable<Cursor : Any, C : KlerkContext, V> : JobType<Cursor, C, V>() {
 
-        public abstract suspend fun step(args: JobStepArgs.Portable<Cursor, C, V>): JobResult<Cursor>
+        public abstract suspend fun step(args: JobStepArgs.Portable<Cursor, C, V>): JobResult<Cursor, C, V>
 
-        public open suspend fun onCancelled(args: JobEndArgs.Portable<Cursor, C, V>): JobResult<Cursor> =
+        public open suspend fun onCancelled(args: JobEndArgs.Portable<Cursor, C, V>): JobResult<Cursor, C, V> =
             JobResult.Success()
 
-        public open suspend fun onDeadLettered(args: JobEndArgs.Portable<Cursor, C, V>): JobResult<Cursor> =
+        public open suspend fun onDeadLettered(args: JobEndArgs.Portable<Cursor, C, V>): JobResult<Cursor, C, V> =
             JobResult.Success()
     }
 

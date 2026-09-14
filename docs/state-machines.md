@@ -67,7 +67,7 @@ fun newBook(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>): Book {
 
 `createModel(initialState, function)` calls `function` to build the model's properties and puts the new instance
 directly into `initialState`. There is no other way to create a model — you cannot construct a `Model<T>` yourself
-outside of a state machine (aside from the `unsafeCreate` escape hatch on `KlerkModels`, which bypasses the state
+outside of a state machine (aside from the `klerk.unsafe.create` escape hatch, which bypasses the state
 machine entirely and should be avoided).
 
 ## Instance states

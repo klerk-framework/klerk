@@ -10,19 +10,19 @@ import kotlinx.coroutines.withContext
 internal class KlerkModelsImpl<C : KlerkContext, V>(
     private val klerk: KlerkImpl<C, V>,
     private val readWriteLock: ReadWriteLock,
-) : KlerkModels<C, V> {
+) : KlerkModelChanges<C, V>, KlerkUnsafe<C> {
 
     private val modelsFlow: MutableSharedFlow<ModelModification> = MutableSharedFlow()
 
     override fun subscribe(
+        id: ModelID<out Any>?,
         context: C,
-        id: ModelID<out Any>?
     ): Flow<ModelModification> {
         // Do we need a separate authorization for subscriptions?
         return modelsFlow
     }
 
-    override suspend fun <T : Any> unsafeCreate(context: C, model: Model<T>) {
+    override suspend fun <T : Any> create(model: Model<T>, context: C) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
         readWriteLock.withWrite {
             check(ModelCache.read(model.id).getOrNull() == null) { "There already exists a model with that ID" }
@@ -30,7 +30,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         }
     }
 
-    override suspend fun <T : Any> unsafeUpdate(context: C, model: Model<T>) {
+    override suspend fun <T : Any> update(model: Model<T>, context: C) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
         readWriteLock.withWrite {
             checkNotNull(ModelCache.read(model.id).getOrNull()) { "There is no model with that ID" }
@@ -38,7 +38,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         }
     }
 
-    override suspend fun <T : Any> unsafeDelete(context: C, id: ModelID<T>) {
+    override suspend fun <T : Any> delete(id: ModelID<T>, context: C) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
         readWriteLock.withWrite {
             val original = ModelCache.read(id).getOrNull()
@@ -78,7 +78,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
 }
 
 /**
- * An event emitted by [dev.klerkframework.klerk.KlerkModels.subscribe] describing how a model changed.
+ * An event emitted by [dev.klerkframework.klerk.KlerkModelChanges.subscribe] describing how a model changed.
  */
 public sealed class ModelModification(public val id: ModelID<out Any>) {
     public class Created(id: ModelID<out Any>) : ModelModification(id)

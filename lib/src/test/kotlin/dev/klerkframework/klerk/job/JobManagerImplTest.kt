@@ -38,7 +38,7 @@ class JobManagerImplTest {
         override val name = JobName("counter")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> {
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) {
                 return JobResult.Success(result = args.cursor.done.toString())
             }
@@ -59,7 +59,7 @@ class JobManagerImplTest {
 
         var sawPreviousResult: CommandResult<*>? = null
 
-        override suspend fun step(args: JobStepArgs.Local<NameCursor, Ctx, Views>): JobResult<NameCursor> {
+        override suspend fun step(args: JobStepArgs.Local<NameCursor, Ctx, Views>): JobResult<NameCursor, Ctx, Views> {
             if (args.job.step == 0) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(name = args.cursor.name + "!"),
@@ -86,14 +86,14 @@ class JobManagerImplTest {
         var attempts = 0
         var deadLetterHookRan = 0
 
-        override suspend fun step(args: JobStepArgs.Local<FlakyCursor, Ctx, Views>): JobResult<FlakyCursor> {
+        override suspend fun step(args: JobStepArgs.Local<FlakyCursor, Ctx, Views>): JobResult<FlakyCursor, Ctx, Views> {
             attempts++
             return JobResult.Fail("nope")
         }
 
         override suspend fun onDeadLettered(
             args: JobEndArgs.Local<FlakyCursor, Ctx, Views>
-        ): JobResult<FlakyCursor> {
+        ): JobResult<FlakyCursor, Ctx, Views> {
             deadLetterHookRan++
             return JobResult.Success()
         }
@@ -105,12 +105,12 @@ class JobManagerImplTest {
 
         var hookRan = 0
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Abort("this will never work")
 
         override suspend fun onDeadLettered(
             args: JobEndArgs.Local<CountCursor, Ctx, Views>
-        ): JobResult<CountCursor> {
+        ): JobResult<CountCursor, Ctx, Views> {
             hookRan++
             // The cursor the job died at is preserved, whatever the hook does to its own.
             assertEquals(7, args.failedAtCursor.remaining)
@@ -123,7 +123,7 @@ class JobManagerImplTest {
         override val name = JobName("stuck")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Yield(cursor = args.cursor)
     }
 
@@ -134,7 +134,7 @@ class JobManagerImplTest {
         override val name = JobName("child")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Success(result = "child-${args.cursor.remaining}")
     }
 
@@ -144,7 +144,7 @@ class JobManagerImplTest {
 
         var seenChildren: List<ChildOutcome> = emptyList()
 
-        override suspend fun step(args: JobStepArgs.Local<FanOutCursor, Ctx, Views>): JobResult<FanOutCursor> {
+        override suspend fun step(args: JobStepArgs.Local<FanOutCursor, Ctx, Views>): JobResult<FanOutCursor, Ctx, Views> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
@@ -170,7 +170,7 @@ class JobManagerImplTest {
 
         var cancelHookRan = 0
 
-        override suspend fun step(args: JobStepArgs.Local<TreeCursor, Ctx, Views>): JobResult<TreeCursor> {
+        override suspend fun step(args: JobStepArgs.Local<TreeCursor, Ctx, Views>): JobResult<TreeCursor, Ctx, Views> {
             if (args.cursor.levels > 0 && !args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
@@ -190,7 +190,7 @@ class JobManagerImplTest {
 
         override suspend fun onCancelled(
             args: JobEndArgs.Local<TreeCursor, Ctx, Views>
-        ): JobResult<TreeCursor> {
+        ): JobResult<TreeCursor, Ctx, Views> {
             cancelHookRan++
             return JobResult.Success()
         }
@@ -202,7 +202,7 @@ class JobManagerImplTest {
 
         var runs = 0
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> {
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> {
             runs++
             return JobResult.Success()
         }
@@ -581,7 +581,7 @@ class JobManagerImplTest {
             }
         }
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Success()
     }
 
@@ -610,7 +610,7 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
         override val maxSteps = 4
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Yield(cursor = CountCursor(args.cursor.remaining + 1))
     }
 
@@ -620,7 +620,7 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
         override val maxDescendants = 3
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> =
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> =
             JobResult.Yield(
                 cursor = CountCursor(args.cursor.remaining + 1),
                 spawn = listOf(Child.declare(CountCursor(0))),
@@ -654,7 +654,7 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
         override val maxConcurrent = 1
 
-        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor> {
+        override suspend fun step(args: JobStepArgs.Local<CountCursor, Ctx, Views>): JobResult<CountCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) return JobResult.Success()
             return JobResult.Yield(cursor = CountCursor(args.cursor.remaining - 1))
         }

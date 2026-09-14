@@ -107,6 +107,9 @@ Built-in containers:
 | `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
 | `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 
+All the numeric containers extend `NumberContainer`, which is what code that handles any number generically uses: it
+exposes `minAsText`, `maxAsText` and `hasDecimals` without knowing the exact kind.
+
 On top of the built-in constraints, add custom rules via `validators`:
 
 ```kotlin
@@ -115,7 +118,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
     override val max = Int.MAX_VALUE
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(t: Translation): PropertyValidation {
+    fun mustBeEven(value: Int, t: Translation): PropertyValidation {
         return if (value % 2 == 0) PropertyValidation.Valid else PropertyValidation.Invalid()
     }
 }
@@ -187,6 +190,9 @@ val value = title.get(params)
 `create` uses the default value for a field you leave out. It throws `IllegalArgumentException` for an unknown name, a
 missing required field or a value of the wrong type. `createContainer` builds a field's container from what the
 container's constructor takes, e.g. an `Instant` for an `InstantContainer`.
+
+`SchemaField.defaultContainer` is the value to prefill a field with, or null if there is none: the Kotlin default
+expression of the constructor parameter when there is one, otherwise the container's `recommendedDefault`.
 
 ## Appearance
 

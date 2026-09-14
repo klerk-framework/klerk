@@ -1380,8 +1380,8 @@ public data class KlerkSettings(
     val modelCache: ModelCacheSettings = ModelCacheSettings(),
 
     /**
-     * Gates the "escape hatch" functions on [KlerkModels] ([KlerkModels.unsafeCreate], [KlerkModels.unsafeUpdate],
-     * [KlerkModels.unsafeDelete]), which bypass the state machine, validation and authorization entirely. Off by
+     * Gates the "escape hatch" functions on [Klerk.unsafe] ([KlerkUnsafe.create], [KlerkUnsafe.update],
+     * [KlerkUnsafe.delete]), which bypass the state machine, validation and authorization entirely. Off by
      * default; enable only if you understand the risk.
      */
     val allowUnsafeOperations: Boolean = false,

@@ -5,6 +5,13 @@ import dev.klerkframework.klerk.attacheddata.collectAttachedData
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.datatypes.ByteContainer
+import dev.klerkframework.klerk.datatypes.DoubleContainer
+import dev.klerkframework.klerk.datatypes.ShortContainer
+import dev.klerkframework.klerk.datatypes.UByteContainer
+import dev.klerkframework.klerk.datatypes.UIntContainer
+import dev.klerkframework.klerk.datatypes.ULongContainer
+import dev.klerkframework.klerk.datatypes.UShortContainer
 import dev.klerkframework.klerk.validation.PropertyValidation
 import kotlin.test.*
 
@@ -32,7 +39,7 @@ data class SchemaWithDefault(val street: Street, val other: Street = Street("def
 class LambdaValidated(value: Int) : IntContainer(value) {
     override val min = 0
     override val max = 10
-    override val validators = setOf<(Translation) -> PropertyValidation>({ PropertyValidation.Invalid() })
+    override val validators = setOf<(Int, Translation) -> PropertyValidation>({ _, _ -> PropertyValidation.Invalid() })
 }
 
 data class SchemaLambdaValidated(val number: LambdaValidated)
@@ -82,8 +89,8 @@ class ObjectSchemaTest {
         assertEquals(SchemaWithDefault(Street("a"), Street("default")), schema.create(mapOf("street" to Street("a"))))
         assertFailsWith<IllegalArgumentException> { schema.create(mapOf("other" to Street("b"))) }
         assertFailsWith<IllegalArgumentException> { schema.create(mapOf("street" to Street("a"), "nope" to 1)) }
-        assertEquals("default", schema.field("other")?.kotlinDefaultInstance?.valueWithoutAuthorization)
-        assertNull(schema.field("street")?.kotlinDefaultInstance)
+        assertEquals("default", schema.field("other")?.defaultContainer?.valueWithoutAuthorization)
+        assertNull(schema.field("street")?.defaultContainer)
     }
 
     @Test
@@ -122,7 +129,7 @@ class ObjectSchemaTest {
                 .message!!.contains("SchemaInternalClass is not public")
         )
         assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaOuter.Nested::class) }
-        assertFailsWith<IllegalArgumentException> { DataContainer.create(InternalStreet::class, "x") }    }
+    }
 
     private val person = SchemaPerson(
         name = Street("Main"),
@@ -177,9 +184,10 @@ class ObjectSchemaTest {
     }
 
     @Test
-    fun `A container is created from its class`() {
-        assertEquals("x", DataContainer.create(Street::class, "x").valueWithoutAuthorization)
-        assertFailsWith<IllegalArgumentException> { DataContainer.create(Street::class, 5) }
+    fun `A container is created from a field`() {
+        val field = ObjectSchema.of(SchemaWithDefault::class).field("street")!!
+        assertEquals("x", field.createContainer("x").valueWithoutAuthorization)
+        assertFailsWith<IllegalArgumentException> { field.createContainer(5) }
     }
 
     @Test
@@ -189,3 +197,52 @@ class ObjectSchemaTest {
 }
 
 private fun sampleRule(context: Ctx): PropertyCollectionValidity = PropertyCollectionValidity.Valid
+
+class SchemaShort(value: Short) : ShortContainer(value) { override val min = 0.toShort(); override val max = 9.toShort() }
+class SchemaByte(value: Byte) : ByteContainer(value) { override val min = 0.toByte(); override val max = 9.toByte() }
+class SchemaUInt(value: UInt) : UIntContainer(value) { override val min = 0u; override val max = 9u }
+class SchemaULong(value: ULong) : ULongContainer(value) { override val min = 0uL; override val max = 9uL }
+class SchemaUShort(value: UShort) : UShortContainer(value) { override val min = 0.toUShort(); override val max = 9.toUShort() }
+class SchemaUByte(value: UByte) : UByteContainer(value) { override val min = 0.toUByte(); override val max = 9.toUByte() }
+class SchemaDouble(value: Double) : DoubleContainer(value) { override val min = 0.0; override val max = 9.0 }
+
+data class SchemaNumbers(
+    val short: SchemaShort,
+    val byte: SchemaByte,
+    val uInt: SchemaUInt,
+    val uLong: SchemaULong,
+    val uShort: SchemaUShort,
+    val uByte: SchemaUByte,
+    val double: SchemaDouble,
+)
+
+class NumberContainerTest {
+
+    private val schema = ObjectSchema.of(SchemaNumbers::class)
+
+    @Test
+    fun `Every numeric container kind has a property type`() {
+        assertEquals(PropertyType.Short, schema.field("short")!!.type)
+        assertEquals(PropertyType.Byte, schema.field("byte")!!.type)
+        assertEquals(PropertyType.UInt, schema.field("uInt")!!.type)
+        assertEquals(PropertyType.ULong, schema.field("uLong")!!.type)
+        assertEquals(PropertyType.UShort, schema.field("uShort")!!.type)
+        assertEquals(PropertyType.UByte, schema.field("uByte")!!.type)
+        assertEquals(PropertyType.Double, schema.field("double")!!.type)
+    }
+
+    @Test
+    fun `Bounds are readable without knowing the kind`() {
+        val uLong = SchemaULong(5uL)
+        assertEquals("0", uLong.minAsText)
+        assertEquals("9", uLong.maxAsText)
+        assertFalse(uLong.hasDecimals)
+        assertTrue(SchemaDouble(1.5).hasDecimals)
+    }
+
+    @Test
+    fun `Bounds are enforced`() {
+        assertNull(SchemaUByte(9.toUByte()).validate("uByte", DefaultTranslation))
+        assertNotNull(SchemaDouble(9.5).validate("double", DefaultTranslation))
+    }
+}

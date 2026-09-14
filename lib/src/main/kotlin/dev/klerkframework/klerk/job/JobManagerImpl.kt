@@ -399,7 +399,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
 
         exceededLimits(started, now)?.let { reason ->
-            commitOutcome(started, type, JobResult.Abort(reason), null)
+            commitOutcome(started, type, JobResult.Abort<C, V>(reason), null)
             return
         }
 
@@ -433,7 +433,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         record: JobRecord,
         info: JobInfo,
         context: C,
-    ): JobResult<Any> = try {
+    ): JobResult<Any, C, V> = try {
         val cursor = type.decodeCursor(record.activeCursor)
         val previous = previousResults[record.id]
         val outcomes = childOutcomesOf(record.id)
@@ -548,7 +548,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private suspend fun commitOutcome(
         record: JobRecord,
         type: JobType<*, C, V>,
-        result: JobResult<Any>,
+        result: JobResult<Any, C, V>,
         context: C?,
     ) {
         val now = klerk.settings.now()
@@ -601,7 +601,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private fun planTransition(
         record: JobRecord,
         type: JobType<*, C, V>,
-        result: JobResult<Any>,
+        result: JobResult<Any, C, V>,
         now: Instant,
     ): Transition {
         val logged = record.withLog(result.log).copy(lastAttemptFinished = now)
@@ -625,7 +625,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 if (spawnProblem != null) {
                     return Transition(deadLetter(logged, type, spawnProblem, runHook = true, now, rows))
                 }
-                val children = result.spawn.map { spawnRecord(record, it as DeclaredJob<C, V>, now) }
+                val children = result.spawn.map { spawnRecord(record, it, now) }
                 children.forEach { rows.put(it) }
                 if (children.isNotEmpty()) {
                 }
@@ -1082,7 +1082,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun all(context: C): List<JobInfo> = reading(context) { it.all() }
 
-    override fun subscribe(context: C, id: JobId?): Flow<JobInfo> = changes
+    override fun subscribe(id: JobId?, context: C): Flow<JobInfo> = changes
         .filter { id == null || it.id == id }
         .map { it.toJobInfoWithRunningOverlay() }
         .filter { isAuthorized(it, context) }

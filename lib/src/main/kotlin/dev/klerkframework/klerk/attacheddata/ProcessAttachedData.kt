@@ -33,7 +33,7 @@ internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessB
     override val name: JobName = JobName(PROCESS_ATTACHED_DATA)
     override val agent: JobAgent = JobAgent.System
 
-    override suspend fun step(args: JobStepArgs.Local<ProcessBlobCursor, C, V>): JobResult<ProcessBlobCursor> {
+    override suspend fun step(args: JobStepArgs.Local<ProcessBlobCursor, C, V>): JobResult<ProcessBlobCursor, C, V> {
         val attachedData = args.klerk.impl().attachedDataImpl
         val declaration = instantiateDeclaration(
             args.cursor.declaration,

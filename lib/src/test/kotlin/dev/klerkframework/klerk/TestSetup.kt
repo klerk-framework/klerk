@@ -497,7 +497,7 @@ object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
     override val name = JobName("my-job-2")
     override val agent: JobAgent = JobAgent.System
 
-    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
+    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor, Ctx, Views> {
         assertEquals("Hej", args.cursor.greeting)
         return JobResult.Success()
     }
@@ -708,8 +708,8 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(t: Translation): PropertyValidation {
-        if (valueWithoutAuthorization % 2 == 0) {
+    fun mustBeEven(value: Int, t: Translation): PropertyValidation {
+        if (value % 2 == 0) {
             return PropertyValidation.Valid
         }
         return PropertyValidation.Invalid()
@@ -737,7 +737,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(translation: Translation): PropertyValidation {
+    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidation {
         return PropertyValidation.Valid
     }
 }
@@ -920,7 +920,7 @@ object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
     override val name = JobName("my-job")
     override val agent: JobAgent = JobAgent.System
     
-    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor> {
+    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor, Ctx, Views> {
         if (args.cursor.stepsLeft == 0) {
             return JobResult.Success(result = args.cursor.greeting)
         }

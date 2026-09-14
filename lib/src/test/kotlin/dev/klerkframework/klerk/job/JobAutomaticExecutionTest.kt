@@ -30,7 +30,7 @@ class JobAutomaticExecutionTest {
 
         val stepsRun = AtomicInteger(0)
 
-        override suspend fun step(args: JobStepArgs.Local<TickCursor, Ctx, Views>): JobResult<TickCursor> {
+        override suspend fun step(args: JobStepArgs.Local<TickCursor, Ctx, Views>): JobResult<TickCursor, Ctx, Views> {
             stepsRun.incrementAndGet()
             if (args.cursor.remaining == 0) {
                 return JobResult.Success()
@@ -110,7 +110,7 @@ class JobAutomaticExecutionTest {
         override val name = JobName("fan-leaf")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> =
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor, Ctx, Views> =
             JobResult.Success(result = "leaf")
     }
 
@@ -122,7 +122,7 @@ class JobAutomaticExecutionTest {
         @Volatile
         var sawChildren: String? = null
 
-        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor> {
+        override suspend fun step(args: JobStepArgs.Local<FanCursor, Ctx, Views>): JobResult<FanCursor, Ctx, Views> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
