@@ -109,18 +109,10 @@ fun throwSomething(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>) {
 fun generousAuthRules(): SpecificationBuilder<Ctx, Views>.() -> Unit = {
     authorization {
         readModels {
-            positive {
-                rule(::`Everybody can read`)
-            }
-            negative {
-            }
+            positive(::`Everybody can read`)
         }
         commands {
-            positive {
-                rule(::`Everybody can do everything`)
-            }
-            negative {
-            }
+            positive(::`Everybody can do everything`)
         }
     }
 }

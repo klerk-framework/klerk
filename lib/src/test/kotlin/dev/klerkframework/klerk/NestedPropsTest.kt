@@ -125,13 +125,13 @@ class NestedPropsTest {
                 model(Author::class, authorStateMachine(views), views.authors)
             }
             authorization {
-                readModels { positive { rule(::`Everybody can read`) } }
-                readProperties { positive { rule(::canReadAllProperties) } }
-                commands { positive { rule(::`Everybody can do everything`) } }
-                eventLog { positive { rule(::`Everybody can read event log`) } }
-                readAttachedData { positive { rule(::onlyTheAuthorsOwnerCanReadThePicture) } }
-                writeAttachedData { positive { rule(::everybodyCanPrepareAttachedData) } }
-                jobs { positive { rule(::authorsCanSeeTheirOwnJobs) } }
+                readModels { positive(::`Everybody can read`) }
+                readProperties { positive(::canReadAllProperties) }
+                commands { positive(::`Everybody can do everything`) }
+                eventLog { positive(::`Everybody can read event log`) }
+                readAttachedData { positive(::onlyTheAuthorsOwnerCanReadThePicture) }
+                writeAttachedData { positive(::everybodyCanPrepareAttachedData) }
+                jobs { positive(::authorsCanSeeTheirOwnJobs) }
             }
         }
         val klerk = Klerk.create(specification, testSettings())

@@ -181,7 +181,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 )
                 return@forEachLeaf
             }
-            val view = validReferences[leaf.field.key] ?: return@forEachLeaf
+            val view = requireNotNull(validReferences[leaf.field.key])
             if (!view.internalContains(id, reader)) {
                 problem = InvalidPropertyProblem(
                     "Did not find $id in ${view.id} for parameter ${leaf.path}",

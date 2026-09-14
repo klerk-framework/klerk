@@ -39,11 +39,11 @@ The second constructor argument controls where the event may be triggered from:
 | `StateMachineInternal` | Only from within the same state machine (e.g. `commands`, a secondary event fired by another event's handler).                |
 | `InterStateMachine`    | From any state machine.                                                                                                             |
 | `System`                | From any state machine, and from application code — intended for events triggered by the system itself, e.g. from a [job](jobs.md). |
-| `Code`                  | From any state machine, and from application code.                                                                                  |
-| `External`              | Same as `Code`, but signals to other tooling (generated UI/API) that this event is meant to be exposed to end users.                |
+| `Application`           | From any state machine, and from application code.                                                                                  |
+| `External`              | Same as `Application`, but signals to other tooling (generated UI/API) that this event is meant to be exposed to end users.         |
 
 Each level implies everything below it. `klerk.handle(...)` rejects any command whose event has a visibility lower than
-`Code` (`KlerkErrorCode.EventVisibilityTooLow`) — `StateMachineInternal` and `InterStateMachine` events can only be
+`Application` (`KlerkErrorCode.EventVisibilityTooLow`) — `StateMachineInternal` and `InterStateMachine` events can only be
 produced by the state machine itself (e.g. via `commands`), never submitted directly.
 
 ## Building a Command

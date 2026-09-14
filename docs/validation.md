@@ -120,8 +120,8 @@ event(CreateBook) {
   ```
 
   Klerk starts only if every `ModelID` is declared; otherwise it throws `IllegalConfigurationException`
-  (`KlerkErrorCode.MissingValidReferences`) with a message telling you exactly what to add. Pass `null` instead of a
-  view to accept any id without a membership check.
+  (`KlerkErrorCode.MissingValidReferences`) with a message telling you exactly what to add. There is no way to opt
+  out: every id a command carries must be in a view. To accept any model of a type, declare its `all` view.
 
 * **`validEnums(property, validValues)`** — restricts an `EnumContainer` (or a `List`/`Set` of them) to a subset of
   the enum's values, e.g. to phase out a value without removing it from the enum itself.

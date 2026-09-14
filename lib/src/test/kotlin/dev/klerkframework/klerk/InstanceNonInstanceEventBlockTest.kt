@@ -23,23 +23,15 @@ class InstanceNonInstanceEventBlockTest {
             val persistence = RamStorage()
             val specification = SpecificationBuilder<Ctx, Views>(collections).build {
                 managedModels {
-                    model(Book::class, createStateMachine(collections.authors), collections.books)
+                    model(Book::class, createStateMachine(collections), collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)
                 }
                 authorization {
                     readModels {
-                        positive {
-                            rule(::`Everybody can read`)
-                        }
-                        negative {
-                        }
+                        positive(::`Everybody can read`)
                     }
                     commands {
-                        positive {
-                            rule(::`Everybody can do everything`)
-                        }
-                        negative {
-                        }
+                        positive(::`Everybody can do everything`)
                     }
                 }
                 systemContextProvider { Ctx(SystemIdentity) }
@@ -75,13 +67,13 @@ class InstanceNonInstanceEventBlockTest {
         }
     }
 
-    fun createStateMachine(authors: AuthorViews<Views>): StateMachine<Book, BookStates, Ctx, Views> =
+    fun createStateMachine(views: Views): StateMachine<Book, BookStates, Ctx, Views> =
 
         stateMachine {
             event(CreateBook) {
-                validReferences(CreateBookParams::author, authors.all)
-                validReferences(CreateBookParams::coAuthors, authors.all)
-                validReferences(CreateBookParams::previousBooksInSameSeries, null)
+                validReferences(CreateBookParams::author, views.authors.all)
+                validReferences(CreateBookParams::coAuthors, views.authors.all)
+                validReferences(CreateBookParams::previousBooksInSameSeries, views.books.all)
             }
 
             event(PublishBook) {}

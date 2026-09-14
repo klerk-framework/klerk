@@ -152,11 +152,12 @@ public enum class EventVisibility(internal val level: Int) {
     /**
      * Can be created in any statemachine and in application code.
      */
-    Code(4),
+    Application(4),
 
     /**
-     * Can be created in any statemachine and in application code. Klerk doesn't differentiate this from Code, but this
-     * level can be used as a signal to other code (e.g., auto-generated UI or API) that it should handle this event.
+     * Can be created in any statemachine and in application code. Klerk doesn't differentiate this from
+     * [Application], but this level can be used as a signal to other code (e.g., auto-generated UI or API) that it
+     * should handle this event.
      */
     External(5)
 }
@@ -620,7 +621,10 @@ public interface KlerkTranslation {
     /** A description of [property], e.g. shown as a tooltip, or null if it has none. */
     public fun propertyDescription(property: KProperty1<*, *>): String?
     public fun event(event: EventReference): String
-    /** The name of the rule [f], a named function reference, e.g. used as the message when it fails without one. */
+    /**
+     * The name of the rule [f], a named function reference, as shown in generated documentation. Not a failure
+     * message — see [invalidPropertyCollection] and [preventedByRule] for those.
+     */
     public fun function(f: Function<Any>): String
     public fun mustBeAtLeast(value: Number): String
     public fun mustBeAtMost(value: Number): String

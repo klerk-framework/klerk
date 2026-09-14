@@ -62,7 +62,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return Failure(listOf(it))
         }
 
-        if (command.event.visibility.level < EventVisibility.Code.level) {
+        if (command.event.visibility.level < EventVisibility.Application.level) {
             return Failure(
                 listOf(
                     BadRequestProblem(

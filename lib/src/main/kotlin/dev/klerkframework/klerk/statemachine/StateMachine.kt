@@ -263,7 +263,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         contextRules: Set<(C) -> ContextValidity>,
         noParamRules: Set<*>,
         paramRules: Set<*> = emptySet<Any>(),
-        validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
+        validRefs: Map<PropertyKey, ModelView<out Any, *>> = emptyMap(),
         validEnums: Map<PropertyKey, Set<Enum<*>>> = emptyMap(),
     ) {
         require(declaredRules.put(
@@ -288,7 +288,7 @@ internal data class DeclaredEventRules(
     val contextRules: Set<(KlerkContext) -> ContextValidity> = emptySet(),
     val noParamRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
     val paramRules: Set<(Nothing) -> PropertyCollectionValidity> = emptySet(),
-    val validRefs: Map<PropertyKey, ModelView<out Any, *>?> = emptyMap(),
+    val validRefs: Map<PropertyKey, ModelView<out Any, *>> = emptyMap(),
     val validEnums: Map<PropertyKey, Set<Enum<*>>> = emptyMap(),
 ) {
     /** Every rule declared here, for the "rules must be named" check. */

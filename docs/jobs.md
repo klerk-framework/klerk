@@ -573,11 +573,7 @@ own progress bar can stop their own job:
 ```kotlin
 authorization {
     jobs {
-        positive {
-            rule(::usersCanSeeTheirOwnJobs)
-            rule(::adminsCanSeeAllJobs)
-        }
-        negative { }
+        positive(::usersCanSeeTheirOwnJobs, ::adminsCanSeeAllJobs)
     }
 }
 

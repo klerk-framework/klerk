@@ -29,15 +29,14 @@ public abstract class EventRules<C : KlerkContext> {
  * `Address::owner`.
  */
 public abstract class EventRulesWithParameters<P : Any, C : KlerkContext> : EventRules<C>() {
-    internal val validRefs: MutableMap<PropertyKey, ModelView<out Any, *>?> = mutableMapOf()
+    internal val validRefs: MutableMap<PropertyKey, ModelView<out Any, *>> = mutableMapOf()
     internal val validEnumsMap: MutableMap<PropertyKey, Set<Enum<*>>> = mutableMapOf()
 
     /**
-     * Declares which models the `ModelID` [property] may point to. Required for every `ModelID` in the parameters —
-     * Klerk rejects the specification at startup otherwise. Pass `modelView = null` to accept any id without a
-     * membership check.
+     * Declares which models the `ModelID` [property] may point to: an id outside [modelView] fails validation.
+     * Required for every `ModelID` in the parameters — Klerk rejects the specification at startup otherwise.
      */
-    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>?) {
+    public fun <T : Any> validReferences(property: KProperty1<*, ModelID<out T>?>, modelView: ModelView<T, C>) {
         validRefs[PropertyKey.of(property)] = modelView
     }
 
@@ -45,7 +44,7 @@ public abstract class EventRulesWithParameters<P : Any, C : KlerkContext> : Even
     @JvmName("validReferencesInCollection")
     public fun <T : Any> validReferences(
         property: KProperty1<*, Collection<ModelID<out T>>?>,
-        modelView: ModelView<T, C>?
+        modelView: ModelView<T, C>
     ) {
         validRefs[PropertyKey.of(property)] = modelView
     }

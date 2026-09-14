@@ -216,7 +216,7 @@ class ViewOperationsTest {
         val bc = BookViews()
         val views = Views(bc, AuthorViews(bc.all))
         val spec = createConfig(views, configureAuthorization = {
-            readModels { negative { rule(::unauthenticatedCannotReadEvenAuthors) } }
+            readModels { negative(::unauthenticatedCannotReadEvenAuthors) }
         })
         return Klerk.create(spec, testSettings(storage = storage, modelCache = cache)) to views
     }

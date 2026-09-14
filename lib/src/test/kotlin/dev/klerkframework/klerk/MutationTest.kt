@@ -24,25 +24,13 @@ class MutationTest {
                 }
                 authorization {
                     readModels {
-                        positive {
-                            rule(::`Everybody can read`)
-                        }
-                        negative {
-                        }
+                        positive(::`Everybody can read`)
                     }
                     readProperties {
-                        positive {
-                            rule(::canReadAllProperties)
-                        }
-                        negative {
-                        }
+                        positive(::canReadAllProperties)
                     }
                     commands {
-                        positive {
-                            rule(::`Everybody can do everything`)
-                        }
-                        negative {
-                        }
+                        positive(::`Everybody can do everything`)
                     }
                 }
                 systemContextProvider { Ctx(SystemIdentity) }

@@ -7,38 +7,40 @@ read, every individual property read, every command, and the event log.
 SpecificationBuilder<Ctx, Views>(views).build {
     authorization {
         readModels {
-            positive { rule(::everybodyCanRead) }
-            negative { rule(::unauthenticatedCannotReadAstrid) }
+            positive(::everybodyCanRead)
+            negative(::unauthenticatedCannotReadAstrid)
         }
         readProperties {
-            positive { rule(::everybodyCanReadAllProperties) }
-            negative { rule(::cannotReadAstridsFirstName) }
+            positive(::everybodyCanReadAllProperties, ::authorsCanReadTheirOwnDrafts)
+            negative(::cannotReadAstridsFirstName)
         }
         commands {
-            positive { rule(::everybodyCanDoEverything) }
-            negative { }
+            positive(::everybodyCanDoEverything)
         }
         eventLog {
-            positive { rule(::everybodyCanReadEventLog) }
-            negative { }
+            positive(::everybodyCanReadEventLog)
         }
         readAttachedData {
-            positive { rule(::onlyProjectMembersCanReadAttachments) }
-            negative { }
+            positive(::onlyProjectMembersCanReadAttachments)
         }
         writeAttachedData {
-            positive { rule(::anyLoggedInUserCanUpload) }
-            negative { }
+            positive(::anyLoggedInUserCanUpload)
+        }
+        jobs {
+            positive(::usersCanSeeTheirOwnJobs)
         }
     }
     // other specification
 }
 ```
 
-There are six independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
-`eventLog`, `readAttachedData` and `writeAttachedData` — each with its own `positive`/`negative` rule sets. A category
-with no rules at all denies everything in that category, since there is no rule to explicitly allow it. Both the
-categories and the `positive`/`negative` blocks inside them are optional, so declare only the ones you need.
+There are seven independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
+`eventLog`, `readAttachedData`, `writeAttachedData` and `jobs` — each with its own `positive`/`negative` rule sets. A
+category with no rules at all denies everything in that category, since there is no rule to explicitly allow it. Both
+the categories and the `positive`/`negative` calls inside them are optional, so declare only the ones you need.
+
+`positive` and `negative` take one or more rules, so related rules can be listed together or given a call each —
+whichever reads better.
 
 Every rule must be a named function reference, such as `::everybodyCanRead`, since its name identifies the rule in
 problems and documentation. A lambda is rejected when Klerk starts.
@@ -165,6 +167,24 @@ property holds, blob or string alike — see
 
 What is left for these rules is the `kind` ("anyone may upload JSON, only editors may upload a blob") and the `lease`
 (who may keep unclaimed data around for hours rather than a minute).
+
+### jobs
+
+Who may see a job's metadata — its status, progress and log — through `JobManager.get`, `JobManager.all` and
+`JobManager.subscribe`. The rules receive a `JobReadRuleArgs`, whose `isOwnedByActor()` answers "did this actor
+schedule it?" (`isOwnedBy(actor)` asks about someone else).
+
+```kotlin
+jobs {
+    positive(::usersCanSeeTheirOwnJobs)
+}
+
+fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthorization =
+    if (args.isOwnedByActor()) Allow else NoOpinion
+```
+
+The same rules gate `JobManager.cancel`, so an actor who can watch their own progress bar can also cancel their own
+job. Declaring no rule here denies every job read, which is what makes a progress bar silently empty.
 
 ## ActorIdentity
 

@@ -195,7 +195,7 @@ class EventLogTest {
         val (klerk, _) = start(SQLiteInMemory.create()) {
             // Only a negative block: declaring one half of a category must not require declaring the other.
             eventLog {
-                negative { rule(::unauthenticatedCannotReadTheEventLog) }
+                negative(::unauthenticatedCannotReadTheEventLog)
             }
         }
         klerk.meta.start()

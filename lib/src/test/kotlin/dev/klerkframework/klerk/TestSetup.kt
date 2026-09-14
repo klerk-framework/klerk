@@ -74,58 +74,30 @@ fun createConfig(
         }
         authorization {
             readModels {
-                positive {
-                    rule(::`Everybody can read`)
-                }
-                negative {
-                    rule(::pelleCannotReadOnMornings)
-                    rule(::unauthenticatedCannotReadAstrid)
-                }
+                positive(::`Everybody can read`)
+                negative(::pelleCannotReadOnMornings, ::unauthenticatedCannotReadAstrid)
             }
 
             readProperties {
-                positive {
-                    rule(::canReadAllProperties)
-                }
-                negative {
-                    rule(::cannotReadAstrid)
-                }
+                positive(::canReadAllProperties)
+                negative(::cannotReadAstrid)
             }
             commands {
-                positive {
-                    rule(::`Everybody can do everything`)
-                }
-                negative {
-                }
+                positive(::`Everybody can do everything`)
             }
             eventLog {
-                positive {
-                    rule(::`Everybody can read event log`)
-                }
-                negative {}
+                positive(::`Everybody can read event log`)
             }
             readAttachedData {
-                positive {
-                    rule(::onlyTheAuthorsOwnerCanReadThePicture)
-                }
-                negative {
-                    rule(::unauthenticatedCannotReadAttachedData)
-                }
+                positive(::onlyTheAuthorsOwnerCanReadThePicture)
+                negative(::unauthenticatedCannotReadAttachedData)
             }
             writeAttachedData {
-                positive {
-                    rule(::everybodyCanPrepareAttachedData)
-                }
-                negative {
-                    rule(::unauthenticatedCannotPrepareStrings)
-                }
+                positive(::everybodyCanPrepareAttachedData)
+                negative(::unauthenticatedCannotPrepareStrings)
             }
             jobs {
-                positive {
-                    rule(::authorsCanSeeTheirOwnJobs)
-                    rule(::systemCanSeeAllJobs)
-                }
-                negative {}
+                positive(::authorsCanSeeTheirOwnJobs, ::systemCanSeeAllJobs)
             }
             configureAuthorization()
         }
@@ -780,31 +752,17 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Ctx
     if (auth) {
         authorization {
             readModels {
-                positive {
-                    rule(::`Everybody can read`)
-                }
-                negative {
-                    rule(::pelleCannotReadOnMornings)
-                }
+                positive(::`Everybody can read`)
+                negative(::pelleCannotReadOnMornings)
             }
             commands {
-                positive {
-                    rule(::`Everybody can do everything`)
-                }
-                negative {
-                }
+                positive(::`Everybody can do everything`)
             }
             eventLog {
-                positive {
-                    rule(::`Everybody can read event log`)
-                }
-                negative {}
+                positive(::`Everybody can read event log`)
             }
             jobs {
-                positive {
-                    rule(::systemCanSeeAllJobs)
-                }
-                negative {}
+                positive(::systemCanSeeAllJobs)
             }
         }
         systemContextProvider { Ctx(SystemIdentity) }
