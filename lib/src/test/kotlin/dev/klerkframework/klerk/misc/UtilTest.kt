@@ -1,5 +1,7 @@
 package dev.klerkframework.klerk.misc
 
+
+import dev.klerkframework.klerk.camelCaseToPretty
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

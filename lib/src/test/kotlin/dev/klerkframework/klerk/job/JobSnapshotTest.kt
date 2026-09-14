@@ -146,7 +146,7 @@ class JobSnapshotTest {
         listOf(Ctx.system(), Ctx.unauthenticated()).forEach { context ->
             val failure = assertFailsWith<IllegalStateException>("with actor ${context.actor}") {
                 withTimeout(30.seconds) {
-                    klerk.read(context) { runBlocking { klerk.jobs.getJob(id, context) } }
+                    klerk.read(context) { runBlocking { klerk.jobs.get(id, context) } }
                 }
             }
             assertTrue(
@@ -190,7 +190,7 @@ class JobSnapshotTest {
             }
             // The dispatcher must get through every job while all of that reading is going on.
             ids.forEach { id ->
-                while (klerk.jobs.getJob(id, Ctx.system()).status != JobStatus.Succeeded) {
+                while (klerk.jobs.get(id, Ctx.system()).status != JobStatus.Succeeded) {
                     kotlinx.coroutines.delay(20)
                 }
             }

@@ -29,7 +29,7 @@ class StorageTest {
         val author = Model(
             id = ModelID(234),
             createdAt = now,
-            lastPropsUpdateAt = now,
+            lastPropsUpdatedAt = now,
             lastStateTransitionAt = now,
             state = AuthorStates.Amateur.name,
             timeTrigger = null,
@@ -70,7 +70,7 @@ class StorageTest {
         val book = Model(
             id = ModelID(123),
             createdAt = now,
-            lastPropsUpdateAt = now,
+            lastPropsUpdatedAt = now,
             state = BookStates.Draft.name,
             timeTrigger = null,
             props = bookProps,

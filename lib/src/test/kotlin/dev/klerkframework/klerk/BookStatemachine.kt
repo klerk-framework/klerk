@@ -63,6 +63,6 @@ fun bookStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Vi
 
     }
 
-fun setPublishTime(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
+fun setPublishTime(args: InstanceEventArgs<Book, Nothing?, Ctx, Views>): Book {
     return args.model.props.copy(publishedAt = BookWrittenAt(args.context.time))
 }

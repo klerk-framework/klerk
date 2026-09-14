@@ -1,5 +1,6 @@
-package dev.klerkframework.klerk
+package dev.klerkframework.klerk.ecosystem
 
+import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.JobId
 
@@ -42,9 +43,9 @@ public data class BasicEmail(
     val cc: List<EmailAndName> = emptyList(),
     val bcc: List<EmailAndName> = emptyList(),
     val subject: String,
-    val htmlBody: String?,
-    val textBody: String?,
-    val replyTo: EmailAndName?,
+    val htmlBody: String? = null,
+    val textBody: String? = null,
+    val replyTo: EmailAndName? = null,
 ) {
     private val maxRecipients = 50
 
@@ -90,8 +91,13 @@ public data class BasicEmail(
 public interface EmailSender<C : KlerkContext, V> {
     public val defaultFromAddress: BasicEmail.EmailAndName
 
-    /** @return a [JobId] if sending was scheduled as a background job, or a failed [Result] describing why sending failed. */
-    public suspend fun sendEmail(email: BasicEmail, context: C): Result<JobId?>
+    /**
+     * Sends [email], or schedules it.
+     *
+     * @return the [JobId] if sending was scheduled as a background job, or null if it was sent directly.
+     * @throws Exception if the email could not be sent or scheduled
+     */
+    public suspend fun sendEmail(email: BasicEmail, context: C): JobId?
 
     /** @return the command that would send [email], if this sender can express sending as a command, else `null`. */
     public fun getSendEmailCommand(email: BasicEmail): Command<out Any, out Any>?

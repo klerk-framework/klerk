@@ -18,20 +18,20 @@ import dev.klerkframework.klerk.read.viewReader
  * How many models are in the view. Answered from ids for an indexed view, without reading a single model.
  */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.count(): Int = count(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.count(): Int = internalCount(reader)
 
 /** True if the view holds nothing. Stops at the first id rather than counting them all. */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isEmpty(): Boolean = isEmpty(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isEmpty(): Boolean = internalIsEmpty(reader)
 
 /** True if the view holds anything. */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isNotEmpty(): Boolean = !isEmpty(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isNotEmpty(): Boolean = !internalIsEmpty(reader)
 
 /** `id in view` -- an index lookup for an indexed view. */
 context(reader: ModelReader<C, V>)
 public operator fun <T : Any, C : KlerkContext, V> ModelView<T, C>.contains(id: ModelID<T>): Boolean =
-    contains(id, reader)
+    internalContains(id, reader)
 
 /**
  * The ids in the view, in its own order, lazily. Reads no models at all.

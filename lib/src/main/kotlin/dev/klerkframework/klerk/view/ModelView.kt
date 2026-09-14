@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.read.unauthorized
  * free; everything else is built by composing [filter], [filterStates] and [sorted] on top of it (or on another
  * view), then exposing it via [register]. See docs/views.md.
  *
- * Views are read through [ModelReader] (`withReader`, or the higher-level `count`/`asSequence`/`query` extensions), never queried
+ * Views are read through [ModelReader] (the `count`/`asSequence`/`query` extensions), never queried
  * directly — that's what makes their content authorization-checked and lock-consistent with the rest of a read.
  */
 public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: ModelView<T, C>?) {
@@ -54,7 +54,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /**
      * True if membership can be decided by [matches] alone, for this view and every view it is derived from. False for
-     * a custom [ModelView], whose `withReader` may depend on anything at all, and for anything derived from one.
+     * a custom [ModelView], whose `memberIds` may depend on anything at all, and for anything derived from one.
      */
     internal open val isIndexable: Boolean
         get() = narrowsByPredicate && parent?.isIndexable == true
@@ -173,16 +173,12 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      */
     public abstract fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>>
 
-    /**
-     * The content of this view, as models. Reads each model of [memberIds] through [reader], so be careful not to use
-     * the sequence after the reader has been released — that may lead to ConcurrentModificationException. It is
-     * usually better to use the methods in Reader (query, list etc.).
-     */
-    public fun <V> withReader(reader: ModelReader<C, V>): Sequence<Model<T>> =
+    /** The content of this view, as models. The caller API is `asSequence()` / `asSequenceOrThrow()`. */
+    internal fun <V> withReader(reader: ModelReader<C, V>): Sequence<Model<T>> =
         memberIds(reader).map { reader.get(it) }
 
-    /** Answered from the index when there is one, so no model is read. */
-    public open fun <V> isEmpty(reader: ModelReader<C, V>): Boolean =
+    /** Answered from the index when there is one, so no model is read. Override it when the view can do better. */
+    protected open fun <V> isEmpty(reader: ModelReader<C, V>): Boolean =
         ensureIndex(reader)?.isEmpty() ?: memberIds(reader).none()
 
     /**
@@ -200,8 +196,8 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open val modelViews: ModelViews<T, C>
         get() = parent?.modelViews ?: throw IllegalStateException("This view has no ModelViews")
-    /** Answered from the index when there is one, so no model is read. */
-    public open fun <V> count(reader: ModelReader<C, V>): Int =
+    /** Answered from the index when there is one, so no model is read. Override it when the view can do better. */
+    protected open fun <V> count(reader: ModelReader<C, V>): Int =
         ensureIndex(reader)?.size ?: memberIds(reader).count()
 
     /**
@@ -210,7 +206,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * Walks [memberIds] unless the view is indexed. Override it when the view can answer membership directly — it is
      * asked once per `validReferences` check, i.e. on the command path.
      */
-    public open fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean {
+    protected open fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean {
         ensureIndex(reader)?.let { return it.contains(value.value) }
         return memberIds(reader).any { it.value == value.value }
     }
@@ -234,8 +230,12 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         this.idBase = idBase
     }
 
-    /** Eagerly collects this view's content into a [List]. Prefer `asSequence()`/`query()` unless you specifically need a `List`. */
-    public fun <D> readWith(reader: ModelReader<C, D>): List<Model<T>> = withReader(reader).toList()
+    internal fun <V> internalCount(reader: ModelReader<C, V>): Int = count(reader)
+
+    internal fun <V> internalIsEmpty(reader: ModelReader<C, V>): Boolean = isEmpty(reader)
+
+    internal fun <V> internalContains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean =
+        contains(value, reader)
 
 }
 
@@ -254,8 +254,8 @@ internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
 
     // Cardinality is a question about membership, so it goes to the parent rather than through memberIds, which would
     // read and sort every model just to count it.
-    override fun <V> count(reader: ModelReader<C, V>): Int = previous.count(reader)
-    override fun <V> isEmpty(reader: ModelReader<C, V>): Boolean = previous.isEmpty(reader)
+    override fun <V> count(reader: ModelReader<C, V>): Int = previous.internalCount(reader)
+    override fun <V> isEmpty(reader: ModelReader<C, V>): Boolean = previous.internalIsEmpty(reader)
 
     // Unlike the other views this must read every model, since only the model itself answers where it sorts.
     override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> {

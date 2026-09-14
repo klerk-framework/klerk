@@ -14,7 +14,7 @@ public data class MigrationModelV1(
     val id: Int,
     val createdAt: Instant,
     val lastPropsUpdatedAt: Instant,
-    val lastTransitionAt: Instant,
+    val lastStateTransitionAt: Instant,
     val state: String,
     val props: JsonObject,
 )

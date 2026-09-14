@@ -131,7 +131,7 @@ class ReaderTest {
             val ida = Model(
                 id = idaRef,
                 createdAt = Clock.System.now(),
-                lastPropsUpdateAt = Clock.System.now(),
+                lastPropsUpdatedAt = Clock.System.now(),
                 lastStateTransitionAt = Clock.System.now(),
                 state = AuthorStates.Improving.name,
                 timeTrigger = null,

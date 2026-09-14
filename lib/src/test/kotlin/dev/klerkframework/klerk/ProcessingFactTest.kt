@@ -22,7 +22,7 @@ class ProcessingFactTest {
             id = authorId,
             createdAt = Instant.DISTANT_PAST,
             lastStateTransitionAt = Instant.DISTANT_PAST,
-            lastPropsUpdateAt = Instant.DISTANT_PAST,
+            lastPropsUpdatedAt = Instant.DISTANT_PAST,
             state = "first",
             timeTrigger = null,
             props = author
@@ -37,7 +37,7 @@ class ProcessingFactTest {
             updatedModels = listOf(authorId),
             aggregatedModelState = mapOf(
                 authorId to authorModel.copy(
-                    lastPropsUpdateAt = updateTime,
+                    lastPropsUpdatedAt = updateTime,
                     props = author.copy(firstName = FirstName("Another"))
                 )
             )
@@ -48,7 +48,7 @@ class ProcessingFactTest {
         assertEquals("second", modifiedModel.state)
         assertEquals("Another", modifiedModel.props.firstName.value)
         assertEquals(transitionTime, modifiedModel.lastStateTransitionAt)
-        assertEquals(updateTime, modifiedModel.lastPropsUpdateAt)
+        assertEquals(updateTime, modifiedModel.lastPropsUpdatedAt)
         assertEquals(updateTime, modifiedModel.lastModifiedAt)
     }
 }

@@ -48,7 +48,7 @@ class InstanceNonInstanceEventBlockTest {
             klerk.meta.start()
 
             klerk.read(Ctx.system()) {
-                println("is empty: ${collections.authors.all.isEmpty(this)}")
+                println("is empty: ${collections.authors.all.isEmpty()}")
             }
 
             val author = createAuthorJKRowling(klerk)
@@ -56,7 +56,7 @@ class InstanceNonInstanceEventBlockTest {
 
             klerk.read(Ctx.system()) {
 
-                println("is empty: ${collections.authors.all.withReader(this).count()}")
+                println("is empty: ${collections.authors.all.asSequenceOrThrow().count()}")
 
             }
 
@@ -104,6 +104,6 @@ class InstanceNonInstanceEventBlockTest {
 
 }
 
-fun updateModelFunction(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
+fun updateModelFunction(args: InstanceEventArgs<Book, Nothing?, Ctx, Views>): Book {
     return args.model.props.copy(title = BookTitle("something else"))
 }

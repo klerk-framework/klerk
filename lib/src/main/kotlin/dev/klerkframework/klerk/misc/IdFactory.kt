@@ -45,7 +45,7 @@ internal class AttachedDataIdAllocator {
     }
 }
 
-internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {
+internal class IdFactory(val isJobIdAvailable: (Long) -> Boolean) : IdProvider {
 
     private val log = KotlinLogging.logger {}
     private val random = SecureRandom.getInstanceStrong()
@@ -68,9 +68,9 @@ internal class IdFactory(val isJobIdAvailable: (Int) -> Boolean) : IdProvider {
 
     override fun getNextJobID(): JobId {
         while (true) {
-            val randomInt = random.nextInt(0, Int.MAX_VALUE)
-            if (isJobIdAvailable(randomInt)) {
-                return JobId(randomInt)
+            val candidate = random.nextLong(0, Long.MAX_VALUE)
+            if (isJobIdAvailable(candidate)) {
+                return JobId(candidate)
             }
         }
     }

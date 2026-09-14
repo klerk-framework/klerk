@@ -90,7 +90,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
 ) : ModelView<Author, Ctx>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {
-        val withTwoBooks = books.withReader(reader)
+        val withTwoBooks = with(reader) { books.asSequenceOrThrow() }
             .groupingBy { it.props.author }
             .eachCount()
             .filterValues { it >= 2 }
@@ -102,7 +102,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
 
 **Answer in ids, not models.** Klerk turns ids into models only for the ones a caller actually asks for, so a view that
 returns ids never pays for reading models it excludes — and `count`, `contains` and `isEmpty` are then answered without
-reading any model at all. `withReader` is derived from `memberIds` and is not overridable.
+reading any model at all. Everything else the view answers is derived from `memberIds`.
 
 The pattern that makes a custom view genuinely cheap is to maintain your own lookup structure from the
 `didCreate`/`didUpdate`/`didDelete` hooks on the `ModelViews` of whatever the view depends on, and answer from it:

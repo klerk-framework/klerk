@@ -194,8 +194,15 @@ The query is a snapshot of the read block that created it: it only ever returns 
 visible there, so the log never shows an event that hasn't happened yet. Because the database is queried by `get()`,
 outside the block, nothing is read while the read lock is held — calling `get()` inside a read block is an error.
 
-`eventLog` also takes `after`/`before` to limit the [time](context.md) range, and `sequenceNumber` to fetch one specific
-entry:
+`eventLog` also takes `after`/`before` to limit the [time](context.md) range. A single entry is fetched with
+`eventLogEntry(sequenceNumber)`, which works the same way but returns one entry or null:
+
+```kotlin
+val query = klerk.read(context) { eventLogEntry(42) }
+val entry: EventLogEntry? = query.get()
+```
+
+An entry looks like this:
 
 ```kotlin
 public data class EventLogEntry(

@@ -1,10 +1,9 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.job.JobCommit
-import dev.klerkframework.klerk.storage.AttachedDataDelta
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.SqlPersistence
 import kotlinx.coroutines.Dispatchers
@@ -162,8 +161,8 @@ class EventLogTest {
 
         val all = klerk.read(Ctx.system()) { eventLog() }.get()
         val wanted = all.last()
-        val found = klerk.read(Ctx.system()) { eventLog(sequenceNumber = wanted.sequenceNumber) }.get()
-        assertEquals(listOf(wanted), found)
+        val found = klerk.read(Ctx.system()) { eventLogEntry(wanted.sequenceNumber) }.get()
+        assertEquals(wanted, found)
         klerk.meta.stop()
     }
 
@@ -222,5 +221,5 @@ class EventLogTest {
     }
 }
 
-fun unauthenticatedCannotReadTheEventLog(args: ArgContextReader<Ctx, Views>): NegativeAuthorization =
+fun unauthenticatedCannotReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>): NegativeAuthorization =
     if (args.context.actor is Unauthenticated) NegativeAuthorization.Deny else NegativeAuthorization.Pass

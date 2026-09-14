@@ -232,7 +232,7 @@ class JobManagerImplTest {
         return Fixture(klerk, clock, storage)
     }
 
-    private suspend fun Fixture.job(id: JobId): JobInfo = klerk.jobs.getJob(id, Ctx.system())
+    private suspend fun Fixture.job(id: JobId): JobInfo = klerk.jobs.get(id, Ctx.system())
 
     // ---------------------------------------------------------------- tests
 
@@ -255,13 +255,13 @@ class JobManagerImplTest {
     @Test
     fun `a failing command schedules nothing`() = runBlocking<Unit> {
         val f = fixture()
-        val before = f.klerk.jobs.getAllJobs(Ctx.system()).size
+        val before = f.klerk.jobs.all(Ctx.system()).size
         val result = f.klerk.handle(
             Command(ChangeName, ModelID(123456), ChangeNameParams(FirstName("a"), LastName("b"))),
             Ctx.system(),
         )
         assertTrue(result is CommandResult.Failure)
-        assertEquals(before, f.klerk.jobs.getAllJobs(Ctx.system()).size)
+        assertEquals(before, f.klerk.jobs.all(Ctx.system()).size)
     }
 
     @Test
@@ -296,7 +296,7 @@ class JobManagerImplTest {
         val remaining = second.klerk.jobs.runUntilIdle()
         assertEquals(301, remaining)
         assertEquals(JobStatus.Succeeded, second.job(id).status)
-        assertEquals("500", second.klerk.jobs.getAllJobs(Ctx.system()).single { it.id == id }.let {
+        assertEquals("500", second.klerk.jobs.all(Ctx.system()).single { it.id == id }.let {
             // the result the last Success reported
             second.storageResult(id)
         })
@@ -437,7 +437,7 @@ class JobManagerImplTest {
         // Every parent yields into Waiting first; if Waiting occupied a slot the children could never run.
         f.klerk.jobs.runUntilIdle()
 
-        val all = f.klerk.jobs.getAllJobs(Ctx.system())
+        val all = f.klerk.jobs.all(Ctx.system())
         assertEquals(4 + 12, all.size)
         assertTrue(all.all { it.status == JobStatus.Succeeded })
     }
@@ -451,17 +451,17 @@ class JobManagerImplTest {
         // Let the tree build itself out: 1 root + 2 + 4 = 7 jobs. Stepping by condition rather than by a fixed count,
         // because with a frozen clock every job is equally ready and the dispatch order between them is arbitrary.
         var guard = 0
-        while (f.klerk.jobs.getAllJobs(Ctx.system()).size < 7 && guard++ < 1000) {
+        while (f.klerk.jobs.all(Ctx.system()).size < 7 && guard++ < 1000) {
             f.klerk.jobs.step()
         }
-        assertEquals(7, f.klerk.jobs.getAllJobs(Ctx.system()).size)
+        assertEquals(7, f.klerk.jobs.all(Ctx.system()).size)
 
         f.klerk.jobs.cancel(root, Ctx.system(), "user asked")
         assertEquals(JobStatus.Cancelling, f.job(root).status)
 
         f.klerk.jobs.runUntilIdle()
 
-        val all = f.klerk.jobs.getAllJobs(Ctx.system())
+        val all = f.klerk.jobs.all(Ctx.system())
         assertEquals(7, all.size)
         assertTrue(all.all { it.status == JobStatus.Cancelled }, "not all cancelled: ${all.map { it.status }}")
         assertEquals(7, Tree.cancelHookRan)
@@ -473,9 +473,9 @@ class JobManagerImplTest {
         val id = f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
 
         // The test specification only lets the system, or the scheduling actor, see a job.
-        assertFailsWith<AuthorizationException> { f.klerk.jobs.getJob(id, Ctx.unauthenticated()) }
-        assertTrue(f.klerk.jobs.getAllJobs(Ctx.unauthenticated()).isEmpty())
-        assertEquals(id, f.klerk.jobs.getJob(id, Ctx.system()).id)
+        assertFailsWith<AuthorizationException> { f.klerk.jobs.get(id, Ctx.unauthenticated()) }
+        assertTrue(f.klerk.jobs.all(Ctx.unauthenticated()).isEmpty())
+        assertEquals(id, f.klerk.jobs.get(id, Ctx.system()).id)
     }
 
     @Test
@@ -556,9 +556,9 @@ class JobManagerImplTest {
         val f = fixture { register(Serial) }
         repeat(5) { f.klerk.jobs.schedule(Serial.declare(CountCursor(remaining = 2)), Ctx.system()) }
         // All five were accepted even though only one may run at a time.
-        assertEquals(5, f.klerk.jobs.getAllJobs(Ctx.system()).size)
+        assertEquals(5, f.klerk.jobs.all(Ctx.system()).size)
         f.klerk.jobs.runUntilIdle()
-        assertTrue(f.klerk.jobs.getAllJobs(Ctx.system()).all { it.status == JobStatus.Succeeded })
+        assertTrue(f.klerk.jobs.all(Ctx.system()).all { it.status == JobStatus.Succeeded })
     }
 
     /**
@@ -645,7 +645,7 @@ class JobManagerImplTest {
             "should say why it was stopped, was: ${breeder.reason}"
         )
         // The budget is what it was configured to be, not one more because two spawns raced.
-        val spawned = f.klerk.jobs.getAllJobs(Ctx.system()).count { it.parent == id }
+        val spawned = f.klerk.jobs.all(Ctx.system()).count { it.parent == id }
         assertEquals(3, spawned)
     }
 
@@ -671,7 +671,7 @@ class JobManagerImplTest {
     fun `concurrent scheduling never hands out the same job id twice`() = runBlocking<Unit> {
         val f = fixture { register(Counter) }
         val small = java.util.Random(20260826)   // java.util.Random is synchronized, so it is safe to share here
-        (f.klerk.jobs as JobManagerImpl<Ctx, Views>).idCandidates = { small.nextInt(48) }
+        (f.klerk.jobs as JobManagerImpl<Ctx, Views>).idCandidates = { small.nextInt(48).toLong() }
 
         val ids = java.util.Collections.synchronizedList(mutableListOf<JobId>())
         withTimeout(60_000) {
@@ -686,7 +686,7 @@ class JobManagerImplTest {
         assertEquals(24, ids.toSet().size, "the same job id was handed out more than once")
         assertEquals(
             24,
-            f.klerk.jobs.getAllJobs(Ctx.system()).size,
+            f.klerk.jobs.all(Ctx.system()).size,
             "a job row was overwritten by another job that was given the same id"
         )
         f.klerk.meta.stop()

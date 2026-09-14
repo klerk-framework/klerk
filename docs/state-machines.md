@@ -59,7 +59,7 @@ voidState {
     }
 }
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>): Book {
+fun newBook(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>): Book {
     val params = args.command.params
     return Book(title = params.title, author = params.author, /* ... */)
 }
@@ -186,7 +186,7 @@ onEvent(DeleteAuthorAndBooks) {
     commands(::eventsToDeleteAuthorAndBooks)
 }
 
-fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
+fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
         val books = referencing(Book::class, requireNotNull(args.model.id))
         return books.map { Command(DeleteBook, it.id) } +
@@ -204,9 +204,9 @@ transition instead.
 Every function you pass to `event`, `createModel`, `update`, `transitionTo`'s `onCondition`, etc. receives one argument
 describing everything available at that point:
 
-- `ArgForVoidEvent<T, P, C, V>` — used in `voidState`. Has `command` (the incoming `Command<T, P>`), `context`
+- `VoidEventArgs<T, P, C, V>` — used in `voidState`. Has `command` (the incoming `Command<T, P>`), `context`
   ([context.md](context.md)), and `reader` ([reading.md](reading.md)). There is no `model` yet — it doesn't exist.
-- `ArgForInstanceEvent<T, P, C, V>` — used in `onEvent` inside `state { }`. Adds `model: Model<T>`
+- `InstanceEventArgs<T, P, C, V>` — used in `onEvent` inside `state { }`. Adds `model: Model<T>`
   ([models.md](models.md)), the (uncommitted) model the event is acting on.
 - `LifecycleArgs<T, C, V>` — used in `onEnter`, `onExit`, `after`, `atTime`, i.e. anywhere there's no
   triggering event. Has `model`, `time`, and `reader`, but no `command`.

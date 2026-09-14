@@ -38,7 +38,7 @@ public value class JobName(public val value: String) {
  */
 @Serializable
 @JvmInline
-public value class JobId(public val value: Int) {
+public value class JobId(public val value: Long) {
     override fun toString(): String = value.toString()
 }
 
@@ -128,7 +128,7 @@ public enum class JobAgent {
 /**
  * How far a job has got, structured so that a UI can render a progress bar without parsing strings.
  *
- * Stored with the cursor, in the same transaction, and visible through [dev.klerkframework.klerk.JobManager.getJob]
+ * Stored with the cursor, in the same transaction, and visible through [dev.klerkframework.klerk.JobManager.get]
  * subject to the job authorization rules.
  *
  * @property completed how many units of work are done.
@@ -209,7 +209,7 @@ public data class JobInfo(
     val name: JobName,
     val step: Int,
     val attempt: Int,
-    val created: Instant,
+    val createdAt: Instant,
     val priority: JobPriority,
     val parent: JobId?,
     val root: JobId,

@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.job.isJobAuthorized
 
 /**
- * The `jobs` accessor of a [ReaderWithAuth]: the same rules `klerk.jobs.getJob` applies, but evaluated without
+ * The `jobs` accessor of a [ReaderWithAuth]: the same rules `klerk.jobs.get` applies, but evaluated without
  * taking the read lock, since the surrounding read block already holds it.
  */
 internal class AuthorizingJobReader<C : KlerkContext, V>(

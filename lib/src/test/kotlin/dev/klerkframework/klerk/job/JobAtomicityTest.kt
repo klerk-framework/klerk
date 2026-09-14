@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.misc.MutableClock
@@ -95,7 +96,7 @@ class JobAtomicityTest {
             delta: ProcessingData<out T, C, V>?,
             command: Command<T, P>?,
             context: C?,
-            attachedData: dev.klerkframework.klerk.storage.AttachedDataDelta,
+            attachedData: AttachedDataDelta,
             jobs: JobCommit,
             sequenceNumber: Long,
         ) {
@@ -164,7 +165,7 @@ class JobAtomicityTest {
                     authors.map { it.props.lastName.valueWithoutAuthorization }.toSet(),
                     "crashing at commit $crashAt applied a command twice or skipped one",
                 )
-                assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
+                assertEquals(JobStatus.Succeeded, klerk.jobs.get(id, Ctx.system()).status)
                 klerk.meta.stop()
             }
         }
@@ -184,7 +185,7 @@ class JobAtomicityTest {
             klerk = klerkOver(storage.recovered(), clock)
             klerk.jobs.runUntilIdle()
 
-            val all = klerk.jobs.getAllJobs(Ctx.system())
+            val all = klerk.jobs.all(Ctx.system())
             val children = all.filter { it.parent == id }
             assertTrue(
                 children.size == 0 || children.size == 5,
@@ -192,8 +193,8 @@ class JobAtomicityTest {
             )
             // The parent must reach a terminal status either way; it must never sit waiting on a child that is gone.
             assertTrue(
-                klerk.jobs.getJob(id, Ctx.system()).status.isTerminal,
-                "crashing at commit $crashAt stranded the parent in ${klerk.jobs.getJob(id, Ctx.system()).status}",
+                klerk.jobs.get(id, Ctx.system()).status.isTerminal,
+                "crashing at commit $crashAt stranded the parent in ${klerk.jobs.get(id, Ctx.system()).status}",
             )
             klerk.meta.stop()
         }

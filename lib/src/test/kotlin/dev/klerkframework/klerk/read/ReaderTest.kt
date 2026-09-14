@@ -32,7 +32,7 @@ class ReaderTest {
             val originalAuthor = Model(
                 id = ref,
                 createdAt = Clock.System.now(),
-                lastPropsUpdateAt = Clock.System.now(),
+                lastPropsUpdatedAt = Clock.System.now(),
                 lastStateTransitionAt = Clock.System.now(),
                 state = "test",
                 timeTrigger = null,

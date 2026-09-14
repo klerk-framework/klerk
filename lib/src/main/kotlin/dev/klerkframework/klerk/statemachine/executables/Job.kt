@@ -19,12 +19,12 @@ private fun <C : KlerkContext, V> List<DeclaredJob<C, V>>.withIds(
 ): List<PendingJob<C, V>> = map { PendingJob(processingOptions.idProvider.getNextJobID(), it) }
 
 internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForVoidEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: VoidEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -37,12 +37,12 @@ internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
 }
 
 internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForVoidEvent<T, P, C, V>) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: VoidEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -91,12 +91,12 @@ internal class InstanceLifecycleJob<T : Any, C : KlerkContext, V>(
 }
 
 internal class InstanceEventJobs<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: InstanceEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -109,12 +109,12 @@ internal class InstanceEventJobs<T : Any, P, C : KlerkContext, V>(
 }
 
 internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: InstanceEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

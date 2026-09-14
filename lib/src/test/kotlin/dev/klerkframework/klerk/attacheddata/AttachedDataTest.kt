@@ -574,7 +574,7 @@ open class AttachedDataTest {
         val thrown = assertFailsWith<IllegalStateException> {
             klerk.readSuspend(Ctx.system()) { klerk.attachedData.getMetadata(id, Ctx.system()) }
         }
-        assertTrue(thrown.message!!.contains("reader.attachedData.metadata"))
+        assertTrue(thrown.message!!.contains("reader.attachedData.getMetadata"))
         klerk.meta.stop()
     }
 
@@ -586,7 +586,7 @@ open class AttachedDataTest {
 
         val (author, metadata) = klerk.read(Ctx.system()) {
             val author = get(authorID)
-            author to attachedData.metadata(requireNotNull(author.props.picture).id)
+            author to attachedData.getMetadata(requireNotNull(author.props.picture).id)
         }
 
         assertEquals(id, author.props.picture?.id)
@@ -604,10 +604,10 @@ open class AttachedDataTest {
 
         val context = Ctx.authenticationIdentity()
         klerk.read(context) {
-            assertEquals(8L, attachedData.metadata(readable).size)
-            assertFailsWith<AuthorizationException> { attachedData.metadata(secret) }
-            assertNull(attachedData.metadataOrNull(secret.untyped()))
-            assertNull(attachedData.metadataOrNull(AttachedDataID(4711)))
+            assertEquals(8L, attachedData.getMetadata(readable).size)
+            assertFailsWith<AuthorizationException> { attachedData.getMetadata(secret) }
+            assertNull(attachedData.getMetadataOrNull(secret.untyped()))
+            assertNull(attachedData.getMetadataOrNull(AttachedDataID(4711)))
         }
         klerk.meta.stop()
     }
@@ -644,7 +644,7 @@ open class AttachedDataTest {
         }
         klerk.read(Ctx.system()) {
             assertFailsWith<NoSuchElementException> {
-                attachedData.metadata(picture.untyped().asString())
+                attachedData.getMetadata(picture.untyped().asString())
             }
         }
         klerk.meta.stop()

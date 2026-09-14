@@ -267,7 +267,7 @@ fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> {
     }
 }
 
-fun anonymousCannotReadSensitiveProperties(args: ArgsForPropertyAuth<Ctx, Views>): NegativeAuthorization {
+fun anonymousCannotReadSensitiveProperties(args: PropertyReadRuleArgs<Ctx, Views>): NegativeAuthorization {
     propertyRuleEvaluations++
     val sensitive = args.property is LastName || args.property is Street || args.property is BookTag
     return if (sensitive && args.context.actor == Unauthenticated) Deny else Pass

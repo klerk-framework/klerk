@@ -31,10 +31,14 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
-        sequenceNumber: Long?,
     ): EventLogQuery {
         checkEventLogAuthorization(klerk, context, withoutAuth)
-        return eventLogQuery(klerk, id, after, before, sequenceNumber)
+        return eventLogQuery(klerk, id, after, before)
+    }
+
+    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery {
+        checkEventLogAuthorization(klerk, context, withoutAuth)
+        return eventLogEntryQuery(klerk, sequenceNumber)
     }
 
     internal val modelsRead = mutableSetOf<Model<*>>()
@@ -146,7 +150,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         return ReadResult.Ok(model)
     }
     val brokenRule = specification.authorization.readModelNegativeRules
-        .firstOrNull { it(ArgModelContextReader(model, context, reader)) == NegativeAuthorization.Deny }
+        .firstOrNull { it(ModelReadRuleArgs(model, context, reader)) == NegativeAuthorization.Deny }
 
     if (brokenRule != null) {
         return ReadResult.Fail(
@@ -157,7 +161,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         )
     }
 
-    if (specification.authorization.readModelPositiveRules.map { it(ArgModelContextReader(model, context, reader)) }
+    if (specification.authorization.readModelPositiveRules.map { it(ModelReadRuleArgs(model, context, reader)) }
             .none { it == PositiveAuthorization.Allow }) {
         logger.info("No policy explicitly allowed the request")
         return ReadResult.Fail(

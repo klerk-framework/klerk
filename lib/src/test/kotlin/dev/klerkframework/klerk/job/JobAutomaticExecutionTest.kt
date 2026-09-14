@@ -45,7 +45,7 @@ class JobAutomaticExecutionTest {
         status: JobStatus,
     ): JobInfo = withTimeout(20.seconds) {
         while (true) {
-            val info = klerk.jobs.getJob(id, Ctx.system())
+            val info = klerk.jobs.get(id, Ctx.system())
             if (info.status == status) {
                 return@withTimeout info
             }
@@ -87,20 +87,20 @@ class JobAutomaticExecutionTest {
         val id = klerk.jobs.schedule(Ticker.declare(TickCursor(remaining = 10_000)), Ctx.system())
         // Let it get going, then stop while it is still nowhere near done.
         withTimeout(20.seconds) {
-            while (klerk.jobs.getJob(id, Ctx.system()).step < 3) {
+            while (klerk.jobs.get(id, Ctx.system()).step < 3) {
                 kotlinx.coroutines.delay(10)
             }
         }
         klerk.meta.stop()
 
         val persisted = storage.getAllJobs().single { it.id == id }
-        assertTrue(persisted.stepNumber >= 3, "the checkpoint of the last finished step must have been committed")
+        assertTrue(persisted.step >= 3, "the checkpoint of the last finished step must have been committed")
         assertTrue(!persisted.status.isTerminal, "the job is not done; it should be resumable")
 
         // Nothing keeps running after stop.
-        val after = persisted.stepNumber
+        val after = persisted.step
         kotlinx.coroutines.delay(200)
-        assertEquals(after, storage.getAllJobs().single { it.id == id }.stepNumber)
+        assertEquals(after, storage.getAllJobs().single { it.id == id }.step)
     }
 
     @Serializable
@@ -162,7 +162,7 @@ class JobAutomaticExecutionTest {
 
         assertEquals("saw 4 children", Fan.sawChildren, "the parent's step should see every child's outcome")
 
-        val children = klerk.jobs.getAllJobs(Ctx.system()).filter { it.parent == id }
+        val children = klerk.jobs.all(Ctx.system()).filter { it.parent == id }
         assertEquals(4, children.size)
         assertTrue(children.all { it.status == JobStatus.Succeeded })
         klerk.meta.stop()
@@ -189,7 +189,7 @@ class JobAutomaticExecutionTest {
         val ids = (1..12).map { klerk.jobs.schedule(Fan.declare(FanCursor(children = 8)), Ctx.system()) }
         ids.forEach { awaitStatus(klerk, it, JobStatus.Succeeded) }
 
-        val all = klerk.jobs.getAllJobs(Ctx.system())
+        val all = klerk.jobs.all(Ctx.system())
         assertEquals(12 * 8, all.count { it.parent != null }, "every child should exist")
         assertTrue(all.all { it.status == JobStatus.Succeeded }, "every job should have finished")
         klerk.meta.stop()

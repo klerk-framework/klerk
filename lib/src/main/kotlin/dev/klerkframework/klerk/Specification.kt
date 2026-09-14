@@ -638,20 +638,20 @@ public data class Specification<C : KlerkContext, V>(
  * meant to be constructed directly by application code.
  */
 public data class AuthorizationConfig<C : KlerkContext, V>(
-    val readModelPositiveRules: Set<(ArgModelContextReader<C, V>) -> PositiveAuthorization>,
-    val readModelNegativeRules: Set<(ArgModelContextReader<C, V>) -> NegativeAuthorization>,
-    val readPropertyPositiveRules: Set<(ArgsForPropertyAuth<C, V>) -> PositiveAuthorization>,
-    val readPropertyNegativeRules: Set<(ArgsForPropertyAuth<C, V>) -> NegativeAuthorization>,
-    val eventPositiveRules: Set<(ArgCommandContextReader<*, C, V>) -> PositiveAuthorization>,
-    val eventNegativeRules: Set<(ArgCommandContextReader<*, C, V>) -> NegativeAuthorization>,
-    val eventLogPositiveRules: Set<(args: ArgContextReader<C, V>) -> PositiveAuthorization>,
-    val eventLogNegativeRules: Set<(args: ArgContextReader<C, V>) -> NegativeAuthorization>,
-    val attachedDataReadPositiveRules: Set<(ArgsForAttachedDataRead<C, V>) -> PositiveAuthorization> = emptySet(),
-    val attachedDataReadNegativeRules: Set<(ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization> = emptySet(),
-    val attachedDataWritePositiveRules: Set<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization> = emptySet(),
-    val attachedDataWriteNegativeRules: Set<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization> = emptySet(),
-    val jobPositiveRules: Set<(ArgsForJobRead<C, V>) -> PositiveAuthorization> = emptySet(),
-    val jobNegativeRules: Set<(ArgsForJobRead<C, V>) -> NegativeAuthorization> = emptySet(),
+    val readModelPositiveRules: Set<(ModelReadRuleArgs<C, V>) -> PositiveAuthorization>,
+    val readModelNegativeRules: Set<(ModelReadRuleArgs<C, V>) -> NegativeAuthorization>,
+    val readPropertyPositiveRules: Set<(PropertyReadRuleArgs<C, V>) -> PositiveAuthorization>,
+    val readPropertyNegativeRules: Set<(PropertyReadRuleArgs<C, V>) -> NegativeAuthorization>,
+    val eventPositiveRules: Set<(CommandRuleArgs<*, C, V>) -> PositiveAuthorization>,
+    val eventNegativeRules: Set<(CommandRuleArgs<*, C, V>) -> NegativeAuthorization>,
+    val eventLogPositiveRules: Set<(args: EventLogRuleArgs<C, V>) -> PositiveAuthorization>,
+    val eventLogNegativeRules: Set<(args: EventLogRuleArgs<C, V>) -> NegativeAuthorization>,
+    val attachedDataReadPositiveRules: Set<(AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val attachedDataReadNegativeRules: Set<(AttachedDataReadRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
+    val attachedDataWritePositiveRules: Set<(AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val attachedDataWriteNegativeRules: Set<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
+    val jobPositiveRules: Set<(JobReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val jobNegativeRules: Set<(JobReadRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
 )
 
 @DslMarker
@@ -878,31 +878,31 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     public class AuthorizationRulesBlock<C : KlerkContext, V> {
 
         internal val readModelPositiveRules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> PositiveAuthorization>()
+            mutableSetOf<(ModelReadRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val readModelNegativeRules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> NegativeAuthorization>()
+            mutableSetOf<(ModelReadRuleArgs<C, V>) -> NegativeAuthorization>()
         internal val readPropertyPositiveRules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> PositiveAuthorization>()
+            mutableSetOf<(PropertyReadRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val readPropertyNegativeRules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> NegativeAuthorization>()
+            mutableSetOf<(PropertyReadRuleArgs<C, V>) -> NegativeAuthorization>()
         internal val eventPositiveRules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> PositiveAuthorization>()
+            mutableSetOf<(CommandRuleArgs<*, C, V>) -> PositiveAuthorization>()
         internal val eventNegativeRules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> NegativeAuthorization>()
+            mutableSetOf<(CommandRuleArgs<*, C, V>) -> NegativeAuthorization>()
         internal val eventLogPositiveRules =
-            mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
         internal val eventLogNegativeRules =
-            mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
         internal val attachedDataReadPositiveRules =
-            mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> PositiveAuthorization>()
+            mutableSetOf<(AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val attachedDataReadNegativeRules =
-            mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization>()
+            mutableSetOf<(AttachedDataReadRuleArgs<C, V>) -> NegativeAuthorization>()
         internal val attachedDataWritePositiveRules =
-            mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization>()
+            mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val attachedDataWriteNegativeRules =
-            mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization>()
-        internal val jobPositiveRules = mutableSetOf<(ArgsForJobRead<C, V>) -> PositiveAuthorization>()
-        internal val jobNegativeRules = mutableSetOf<(ArgsForJobRead<C, V>) -> NegativeAuthorization>()
+            mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization>()
+        internal val jobPositiveRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> PositiveAuthorization>()
+        internal val jobNegativeRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> NegativeAuthorization>()
 
 
         /**
@@ -979,10 +979,10 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
         /**
          * Rules deciding who may see a job's metadata — its status, progress and log — via
-         * [JobManager.getJob]/[JobManager.getAllJobs]/[JobManager.subscribe].
+         * [JobManager.get]/[JobManager.all]/[JobManager.subscribe].
          *
          * The same rules gate [JobManager.cancel], so a user who can watch their own progress bar can also cancel
-         * their own job. [ArgsForJobRead.isOwnedBy] answers "did this actor schedule it?".
+         * their own job. [JobReadRuleArgs.isOwnedBy] answers "did this actor schedule it?".
          */
         public fun jobs(init: AuthorizationJobRulesBlock<C, V>.() -> Unit) {
             val block = AuthorizationJobRulesBlock<C, V>()
@@ -1051,25 +1051,25 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             }
         }
 
-        private fun everybodyCanSeeAllJobs(args: ArgsForJobRead<C, V>): PositiveAuthorization =
+        private fun everybodyCanSeeAllJobs(args: JobReadRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanReadModels(args: ArgModelContextReader<C, V>): PositiveAuthorization =
+        private fun everybodyCanReadModels(args: ModelReadRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanReadAllAttachedData(args: ArgsForAttachedDataRead<C, V>): PositiveAuthorization =
+        private fun everybodyCanReadAllAttachedData(args: AttachedDataReadRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanWriteAttachedData(args: ArgsForAttachedDataWrite<C, V>): PositiveAuthorization =
+        private fun everybodyCanWriteAttachedData(args: AttachedDataWriteRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanReadAllProperties(args: ArgsForPropertyAuth<C, V>): PositiveAuthorization =
+        private fun everybodyCanReadAllProperties(args: PropertyReadRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanDoEverything(args: ArgCommandContextReader<*, C, V>): PositiveAuthorization =
+        private fun everybodyCanDoEverything(args: CommandRuleArgs<*, C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
-        private fun everybodyCanReadEventLog(args: ArgContextReader<C, V>): PositiveAuthorization =
+        private fun everybodyCanReadEventLog(args: EventLogRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
     }
@@ -1094,9 +1094,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(ModelReadRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
 
-        public fun rule(function: (ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
+        public fun rule(function: (ModelReadRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
             rules.add(function)
         }
     }
@@ -1104,9 +1104,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(ModelReadRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
 
-        public fun rule(function: (ArgModelContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
+        public fun rule(function: (ModelReadRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1131,9 +1131,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadPropertyPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(PropertyReadRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
 
-        public fun rule(function: (ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
+        public fun rule(function: (PropertyReadRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
             rules.add(function)
         }
     }
@@ -1141,9 +1141,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationReadPropertyNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(PropertyReadRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
 
-        public fun rule(function: (ArgsForPropertyAuth<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
+        public fun rule(function: (PropertyReadRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1166,18 +1166,18 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     @SpecificationMarker
     public class AuthorizationAttachedDataReadPositiveRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> PositiveAuthorization>()
+        internal val rules = mutableSetOf<(AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization>()
 
-        public fun rule(function: (ArgsForAttachedDataRead<C, V>) -> PositiveAuthorization) {
+        public fun rule(function: (AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization) {
             rules.add(function)
         }
     }
 
     @SpecificationMarker
     public class AuthorizationAttachedDataReadNegativeRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization>()
+        internal val rules = mutableSetOf<(AttachedDataReadRuleArgs<C, V>) -> NegativeAuthorization>()
 
-        public fun rule(function: (ArgsForAttachedDataRead<C, V>) -> NegativeAuthorization) {
+        public fun rule(function: (AttachedDataReadRuleArgs<C, V>) -> NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1199,18 +1199,18 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     @SpecificationMarker
     public class AuthorizationAttachedDataWritePositiveRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization>()
+        internal val rules = mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization>()
 
-        public fun rule(function: (ArgsForAttachedDataWrite<C, V>) -> PositiveAuthorization) {
+        public fun rule(function: (AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization) {
             rules.add(function)
         }
     }
 
     @SpecificationMarker
     public class AuthorizationAttachedDataWriteNegativeRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization>()
+        internal val rules = mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization>()
 
-        public fun rule(function: (ArgsForAttachedDataWrite<C, V>) -> NegativeAuthorization) {
+        public fun rule(function: (AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1233,18 +1233,18 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
     @SpecificationMarker
     public class AuthorizationJobPositiveRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> PositiveAuthorization>()
+        internal val rules = mutableSetOf<(JobReadRuleArgs<C, V>) -> PositiveAuthorization>()
 
-        public fun rule(function: (ArgsForJobRead<C, V>) -> PositiveAuthorization) {
+        public fun rule(function: (JobReadRuleArgs<C, V>) -> PositiveAuthorization) {
             rules.add(function)
         }
     }
 
     @SpecificationMarker
     public class AuthorizationJobNegativeRulesBlock<C : KlerkContext, V> {
-        internal val rules = mutableSetOf<(ArgsForJobRead<C, V>) -> NegativeAuthorization>()
+        internal val rules = mutableSetOf<(JobReadRuleArgs<C, V>) -> NegativeAuthorization>()
 
-        public fun rule(function: (ArgsForJobRead<C, V>) -> NegativeAuthorization) {
+        public fun rule(function: (JobReadRuleArgs<C, V>) -> NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1267,9 +1267,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationEventsPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(CommandRuleArgs<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
 
-        public fun rule(function: (args: ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
+        public fun rule(function: (args: CommandRuleArgs<*, C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
             rules.add(function)
         }
 
@@ -1278,9 +1278,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationEventsNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(CommandRuleArgs<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
 
-        public fun rule(function: (ArgCommandContextReader<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
+        public fun rule(function: (CommandRuleArgs<*, C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
             rules.add(function)
         }
     }
@@ -1302,9 +1302,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationEventLogPositiveRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
+            mutableSetOf<(args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
 
-        public fun rule(function: (args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
+        public fun rule(function: (args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization) {
             rules.add(function)
         }
     }
@@ -1312,9 +1312,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     @SpecificationMarker
     public class AuthorizationEventLogNegativeRulesBlock<C : KlerkContext, V> {
         internal val rules =
-            mutableSetOf<(args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
+            mutableSetOf<(args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization>()
 
-        public fun rule(function: (args: ArgContextReader<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
+        public fun rule(function: (args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.NegativeAuthorization) {
             rules.add(function)
         }
     }

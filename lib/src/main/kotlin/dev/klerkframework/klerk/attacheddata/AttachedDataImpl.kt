@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.attacheddata
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
@@ -526,7 +527,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             publicId,
             context,
             "klerk.attachedData.getMetadata",
-            "Read it inside the block with reader.attachedData.metadata(...) instead.",
+            "Read it inside the block with reader.attachedData.getMetadata(...) instead.",
         )
         return requireKind(entry, expected, publicId)
     }
@@ -637,7 +638,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         if (context.actor == SystemIdentity) {
             return
         }
-        val args = ArgsForAttachedDataWrite(kind, context, ReaderWithoutAuth<C, V>(klerk), lease)
+        val args = AttachedDataWriteRuleArgs(kind, context, ReaderWithoutAuth<C, V>(klerk), lease)
         // The reader is only sound while the lock is held, so it is used for the rule and nothing else — never across
         // the upload.
         readWriteLock.withRead {
@@ -705,7 +706,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val ownerId = requireNotNull(existing.owner)
         val owner = ModelCache.getOrNull(ModelID<Any>(ownerId))
             ?: throw NoSuchElementException("Could not find the model owning the data with id $id")
-        val args = ArgsForAttachedDataRead(owner, context, ReaderWithoutAuth<C, V>(klerk))
+        val args = AttachedDataReadRuleArgs(owner, context, ReaderWithoutAuth<C, V>(klerk))
         if (specification.authorization.attachedDataReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
             throw AuthorizationException(
                 KlerkErrorCode.AttachedDataReadPositiveAuthorizationMissing,

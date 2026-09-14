@@ -10,12 +10,12 @@ import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
 internal class VoidEventCreateEvents<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
-    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: VoidEventArgs<T, P, C, V>) -> List<Command<out Any, out Any?>>,
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -46,12 +46,12 @@ internal class InstanceLifecycleCreateEvents<T : Any, C : KlerkContext, V>(
 }
 
 internal class InstanceEventCreateEvents<T : Any, P, C : KlerkContext, V>(
-    val f: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: InstanceEventArgs<T, P, C, V>) -> List<Command<out Any, out Any?>>,
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

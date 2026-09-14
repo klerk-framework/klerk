@@ -9,14 +9,14 @@ import dev.klerkframework.klerk.statemachine.executables.*
 internal interface VoidEventExecutable<T : Any, P, C : KlerkContext, V> {
 
     fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V>
 
-    val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 }
 
 internal interface InstanceLifecycleExecutable<T : Any, C : KlerkContext, V> {
@@ -35,14 +35,14 @@ internal interface InstanceLifecycleExecutable<T : Any, C : KlerkContext, V> {
 internal interface InstanceEventExecutable<T : Any, P, C : KlerkContext, V> {
 
     fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V>
 
-    val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 }
 
 /** A pending fire-and-forget job produced by [Block.VoidEventBlock.unmanagedJob] / [Block.InstanceLifecycleBlock.unmanagedJob] / [Block.InstanceEventBlock.unmanagedJob], to be run after the command commits. */
@@ -72,8 +72,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun createModel(
             initialState: ModelStates,
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> T,
-            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: VoidEventArgs<T, P, C, V>) -> T,
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventCreateModel(initialState, function, onCondition))
         }
@@ -83,8 +83,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * command — e.g. cascading a creation into related models.
          */
         public fun commands(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
-            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: VoidEventArgs<T, P, C, V>) -> List<Command<out Any, out Any?>>,
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventCreateEvents(function, onCondition))
         }
@@ -95,8 +95,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun jobs(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: VoidEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventJobs(function, onCondition))
         }
@@ -107,8 +107,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> DeclaredJob<C, V>,
-            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: VoidEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventJob(function, onCondition))
         }
@@ -123,8 +123,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
         public fun unmanagedJob(
-            function: (args: ArgForVoidEvent<T, P, C, V>) -> Unit,
-            onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: VoidEventArgs<T, P, C, V>) -> Unit,
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(VoidEventUnmanagedJob(function, onCondition))
         }
@@ -262,7 +262,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun transitionTo(
             targetState: ModelStates,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             require(executables.none { it is InstanceEventTransition<T, P, *, C, V> }) { "A block can only have one transition" }
             executables.add(InstanceEventTransition(targetState, onCondition))
@@ -279,8 +279,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * }
          * ```
          */
-        public fun transitionWhen(init: TransitionBranches<ArgForInstanceEvent<T, P, C, V>, ModelStates>.() -> Unit) {
-            val branches = TransitionBranches<ArgForInstanceEvent<T, P, C, V>, ModelStates>()
+        public fun transitionWhen(init: TransitionBranches<InstanceEventArgs<T, P, C, V>, ModelStates>.() -> Unit) {
+            val branches = TransitionBranches<InstanceEventArgs<T, P, C, V>, ModelStates>()
             branches.init()
             executables.add(InstanceEventTransitionWhen(branches.branches, branches.otherwise))
         }
@@ -288,7 +288,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         /**
          * Deletes the model. At most one `delete` per block — a second call throws `IllegalArgumentException`.
          */
-        public fun delete(onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null) {
+        public fun delete(onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null) {
             require(executables.none { it is InstanceEventDelete<T, P, C, V> }) { "A block can only have one delete" }
             executables.add(InstanceEventDelete(onCondition))
         }
@@ -297,8 +297,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * Replaces the model's properties with whatever [function] returns.
          */
         public fun update(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> T,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: InstanceEventArgs<T, P, C, V>) -> T,
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventUpdateModel(function, onCondition))
         }
@@ -308,8 +308,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * this event to related models.
          */
         public fun commands(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<Command<out Any, out Any?>>,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: InstanceEventArgs<T, P, C, V>) -> List<Command<out Any, out Any?>>,
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventCreateEvents(function, onCondition))
         }
@@ -320,8 +320,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun jobs(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: InstanceEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventJobs(function, onCondition))
         }
@@ -332,8 +332,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun job(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> DeclaredJob<C, V>,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: InstanceEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventJob(function, onCondition))
         }
@@ -348,8 +348,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * system performance, so consider a normal job instead if you need to do anything non-trivial.
          */
         public fun unmanagedJob(
-            function: (args: ArgForInstanceEvent<T, P, C, V>) -> Unit,
-            onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)? = null
+            function: (args: InstanceEventArgs<T, P, C, V>) -> Unit,
+            onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)? = null
         ) {
             executables.add(InstanceEventUnmanagedJob(function, onCondition))
         }

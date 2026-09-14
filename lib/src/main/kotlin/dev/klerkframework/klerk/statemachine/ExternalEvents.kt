@@ -65,58 +65,58 @@ public abstract class EventRulesWithParameters<P : Any, C : KlerkContext> : Even
 public class InstanceEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V> :
     EventRulesWithParameters<P, C>() {
 
-    internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
+    internal val withoutParametersValidationRules: MutableSet<(InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
-    internal val withParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity> =
+    internal val withParametersValidationRules: MutableSet<(InstanceEventArgs<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
 
-    /** Adds a rule that validates against [ArgForInstanceEvent] but without access to the event's parameters. */
-    public fun validate(function: (ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [InstanceEventArgs] but without access to the event's parameters. */
+    public fun validate(function: (InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
         withoutParametersValidationRules.add(function)
     }
 
-    /** Adds a rule that validates against [ArgForInstanceEvent], with access to the event's parameters. */
-    public fun validateWithParameters(function: (ArgForInstanceEvent<T, P, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [InstanceEventArgs], with access to the event's parameters. */
+    public fun validateWithParameters(function: (InstanceEventArgs<T, P, C, V>) -> PropertyCollectionValidity) {
         withParametersValidationRules.add(function)
     }
 }
 
 public class VoidEventRulesWithParameters<T : Any, P : Any, C : KlerkContext, V> : EventRulesWithParameters<P, C>() {
 
-    internal val withoutParametersValidationRules: MutableSet<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
+    internal val withoutParametersValidationRules: MutableSet<(VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
-    internal val withParametersValidationRules: MutableSet<(ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity> =
+    internal val withParametersValidationRules: MutableSet<(VoidEventArgs<T, P, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
 
-    /** Adds a rule that validates against [ArgForVoidEvent] but without access to the event's parameters. */
-    public fun validate(function: (ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [VoidEventArgs] but without access to the event's parameters. */
+    public fun validate(function: (VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
         withoutParametersValidationRules.add(function)
     }
 
-    /** Adds a rule that validates against [ArgForVoidEvent], with access to the event's parameters. */
-    public fun validateWithParameters(function: (ArgForVoidEvent<T, P, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [VoidEventArgs], with access to the event's parameters. */
+    public fun validateWithParameters(function: (VoidEventArgs<T, P, C, V>) -> PropertyCollectionValidity) {
         withParametersValidationRules.add(function)
     }
 }
 
 /** Rules receiver for a void event with no parameters (see [dev.klerkframework.klerk.statemachine.StateMachine.event]). */
 public class VoidEventRulesNoParameters<T : Any, C : KlerkContext, V> : EventRules<C>() {
-    internal val withoutParametersValidationRules: MutableSet<(ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
+    internal val withoutParametersValidationRules: MutableSet<(VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
 
-    /** Adds a rule that validates against [ArgForVoidEvent]. */
-    public fun validate(f: (ArgForVoidEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [VoidEventArgs]. */
+    public fun validate(f: (VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
         withoutParametersValidationRules.add(f)
     }
 }
 
 /** Rules receiver for an instance event with no parameters (see [dev.klerkframework.klerk.statemachine.StateMachine.event]). */
 public class InstanceEventRulesNoParameters<T : Any, C : KlerkContext, V> : EventRules<C>() {
-    internal val withoutParametersValidationRules: MutableSet<(ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
+    internal val withoutParametersValidationRules: MutableSet<(InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity> =
         mutableSetOf()
 
-    /** Adds a rule that validates against [ArgForInstanceEvent]. */
-    public fun validate(f: (ArgForInstanceEvent<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+    /** Adds a rule that validates against [InstanceEventArgs]. */
+    public fun validate(f: (InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
         withoutParametersValidationRules.add(f)
     }
 }

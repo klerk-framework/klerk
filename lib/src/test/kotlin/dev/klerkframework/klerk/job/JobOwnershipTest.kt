@@ -18,7 +18,7 @@ class JobOwnershipTest {
         name = JobName("test"),
         step = 0,
         attempt = 0,
-        created = Instant.DISTANT_PAST,
+        createdAt = Instant.DISTANT_PAST,
         priority = JobPriority.Interactive,
         parent = null,
         root = JobId(1),
@@ -39,7 +39,7 @@ class JobOwnershipTest {
             val author = klerk.read(Ctx.system()) { get(authorId) }
 
             val args = klerk.read(Ctx.system()) {
-                ArgsForJobRead(jobOwnedBy(ModelReferenceIdentity(authorId)), Ctx.system(), this)
+                JobReadRuleArgs(jobOwnedBy(ModelReferenceIdentity(authorId)), Ctx.system(), this)
             }
 
             assertTrue(args.isOwnedBy(ModelReferenceIdentity(authorId)))
@@ -57,7 +57,7 @@ class JobOwnershipTest {
             val klerk = createKlerk(views)
             klerk.meta.start()
             val args = klerk.read(Ctx.system()) {
-                ArgsForJobRead(jobOwnedBy(SystemIdentity), Ctx.system(), this)
+                JobReadRuleArgs(jobOwnedBy(SystemIdentity), Ctx.system(), this)
             }
             assertTrue(args.isOwnedBy(SystemIdentity))
             assertFalse(args.isOwnedBy(Unauthenticated))

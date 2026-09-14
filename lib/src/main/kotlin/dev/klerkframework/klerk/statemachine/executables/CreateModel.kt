@@ -11,12 +11,12 @@ import kotlin.time.Instant
 
 internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
     val initialState: ModelStates,
-    val f: (args: ArgForVoidEvent<T, P, C, V>) -> T,
-    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val f: (args: VoidEventArgs<T, P, C, V>) -> T,
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -32,7 +32,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         val created = Model(
             id = processingOptions.idProvider.getNextModelID(),
             createdAt = time,
-            lastPropsUpdateAt = time,
+            lastPropsUpdatedAt = time,
             lastStateTransitionAt = Instant.DISTANT_PAST,
             state = "void",
             timeTrigger = null,

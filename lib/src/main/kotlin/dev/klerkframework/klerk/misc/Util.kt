@@ -19,26 +19,6 @@ internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
     return stateMachine as StateMachine<T, *, C, V>
 }
 
-/** Converts a camelCase identifier to a space-separated, capitalized phrase, e.g. `"firstName"` -> `"First name"`. */
-public fun camelCaseToPretty(s: String): String {
-    var result = ""
-    s.toCharArray().forEachIndexed { index, c ->
-        run {
-            if (index == 0) {
-                result += c.titlecase(Locale.getDefault())
-            }
-            if (index > 0) {
-                result = if (c.isUpperCase()) {
-                    result + " " + c.lowercase()
-                } else {
-                    result + c.lowercase()
-                }
-            }
-        }
-    }
-    return result
-}
-
 
 /** Checks that every [ModelID] in the model's props, also in collections and nested objects, refers to a model. */
 internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: ModelReader<C, V>): Problem? {

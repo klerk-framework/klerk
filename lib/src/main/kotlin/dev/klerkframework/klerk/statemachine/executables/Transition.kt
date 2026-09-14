@@ -25,11 +25,11 @@ internal class InstanceLifecycleTransition<T : Any, ModelStates : Enum<*>, C : K
 
 internal class InstanceEventTransition<T : Any, P, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val targetState: ModelStates,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

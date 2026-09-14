@@ -142,7 +142,7 @@ public class ObjectSchema<T : Any> private constructor(
      * Calls [action] for every non-null [DataContainer], [ModelID], [AttachedBlobID] and [AttachedStringID] in
      * [value], including those in collections and nested objects.
      */
-    internal fun forEachLeaf(value: Any, action: (Leaf) -> Unit) {
+    public fun forEachLeaf(value: Any, action: (Leaf) -> Unit) {
         forEachLeaf(value, "", action)
     }
 
@@ -522,7 +522,7 @@ internal enum class ContainerKind(val base: KClass<out DataContainer<*>>, val du
 }
 
 /** A value found by [ObjectSchema.forEachLeaf]. [path] is e.g. `address.street` or `tags[1]`. */
-internal class Leaf(val path: String, val field: SchemaField, val value: Any)
+public class Leaf internal constructor(public val path: String, public val field: SchemaField, public val value: Any)
 
 /** A place found by [ObjectSchema.leafFields]. [path] is e.g. `address.street` or `tags`. */
 internal class LeafField(val path: String, val field: SchemaField, val shape: Shape)

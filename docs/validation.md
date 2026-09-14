@@ -131,7 +131,7 @@ Declaring `validReferences` or `validEnums` for a property that is not in the ev
 
   ```kotlin
   fun cannotHaveAnAwfulName(
-      args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>
+      args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>
   ): PropertyCollectionValidity {
       return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris")
           Invalid() else Valid
@@ -143,7 +143,7 @@ Declaring `validReferences` or `validEnums` for a property that is not in the ev
 
   ```kotlin
   fun onlyAllowAuthorNameAstridIfThereIsNoRowling(
-      args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>
+      args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>
   ): PropertyCollectionValidity {
       args.reader.apply {
           if (args.command.params.firstName.value != "Astrid") return Valid
@@ -153,7 +153,7 @@ Declaring `validReferences` or `validEnums` for a property that is not in the ev
   }
   ```
 
-  For instance events, use `ArgForInstanceEvent` instead, which additionally carries the current `model`.
+  For instance events, use `InstanceEventArgs` instead, which additionally carries the current `model`.
 
 ## 7. Authorization
 

@@ -11,7 +11,7 @@ In this case, many functions have a reader in the argument which is ready to be 
 provided the function updateBook to describe how a Book model should be modified on an event:
 
 ```kotlin
-fun updateBook(args: ArgForInstanceEvent<Book, Nothing?, Ctx, Views>): Book {
+fun updateBook(args: InstanceEventArgs<Book, Nothing?, Ctx, Views>): Book {
     val numberOfLivingAuthors = with(args.reader) {
         views.authors.living.count()
     }
@@ -53,7 +53,7 @@ The reader answers questions about a single model:
   may not read it.
 * `getOrNull(id)` — null in both those cases.
 * `referencing(...)` / `referencingInCollection(...)` — the models that reference this one.
-* `attachedData.metadata(id)` / `metadataOrNull(id)` — what is known about an
+* `attachedData.getMetadata(id)` / `metadataOrNull(id)` — what is known about an
   [attached value](attached-data.md) apart from the value itself. The value is read after the block.
 
 ## Returning several values from one read block
@@ -244,8 +244,8 @@ two requests gives no such guarantee.
 | `get(id)`                                                 | throws `AuthorizationException`           |
 | `getOrNull(id)`                                           | returns `null` (also for a missing model) |
 | `referencing(...)` / `referencingInCollection(...)`         | throws `AuthorizationException`           |
-| `attachedData.metadata(id)`                               | throws `AuthorizationException`           |
-| `attachedData.metadataOrNull(id)`                         | returns `null` (also for missing data)    |
+| `attachedData.getMetadata(id)`                               | throws `AuthorizationException`           |
+| `attachedData.getMetadataOrNull(id)`                         | returns `null` (also for missing data)    |
 | `view.asSequence()` / `view.query(options)`               | silently skips it                         |
 | `view.asSequenceOrThrow()` / `view.queryOrThrow(options)` | throws `AuthorizationException`           |
 

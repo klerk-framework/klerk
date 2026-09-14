@@ -38,8 +38,9 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
-        sequenceNumber: Long?,
-    ): EventLogQuery = eventLogQuery(klerk, id, after, before, sequenceNumber)
+    ): EventLogQuery = eventLogQuery(klerk, id, after, before)
+
+    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery = eventLogEntryQuery(klerk, sequenceNumber)
 
     override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.referencingIds(id)
 

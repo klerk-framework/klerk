@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -49,7 +50,7 @@ class ActionTest {
             klerk.meta.start()
             val author = createAuthorJKRowling(klerk)
             klerk.read(Ctx.system()) {
-                val all = collections.authors.all.withReader(this).toList()
+                val all = collections.authors.all.asSequenceOrThrow().toList()
                 println(all.size)
             }
             val result = klerk.handle(
@@ -101,7 +102,7 @@ class ActionTest {
 
 }
 
-fun throwSomething(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>) {
+fun throwSomething(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>) {
     throw IllegalStateException("This didn't work")
 }
 

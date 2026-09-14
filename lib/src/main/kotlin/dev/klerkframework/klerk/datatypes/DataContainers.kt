@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.datatypes
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.validation.PropertyValidation
 import dev.klerkframework.klerk.validation.PropertyValidation.Invalid
 import kotlinx.datetime.LocalDateTime
@@ -919,4 +920,26 @@ public sealed class BlobPreAttachStepResult {
      * cache can hold it. Once a command attaches it, it is immutable.
      */
     public data class Replace(val value: InputStream) : BlobPreAttachStepResult()
+}
+
+/**
+ * A [DataContainer] wrapping a [JobId], so that a model can hold a reference to a job it started.
+ */
+public class JobIdContainer(value: Long) : LongContainer(value) {
+
+    public companion object {
+        /** Wraps [id]. */
+        public fun of(id: JobId): JobIdContainer = JobIdContainer(id.value)
+    }
+
+    override val min: Long = 0
+    override val max: Long = Long.MAX_VALUE
+
+    /**
+     * The wrapped value as a [JobId].
+     *
+     * @throws dev.klerkframework.klerk.AuthorizationException if the actor that read the model is not allowed to read
+     * this property.
+     */
+    public val jobId: JobId get() = JobId(value)
 }

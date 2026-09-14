@@ -323,7 +323,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             is Block.VoidEventBlock<*, *, *, C, V> -> {
                 @Suppress("UNCHECKED_CAST")
                 processingData.currentCommand as Command<T, P>
-                val args = ArgForVoidEvent(
+                val args = VoidEventArgs(
                     requireNotNull(processingData.currentCommand),
                     context,
                     reader
@@ -341,7 +341,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 @Suppress("UNCHECKED_CAST")
                 processingData.currentCommand as Command<T, P>
                 val command = requireNotNull(processingData.currentCommand)
-                val args = ArgForInstanceEvent(requireNotNull(model), command, context, reader)
+                val args = InstanceEventArgs(requireNotNull(model), command, context, reader)
 
                 @Suppress("UNCHECKED_CAST")
                 currentBlock.executables.map { it as InstanceEventExecutable<T, P, C, V> }

@@ -22,7 +22,7 @@ class ModelCollectionsTest {
 
             val astrid = createAuthorAstrid(klerk)
             klerk.read(Ctx.system()) {
-                assertTrue { collections.authors.all.contains(astrid, this) }
+                assertTrue { collections.authors.all.contains(astrid) }
             }
 
             klerk.handle(
@@ -30,7 +30,7 @@ class ModelCollectionsTest {
                 Ctx.system(),
             )
             klerk.read(Ctx.system()) {
-                assertFalse { collections.authors.all.contains(astrid, this) }
+                assertFalse { collections.authors.all.contains(astrid) }
             }
         }
 

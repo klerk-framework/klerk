@@ -28,7 +28,7 @@ public interface ModelReader<C : KlerkContext, V> {
 
     /**
      * Job state, as part of this block's snapshot. This is how jobs are read inside a read block —
-     * `klerk.jobs.getJob(...)` takes the read lock itself and refuses to run inside one.
+     * `klerk.jobs.get(...)` takes the read lock itself and refuses to run inside one.
      */
     public val jobs: JobReader
 
@@ -49,17 +49,22 @@ public interface ModelReader<C : KlerkContext, V> {
      * @param id if given, only entries for that model. If null, entries for all models.
      * @param after only entries whose [dev.klerkframework.klerk.storage.EventLogEntry.time] is at or after this
      * @param before only entries whose [dev.klerkframework.klerk.storage.EventLogEntry.time] is at or before this
-     * @param sequenceNumber if given, only the entry with exactly this
-     * [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber]. Use it to look up a single entry, e.g. for a
-     * permalink.
      * @throws AuthorizationException if the actor is not allowed to read the event log
      */
     public fun eventLog(
         id: ModelID<out Any>? = null,
         after: Instant = Instant.DISTANT_PAST,
         before: Instant = Instant.DISTANT_FUTURE,
-        sequenceNumber: Long? = null,
     ): EventLogQuery
+
+    /**
+     * A single event-log entry, as of this read block. Like [eventLog], nothing is read from storage here: call
+     * [EventLogEntryQuery.get] once the read block has ended. Use it for a permalink to one entry.
+     *
+     * @param sequenceNumber the [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber] to look up
+     * @throws AuthorizationException if the actor is not allowed to read the event log
+     */
+    public fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery
 
     /**
      * The model with [id].
@@ -175,7 +180,7 @@ internal sealed class ReadListResult<T : Any> {
 
 
 internal fun <C : KlerkContext, V> isReadPropertyAuthorized(
-    args: ArgsForPropertyAuth<C, V>,
+    args: PropertyReadRuleArgs<C, V>,
     specification: Specification<C, V>
 ): Boolean {
     if (specification.authorization.readPropertyPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {

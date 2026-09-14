@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryListCursor
 import dev.klerkframework.klerk.read.ModelReader
@@ -16,7 +17,7 @@ class AuthorsWithAtLeastTwoBooks<V>(
 ) : ModelView<Author, Ctx>(authors) {
 
     override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> {
-        val authorsWithTwoBooks = books.withReader(reader)
+        val authorsWithTwoBooks = with(reader) { books.asSequenceOrThrow() }
             .groupingBy { it.props.author }
             .eachCount()
             .filterValues { it >= 2 }

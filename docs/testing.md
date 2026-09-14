@@ -96,7 +96,7 @@ KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 // ... handle the command that schedules the job ...
 klerk.jobs.runUntilIdle()
-assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(result.jobs.single(), Ctx.system()).status)
+assertEquals(JobStatus.Succeeded, klerk.jobs.get(result.jobs.single(), Ctx.system()).status)
 ```
 
 Anything time-dependent — `scheduleAt`, retry backoff, cron — is driven by the settings clock, so set a `MutableClock`

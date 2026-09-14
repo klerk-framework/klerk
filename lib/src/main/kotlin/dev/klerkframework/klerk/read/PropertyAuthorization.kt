@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk.read
 
-import dev.klerkframework.klerk.ArgsForPropertyAuth
+import dev.klerkframework.klerk.PropertyReadRuleArgs
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
@@ -69,13 +69,13 @@ internal class PropertyAuthScope<C : KlerkContext, V>(
      *
      * Note that containers are compared with [DataContainer.equals], i.e. by class and value rather than by identity.
      * Two different properties of the same model that have the same container class and the same value therefore share
-     * one decision. That is consistent with what a rule can see — [ArgsForPropertyAuth] gives it the container, not the
+     * one decision. That is consistent with what a rule can see — [PropertyReadRuleArgs] gives it the container, not the
      * name of the property holding it, so such properties are indistinguishable to it anyway — but a rule that finds
      * the property name by looking for the container in `model.props` by identity would break this assumption.
      */
     private fun isAuthorized(model: Model<out Any>, property: DataContainer<*>): Boolean =
         decisions.getOrPut(DecisionKey(model.id.value, property)) {
-            isReadPropertyAuthorized(ArgsForPropertyAuth(property, model, context, reader), specification)
+            isReadPropertyAuthorized(PropertyReadRuleArgs(property, model, context, reader), specification)
         }
 
     private data class DecisionKey(val modelId: Int, val property: DataContainer<*>)

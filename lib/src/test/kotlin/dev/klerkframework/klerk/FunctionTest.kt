@@ -26,7 +26,7 @@ class FunctionTest {
             )
         
         )
-        val args = ArgForVoidEvent(command, Ctx.system(), DummyReader)
+        val args = VoidEventArgs(command, Ctx.system(), DummyReader)
 
         val result = onlyAuthenticationIdentityCanCreateDaniel(args)
         assertEquals(PropertyCollectionValidity.Valid, result)
@@ -45,7 +45,11 @@ object DummyReader : Reader<Ctx, Views> {
     override val attachedData: AttachedDataReader
         get() = throw exception
 
-    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant, sequenceNumber: Long?): EventLogQuery {
+    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): EventLogQuery {
+        throw exception
+    }
+
+    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery {
         throw exception
     }
 

@@ -93,9 +93,9 @@ class ViewIndexTest {
 
         storage.reads.set(0)
         klerk.read(Ctx.system()) {
-            assertEquals(3, views.authors.greatAuthors.count(this))
-            assertTrue(views.authors.greatAuthors.contains(members.first(), this))
-            assertFalse(views.authors.greatAuthors.isEmpty(this))
+            assertEquals(3, views.authors.greatAuthors.count())
+            assertTrue(views.authors.greatAuthors.contains(members.first()))
+            assertFalse(views.authors.greatAuthors.isEmpty())
         }
         assertEquals(0, storage.reads.get(), "membership questions should be answered from the index alone")
         klerk.meta.stop()
@@ -234,9 +234,9 @@ class ViewIndexTest {
 
         storage.reads.set(0)
         klerk.read(Ctx.system()) {
-            assertEquals(3, view.count(this))
-            assertTrue(view.contains(chosen.first(), this))
-            assertFalse(view.isEmpty(this))
+            assertEquals(3, view.count())
+            assertTrue(view.contains(chosen.first()))
+            assertFalse(view.isEmpty())
         }
         assertEquals(0, storage.reads.get(), "a custom view answering in ids should not have to read any model")
 

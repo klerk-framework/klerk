@@ -83,10 +83,10 @@ In other words: deny always wins, and you need at least one rule to actively opt
 
 Gates whether an actor can read a `Model<T>` at all — via `Reader.get`, `view.asSequence()`, `view.query(...)`, etc
 (see [reading](reading.md)). Rules
-receive an `ArgModelContextReader<C, V>` (`model`, `context`, `reader`):
+receive an `ModelReadRuleArgs<C, V>` (`model`, `context`, `reader`):
 
 ```kotlin
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Ctx, Views>): NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is Unauthenticated)
         Deny else Pass
@@ -99,10 +99,10 @@ If a model fails this check, `view.asSequence()`/`view.query(...)` silently omit
 ### readProperties
 
 Gates whether an actor can read one specific property *value* of a model that it's already allowed to read as a whole.
-Rules receive an `ArgsForPropertyAuth<C, V>` (`property`, `model`, `context`, `reader`):
+Rules receive an `PropertyReadRuleArgs<C, V>` (`property`, `model`, `context`, `reader`):
 
 ```kotlin
-fun cannotReadAstridsFirstName(args: ArgsForPropertyAuth<Ctx, Views>): NegativeAuthorization =
+fun cannotReadAstridsFirstName(args: PropertyReadRuleArgs<Ctx, Views>): NegativeAuthorization =
     if (args.property is FirstName && args.property.value == "Astrid") Deny else Pass
 ```
 
@@ -114,10 +114,10 @@ masked placeholder. See [models](models.md) for details on `DataContainer`'s aut
 ### commands
 
 Gates whether an actor can submit a given `Command` (see [events and commands](events-and-commands.md)). Rules receive
-an `ArgCommandContextReader<*, C, V>` (`command`, `context`, `reader`):
+an `CommandRuleArgs<*, C, V>` (`command`, `context`, `reader`):
 
 ```kotlin
-fun everybodyCanDoEverything(args: ArgCommandContextReader<*, Ctx, Views>): PositiveAuthorization =
+fun everybodyCanDoEverything(args: CommandRuleArgs<*, Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 ```
 
@@ -127,17 +127,17 @@ passed — so a command that's both invalid and unauthorized is reported as inva
 ### eventLog
 
 Gates whether an actor can read entries from the event log (`eventLog(...)` inside a read block, see
-[events and commands](events-and-commands.md)). Rules receive an `ArgContextReader<C, V>` (`context`, `reader`) —
+[events and commands](events-and-commands.md)). Rules receive an `EventLogRuleArgs<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
 
 ### readAttachedData
 
 Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.attachedData.get(id, context)` and
-`klerk.attachedData.getMetadata(id, context)`. Rules receive an `ArgsForAttachedDataRead<C, V>` (`owner`, `context`,
+`klerk.attachedData.getMetadata(id, context)`. Rules receive an `AttachedDataReadRuleArgs<C, V>` (`owner`, `context`,
 `reader`):
 
 ```kotlin
-fun onlyProjectMembersCanReadAttachments(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
+fun onlyProjectMembersCanReadAttachments(args: AttachedDataReadRuleArgs<Ctx, Views>): PositiveAuthorization {
     val owner = args.owner.props
     if (owner !is File) return PositiveAuthorization.NoOpinion
     val project = args.reader.get(owner.project)
@@ -154,7 +154,7 @@ anyone, and a negative rule here will not stop it — see [visibility](attached-
 
 ### writeAttachedData
 
-Gates whether an actor can call `klerk.attachedData.prepare(...)`. Rules receive an `ArgsForAttachedDataWrite<C, V>`
+Gates whether an actor can call `klerk.attachedData.prepare(...)`. Rules receive an `AttachedDataWriteRuleArgs<C, V>`
 (`kind`, `lease`, `context`, `reader`).
 
 This category is weak by construction: at `prepare` time the data has not been attached to anything, so there is no

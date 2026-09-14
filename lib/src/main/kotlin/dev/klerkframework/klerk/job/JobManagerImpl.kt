@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
@@ -62,8 +63,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * Serializes the *compound* updates — claiming a job, applying a commit — so that two of them cannot interleave.
      * Never held across a call into application code.
      *
-     * The collections below are concurrent regardless, because they are also read without this lock: `getJob`,
-     * `getAllJobs` and the admission policy all run on caller threads while the dispatcher is stepping.
+     * The collections below are concurrent regardless, because they are also read without this lock: `get`,
+     * `all` and the admission policy all run on caller threads while the dispatcher is stepping.
      */
     private val lock = Mutex()
     private val records = ConcurrentHashMap<JobId, JobRecord>()
@@ -97,7 +98,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * Where [allocateId] draws candidates from. Overridable only so that a test can shrink the space to where
      * collisions are likely — over the full range they never happen, so a concurrency test against it proves nothing.
      */
-    internal var idCandidates: () -> Int = { random.nextInt(Int.MAX_VALUE) }
+    internal var idCandidates: () -> Long = { random.nextLong(Long.MAX_VALUE) }
     private val changes = MutableSharedFlow<JobRecord>(extraBufferCapacity = 256)
     private val wakeup = Channel<Unit>(Channel.CONFLATED)
 
@@ -314,7 +315,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         queueOrder.keys.retainAll { id -> records[id]?.let { isDispatchableStatus(it) } == true }
         records.values
             .filter { isDispatchableStatus(it) && !queueOrder.containsKey(it.id) && it.id !in running }
-            .sortedWith(compareBy({ it.readyAt ?: it.created }, { it.id.value }))
+            .sortedWith(compareBy({ it.readyAt ?: it.createdAt }, { it.id.value }))
             .forEach { queueOrder[it.id] = queueCounter++ }
     }
 
@@ -362,7 +363,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return false
         }
         return records.values.any {
-            it.cronScheduleId == scheduleId && !it.status.isTerminal && it.created < record.created
+            it.cronScheduleId == scheduleId && !it.status.isTerminal && it.createdAt < record.createdAt
         }
     }
 
@@ -374,7 +375,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         if (record.readyAt != null && record.readyAt > now) {
             return false
         }
-        return records.values.none { it.parentId == record.id && !it.status.isTerminal }
+        return records.values.none { it.parent == record.id && !it.status.isTerminal }
     }
 
     private suspend fun releaseWithoutCommit(id: JobId) =
@@ -527,7 +528,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             return null
         }
         val type = jobSpec.allTypes[record.name] ?: return null
-        type.maxSteps?.let { if (record.stepNumber >= it) return "Reached maxSteps ($it)" }
+        type.maxSteps?.let { if (record.step >= it) return "Reached maxSteps ($it)" }
         type.maxDuration?.let { max ->
             val since = record.firstAttemptStarted ?: return@let
             if (now - since > max) return "Reached maxDuration ($max)"
@@ -638,7 +639,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     .copy(
                         cursor = if (record.hookKind == null) encoded else record.cursor,
                         hookCursor = if (record.hookKind == null) record.hookCursor else encoded,
-                        stepNumber = record.stepNumber + 1,
+                        step = record.step + 1,
                         attempt = 0,
                         noProgressStreak = if (madeProgress) 0 else record.noProgressStreak + 1,
                     )
@@ -661,7 +662,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
             is JobResult.Success -> {
                 val finished = logged.withProgress(result.progress).copy(
-                    stepNumber = record.stepNumber + 1,
+                    step = record.step + 1,
                     attempt = 0,
                     result = result.result ?: logged.result,
                 )
@@ -780,13 +781,13 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     /** True while any child of [id] has yet to reach a terminal status. */
     private fun awaitedChildrenRemain(id: JobId): Boolean =
-        records.values.any { it.parentId == id && !it.status.isTerminal }
+        records.values.any { it.parent == id && !it.status.isTerminal }
 
     /** What the children of [id] reported, read from their own rows at the moment the parent asks. */
     private fun childOutcomesOf(id: JobId): List<ChildOutcome> =
         records.values
-            .filter { it.parentId == id && it.status.isTerminal }
-            .sortedBy { it.created }
+            .filter { it.parent == id && it.status.isTerminal }
+            .sortedBy { it.createdAt }
             .map { it.toChildOutcome() }
 
     /**
@@ -800,21 +801,21 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         if (record.depth + 1 > type.maxDepth) {
             return "Spawning would exceed maxDepth (${type.maxDepth})"
         }
-        if (descendantCountOf(record.rootId) + count > type.maxDescendants) {
+        if (descendantCountOf(record.root) + count > type.maxDescendants) {
             return "Spawning $count would exceed maxDescendants (${type.maxDescendants})"
         }
         return null
     }
 
     /**
-     * How many jobs the tree rooted at [rootId] currently consists of, not counting the root.
+     * How many jobs the tree rooted at [root] currently consists of, not counting the root.
      *
      * Counted from the tree rather than tracked on the root, for the same reason the parent's children are: a counter
      * has to be read and written, and two jobs spawning at the same instant both read it before either writes, so one
      * of the increments is lost and the budget is quietly larger than configured.
      */
-    private fun descendantCountOf(rootId: JobId): Int =
-        records.values.count { it.rootId == rootId && it.id != rootId }
+    private fun descendantCountOf(root: JobId): Int =
+        records.values.count { it.root == root && it.id != root }
 
     private fun spawnRecord(parent: JobRecord, child: DeclaredJob<C, V>, now: Instant): JobRecord = newRecord(
         id = allocateId(),
@@ -824,8 +825,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         ownerActorId = parent.ownerActorId,
         ownerActorExternalId = parent.ownerActorExternalId,
         now = now,
-        parentId = parent.id,
-        rootId = parent.rootId,
+        parent = parent.id,
+        root = parent.root,
         depth = parent.depth + 1,
     )
 
@@ -850,7 +851,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     // ------------------------------------------------------------------ scheduling
 
-    override fun isJobIdAvailable(int: Int): Boolean = !records.containsKey(JobId(int))
+    override fun isJobIdAvailable(id: Long): Boolean = !records.containsKey(JobId(id))
 
     private fun allocateId(): JobId {
         while (true) {
@@ -980,8 +981,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         ownerActorExternalId: Long?,
         now: Instant,
         scheduleAt: Instant? = null,
-        parentId: JobId? = null,
-        rootId: JobId? = null,
+        parent: JobId? = null,
+        root: JobId? = null,
         depth: Int = 0,
         cronScheduleId: String? = null,
     ): JobRecord {
@@ -996,9 +997,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             ownerActorType = ownerActorType,
             ownerActorId = ownerActorId,
             ownerActorExternalId = ownerActorExternalId,
-            stepNumber = 0,
+            step = 0,
             attempt = 0,
-            created = now,
+            createdAt = now,
             readyAt = readyAt,
             firstAttemptStarted = null,
             lastAttemptStarted = null,
@@ -1007,8 +1008,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             progressTotal = null,
             progressMessage = null,
             log = emptyList(),
-            parentId = parentId,
-            rootId = rootId ?: id,
+            parent = parent,
+            root = root ?: id,
             depth = depth,
             result = null,
             failedAtCursor = null,
@@ -1067,7 +1068,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     /** Every job that exists, newest first, without authorization. Same locking requirement as [jobInfoOrNull]. */
     internal fun allJobInfo(): List<JobInfo> =
-        records.values.sortedByDescending { it.created }.map { it.toJobInfoWithRunningOverlay() }
+        records.values.sortedByDescending { it.createdAt }.map { it.toJobInfoWithRunningOverlay() }
 
     /** What both read entry points share: one read lock for the whole call, and the same rules as `Reader.jobs`. */
     private suspend fun <T> reading(context: C, block: (JobReader) -> T): T {
@@ -1077,9 +1078,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
     }
 
-    override suspend fun getJob(id: JobId, context: C): JobInfo = reading(context) { it.get(id) }
+    override suspend fun get(id: JobId, context: C): JobInfo = reading(context) { it.get(id) }
 
-    override suspend fun getAllJobs(context: C): List<JobInfo> = reading(context) { it.all() }
+    override suspend fun all(context: C): List<JobInfo> = reading(context) { it.all() }
 
     override fun subscribe(context: C, id: JobId?): Flow<JobInfo> = changes
         .filter { id == null || it.id == id }
@@ -1164,11 +1165,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun descendantsOf(id: JobId): List<JobRecord> {
         val result = mutableListOf<JobRecord>()
-        var frontier = records.values.filter { it.parentId == id }
+        var frontier = records.values.filter { it.parent == id }
         while (frontier.isNotEmpty()) {
             result.addAll(frontier)
             val ids = frontier.map { it.id }.toSet()
-            frontier = records.values.filter { it.parentId in ids }
+            frontier = records.values.filter { it.parent in ids }
         }
         return result
     }
@@ -1251,7 +1252,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     private fun oldestReadyAt(priority: JobPriority): Instant? = records.values
         .filter { it.priority == priority && it.status == JobStatus.Ready && it.id !in running }
-        .minOfOrNull { it.readyAt ?: it.created }
+        .minOfOrNull { it.readyAt ?: it.createdAt }
 
     private fun queueSnapshot(now: Instant): JobQueueSnapshot {
         updateBudgetTracking(now)

@@ -4,12 +4,11 @@ import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.datatypes.LongContainer
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.PropertyKey
-import dev.klerkframework.klerk.misc.camelCaseToPretty
+import java.util.Locale
 import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.StateMachine
@@ -77,7 +76,7 @@ public data class RegisteredView<C : KlerkContext>(
 public data class Model<T : Any>(
     val id: ModelID<T>,
     val createdAt: Instant,
-    val lastPropsUpdateAt: Instant,
+    val lastPropsUpdatedAt: Instant,
     val lastStateTransitionAt: Instant,
     val state: String,
     val timeTrigger: Instant?,
@@ -86,7 +85,7 @@ public data class Model<T : Any>(
     /**
      * The time when this model was last modified, either by a state transition or updating properties.
      */
-    public val lastModifiedAt: Instant get() = if (lastPropsUpdateAt > lastStateTransitionAt) lastPropsUpdateAt else lastStateTransitionAt
+    public val lastModifiedAt: Instant get() = if (lastPropsUpdatedAt > lastStateTransitionAt) lastPropsUpdatedAt else lastStateTransitionAt
 
     override fun toString(): String {
         return props.toString()
@@ -100,12 +99,6 @@ public data class Model<T : Any>(
  */
 public fun interface Validatable {
     public fun validators(): Set<() -> PropertyCollectionValidity>
-}
-
-/** An event together with the [ObjectSchema] of its parameters class, e.g. to build a form for it. */
-public data class EventWithParameters<T : Any>(val eventReference: EventReference, val parameters: ObjectSchema<T>) {
-    public constructor(eventReference: EventReference, parametersClass: KClass<T>) :
-            this(eventReference, ObjectSchema.of(parametersClass))
 }
 
 /**
@@ -228,7 +221,7 @@ public sealed class InstanceEvent<T : Any, P>(visibility: EventVisibility) : Eve
 
 /**
  * A void event (creates a new model of type [T]) that takes parameters of type [P] when handled. Declare a
- * handler function `fun create(arg: ArgForVoidEvent<T, P, C, V>): T`.
+ * handler function `fun create(arg: VoidEventArgs<T, P, C, V>): T`.
  */
 public abstract class VoidEventWithParameters<T : Any, P : Any>(visibility: EventVisibility) :
     VoidEvent<T, P>(visibility) {
@@ -238,14 +231,14 @@ public abstract class VoidEventWithParameters<T : Any, P : Any>(visibility: Even
 
 /**
  * A void event (creates a new model of type [T]) that takes no parameters. Declare a handler function
- * `fun create(arg: ArgForVoidEvent<T, Nothing?, C, V>): T`.
+ * `fun create(arg: VoidEventArgs<T, Nothing?, C, V>): T`.
  */
 public abstract class VoidEventNoParameters<T : Any>(visibility: EventVisibility) :
     VoidEvent<T, Nothing?>(visibility)
 
 /**
  * An instance event (acts on an existing model of type [T]) that takes parameters of type [P] when handled.
- * Declare a handler function `fun update(arg: ArgForInstanceEvent<T, P, C, V>): T`.
+ * Declare a handler function `fun update(arg: InstanceEventArgs<T, P, C, V>): T`.
  */
 public abstract class InstanceEventWithParameters<T : Any, P : Any>(visibility: EventVisibility) : InstanceEvent<T, P>(visibility) {
     @Suppress("UNCHECKED_CAST")
@@ -254,7 +247,7 @@ public abstract class InstanceEventWithParameters<T : Any, P : Any>(visibility: 
 
 /**
  * An instance event (acts on an existing model of type [T]) that takes no parameters. Declare a handler function
- * `fun archive(arg: ArgForInstanceEvent<T, Nothing?, C, V>): T`.
+ * `fun archive(arg: InstanceEventArgs<T, Nothing?, C, V>): T`.
  */
 public abstract class InstanceEventNoParameters<T : Any>(visibility: EventVisibility) :
     InstanceEvent<T, Nothing?>(visibility)
@@ -263,12 +256,12 @@ public abstract class InstanceEventNoParameters<T : Any>(visibility: EventVisibi
 /**
  * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
  */
-public data class ArgContextReader<C : KlerkContext, V>(val context: C, val reader: ModelReader<C, V>)
+public data class EventLogRuleArgs<C : KlerkContext, V>(val context: C, val reader: ModelReader<C, V>)
 
 /**
  * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
  */
-public data class ArgCommandContextReader<P, C : KlerkContext, V>(
+public data class CommandRuleArgs<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,
     val context: C,
     val reader: ModelReader<C, V>
@@ -278,7 +271,7 @@ public data class ArgCommandContextReader<P, C : KlerkContext, V>(
  * Arguments handed to rules that evaluate against an existing [model], e.g. read/authorization rules for instance
  * events.
  */
-public data class ArgModelContextReader<C : KlerkContext, V>(
+public data class ModelReadRuleArgs<C : KlerkContext, V>(
     val model: Model<out Any>,
     val context: C,
     val reader: ModelReader<C, V>
@@ -287,7 +280,7 @@ public data class ArgModelContextReader<C : KlerkContext, V>(
 /**
  * Arguments handed to property-level authorization rules deciding whether [property] on [model] may be read.
  */
-public data class ArgsForPropertyAuth<C : KlerkContext, V>(
+public data class PropertyReadRuleArgs<C : KlerkContext, V>(
     val property: DataContainer<*>,
     val model: Model<out Any>,
     val context: C,
@@ -299,7 +292,7 @@ public data class ArgsForPropertyAuth<C : KlerkContext, V>(
  * executed. I.e. if the current event has modified data in a previous step, the updated data will __not__ be accessible
  * through the reader.
  */
-public data class ArgForVoidEvent<T : Any, P, C : KlerkContext, V>(
+public data class VoidEventArgs<T : Any, P, C : KlerkContext, V>(
     val command: Command<T, P>,
     val context: C,
     val reader: ModelReader<C, V>,
@@ -309,7 +302,7 @@ public data class ArgForVoidEvent<T : Any, P, C : KlerkContext, V>(
  * @param model The model as it is in the un-committed state. I.e. the model you see may differ from the model as it was
  * before the current processing (of an event or time-trigger).
  */
-public data class ArgForInstanceEvent<T : Any, P, C : KlerkContext, V>(
+public data class InstanceEventArgs<T : Any, P, C : KlerkContext, V>(
     val model: Model<T>,
     val command: Command<T, P>,
     val context: C,
@@ -510,7 +503,7 @@ public data class AttachedDataMetadata(
  * @property owner the model that owns the data. A rule can use this to express model-relative policies (e.g. "the
  * actor may read the file if it belongs to a project the actor is a member of").
  */
-public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
+public data class AttachedDataReadRuleArgs<C : KlerkContext, V>(
     val owner: Model<out Any>,
     val context: C,
     val reader: ModelReader<C, V>,
@@ -524,7 +517,7 @@ public data class ArgsForAttachedDataRead<C : KlerkContext, V>(
  * restrict who may upload a blob as opposed to a string, or who may keep unclaimed data around for hours. The real
  * gate on *attaching* data to a model is the normal event authorization of the command that claims it.
  */
-public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
+public data class AttachedDataWriteRuleArgs<C : KlerkContext, V>(
     val kind: AttachedDataKind,
 
     val context: C,
@@ -537,14 +530,6 @@ public data class ArgsForAttachedDataWrite<C : KlerkContext, V>(
     val lease: Duration,
 )
 
-/**
- * The arguments given to the rules deciding who may see a job's metadata (see [JobManager.getJob]).
- *
- * The same rules gate cancellation, so allowing an actor to watch a job also lets them stop it.
- *
- * @property job everything Klerk knows about the job, including who scheduled it — see [isOwnedBy] for the common
- * case of "may an actor see their own jobs".
- */
 /**
  * What `SpecificationBuilder.jobContextProvider` is given when a job step is about to run.
  *
@@ -560,7 +545,15 @@ public data class JobContextRequest(
     val job: JobInfo,
 )
 
-public data class ArgsForJobRead<C : KlerkContext, V>(
+/**
+ * The arguments given to the rules deciding who may see a job's metadata (see [JobManager.get]).
+ *
+ * The same rules gate cancellation, so allowing an actor to watch a job also lets them stop it.
+ *
+ * @property job everything Klerk knows about the job, including who scheduled it — see [isOwnedBy] for the common
+ * case of "may an actor see their own jobs".
+ */
+public data class JobReadRuleArgs<C : KlerkContext, V>(
     val job: JobInfo,
     val context: C,
     val reader: ModelReader<C, V>,
@@ -588,35 +581,6 @@ public data class ArgsForJobRead<C : KlerkContext, V>(
 }
 
 /**
- * The EventProducer is used to process events where the subsequent events are dependent on the results of the previous
- * events. The processing happens in a transaction, i.e. if any of the events are rejected, all events will be
- * rejected.
- *
- * When processed, init() is first called and thereafter produceNextEvent() will be called until it returns null.
- *
- * It is important that the EventProducer produces the same events no matter how many times init() and
- * subsequently produceNextEvent() has been called. This means that init() should be idempotent (except for timestamps).
- * It is recommended to have unit tests making sure that the implementation is idempotent.
- */
-/*
-interface CommandProducer<C:IContext, V> {
-
-
-    /**
-     * Called when it is time to prepare for processing. Can be called many times, so it should be idempotent.
-     */
-    fun init(): Reader<C, V>.() -> Unit
-
-    /**
-     * Produce the next event. Return null when there are no more events.
-     * Note that you may not do any reading in this function.
-     */
-    fun produceNextEvent(previousResults: List<CommandResult.Success<*>>): Command<*>?
-}
- */
-
-
-/**
  * Implemented by the application to carry who/when/how-translated for every read, command, and rule evaluation.
  * See the `context` documentation for a full walkthrough and an example implementation.
  */
@@ -630,6 +594,19 @@ public interface KlerkContext {
 
     /** The instant the operation is considered to happen at. Business logic should read time from here, not `Clock.System.now()`. */
     public val time: Instant
+}
+
+/** Converts a camelCase identifier to a space-separated, capitalized phrase, e.g. `"firstName"` -> `"First name"`. */
+public fun camelCaseToPretty(s: String): String {
+    var result = ""
+    s.toCharArray().forEachIndexed { index, c ->
+        if (index == 0) {
+            result += c.titlecase(Locale.getDefault())
+        } else {
+            result = if (c.isUpperCase()) result + " " + c.lowercase() else result + c.lowercase()
+        }
+    }
+    return result
 }
 
 /** Supplies human-readable text for validation, property, and event names. Implement to support additional languages. */
@@ -767,22 +744,4 @@ public interface KlerkPlugin<C : KlerkContext, V> {
      * Override it if the plugin has background work to wind down. Must not block for long.
      */
     public fun stop(): Unit {}
-}
-
-/**
- * A [dev.klerkframework.klerk.datatypes.DataContainer] wrapping a [JobId], so that a model can hold a reference to a
- * job it started.
- */
-public class JobIdContainer(value: Long) : LongContainer(value) {
-    public constructor(id: JobId) : this(id.value.toLong())
-
-    override val min: Long = 0
-    override val max: Long = Int.MAX_VALUE.toLong()
-
-    /**
-     * The wrapped value as a [JobId].
-     *
-     * @throws AuthorizationException if the actor that read the model is not allowed to read this property.
-     */
-    public val jobId: JobId get() = JobId(value.toInt())
 }

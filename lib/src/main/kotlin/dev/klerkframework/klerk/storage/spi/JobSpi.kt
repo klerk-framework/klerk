@@ -1,33 +1,42 @@
-package dev.klerkframework.klerk.job
+package dev.klerkframework.klerk.storage.spi
 
 import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.ActorType
 import dev.klerkframework.klerk.AuthenticationIdentity
 import dev.klerkframework.klerk.CustomIdentity
-import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelReferenceIdentity
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Unauthenticated
-import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.job.ChildOutcome
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobHookKind
+import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobInfo
+import dev.klerkframework.klerk.job.JobLogEntry
+import dev.klerkframework.klerk.job.JobName
+import dev.klerkframework.klerk.job.JobPriority
+import dev.klerkframework.klerk.job.JobProgress
+import dev.klerkframework.klerk.job.JobStatus
 import kotlin.time.Instant
 
 /**
  * Everything Klerk persists about one job instance. This is the shape a [dev.klerkframework.klerk.storage.Persistence]
  * implementation has to store and hand back; the job module owns all of the logic that decides what goes in it.
  *
- * @property cursor the job's state, encoded by its [JobType]. Opaque to storage.
- * @property stepNumber how many steps have committed. Also the number of the step about to run.
+ * @property cursor the job's state, encoded by its [dev.klerkframework.klerk.job.JobType]. Opaque to storage.
+ * @property step how many steps have committed. Also the number of the step about to run.
  * @property attempt how many times the current step has already been attempted.
  * @property readyAt the earliest time the job may be dispatched: the `scheduleAt` while [JobStatus.Scheduled], the
  * end of the backoff while [JobStatus.Backoff], and the time it became ready otherwise. Null while the job is not
  * dispatchable at all (running, waiting for children, terminal).
- * @property rootId the top of this job's spawn tree — itself, for a job nobody spawned. Together with [depth] it is
+ * @property root the top of this job's spawn tree — itself, for a job nobody spawned. Together with [depth] it is
  * what the `maxDescendants`/`maxDepth` budgets are measured against.
  * @property failedAtCursor the cursor as it was when the job died, preserved read-only for an end-of-life hook.
  * @property hookCursor the hook's own cursor, checkpointed separately so unwinding never destroys [failedAtCursor].
  * @property noProgressStreak how many consecutive steps changed neither the cursor nor the progress. Three means
  * livelock, and the job is aborted.
- * @property cronScheduleId the [CronSchedule.id] this instance was fired by, or null if it was not.
+ * @property cronScheduleId the [dev.klerkframework.klerk.job.CronSchedule.id] this instance was fired by, or null if it was not.
  */
 public data class JobRecord(
     val id: JobId,
@@ -39,9 +48,9 @@ public data class JobRecord(
     val ownerActorType: ActorType,
     val ownerActorId: Int?,
     val ownerActorExternalId: Long?,
-    val stepNumber: Int,
+    val step: Int,
     val attempt: Int,
-    val created: Instant,
+    val createdAt: Instant,
     val readyAt: Instant?,
     val firstAttemptStarted: Instant?,
     val lastAttemptStarted: Instant?,
@@ -50,8 +59,8 @@ public data class JobRecord(
     val progressTotal: Int?,
     val progressMessage: String?,
     val log: List<JobLogEntry>,
-    val parentId: JobId?,
-    val rootId: JobId,
+    val parent: JobId?,
+    val root: JobId,
     val depth: Int,
     val result: String?,
     val failedAtCursor: String?,
@@ -84,12 +93,12 @@ public data class JobRecord(
     internal fun toJobInfo(): JobInfo = JobInfo(
         id = id,
         name = name,
-        step = stepNumber,
+        step = step,
         attempt = attempt,
-        created = created,
+        createdAt = createdAt,
         priority = priority,
-        parent = parentId,
-        root = rootId,
+        parent = parent,
+        root = root,
         depth = depth,
         status = status,
         progress = progress,
@@ -114,20 +123,6 @@ public data class JobRecord(
 
     internal fun toChildOutcome(): ChildOutcome =
         ChildOutcome(id = id, name = name, status = status, result = result, reason = reason)
-}
-
-/**
- * A job that a command is in the middle of scheduling: it has an id, but nothing is committed until the command is.
- *
- * If the command fails, no job is scheduled — which is why an id is allocated during processing rather than after.
- */
-public class PendingJob<C : KlerkContext, V> internal constructor(
-    public val id: JobId,
-    internal val scheduled: DeclaredJob<C, V>,
-) {
-    public val name: JobName get() = scheduled.name
-
-    override fun toString(): String = "PendingJob($id, ${name.value})"
 }
 
 /**

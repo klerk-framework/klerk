@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -113,6 +114,21 @@ public interface EventLogQuery {
     public suspend fun get(): List<EventLogEntry>
 }
 
+/**
+ * A single event-log entry, obtained from [Reader.eventLogEntry] inside a read block. The entry itself is read from
+ * storage by [get], after the read lock has been released.
+ */
+public interface EventLogEntryQuery {
+
+    /**
+     * Reads the entry, or null if there is no such entry or it was not yet visible in the read block that created
+     * this query.
+     *
+     * @throws IllegalStateException if called from inside a read block
+     */
+    public suspend fun get(): EventLogEntry?
+}
+
 public interface KlerkModels<C : KlerkContext, V> {
 
     /**
@@ -203,10 +219,10 @@ public interface JobManager<C : KlerkContext, V> {
      * @throws kotlin.NoSuchElementException if there is no job with this id.
      * @throws AuthorizationException if the actor is not allowed to see it.
      */
-    public suspend fun getJob(id: JobId, context: C): JobInfo
+    public suspend fun get(id: JobId, context: C): JobInfo
 
     /** Every job the actor is allowed to see, newest first. */
-    public suspend fun getAllJobs(context: C): List<JobInfo>
+    public suspend fun all(context: C): List<JobInfo>
 
     /**
      * Emits a [JobInfo] every time a job the actor may see changes — for a live progress bar.
@@ -223,7 +239,7 @@ public interface JobManager<C : KlerkContext, V> {
      * is terminal and `onCancelled` has finished. **Cancel latency is therefore the slowest step in the subtree**, so
      * a UI should render `Cancelling` as its own state rather than a button that appears to do nothing.
      *
-     * Requires the same authorization as [getJob].
+     * Requires the same authorization as [get].
      *
      * @throws kotlin.NoSuchElementException if there is no job with this id.
      * @throws AuthorizationException if the actor is not allowed to see the job.
@@ -276,7 +292,7 @@ public interface JobManager<C : KlerkContext, V> {
 internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
 
     /** True if no job is using this id. Used while allocating ids during command processing. */
-    fun isJobIdAvailable(int: Int): Boolean
+    fun isJobIdAvailable(id: Long): Boolean
 
     /**
      * Turns the jobs a command declared into rows to write, applying admission control. Called on the command path
@@ -579,16 +595,16 @@ public interface AttachedDataReader {
      * @throws kotlin.NoSuchElementException if there is no such data, or it has not been attached to a model
      * @throws AuthorizationException if the actor isn't authorized
      */
-    public fun metadata(id: AttachedDataID): AttachedDataMetadata
+    public fun getMetadata(id: AttachedDataID): AttachedDataMetadata
 
     /** Null if there is no such data, or the actor isn't allowed to read it. */
-    public fun metadataOrNull(id: AttachedDataID): AttachedDataMetadata?
+    public fun getMetadataOrNull(id: AttachedDataID): AttachedDataMetadata?
 
-    /** As [metadata], and additionally throws if the id turns out to refer to a string. */
-    public fun metadata(id: AttachedBlobID): AttachedDataMetadata
+    /** As [getMetadata], and additionally throws if the id turns out to refer to a string. */
+    public fun getMetadata(id: AttachedBlobID): AttachedDataMetadata
 
-    /** As [metadata], and additionally throws if the id turns out to refer to a blob. */
-    public fun metadata(id: AttachedStringID): AttachedDataMetadata
+    /** As [getMetadata], and additionally throws if the id turns out to refer to a blob. */
+    public fun getMetadata(id: AttachedStringID): AttachedDataMetadata
 }
 
 public interface KlerkMeta {

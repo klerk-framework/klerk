@@ -392,7 +392,7 @@ class QueryPaginationTest {
     /** Hides the authors whose `lastName` is an even number from an unauthenticated actor. */
     @Suppress("unused")
     private fun unauthenticatedCannotReadEvenAuthors(
-        args: ArgModelContextReader<Ctx, Views>,
+        args: ModelReadRuleArgs<Ctx, Views>,
     ): NegativeAuthorization {
         val props = args.model.props
         if (props !is Author || args.context.actor !is Unauthenticated) {

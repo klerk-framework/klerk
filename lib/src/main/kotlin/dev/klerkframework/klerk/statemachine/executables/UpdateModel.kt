@@ -28,12 +28,12 @@ internal class InstanceLifecycleUpdateModel<T : Any, C : KlerkContext, V>(
 }
 
 internal class InstanceEventUpdateModel<T : Any, P, C : KlerkContext, V>(
-    val f: (ArgForInstanceEvent<T, P, C, V>) -> T,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val f: (InstanceEventArgs<T, P, C, V>) -> T,
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -56,7 +56,7 @@ private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
         return ProcessingData(problems = validationProblems)
     }
 
-    val updatedModel = model.copy(props = newProperties, lastPropsUpdateAt = makeExactSerializable(time))
+    val updatedModel = model.copy(props = newProperties, lastPropsUpdatedAt = makeExactSerializable(time))
     val referenceProblem = verifyReferencesExist(updatedModel, reader)
     if (referenceProblem != null) {
         throw referenceProblem.asException()

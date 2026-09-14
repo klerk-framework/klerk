@@ -36,7 +36,7 @@ val query = klerk.read(context) {
 val entries = query.get()
 ```
 
-`klerk.jobs.getJob(...)` and `klerk.jobs.getAllJobs(...)` take the read lock themselves, so they are for use *outside* a
+`klerk.jobs.get(...)` and `klerk.jobs.all(...)` take the read lock themselves, so they are for use *outside* a
 read block and fail with an explanatory error if called inside one. Because the dispatcher has to take the write lock to
 claim a job, a long read block delays job dispatch in the same way it delays a command.
 

@@ -38,7 +38,7 @@ class FlowChartAlgorithmTest {
 
     @Test
     fun `Basic algorithm`() {
-        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, ModelID(34)), Ctx.system(), reader)
+        val args = InstanceEventArgs(model, Command(ImproveAuthor, ModelID(34)), Ctx.system(), reader)
         assertEquals(4, MyAlgoWhichReturnsInt.execute(args))
         val resultWithLogs = MyAlgoWhichReturnsInt.executeWithLogs(args)
         assertEquals(4, resultWithLogs.first)
@@ -50,7 +50,7 @@ class FlowChartAlgorithmTest {
 
     @Test
     fun `Advanced algorithm`() {
-        val args = ArgForInstanceEvent(model, Command(ImproveAuthor, model.id), Ctx.system(), reader)
+        val args = InstanceEventArgs(model, Command(ImproveAuthor, model.id), Ctx.system(), reader)
         assertEquals(true, ShouldSendNotificationAlgorithm.execute(args))
         val resultWithLogs = ShouldSendNotificationAlgorithm.executeWithLogs(args)
         assertEquals(true, resultWithLogs.first)
@@ -79,8 +79,8 @@ data class Preferences(
 
 sealed class ShowNotificationDecisions<T>(
     override val name: String,
-    override val function: (ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) -> T
-) : Decision<T, ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>> {
+    override val function: (InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) -> T
+) : Decision<T, InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>> {
 
     data object ChannelMuted : ShowNotificationDecisions<Boolean>("Is channel muted?", ::isChannelMuted)
 
@@ -116,16 +116,16 @@ sealed class ShowNotificationDecisions<T>(
     data object UserSubscribed1 : ShowNotificationDecisions<Boolean>("User subscribed?", ::userSubscribed)
 }
 
-fun whatIsTheUserChannelNotificationPrefForThisDevice(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>): ChannelNotificationPref =
+fun whatIsTheUserChannelNotificationPrefForThisDevice(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): ChannelNotificationPref =
     algorithmParams.preferences.channelNotification
 
-fun channelNotificationPrefIsNothing(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun channelNotificationPrefIsNothing(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.preferences.channelNotification == Nothing
 
-fun userSubscribed(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun userSubscribed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.state.userSubscribed
 
-fun threadMessage(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun threadMessage(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.state.threadMessage
 
 enum class ChannelNotificationPref {
@@ -136,35 +136,35 @@ enum class ChannelNotificationPref {
 }
 
 
-fun isChannelMuted(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun isChannelMuted(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.preferences.channelMuted
 
-fun threadMessageAndUserSubscribed(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun threadMessageAndUserSubscribed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     threadMessage(params) && userSubscribed(params)
 
-fun userInDnD(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun userInDnD(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.state.userDnd
 
-fun dnDOverride(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>) =
+fun dnDOverride(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.state.dndOverride
 
-fun channelEveryoneHereMessage(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>): Boolean {
+fun channelEveryoneHereMessage(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): Boolean {
     val p = algorithmParams
     return p.message.contains("@channel") ||
             p.message.contains("@everyone") ||
             p.message.contains("@here")
 }
 
-fun channelMentionsSuppressed(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>): Boolean =
+fun channelMentionsSuppressed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): Boolean =
     algorithmParams.preferences.channelMentionsSurpressed
 
-fun threadsEverythingPrefOn(params: ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>): Boolean =
+fun threadsEverythingPrefOn(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): Boolean =
     algorithmParams.preferences.threadsEverything
 
 object MyAlgoWhichReturnsInt :
-    FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>, Int>("Just testing") {
+    FlowChartAlgorithm<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Int>("Just testing") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>, Int>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Int>.() -> Unit =
         {
 
             start(ChannelMuted)
@@ -201,9 +201,9 @@ object MyAlgoWhichReturnsInt :
 // Note that the functions in this algorithm are not pure since they use algorithmParams rather than the BlockParams.
 // The reason of this is that we want to test with a complicated algorithm (inspired by https://d34u8crftukxnk.cloudfront.net/slackpress/prod/sites/7/0_PV_09olld6K1l8jQ.png)
 object ShouldSendNotificationAlgorithm :
-    FlowChartAlgorithm<ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>, Boolean>("Should we send a notification?") {
+    FlowChartAlgorithm<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Boolean>("Should we send a notification?") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, kotlin.Nothing?, Ctx, Views>, Boolean>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Boolean>.() -> Unit =
         {
             start(ChannelMuted)
 

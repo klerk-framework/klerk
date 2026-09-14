@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.storage
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.*
@@ -158,8 +159,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     it[id] = model.id.value
                     it[type] = model.props::class.simpleName!!
                     it[createdAt] = model.createdAt.to64bitMicroseconds()
-                    it[lastPropsUpdateAt] = model.lastPropsUpdateAt.to64bitMicroseconds()
-                    it[lastTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
+                    it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
+                    it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
                     it[state] = model.state
                     it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
                     it[properties] = KlerkJson.encode(model.props)
@@ -172,8 +173,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 .forEach { modelId ->
                     val model = requireNotNull(delta.aggregatedModelState[modelId])
                     Models.update({ Models.id eq modelId.value }) {
-                        it[lastPropsUpdateAt] = model.lastPropsUpdateAt.to64bitMicroseconds()
-                        it[lastTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
+                        it[lastPropsUpdatedAt] = model.lastPropsUpdatedAt.to64bitMicroseconds()
+                        it[lastStateTransitionAt] = model.lastStateTransitionAt.to64bitMicroseconds()
                         it[state] = model.state
                         it[timeTrigger] = model.timeTrigger?.to64bitMicroseconds()
                         it[properties] = KlerkJson.encode(model.props)
@@ -215,8 +216,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             return Model(
                 id = ModelID(modelId),
                 createdAt = decode64bitMicroseconds(row[Models.createdAt]),
-                lastPropsUpdateAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
-                lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
+                lastPropsUpdatedAt = decode64bitMicroseconds(row[Models.lastPropsUpdatedAt]),
+                lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastStateTransitionAt]),
                 state = row[Models.state],
                 timeTrigger = row[Models.timeTrigger]?.let { decode64bitMicroseconds(it) },
                 props = props
@@ -229,26 +230,29 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
     override fun readEventLog(
         modelId: Int?,
-        from: Instant,
-        until: Instant,
+        after: Instant,
+        before: Instant,
         upToSequenceNumber: Long,
-        sequenceNumber: Long?,
     ): Iterable<EventLogEntry> {
         return transaction(database) {
             val query = EventLog.selectAll()
-                .where(timestamp greaterEq from.to64bitMicroseconds())
-                .andWhere { timestamp lessEq until.to64bitMicroseconds() }
+                .where(timestamp greaterEq after.to64bitMicroseconds())
+                .andWhere { timestamp lessEq before.to64bitMicroseconds() }
                 .andWhere { EventLog.sequenceNumber lessEq upToSequenceNumber }
 
             if (modelId != null) {
                 query.andWhere { EventLog.modelId eq modelId }
             }
-            if (sequenceNumber != null) {
-                query.andWhere { EventLog.sequenceNumber eq sequenceNumber }
-            }
 
             return@transaction query.orderBy(EventLog.sequenceNumber).map { row -> toEventLogEntry(row) }
         }
+    }
+
+    override fun readEventLogEntry(sequenceNumber: Long): EventLogEntry? = transaction(database) {
+        EventLog.selectAll()
+            .where { EventLog.sequenceNumber eq sequenceNumber }
+            .firstOrNull()
+            ?.let { toEventLogEntry(it) }
     }
 
     override fun lastEventLogSequenceNumber(): Long = transaction(database) {
@@ -557,9 +561,9 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.ownerActorType] = record.ownerActorType.storedValue
         this[Jobs.ownerActorId] = record.ownerActorId
         this[Jobs.ownerActorExternalId] = record.ownerActorExternalId
-        this[Jobs.stepNumber] = record.stepNumber
+        this[Jobs.step] = record.step
         this[Jobs.attempt] = record.attempt
-        this[Jobs.created] = record.created.to64bitMicroseconds()
+        this[Jobs.created] = record.createdAt.to64bitMicroseconds()
         this[Jobs.readyAt] = record.readyAt?.to64bitMicroseconds()
         this[Jobs.firstAttemptStarted] = record.firstAttemptStarted?.to64bitMicroseconds()
         this[Jobs.lastAttemptStarted] = record.lastAttemptStarted?.to64bitMicroseconds()
@@ -568,8 +572,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.progressTotal] = record.progressTotal
         this[Jobs.progressMessage] = record.progressMessage
         this[Jobs.log] = jobJson.encodeToString(logSerializer, record.log)
-        this[Jobs.parentId] = record.parentId?.value
-        this[Jobs.rootId] = record.rootId.value
+        this[Jobs.parent] = record.parent?.value
+        this[Jobs.root] = record.root.value
         this[Jobs.depth] = record.depth
         this[Jobs.result] = record.result
         this[Jobs.failedAtCursor] = record.failedAtCursor
@@ -594,9 +598,9 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     ownerActorType = ActorType.fromStoredValue(row[Jobs.ownerActorType]),
                     ownerActorId = row[Jobs.ownerActorId],
                     ownerActorExternalId = row[Jobs.ownerActorExternalId],
-                    stepNumber = row[Jobs.stepNumber],
+                    step = row[Jobs.step],
                     attempt = row[Jobs.attempt],
-                    created = decode64bitMicroseconds(row[Jobs.created]),
+                    createdAt = decode64bitMicroseconds(row[Jobs.created]),
                     readyAt = row[Jobs.readyAt]?.let { decode64bitMicroseconds(it) },
                     firstAttemptStarted = row[Jobs.firstAttemptStarted]?.let { decode64bitMicroseconds(it) },
                     lastAttemptStarted = row[Jobs.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
@@ -605,8 +609,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                     progressTotal = row[Jobs.progressTotal],
                     progressMessage = row[Jobs.progressMessage],
                     log = jobJson.decodeFromString(logSerializer, row[Jobs.log]),
-                    parentId = row[Jobs.parentId]?.let { JobId(it) },
-                    rootId = JobId(row[Jobs.rootId]),
+                    parent = row[Jobs.parent]?.let { JobId(it) },
+                    root = JobId(row[Jobs.root]),
                     depth = row[Jobs.depth],
                     result = row[Jobs.result],
                     failedAtCursor = row[Jobs.failedAtCursor],
@@ -657,8 +661,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val id = integer("id").index()
         val type = varchar("type", length = 50)
         val createdAt = long("created")   // microseconds since 1970
-        val lastPropsUpdateAt = long("last_props_update_at")   // microseconds since 1970
-        val lastTransitionAt = long("last_transition_at")   // microseconds since 1970
+        val lastPropsUpdatedAt = long("last_props_update_at")   // microseconds since 1970
+        val lastStateTransitionAt = long("last_transition_at")   // microseconds since 1970
         val state = varchar("state", length = 50)
         val timeTrigger = long("time_trigger").nullable()  // microseconds since 1970
         val properties = varchar("props", length = 100000)
@@ -704,7 +708,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
 
         // The second, independent claim: a job that prepared this data and is still alive. A row is reaped only when
         // neither claim holds.
-        val claimedByJob = integer("claimed_by_job").nullable()
+        val claimedByJob = long("claimed_by_job").nullable()
         override val primaryKey = PrimaryKey(id)
     }
 
@@ -713,7 +717,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
      * may be appended to those enums but never reordered or removed.
      */
     internal object Jobs : Table("\"klerk_jobs\"") {
-        val id = integer("id")
+        val id = long("id")
         val name = varchar("name", length = 100)        // the JobName, i.e. what resolves the JobType after a restart
         val cursor = text("cursor")                     // encoded by the job type; opaque here
         val status = byte("status")                     // the ordinal of JobStatus
@@ -722,7 +726,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val ownerActorType = integer("owner_actor_type")
         val ownerActorId = integer("owner_actor_id").nullable()
         val ownerActorExternalId = long("owner_actor_external_id").nullable()
-        val stepNumber = integer("step_number")
+        val step = integer("step_number")
         val attempt = integer("attempt")
         val created = long("created")                   // microseconds since 1970
         val readyAt = long("ready_at").nullable()       // microseconds since 1970
@@ -733,8 +737,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         val progressTotal = integer("progress_total").nullable()
         val progressMessage = text("progress_message").nullable()
         val log = text("log")                           // JSON array of JobLogEntry
-        val parentId = integer("parent_id").nullable()
-        val rootId = integer("root_id")
+        val parent = long("parent_id").nullable()
+        val root = long("root_id")
         val depth = integer("depth")
         val result = text("result").nullable()
         val failedAtCursor = text("failed_at_cursor").nullable()
@@ -762,8 +766,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             type = row[Models.type],
             id = row[Models.id],
             createdAt = decode64bitMicroseconds(row[Models.createdAt]),
-            lastPropsUpdatedAt = decode64bitMicroseconds(row[Models.lastPropsUpdateAt]),
-            lastTransitionAt = decode64bitMicroseconds(row[Models.lastTransitionAt]),
+            lastPropsUpdatedAt = decode64bitMicroseconds(row[Models.lastPropsUpdatedAt]),
+            lastStateTransitionAt = decode64bitMicroseconds(row[Models.lastStateTransitionAt]),
             state = row[Models.state],
             props = Json.parseToJsonElement(row[Models.properties]).jsonObject
         )
@@ -779,8 +783,8 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
                 it[type] = after.type
                 it[id] = after.id
                 it[createdAt] = after.createdAt.to64bitMicroseconds()
-                it[lastPropsUpdateAt] = after.lastPropsUpdatedAt.to64bitMicroseconds()
-                it[lastTransitionAt] = after.lastTransitionAt.to64bitMicroseconds()
+                it[lastPropsUpdatedAt] = after.lastPropsUpdatedAt.to64bitMicroseconds()
+                it[lastStateTransitionAt] = after.lastStateTransitionAt.to64bitMicroseconds()
                 it[state] = after.state
                 it[properties] = after.props.toString()
             }

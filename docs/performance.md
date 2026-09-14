@@ -30,7 +30,7 @@ a narrow view over a large `all`, and it is no longer something to avoid on hot 
 Two cases still cost a full pass over the view's contents:
 
 - **`sorted`**, which has to read every model in the view to order them.
-- **A custom `ModelView`**, whose `withReader` may depend on anything and so is evaluated on every query — as is any
+- **A custom `ModelView`**, whose `memberIds` may depend on anything and so is evaluated on every query — as is any
   view derived from one.
 
 If a custom view is hot (e.g. a join across two model types), back it with whatever data structure makes the lookup

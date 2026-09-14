@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.ArgsForJobRead
+import dev.klerkframework.klerk.JobReadRuleArgs
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.NegativeAuthorization
 import dev.klerkframework.klerk.PositiveAuthorization
@@ -24,7 +24,7 @@ internal fun <C : KlerkContext, V> isJobAuthorized(
     if (context.actor == SystemIdentity) {
         return true
     }
-    val args = ArgsForJobRead(job, context, reader)
+    val args = JobReadRuleArgs(job, context, reader)
     return specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
             specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
 }

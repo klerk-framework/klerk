@@ -27,7 +27,7 @@ state(Amateur) {
     }
 }
 
-fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>) {
+fun showNotification(args: InstanceEventArgs<Author, Nothing?, Ctx, Views>) {
     // fire-and-forget
 }
 ```
@@ -120,7 +120,7 @@ onEvent(ChangeName) {
     job(::notifyBookStores)
 }
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): DeclaredJob<Ctx, Views> =
+fun notifyBookStores(args: InstanceEventArgs<Author, ChangeNameParams, Ctx, Views>): DeclaredJob<Ctx, Views> =
     NotifyBookStores.declare(NotifyCursor(author = args.model.id))
 ```
 
@@ -132,7 +132,7 @@ onEvent(ChangeName) {
     jobs(::notifyBookStoresAndPartners)
 }
 
-fun notifyBookStoresAndPartners(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> =
+fun notifyBookStoresAndPartners(args: InstanceEventArgs<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> =
     listOf(NotifyBookStores.declare(NotifyCursor(author = args.model.id)), NotifyPartners.declare(...))
 ```
 
@@ -265,12 +265,12 @@ JobProgress(
 )
 ```
 
-Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.getJob(id, context)`
+Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.get(id, context)`
 subject to [authorization](#who-can-see-a-job).
 
 ### Reading jobs inside a read block
 
-`klerk.jobs.getJob(id, context)` and `klerk.jobs.getAllJobs(context)` take the read lock themselves, so they are for use
+`klerk.jobs.get(id, context)` and `klerk.jobs.all(context)` take the read lock themselves, so they are for use
 *outside* a read block and fail with an explanatory error if called inside one. Inside a read block, use `jobs` on the
 reader:
 
@@ -559,7 +559,7 @@ class Ctx(override val actor: ActorIdentity, val user: Model<User>? = null, ...)
     val userId: ModelID<*>? get() = user?.id ?: actor.id
 }
 
-fun onlyByOwner(args: ArgForInstanceEvent<Order, Nothing?, Ctx, Views>): PropertyCollectionValidity =
+fun onlyByOwner(args: InstanceEventArgs<Order, Nothing?, Ctx, Views>): PropertyCollectionValidity =
     if (args.model.props.owner == args.context.userId) Valid else Invalid()
 ```
 
@@ -581,7 +581,7 @@ authorization {
     }
 }
 
-fun usersCanSeeTheirOwnJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthorization =
     if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
 ```
 

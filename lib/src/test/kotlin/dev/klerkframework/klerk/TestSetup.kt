@@ -174,24 +174,24 @@ fun myContextProvider(): Ctx {
 /** Gives a job step a context whose time comes from the configured clock, so job time is controllable in tests. */
 fun myJobContextProvider(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
 
-fun authorsCanSeeTheirOwnJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+fun authorsCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthorization =
     if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
 
-fun systemCanSeeAllJobs(args: ArgsForJobRead<Ctx, Views>): PositiveAuthorization =
+fun systemCanSeeAllJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthorization =
     if (args.context.actor is SystemIdentity) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
 
-fun cannotReadAstrid(args: ArgsForPropertyAuth<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
+fun cannotReadAstrid(args: PropertyReadRuleArgs<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
     return if (args.property is FirstName && args.property.valueWithoutAuthorization == "Astrid") Deny else Pass
 }
 
-fun canReadAllProperties(args: ArgsForPropertyAuth<Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
+fun canReadAllProperties(args: PropertyReadRuleArgs<Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 /**
  * A model-relative rule: it reaches the owning model, which is the point of handing the rule a [Model] and a `Reader`.
  */
-fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
+fun onlyTheAuthorsOwnerCanReadThePicture(args: AttachedDataReadRuleArgs<Ctx, Views>): PositiveAuthorization {
     val props = args.owner.props
     if (props is Author && props.lastName.value == "Secretive") {
         return PositiveAuthorization.NoOpinion
@@ -199,36 +199,36 @@ fun onlyTheAuthorsOwnerCanReadThePicture(args: ArgsForAttachedDataRead<Ctx, View
     return PositiveAuthorization.Allow
 }
 
-fun unauthenticatedCannotReadAttachedData(args: ArgsForAttachedDataRead<Ctx, Views>): NegativeAuthorization =
+fun unauthenticatedCannotReadAttachedData(args: AttachedDataReadRuleArgs<Ctx, Views>): NegativeAuthorization =
     if (args.context.actor is Unauthenticated) Deny else Pass
 
-fun everybodyCanPrepareAttachedData(args: ArgsForAttachedDataWrite<Ctx, Views>): PositiveAuthorization =
+fun everybodyCanPrepareAttachedData(args: AttachedDataWriteRuleArgs<Ctx, Views>): PositiveAuthorization =
     PositiveAuthorization.Allow
 
 /** A rule that keys on the kind. Nonsensical as a policy, but that is not the point. */
-fun unauthenticatedCannotPrepareStrings(args: ArgsForAttachedDataWrite<Ctx, Views>): NegativeAuthorization =
+fun unauthenticatedCannotPrepareStrings(args: AttachedDataWriteRuleArgs<Ctx, Views>): NegativeAuthorization =
     if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is dev.klerkframework.klerk.Unauthenticated) Deny else Pass
 }
 
-fun `Everybody can do everything`(argCommandContextReader: ArgCommandContextReader<*, Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
+fun `Everybody can do everything`(argCommandContextReader: CommandRuleArgs<*, Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 
-fun `Everybody can read event log`(args: ArgContextReader<Ctx, Views>): PositiveAuthorization {
+fun `Everybody can read event log`(args: EventLogRuleArgs<Ctx, Views>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
-fun `Everybody can read`(args: ArgModelContextReader<Ctx, Views>): PositiveAuthorization {
+fun `Everybody can read`(args: ModelReadRuleArgs<Ctx, Views>): PositiveAuthorization {
     return dev.klerkframework.klerk.PositiveAuthorization.Allow
 }
 
 fun pelleCannotReadOnMornings(
-    args: ArgModelContextReader<Ctx, Views>
+    args: ModelReadRuleArgs<Ctx, Views>
 ): dev.klerkframework.klerk.NegativeAuthorization {
     try {
         if (args.context.user?.props?.name?.value.equals("Pelle")) {
@@ -473,7 +473,7 @@ fun onEnterImprovingStateAction(args: LifecycleArgs<Author, Ctx, Views>) {
 }
 
 
-fun showNotification(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>) {
+fun showNotification(args: InstanceEventArgs<Author, Nothing?, Ctx, Views>) {
     println("It was decided that we should show a notification")
 }
 
@@ -484,7 +484,7 @@ fun onEnterAmateurStateAction(args: LifecycleArgs<Author, Ctx, Views>) {
 }
 
 
-fun notifyBookStores(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
+fun notifyBookStores(args: InstanceEventArgs<Author, ChangeNameParams, Ctx, Views>): List<DeclaredJob<Ctx, Views>> {
     return listOf(MyJob2.declare(MyJobCursor(greeting = "Hej")))
 }
 
@@ -503,14 +503,14 @@ object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
     }
 }
 
-fun changeNameOfAuthor(args: ArgForInstanceEvent<Author, ChangeNameParams, Ctx, Views>): Author {
+fun changeNameOfAuthor(args: InstanceEventArgs<Author, ChangeNameParams, Ctx, Views>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
         lastName = args.command.params.updatedLastName
     )
 }
 
-fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
+fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Ctx, Views>): List<Command<Any, Any>> {
     args.reader.apply {
         val result: MutableList<Command<Any, Any>> = mutableListOf()
         val books = referencing(Book::class, requireNotNull(args.model.id))
@@ -529,7 +529,7 @@ fun eventsToDeleteAuthorAndBooks(args: ArgForInstanceEvent<Author, Nothing?, Ctx
     }
 }
 
-fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): Author {
+fun newAuthor(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): Author {
     val params = args.command.params
     return Author(
         firstName = params.firstName,
@@ -539,25 +539,25 @@ fun newAuthor(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): Au
     )
 }
 
-fun newAuthor2(args: ArgForVoidEvent<Author, Nothing?, Ctx, Views>): Author {
+fun newAuthor2(args: VoidEventArgs<Author, Nothing?, Ctx, Views>): Author {
     return Author(FirstName("Auto"), LastName("Created"), Address(Street("Somewhere")), picture = null)
 }
 
 
-fun updateAuthor(args: ArgForInstanceEvent<Author, Author, Ctx, Views>): Author {
+fun updateAuthor(args: InstanceEventArgs<Author, Author, Ctx, Views>): Author {
     return args.command.params
 }
 
 
-fun onlyAuthenticationIdentityCanCreateDaniel(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
+fun onlyAuthenticationIdentityCanCreateDaniel(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Daniel" && args.context.actor != dev.klerkframework.klerk.AuthenticationIdentity) Invalid() else Valid
 }
 
-fun cannotHaveAnAwfulName(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
+fun cannotHaveAnAwfulName(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris") Invalid() else Valid
 }
 
-fun secretTokenShouldBeZeroIfNameStartsWithM(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
+fun secretTokenShouldBeZeroIfNameStartsWithM(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
 }
 
@@ -565,7 +565,7 @@ fun preventUnauthenticated(context: Ctx): PropertyCollectionValidity {
     return if (context.actor == dev.klerkframework.klerk.Unauthenticated) Invalid() else Valid
 }
 
-fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
+fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
     args.reader.apply {
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
@@ -575,7 +575,7 @@ fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: ArgForVoidEvent<Author, Cr
     }
 }
 
-fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>): Book {
+fun newBook(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>): Book {
     val params = args.command.params
     return Book(
         title = params.title,
@@ -597,7 +597,7 @@ fun newBook(args: ArgForVoidEvent<Book, CreateBookParams, Ctx, Views>): Book {
     )
 }
 
-fun updateBook(args: ArgForInstanceEvent<Book, Book, Ctx, Views>): Book = args.command.params
+fun updateBook(args: InstanceEventArgs<Book, Book, Ctx, Views>): Book = args.command.params
 
 
 enum class AuthorStates {
@@ -859,21 +859,21 @@ object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Extern
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
-    override val function: (ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>) -> Boolean
-) : Decision<Boolean, ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>> {
+    override val function: (InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>) -> Boolean
+) : Decision<Boolean, InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>> {
     data object Something : AlwaysFalseDecisions("This will always be false", ::alwaysFalse)
 
 }
 
-fun alwaysFalse(args: ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>): Boolean {
+fun alwaysFalse(args: InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>): Boolean {
     return false
 }
 
 
 object AlwaysFalseAlgorithm :
-    FlowChartAlgorithm<ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>, Boolean>("Always false") {
+    FlowChartAlgorithm<InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>, Boolean>("Always false") {
 
-    override fun configure(): AlgorithmBuilder<ArgForInstanceEvent<Author, CreateAuthorParams, Ctx, Views>, Boolean>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>, Boolean>.() -> Unit =
         {
             start(Something)
             booleanNode(Something) {
@@ -1063,7 +1063,7 @@ fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> =
     }
 }
 
-private fun newPainting(args: ArgForVoidEvent<Painting, CreatePaintingParams, Ctx, Views>): Painting =
+private fun newPainting(args: VoidEventArgs<Painting, CreatePaintingParams, Ctx, Views>): Painting =
     Painting(args.command.params.title, args.command.params.image)
 
 // Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the attached-data
@@ -1125,7 +1125,7 @@ fun noteStateMachine(): StateMachine<Note, NoteStates, Ctx, Views> = stateMachin
     }
 }
 
-private fun newNote(args: ArgForVoidEvent<Note, CreateNoteParams, Ctx, Views>): Note =
+private fun newNote(args: VoidEventArgs<Note, CreateNoteParams, Ctx, Views>): Note =
     Note(args.command.params.title, args.command.params.body)
 
 // Declared the old way, on purpose: the specification must refuse it. Never registered in createConfig.
@@ -1143,7 +1143,7 @@ fun sketchStateMachine(): StateMachine<Sketch, SketchStates, Ctx, Views> = state
     state(SketchStates.Drawn) {}
 }
 
-private fun newSketch(args: ArgForVoidEvent<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
+private fun newSketch(args: VoidEventArgs<Sketch, Sketch, Ctx, Views>): Sketch = args.command.params
 
 // Declared the old way, on purpose: the specification must refuse it. Never registered in createConfig.
 data class Scribble(val text: AttachedStringID)
@@ -1160,7 +1160,7 @@ fun scribbleStateMachine(): StateMachine<Scribble, ScribbleStates, Ctx, Views> =
     state(ScribbleStates.Written) {}
 }
 
-private fun newScribble(args: ArgForVoidEvent<Scribble, Scribble, Ctx, Views>): Scribble = args.command.params
+private fun newScribble(args: VoidEventArgs<Scribble, Scribble, Ctx, Views>): Scribble = args.command.params
 
 // A container that declares no step at all, which the specification must refuse. Never registered in createConfig.
 class DoodleImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
@@ -1181,7 +1181,7 @@ fun doodleStateMachine(): StateMachine<Doodle, DoodleStates, Ctx, Views> = state
     state(DoodleStates.Drawn) {}
 }
 
-private fun newDoodle(args: ArgForVoidEvent<Doodle, Doodle, Ctx, Views>): Doodle = args.command.params
+private fun newDoodle(args: VoidEventArgs<Doodle, Doodle, Ctx, Views>): Doodle = args.command.params
 
 // A blob whose bytes are checked, not just its metadata: the CSV must have the columns the application expects.
 data class Inventory(val name: InventoryName, val rows: InventoryCsv)
@@ -1231,5 +1231,5 @@ fun inventoryStateMachine(): StateMachine<Inventory, InventoryStates, Ctx, Views
     state(InventoryStates.Counted) {}
 }
 
-private fun newInventory(args: ArgForVoidEvent<Inventory, CreateInventoryParams, Ctx, Views>): Inventory =
+private fun newInventory(args: VoidEventArgs<Inventory, CreateInventoryParams, Ctx, Views>): Inventory =
     Inventory(args.command.params.name, args.command.params.rows)

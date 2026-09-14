@@ -297,11 +297,11 @@ Inside a read block, read it on the reader instead — the model and its metadat
 ```kotlin
 val (author, meta) = klerk.read(context) {
     val author = get(authorID)
-    author to attachedData.metadata(author.props.picture.id)
+    author to attachedData.getMetadata(author.props.picture.id)
 }
 ```
 
-`attachedData.metadataOrNull(id)` is the variant that returns null rather than throwing.
+`attachedData.getMetadataOrNull(id)` is the variant that returns null rather than throwing.
 
 #### When you only have an ID
 
@@ -371,7 +371,7 @@ data.
 Because the owning model is reachable from the rule, model-relative policies work and stay correct over time:
 
 ```kotlin
-fun onlyProjectMembersCanReadAttachments(args: ArgsForAttachedDataRead<Ctx, Views>): PositiveAuthorization {
+fun onlyProjectMembersCanReadAttachments(args: AttachedDataReadRuleArgs<Ctx, Views>): PositiveAuthorization {
     ...
 }
 ```

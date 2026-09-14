@@ -179,11 +179,11 @@ class AttachedBlobContainerTest {
     @Test
     fun `a container that declares no steps needs no job`() = runBlocking {
         val klerk = start()
-        val before = klerk.jobs.getAllJobs(Ctx.system()).size
+        val before = klerk.jobs.all(Ctx.system()).size
 
         klerk.attachedData.prepare(png().inputStream(), PaintingImage::class, Ctx.system())
 
-        assertEquals(before, klerk.jobs.getAllJobs(Ctx.system()).size, "nothing has to run, so nothing was scheduled")
+        assertEquals(before, klerk.jobs.all(Ctx.system()).size, "nothing has to run, so nothing was scheduled")
         klerk.meta.stop()
     }
 
@@ -202,7 +202,7 @@ class AttachedBlobContainerTest {
         assertTrue(refusal.message!!.contains("quantity,name"), refusal.message!!)
         // the value is gone, and the job that refused it says why
         assertFailsWith<NoSuchElementException> { klerk.attachedData.getMetadata(wrong, Ctx.system()) }
-        val job = klerk.jobs.getAllJobs(Ctx.system()).first { it.name.value == PROCESS_ATTACHED_DATA }
+        val job = klerk.jobs.all(Ctx.system()).first { it.name.value == PROCESS_ATTACHED_DATA }
         assertEquals(JobStatus.DeadLettered, job.status)
         assertTrue(job.reason!!.contains("quantity,name"), job.reason!!)
         klerk.meta.stop()
@@ -240,7 +240,7 @@ class AttachedBlobContainerTest {
 
         // one step of the job per declared step, with a checkpoint in between rather than one long step
         assertTrue(klerk.jobs.step(), "the first declared step")
-        val midway = klerk.jobs.getAllJobs(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
+        val midway = klerk.jobs.all(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
         assertEquals(JobProgress(1, 2), midway.progress)
         klerk.attachedData.awaitProcessing(id)
 
@@ -273,7 +273,7 @@ class AttachedBlobContainerTest {
         val id = klerk.attachedData.prepare("anything".byteInputStream(), FlakyDocument::class, Ctx.system())
 
         klerk.jobs.runUntilIdle()   // the first step passes, the second throws and goes into backoff
-        val job = klerk.jobs.getAllJobs(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
+        val job = klerk.jobs.all(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
         assertEquals(JobStatus.Backoff, job.status)
         clock.advance(1.minutes)
         klerk.jobs.runUntilIdle()
@@ -281,7 +281,7 @@ class AttachedBlobContainerTest {
         assertEquals(1, counted, "the step before the flaky one ran once, not once per attempt")
         assertEquals(
             JobStatus.Succeeded,
-            klerk.jobs.getJob(job.id, Ctx.system()).status,
+            klerk.jobs.get(job.id, Ctx.system()).status,
             "the retry got through the step that had failed",
         )
         assertNotNull(id)
@@ -304,7 +304,7 @@ class AttachedBlobContainerTest {
         restarted.jobs.runUntilIdle()
 
         assertEquals(1, counted, "the step that had already run is not run again")
-        val job = restarted.jobs.getAllJobs(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
+        val job = restarted.jobs.all(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
         assertEquals(JobStatus.Succeeded, job.status)
         restarted.meta.stop()
     }
@@ -392,7 +392,7 @@ class AttachedBlobContainerTest {
             restarted.attachedData.getMetadata(id, Ctx.system()).visibility,
         )
         assertNull(
-            restarted.jobs.getAllJobs(Ctx.system()).firstOrNull { it.name.value == PROCESS_ATTACHED_DATA },
+            restarted.jobs.all(Ctx.system()).firstOrNull { it.name.value == PROCESS_ATTACHED_DATA },
             "a container that only declares noPreAttachProcessing never had a job",
         )
         restarted.meta.stop()
@@ -424,7 +424,7 @@ class AttachedBlobContainerTest {
 
         // nothing to wait for, and nothing to run: the value is ready as soon as it is written
         klerk.attachedData.awaitProcessing(id)
-        assertNull(klerk.jobs.getAllJobs(Ctx.system()).firstOrNull { it.name.value == PROCESS_ATTACHED_DATA })
+        assertNull(klerk.jobs.all(Ctx.system()).firstOrNull { it.name.value == PROCESS_ATTACHED_DATA })
         hang(klerk, id).getOrThrow()
         assertTrue(klerk.attachedData.getMetadata(id, Ctx.system()).completedSteps.isEmpty())
         klerk.meta.stop()

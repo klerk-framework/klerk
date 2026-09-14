@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.misc.MutableClock
@@ -102,7 +103,7 @@ class JobAttachedDataClaimTest {
         assertEquals(1, storage.readAllAttachedDataMetadata().size)
 
         klerk.jobs.runUntilIdle()
-        assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
+        assertEquals(JobStatus.Succeeded, klerk.jobs.get(id, Ctx.system()).status)
 
         // The command attached it to a model, so now it is owned as well as claimed.
         val author = klerk.read(Ctx.system()) { klerk.specification.views.authors.all.asSequence().toList() }.single()
@@ -144,7 +145,7 @@ class JobAttachedDataClaimTest {
         klerk.jobs.cancel(id, Ctx.system()) // stops it before the data is ever attached
         klerk.jobs.runUntilIdle()
 
-        assertEquals(JobStatus.Cancelled, klerk.jobs.getJob(id, Ctx.system()).status)
+        assertEquals(JobStatus.Cancelled, klerk.jobs.get(id, Ctx.system()).status)
         clock += 1.hours
         storage.deleteExpiredAttachedData(clock.now())
         assertEquals(
@@ -180,7 +181,7 @@ class JobAttachedDataClaimTest {
         try {
             val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
             klerk.jobs.runUntilIdle()
-            assertEquals(JobStatus.DeadLettered, klerk.jobs.getJob(id, Ctx.system()).status)
+            assertEquals(JobStatus.DeadLettered, klerk.jobs.get(id, Ctx.system()).status)
             assertEquals(1, storage.getAllJobs().size)
 
             clock += 1.hours
@@ -221,7 +222,7 @@ class JobAttachedDataClaimTest {
         klerk.jobs.step()                       // prepares the blob
         klerk.jobs.cancel(id, Ctx.system())
         klerk.jobs.runUntilIdle()
-        assertEquals(JobStatus.Cancelled, klerk.jobs.getJob(id, Ctx.system()).status)
+        assertEquals(JobStatus.Cancelled, klerk.jobs.get(id, Ctx.system()).status)
 
         clock += 1.hours
         klerk.jobs.runUntilIdle()
@@ -256,7 +257,7 @@ class JobAttachedDataClaimTest {
 
         val id = klerk.jobs.schedule(Uploader.declare(UploadCursor(attach = true)), Ctx.system())
         klerk.jobs.runUntilIdle()
-        assertEquals(JobStatus.Succeeded, klerk.jobs.getJob(id, Ctx.system()).status)
+        assertEquals(JobStatus.Succeeded, klerk.jobs.get(id, Ctx.system()).status)
         assertEquals(1, storage.getAllJobs().size)
 
         clock += 1.hours

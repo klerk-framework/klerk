@@ -222,7 +222,7 @@ class ViewOperationsTest {
     }
 
     @Suppress("unused")
-    private fun unauthenticatedCannotReadEvenAuthors(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
+    private fun unauthenticatedCannotReadEvenAuthors(args: ModelReadRuleArgs<Ctx, Views>): NegativeAuthorization {
         val props = args.model.props
         if (props !is Author || args.context.actor !is Unauthenticated) {
             return NegativeAuthorization.Pass

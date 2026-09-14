@@ -58,7 +58,7 @@ record who did what in the event log.
 Business and authorization rules narrow on the concrete type, e.g.:
 
 ```kotlin
-fun unauthenticatedCannotReadAstrid(args: ArgModelContextReader<Ctx, Views>): NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Ctx, Views>): NegativeAuthorization {
     val props = args.model.props
     return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is Unauthenticated) Deny else Pass
 }
@@ -105,5 +105,5 @@ This is mandatory — `SpecificationBuilder.build()` throws `IllegalConfiguratio
 
 See [reading.md](reading.md) for how a `Ctx` is used together with `klerk.read`/`klerk.readSuspend`. Inside the DSL
 functions of a state machine, you never construct a `Ctx` yourself — one is handed to you as part of the
-`Arg...` parameter (e.g. `ArgForInstanceEvent.context`), carrying over the context of whichever command triggered the
+`Arg...` parameter (e.g. `InstanceEventArgs.context`), carrying over the context of whichever command triggered the
 call.

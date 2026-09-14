@@ -22,9 +22,9 @@ internal class AuthorizingAttachedDataReader<C : KlerkContext, V>(
 
     private var finished = false
 
-    override fun metadata(id: AttachedDataID): AttachedDataMetadata = read(id, expected = null)
+    override fun getMetadata(id: AttachedDataID): AttachedDataMetadata = read(id, expected = null)
 
-    override fun metadataOrNull(id: AttachedDataID): AttachedDataMetadata? = try {
+    override fun getMetadataOrNull(id: AttachedDataID): AttachedDataMetadata? = try {
         read(id, expected = null)
     } catch (e: NoSuchElementException) {
         null
@@ -32,10 +32,10 @@ internal class AuthorizingAttachedDataReader<C : KlerkContext, V>(
         null
     }
 
-    override fun metadata(id: AttachedBlobID): AttachedDataMetadata =
+    override fun getMetadata(id: AttachedBlobID): AttachedDataMetadata =
         read(id.untyped(), AttachedDataKind.Blob)
 
-    override fun metadata(id: AttachedStringID): AttachedDataMetadata =
+    override fun getMetadata(id: AttachedStringID): AttachedDataMetadata =
         read(id.untyped(), AttachedDataKind.String)
 
     /** Mirrors `ReaderWithAuth.finishRead`: a reader smuggled out of its block must not keep reading. */
@@ -57,17 +57,17 @@ internal class UnauthorizedAttachedDataReader<C : KlerkContext, V>(
     private val klerk: Klerk<C, V>,
 ) : AttachedDataReader {
 
-    override fun metadata(id: AttachedDataID): AttachedDataMetadata = read(id, expected = null)
+    override fun getMetadata(id: AttachedDataID): AttachedDataMetadata = read(id, expected = null)
 
-    override fun metadataOrNull(id: AttachedDataID): AttachedDataMetadata? = try {
+    override fun getMetadataOrNull(id: AttachedDataID): AttachedDataMetadata? = try {
         read(id, expected = null)
     } catch (e: NoSuchElementException) {
         null
     }
 
-    override fun metadata(id: AttachedBlobID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.Blob)
+    override fun getMetadata(id: AttachedBlobID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.Blob)
 
-    override fun metadata(id: AttachedStringID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.String)
+    override fun getMetadata(id: AttachedStringID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.String)
 
     private fun read(id: AttachedDataID, expected: AttachedDataKind?): AttachedDataMetadata =
         klerk.impl().attachedDataImpl.metadataWithLockHeldWithoutAuth(id, expected)

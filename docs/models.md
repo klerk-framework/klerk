@@ -30,7 +30,7 @@ this yourself:
 data class Model<T : Any>(
     val id: ModelID<T>,
     val createdAt: Instant,
-    val lastPropsUpdateAt: Instant,
+    val lastPropsUpdatedAt: Instant,
     val lastStateTransitionAt: Instant,
     val state: String,
     val timeTrigger: Instant?,

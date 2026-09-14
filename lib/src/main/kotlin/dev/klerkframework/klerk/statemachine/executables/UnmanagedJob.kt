@@ -9,12 +9,12 @@ import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.statemachine.VoidEventExecutable
 
 internal class VoidEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
-    val action: (args: ArgForVoidEvent<T, P, C, V>) -> Unit,
-    override val onCondition: ((args: ArgForVoidEvent<T, P, C, V>) -> Boolean)?
+    val action: (args: VoidEventArgs<T, P, C, V>) -> Unit,
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
 ) : VoidEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForVoidEvent<T, P, C, V>,
+        args: VoidEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -57,12 +57,12 @@ internal class InstanceLifecycleUnmanagedJob<T : Any, C : KlerkContext, V>(
 }
 
 internal class InstanceEventUnmanagedJob<T : Any, P, C : KlerkContext, V>(
-    val action: (args: ArgForInstanceEvent<T, P, C, V>) -> Unit,
-    override val onCondition: ((args: ArgForInstanceEvent<T, P, C, V>) -> Boolean)?
+    val action: (args: InstanceEventArgs<T, P, C, V>) -> Unit,
+    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
 ) : InstanceEventExecutable<T, P, C, V> {
 
     override fun <Primary : Any> process(
-        args: ArgForInstanceEvent<T, P, C, V>,
+        args: InstanceEventArgs<T, P, C, V>,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
