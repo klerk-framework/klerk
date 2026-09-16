@@ -19,7 +19,7 @@ internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
         val model = args.model
         val other = ModelCache.referencingIds(model.id)
         if (other.isNotEmpty()) {
-            val currentReferencesToModel = other.filter { !processingDataSoFar.deletedModels.contains(it) }
+            val currentReferencesToModel = other.filter { it !in processingDataSoFar.deletedModels }
             if (currentReferencesToModel.isNotEmpty()) {
                 return ProcessingData(
                     problems = listOf(

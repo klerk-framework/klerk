@@ -58,18 +58,9 @@ internal class KlerkImpl<C : KlerkContext, V>(
     }
 
 
-    private fun modelViewProvider(modelType: String): ModelViews<*, C> {
-        return specification.managedModels.find { it.kClass.simpleName == modelType }?.views
-            ?: throw RuntimeException("Can't find model view for type '$modelType'")
-    }
-
-    /*
-        intellij gillar inte denna. Men den används inte?
-        private inline fun <reified T : Any> getStateMachine(): StateMachine<*, *, V> {
-            return specification.managedModels.find { it.kClass == T::class }!!.stateMachine
-        }
-
-     */
+    private fun modelViewProvider(modelType: String): ModelViews<*, C> =
+        specification.managedModels.find { it.kClass.simpleName == modelType }?.views
+            ?: error("Can't find model view for type '$modelType'")
 
 
 

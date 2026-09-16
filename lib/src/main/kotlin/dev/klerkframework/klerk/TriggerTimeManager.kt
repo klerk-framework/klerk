@@ -32,22 +32,19 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
 
     override fun init(models: List<Model<out Any>>) {
         require(worker == null)
-        val modelsWithTriggers = models.filter { it.timeTrigger != null }
-        timeTriggers = PriorityBlockingQueue<TimeTriggerModel>(max(modelsWithTriggers.size, 1000))
-        for (modelsWithTrigger in modelsWithTriggers) {
-            timeTriggers.add(TimeTriggerModel(modelsWithTrigger.timeTrigger!!, modelsWithTrigger.id.value))
-        }
+        val triggers = models.mapNotNull { it.toTimeTriggerModel() }
+        timeTriggers = PriorityBlockingQueue<TimeTriggerModel>(max(triggers.size, 1000))
+        timeTriggers.addAll(triggers)
     }
 
     fun handle(delta: ProcessingData<out Any, C, V>) {
         val deleted = delta.deletedModels.map { it.value }
-        timeTriggers.removeIf { deleted.contains(it.id) }
+        timeTriggers.removeIf { it.id in deleted }
 
         val newTriggers = delta.createdModels
             .union(delta.transitions)
             .map { requireNotNull(delta.aggregatedModelState[it]) }
-            .filter { it.timeTrigger != null }
-            .map { TimeTriggerModel(it.timeTrigger!!, it.id.value) }
+            .mapNotNull { it.toTimeTriggerModel() }
         timeTriggers.addAll(newTriggers)
     }
 
@@ -108,3 +105,5 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
 private data class TimeTriggerModel(val instant: Instant, val id: Int) : Comparable<TimeTriggerModel> {
     override fun compareTo(other: TimeTriggerModel): Int = instant.compareTo(other.instant)
 }
+
+private fun Model<out Any>.toTimeTriggerModel(): TimeTriggerModel? = timeTrigger?.let { TimeTriggerModel(it, id.value) }

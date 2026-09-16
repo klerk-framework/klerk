@@ -90,7 +90,7 @@ internal fun <C : KlerkContext, V> Specification<C, V>.validate(settings: KlerkS
     blobContainersMustDeclareAPreAttachStep()
     stringsMustBeDeclaredInAContainer()
     for (plugin in plugins) {
-        require(!plugin.name.contains(" ")) { "Plugin name cannot contain space: ${plugin.name}" }
+        require(" " !in plugin.name) { "Plugin name cannot contain space: ${plugin.name}" }
     }
 }
 
@@ -374,7 +374,7 @@ private fun <C : KlerkContext, V> Specification<C, V>.allEventsMustBeDeclared() 
             }
         }
             .forEach {
-                if (!sm.declaredEvents.contains(it)) {
+                if (it !in sm.declaredEvents) {
                     throw IllegalConfigurationException(
                         KlerkErrorCode.EventNotDeclared,
                         "The event '${it.id}' must be declared before used in state",

@@ -47,7 +47,7 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
         val enterBlock = sm.states.single { it.name == initialState.name }.enterBlock
         return ProcessingData(
             createdModels = listOf(created.id),
-            unFinalizedTransition = Triple(initialState.name, time, created),
+            unFinalizedTransition = UnfinalizedTransition(initialState.name, time, created),
             aggregatedModelState = mapOf(created.id to created),
             currentModel = created.id,
             remainingBlocks = listOf(voidExitBlock, enterBlock),

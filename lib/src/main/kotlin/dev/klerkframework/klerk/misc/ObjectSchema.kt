@@ -108,7 +108,7 @@ public class ObjectSchema<T : Any> private constructor(
         val missing = fields.filter { it.isRequired && it.name !in values }
         require(missing.isEmpty()) { "${missing.joinToString(", ") { it.name }} is missing" }
         for ((name, value) in values) {
-            field(name)!!.schemaType.requireAccepts(value, name)
+            requireNotNull(field(name)).schemaType.requireAccepts(value, name)
         }
         return callConstructor(fields.filter { it.name in values }.associate { it.parameter to values[it.name] })
     }

@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.microseconds
  */
 internal object KlerkJson {
 
-    fun encode(value: Any?): String = if (value == null) JsonNull.toString() else encodeToElement(value).toString()
+    fun encode(value: Any?): String = value?.let { encodeToElement(it).toString() } ?: JsonNull.toString()
 
     fun encodeToElement(value: Any): JsonObject = encodeObject(ObjectSchema.of(value::class), value)
 

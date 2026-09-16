@@ -39,7 +39,7 @@ public open class ModelViews<T : Any, C : KlerkContext> {
         isFrozen = true
     }
 
-    internal fun containsId(id: Int): Boolean = allIds.contains(id)
+    internal fun containsId(id: Int): Boolean = id in allIds
 
     internal fun allIdSet(): Set<Int> = allIds
 

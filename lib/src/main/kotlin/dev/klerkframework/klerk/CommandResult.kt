@@ -17,31 +17,28 @@ public sealed class CommandResult<T : Any> {
      * @throws Exception the first [Problem]'s [Problem.asException] (e.g. [AuthorizationException],
      * [IllegalStateException], [IllegalArgumentException]) if this is a [Failure].
      */
-    public fun getOrThrow(): Success<T> {
-        return when (this) {
-            is Failure -> throw this.problems.firstOrNull()?.asException() ?: RuntimeException("Unknown problem")
+    public fun getOrThrow(): Success<T> =
+        when (this) {
+            is Failure -> throw this.problems.firstOrNull()?.asException() ?: IllegalStateException("Unknown problem")
             is Success -> this
         }
-    }
 
     /**
      * Returns this as [Success], or calls [onFailure] otherwise. [onFailure] typically leaves the enclosing function
      * with `return` or `throw`; to turn either outcome into another value, use [fold].
      */
-    public inline fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> {
-        return when (this) {
+    public inline fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> =
+        when (this) {
             is Failure -> onFailure(this)
             is Success -> this
         }
-    }
 
     /** Returns the result of [onSuccess] or [onFailure], depending on the outcome. */
-    public inline fun <R> fold(onSuccess: (Success<T>) -> R, onFailure: (Failure<T>) -> R): R {
-        return when (this) {
+    public inline fun <R> fold(onSuccess: (Success<T>) -> R, onFailure: (Failure<T>) -> R): R =
+        when (this) {
             is Failure -> onFailure(this)
             is Success -> onSuccess(this)
         }
-    }
 
     /**
      * The result of a successfully processed command.

@@ -87,7 +87,7 @@ public enum class MajorSource() {
 }
 
 /** Where a [LogEntry] came from: a [major] category plus an optional free-text [minor] detail (e.g. a plugin name). */
-public class LogSource(public val major: MajorSource, public val minor: String? = null) {
+public data class LogSource(public val major: MajorSource, public val minor: String? = null) {
     override fun toString(): String = "${major.name}: $minor"
 }
 

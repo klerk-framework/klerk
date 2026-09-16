@@ -729,7 +729,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         for (modelId in affected) {
             val before = ModelCache.getOrNull(ModelID<Any>(modelId.value))
                 ?.let { collectAttachedData(it.props) } ?: emptyMap()
-            val after = if (delta.deletedModels.contains(modelId)) emptyMap() else
+            val after = if (modelId in delta.deletedModels) emptyMap() else
                 delta.aggregatedModelState[modelId]?.let { collectAttachedData(it.props) } ?: emptyMap()
 
             claim(after.minus(before.keys).values, modelId, claimed, now, problems)

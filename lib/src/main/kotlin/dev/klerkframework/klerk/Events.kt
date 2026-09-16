@@ -9,10 +9,10 @@ import kotlin.reflect.full.allSupertypes
  */
 public data class EventReference(val modelName: String, val eventName: String) {
     init {
-        require(!modelName.contains("/"))
-        require(!eventName.contains("/"))
-        require(!modelName.contains(":"))
-        require(!eventName.contains(":"))
+        require("/" !in modelName)
+        require("/" !in eventName)
+        require(":" !in modelName)
+        require(":" !in eventName)
     }
 
     override fun toString(): String = "$modelName:$eventName"

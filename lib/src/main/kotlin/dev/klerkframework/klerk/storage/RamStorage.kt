@@ -104,10 +104,7 @@ public open class RamStorage : Persistence {
     override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?) {
         for (entry in readEventLog(modelId).toList()) {
             eventLog.remove(entry)
-            val new = transformer(entry)
-            if (new != null) {
-                eventLog.add(new)
-            }
+            transformer(entry)?.let { eventLog.add(it) }
         }
     }
 

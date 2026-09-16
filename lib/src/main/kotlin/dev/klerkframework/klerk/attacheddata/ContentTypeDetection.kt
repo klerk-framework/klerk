@@ -137,7 +137,7 @@ private fun detectText(head: ByteArray): String? {
     }
     val start = text.trimStart().take(200).lowercase()
     return when {
-        start.startsWith("<?xml") && start.contains("<svg") -> "image/svg+xml"
+        start.startsWith("<?xml") && "<svg" in start -> "image/svg+xml"
         start.startsWith("<svg") -> "image/svg+xml"
         start.startsWith("<!doctype html") || start.startsWith("<html") -> "text/html"
         else -> "text/plain"

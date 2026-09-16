@@ -143,14 +143,12 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
     /** Checks every [EnumContainer] in [parameters], also in collections and nested objects, against `validEnums`. */
     private fun validateEnums(eventReference: EventReference, parameters: Any?): Problem? {
-        if (parameters == null) {
-            return null
-        }
+        parameters ?: return null
         val validEnums = klerk.specification.validEnumsOf(eventReference)
         for (leaf in ObjectSchema.of(parameters::class).leaves(parameters)) {
             val container = leaf.value as? EnumContainer<*> ?: continue
             val validValues = validEnums[leaf.field.key] ?: continue
-            if (!validValues.contains(container.value)) {
+            if (container.value !in validValues) {
                 return InvalidPropertyProblem(
                     "'${container.value}' is not a valid value for parameter ${leaf.path}",
                     propertyName = leaf.path,
@@ -165,9 +163,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
      * in a property without a declaration is rejected.
      */
     private fun validateReferences(eventReference: EventReference, parameters: Any?, context: C): Problem? {
-        if (parameters == null) {
-            return null
-        }
+        parameters ?: return null
         val validReferences = klerk.specification.validReferencesOf(eventReference)
         val reader = ReaderWithoutAuth<C, V>(klerk)
         for (leaf in ObjectSchema.of(parameters::class).leaves(parameters)) {
@@ -190,11 +186,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     }
 
     /** Validates every [DataContainer] in [instance], also in collections and nested objects. */
-    fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> {
-        return ObjectSchema.of(instance::class).leaves(instance)
+    fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> =
+        ObjectSchema.of(instance::class).leaves(instance)
             .mapNotNull { leaf -> (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation) }
             .toSet()
-    }
 
     fun <P> validateCommand(
         currentCommand: Command<out Any, P>,
@@ -206,19 +201,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 return listOf(NotFoundProblem("The model with id=$it could not be found"))
             }
         }
-        val stateProblem = isEventPossibleGivenModelState(currentCommand, reader)
-        if (stateProblem != null) return listOf(stateProblem)
+        isEventPossibleGivenModelState(currentCommand, reader)?.let { return listOf(it) }
         val eventValidationProblems = validateEvent(currentCommand, context, reader)
         if (eventValidationProblems.isNotEmpty()) return eventValidationProblems
-        val authorizationProblem = checkAuthorization(
-            currentCommand,
-            reader,
-            context,
-        )
-        if (authorizationProblem != null) {
-            return listOf(authorizationProblem)
-        }
-        return emptyList()
+        return listOfNotNull(checkAuthorization(currentCommand, reader, context))
     }
 
     private fun <T : Any, P> checkAuthorization(

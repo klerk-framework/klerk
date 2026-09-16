@@ -383,8 +383,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     // ------------------------------------------------------------------ running one step
 
     private suspend fun runStep(record: JobRecord) {
-        val type = jobSpec.allTypes[record.name]
-        if (type == null) {
+        val type = jobSpec.allTypes[record.name] ?: run {
             // Only reachable if the registry changed after startup, which it cannot; treated as a bug, not a job error.
             logger.error { "Job ${record.id} has the unregistered name '${record.name}'" }
             releaseWithoutCommit(record.id)
@@ -1196,12 +1195,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun runUntilIdle(maxSteps: Int): Int {
         requireManual()
-        var steps = 0
-        while (steps < maxSteps) {
-            if (!step()) {
-                return steps
-            }
-            steps++
+        repeat(maxSteps) { steps ->
+            if (!step()) return steps
         }
         throw IllegalStateException(
             "runUntilIdle ran $maxSteps steps without the queue going idle. Either raise maxSteps, or a job is " +

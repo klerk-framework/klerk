@@ -127,10 +127,7 @@ public class QueryListCursor internal constructor(
             }
             val offset = fields["o"]?.toIntOrNull()
             require(offset != null && offset >= 0) { "Not a cursor: '$s'" }
-            val anchorField = fields["a"]
-            val anchor = if (anchorField == null) null else {
-                requireNotNull(anchorField.toIntOrNull()) { "Not a cursor: '$s'" }
-            }
+            val anchor = fields["a"]?.let { requireNotNull(it.toIntOrNull()) { "Not a cursor: '$s'" } }
             return QueryListCursor(offset, anchor)
         }
 

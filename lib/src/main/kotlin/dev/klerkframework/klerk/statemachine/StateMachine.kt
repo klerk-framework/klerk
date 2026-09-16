@@ -173,7 +173,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
                 "The state machine for ${type.simpleName} does not declare a voidState",
             )
         }
-        val missing = (modelStatesClass?.enumConstants ?: emptyArray()).filterNot { declaredModelStates.contains(it) }
+        val missing = (modelStatesClass?.enumConstants ?: emptyArray()).filterNot { it in declaredModelStates }
         if (missing.isNotEmpty()) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.InvalidStateMachine,

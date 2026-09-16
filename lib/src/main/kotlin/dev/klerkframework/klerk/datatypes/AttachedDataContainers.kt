@@ -74,7 +74,7 @@ public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
         }
         val detected = metadata.contentType
             ?: return if (acceptUnrecognised) null else "its type could not be recognised, and ${describeAccepted()}"
-        return if (accept.contains(detected)) null else "it is $detected, and ${describeAccepted()}"
+        return if (detected in accept) null else "it is $detected, and ${describeAccepted()}"
     }
 
     private fun describeAccepted(): String = "only ${accept.sorted().joinToString(", ")} is allowed"

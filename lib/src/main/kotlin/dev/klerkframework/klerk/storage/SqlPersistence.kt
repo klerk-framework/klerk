@@ -163,11 +163,10 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun readModel(id: Int): Model<out Any>? {
-        return transaction(database) {
+    override fun readModel(id: Int): Model<out Any>? =
+        transaction(database) {
             ModelsTable.selectAll().where { ModelsTable.id eq id }.singleOrNull()?.let { toModel(it) }
         }
-    }
 
     private fun toModel(row: ResultRow): Model<out Any> {
         val modelId = row[ModelsTable.id]
@@ -469,7 +468,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         if (custom.isEmpty()) null else Json.encodeToString(stringMapSerializer, custom)
 
     private fun decodeCustomMetadata(json: String?): Map<String, String> =
-        if (json == null) emptyMap() else Json.decodeFromString(stringMapSerializer, json)
+        json?.let { Json.decodeFromString(stringMapSerializer, it) } ?: emptyMap()
 
     override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
         val cutoff = now.to64bitMicroseconds()

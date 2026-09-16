@@ -44,11 +44,11 @@ internal class CronExpression private constructor(
                 candidate = candidate.plusDays(1).withHour(0).withMinute(0)
                 continue
             }
-            if (!hours.contains(candidate.hour)) {
+            if (candidate.hour !in hours) {
                 candidate = candidate.plusHours(1).withMinute(0)
                 continue
             }
-            if (!minutes.contains(candidate.minute)) {
+            if (candidate.minute !in minutes) {
                 candidate = candidate.plusMinutes(1)
                 continue
             }
@@ -75,13 +75,13 @@ internal class CronExpression private constructor(
         return result
     }
 
-    private fun matchesMonth(t: LocalDateTime): Boolean = months.contains(t.monthValue)
+    private fun matchesMonth(t: LocalDateTime): Boolean = t.monthValue in months
 
     private fun matchesDay(t: LocalDateTime): Boolean {
         // java.time's DayOfWeek is 1 = Monday .. 7 = Sunday; cron's is 0 = Sunday .. 6 = Saturday.
         val cronDayOfWeek = t.dayOfWeek.value % 7
-        val byDayOfMonth = daysOfMonth.contains(t.dayOfMonth)
-        val byDayOfWeek = daysOfWeek.contains(cronDayOfWeek)
+        val byDayOfMonth = t.dayOfMonth in daysOfMonth
+        val byDayOfWeek = cronDayOfWeek in daysOfWeek
         return when {
             dayOfMonthRestricted && dayOfWeekRestricted -> byDayOfMonth || byDayOfWeek
             dayOfMonthRestricted -> byDayOfMonth
@@ -127,7 +127,7 @@ internal class CronExpression private constructor(
 
         private fun parseTerm(term: String, min: Int, max: Int, expression: String, name: String): List<Int> {
             val (rangePart, step) = when {
-                term.contains("/") -> {
+                "/" in term -> {
                     val parts = term.split("/")
                     require(parts.size == 2) { "Invalid $name term '$term' in the cron expression '$expression'" }
                     val stepValue = parts[1].toIntOrNull()
@@ -143,7 +143,7 @@ internal class CronExpression private constructor(
 
             val range = when {
                 rangePart == "*" -> min..max
-                rangePart.contains("-") -> {
+                "-" in rangePart -> {
                     val bounds = rangePart.split("-")
                     require(bounds.size == 2) {
                         "Invalid $name range '$rangePart' in the cron expression '$expression'"

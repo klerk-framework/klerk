@@ -30,7 +30,7 @@ class ProcessingFactTest {
 
         val withTransition = ProcessingData<Author, Ctx, Views>(
             currentModel = authorId,
-            unFinalizedTransition = Triple("second", transitionTime, authorModel),
+            unFinalizedTransition = UnfinalizedTransition("second", transitionTime, authorModel),
         )
 
         val withUpdate = ProcessingData<Author, Ctx, Views>(

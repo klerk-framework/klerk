@@ -12,7 +12,7 @@ internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
 ): StateMachine<T, *, C, V> {
     val stateMachine =
         managedModels.find { it.stateMachine.knowsAboutEvent(command.event.id) }?.stateMachine
-            ?: throw RuntimeException("Can't find state machine for event '${command.event}'")
+            ?: error("Can't find state machine for event '${command.event}'")
     @Suppress("UNCHECKED_CAST")
     return stateMachine as StateMachine<T, *, C, V>
 }

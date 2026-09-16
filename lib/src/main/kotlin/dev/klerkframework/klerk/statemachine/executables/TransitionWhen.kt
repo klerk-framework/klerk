@@ -51,7 +51,11 @@ internal fun <Primary : Any, T : Any, C : KlerkContext, V> transition(
 
     return ProcessingData(
         transitions = listOf(updatedModel.id),
-        unFinalizedTransition = Triple(updatedModel.state, updatedModel.lastStateTransitionAt, updatedModel),
+        unFinalizedTransition = UnfinalizedTransition(
+            updatedModel.state,
+            updatedModel.lastStateTransitionAt,
+            updatedModel,
+        ),
         remainingBlocks = listOf(exitBlock, enterBlock),
         functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
         log = listOf("Transition from ${model.state} -> ${updatedModel.state}"),

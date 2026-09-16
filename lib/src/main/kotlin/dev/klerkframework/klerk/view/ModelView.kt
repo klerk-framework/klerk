@@ -73,7 +73,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     internal open fun matches(model: Model<T>): Boolean = true
 
     /** Whether this view contains [id], answered from the index. Only valid once [ensureIndex] has run. */
-    internal open fun containsId(id: Int): Boolean = index?.contains(id) ?: false
+    internal open fun containsId(id: Int): Boolean = index?.contains(id) == true
 
     /**
      * Builds this view's index if it has one and it has not been built, parents first. Returns null for a view that
@@ -112,7 +112,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      */
     protected fun <V> indexedMemberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>>? {
         val members = ensureIndex(reader) ?: return null
-        return requireNotNull(parent).memberIds(reader).filter { members.contains(it.value) }
+        return requireNotNull(parent).memberIds(reader).filter { it.value in members }
     }
 
     /** Drops this view's index, and every derived view's, so that they are rebuilt against freshly loaded models. */
@@ -124,7 +124,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     }
 
     internal open fun onModelCreated(model: Model<T>) {
-        index?.let { if (parent!!.containsId(model.id.value) && matches(model)) it.add(model.id.value) }
+        index?.let { if (requireNotNull(parent).containsId(model.id.value) && matches(model)) it.add(model.id.value) }
         for (child in children) {
             child.onModelCreated(model)
         }
@@ -133,7 +133,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     internal open fun onModelUpdated(before: Model<T>, after: Model<T>) {
         index?.let {
             val id = after.id.value
-            if (parent!!.containsId(id) && matches(after)) it.add(id) else it.remove(id)
+            if (requireNotNull(parent).containsId(id) && matches(after)) it.add(id) else it.remove(id)
         }
         for (child in children) {
             child.onModelUpdated(before, after)
@@ -200,13 +200,13 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      */
     public open val id: ViewID
         get() {
-            check(idBase != null && _id != null) { "This view was never registered" }
-            return ViewID(idBase!!, _id!!)
+            val base = checkNotNull(idBase) { "This view was never registered" }
+            return ViewID(base, checkNotNull(_id) { "This view was never registered" })
         }
 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open val modelViews: ModelViews<T, C>
-        get() = parent?.modelViews ?: throw IllegalStateException("This view has no ModelViews")
+        get() = parent?.modelViews ?: error("This view has no ModelViews")
     /** Answered from the index when there is one, so no model is read. Override it when the view can do better. */
     protected open fun <V> count(reader: ModelReader<C, V>): Int =
         ensureIndex(reader)?.size ?: memberIds(reader).count()
@@ -218,7 +218,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * asked once per `validReferences` check, i.e. on the command path.
      */
     protected open fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean {
-        ensureIndex(reader)?.let { return it.contains(value.value) }
+        ensureIndex(reader)?.let { return value.value in it }
         return memberIds(reader).any { it.value == value.value }
     }
 
@@ -230,7 +230,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * @throws IllegalArgumentException if [id] contains `.` or a space
      */
     public fun register(id: String): ModelView<T, C> {
-        require(!id.contains(".") && !id.contains(" ")) { "Illegal view id: $id" }
+        require("." !in id && " " !in id) { "Illegal view id: $id" }
         this._id = id
         modelViews.register(this)
         return this
@@ -293,8 +293,8 @@ internal class IncludeStatesModelView<T : Any, C : KlerkContext>(
     override val filteredStates: Set<Enum<*>> get() = (included ?: emptySet()) + (excluded ?: emptySet())
 
     override fun matches(model: Model<T>): Boolean =
-        (includedNames == null || includedNames.contains(model.state)) &&
-                (excludedNames == null || !excludedNames.contains(model.state))
+        (includedNames == null || model.state in includedNames) &&
+                (excludedNames == null || model.state !in excludedNames)
 
     override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
         indexedMemberIds(reader)

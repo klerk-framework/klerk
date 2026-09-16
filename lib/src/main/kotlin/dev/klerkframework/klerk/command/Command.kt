@@ -129,24 +129,16 @@ public class CommandToken private constructor(
          * @throws IllegalArgumentException if [string] is not a validly encoded token.
          */
         public fun parse(string: String): CommandToken {
-            var time: Instant? = null
-            var models: Set<ModelID<Any>>? = null
-            string.decodeBase64String()
-                .split(":")
-                .forEach { keyValueString ->
-                    val keyValueList = keyValueString.split("=")
-                    require(keyValueList.size == 2)
-                    val key = keyValueList.first()
-                    val value = keyValueList.last()
-                    if (key == "t") {
-                        time = decode64bitMicroseconds(value.toLong())
-                    }
-                    if (key == "m") {
-                        models = if (value.isEmpty()) emptySet() else
-                            value.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
-                    }
-                }
-            return CommandToken(requireNotNull(time), requireNotNull(models))
+            val fields = string.decodeBase64String().split(":").associate { field ->
+                val keyValue = field.split("=")
+                require(keyValue.size == 2)
+                keyValue.first() to keyValue.last()
+            }
+            val time = decode64bitMicroseconds(requireNotNull(fields["t"]).toLong())
+            val models = requireNotNull(fields["m"]).let { value ->
+                if (value.isEmpty()) emptySet() else value.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
+            }
+            return CommandToken(time, models)
         }
 
         /** The token in [string], or null if it is not one. */

@@ -36,8 +36,8 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 
     internal fun executeWithLogs(params: P): Pair<R, String> = executeNode(startNode, params, "")
 
-    private fun executeNode(node: Node<P, R>, params: P, logs: String): Pair<R, String> {
-        return when (val execution = node.execute(params)) {
+    private fun executeNode(node: Node<P, R>, params: P, logs: String): Pair<R, String> =
+        when (val execution = node.execute(params)) {
             is NodeExecutionResult.Next -> {
                 val newLogs = logs.plus("${node.id}=${execution.functionResult} -> ")
                 val next = nodes.single { it.id == execution.decision.toString() }
@@ -47,10 +47,9 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
             is NodeExecutionResult.Termination -> {
                 val newLogs =
                     logs.plus("${node.id}=${execution.functionResult} -> Result: ${execution.terminationResult}")
-                Pair(execution.terminationResult, newLogs)
+                execution.terminationResult to newLogs
             }
         }
-    }
 
 }
 
@@ -91,7 +90,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
     internal fun build(): Pair<Set<Node<P, R>>, Node<P, R>> {
         val start = requireNotNull(startNodeId) { "Start node must be defined" }
         val startNode = nodes.single { it.id == start.toString() }
-        return Pair(nodes, startNode)
+        return nodes to startNode
     }
 
 }
@@ -118,10 +117,7 @@ public sealed class Node<P, R> {
     ) : Node<P, R>() {
         override fun execute(params: P): NodeExecutionResult<P, R> {
             val functionResult = decision.function.invoke(params)
-            val finishResult = terminations[functionResult]
-            if (finishResult != null) {
-                return NodeExecutionResult.Termination(finishResult, functionResult.toString())
-            }
+            terminations[functionResult]?.let { return NodeExecutionResult.Termination(it, functionResult.toString()) }
             return NodeExecutionResult.Next(requireNotNull(goTos[functionResult]), functionResult.toString())
         }
 
@@ -137,10 +133,7 @@ public sealed class Node<P, R> {
     ) : Node<P, R>() {
         override fun execute(params: P): NodeExecutionResult<P, R> {
             val functionResult = decision.function.invoke(params)
-            val finishResult = terminations[functionResult]
-            if (finishResult != null) {
-                return NodeExecutionResult.Termination(finishResult, functionResult.toString())
-            }
+            terminations[functionResult]?.let { return NodeExecutionResult.Termination(it, functionResult.toString()) }
             return NodeExecutionResult.Next(requireNotNull(goTos[functionResult]), functionResult.toString())
         }
 
@@ -190,15 +183,11 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
      * @throws IllegalArgumentException if both [next] and [terminateWith] are null
      */
     public fun on(option: Boolean, next: Decision<out Any, P>? = null, terminateWith: R? = null) {
-        if (next != null) {
-            goTos[option] = next
-            return
+        when {
+            next != null -> goTos[option] = next
+            terminateWith != null -> terminations[option] = terminateWith
+            else -> throw IllegalArgumentException("Must declare either goTo or finish")
         }
-        if (terminateWith != null) {
-            this.terminations[option] = terminateWith
-            return
-        }
-        throw IllegalArgumentException("Must declare either goTo or finish")
     }
 
     internal fun build(decision: D): Node<P, R> = Node.BooleanNode(decision, goTos, terminations)
@@ -217,15 +206,11 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
      * @throws IllegalArgumentException if both [next] and [terminateWith] are null
      */
     public fun on(option: E, next: Decision<out Any, P>? = null, terminateWith: R? = null) {
-        if (next != null) {
-            goTos[option] = next
-            return
+        when {
+            next != null -> goTos[option] = next
+            terminateWith != null -> terminations[option] = terminateWith
+            else -> throw IllegalArgumentException("Must declare either goTo or finish")
         }
-        if (terminateWith != null) {
-            this.terminations[option] = terminateWith
-            return
-        }
-        throw IllegalArgumentException("Must declare either goTo or finish")
     }
 
     internal fun build(decision: D): Node<P, R> = Node.EnumNode(decision, goTos, terminations)

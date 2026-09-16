@@ -59,8 +59,8 @@ public sealed interface PropertyCollectionValidity : Validity {
         public fun toProblem(rule: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
             InvalidPropertyCollectionProblem(
                 endUserTranslatedMessage = message(rule, translation),
-                fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
-                fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull),
+                fieldsMustBeNull = setOfNotNull(fieldMustBeNull),
+                fieldsMustNotBeNull = setOfNotNull(fieldMustNotBeNull),
             )
     }
 }

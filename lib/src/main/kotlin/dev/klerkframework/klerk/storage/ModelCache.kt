@@ -135,7 +135,7 @@ internal object ModelCache {
      * exist — the id set is checked first, so a miss never turns into a pointless storage lookup.
      */
     private fun getBody(id: Int): Model<out Any>? {
-        if (!ids.contains(id)) {
+        if (id !in ids) {
             return null
         }
         // Answered before consulting storage: a model the commit in flight touches may already be written there, so
@@ -223,22 +223,18 @@ internal object ModelCache {
         return relations.map { ModelID<Any>(it) }.toSet()
     }
 
-    internal fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
-        return referencingIds(id).map {
-            val model = getBody(it.value) ?: return@map null
-            if (model.props::class == clazz) {
-                @Suppress("UNCHECKED_CAST")
-                return@map model.copy() as Model<T>
-            }
-            return@map null
-        }.filterNotNull().toSet()
-    }
+    @Suppress("UNCHECKED_CAST")
+    internal fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
+        referencingIds(id).mapNotNull {
+            val model = getBody(it.value)
+            if (model != null && model.props::class == clazz) model.copy() as Model<T> else null
+        }.toSet()
 
     internal fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
     ): Set<Model<T>> {
-        if (!ids.contains(id.value)) throw NoSuchElementException("Could not find model with id $id")
+        if (id.value !in ids) throw NoSuchElementException("Could not find model with id $id")
         return relatedThrough(PropertyKey.of(property), id)
     }
 
@@ -270,7 +266,7 @@ internal object ModelCache {
 
         // we don't have to do this for new models. Note that this asks the id set rather than the body cache, so an
         // evicted model still counts as existing.
-        if (klerkHasStarted && ids.contains(fromId)) {
+        if (klerkHasStarted && fromId in ids) {
             // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations
             // for this model
             for ((_, relationSet) in relationsMap) {
@@ -284,17 +280,12 @@ internal object ModelCache {
     }
 
     private fun createReference(fromId: Int, toId: Int, relationsMap: MutableMap<Int, MutableSet<Int>>) {
-        var relationSet = relationsMap[toId]
-        if (relationSet == null) {
-            relationSet = mutableSetOf()
-        }
-        relationSet.add(fromId)
-        relationsMap[toId] = relationSet
+        relationsMap.getOrPut(toId) { mutableSetOf() }.add(fromId)
     }
 
     fun isEmpty(): Boolean = ids.isEmpty()
 
-    fun isIdAvailable(uInt: Int): Boolean = !ids.contains(uInt)
+    fun isIdAvailable(uInt: Int): Boolean = uInt !in ids
 
     fun clear() {
         ids.clear()

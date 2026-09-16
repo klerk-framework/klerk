@@ -10,7 +10,7 @@ import kotlin.reflect.KFunction
  */
 internal fun validatorName(function: Function<*>): String {
     val name = functionName(function) ?: return extractNameFromFunctionString(function.toString())
-    return if (name.contains(' ')) name else camelCaseToPretty(name)
+    return if (' ' in name) name else camelCaseToPretty(name)
 }
 
 internal fun extractNameFromFunctionString(funString: String): String {

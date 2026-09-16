@@ -30,7 +30,7 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     val updatedModels: List<ModelID<out Any>> = emptyList(),
     val transitions: List<ModelID<out Any>> = emptyList(),
     val deletedModels: List<ModelID<out Any>> = emptyList(),
-    val unFinalizedTransition: Triple<String, Instant, Model<out Any>>? = null,
+    val unFinalizedTransition: UnfinalizedTransition? = null,
     val aggregatedModelState: Map<ModelID<out Any>, Model<out Any>> = emptyMap(),
     val newJobs: List<PendingJob<C, V>> = emptyList(),
     val remainingBlocks: List<Block<*, *, C, V>> = emptyList(),
@@ -84,7 +84,7 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     internal data class CalculatedStuff(
         val modified: Map<ModelID<out Any>, Model<out Any>>,
         val transitions: List<ModelID<out Any>>,
-        val toFinalize: Triple<String, Instant, Model<out Any>>?,
+        val toFinalize: UnfinalizedTransition?,
     )
 
     /**
@@ -97,16 +97,9 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
         subsequent: ProcessingData<Primary, C, V>,
         finalizeTransition: Boolean,
     ): CalculatedStuff {
-        val modified = mutableMapOf<ModelID<out Any>, Model<out Any>>()
-        modified.putAll(aggregatedModelState)
-
-        val newTransitions = mutableListOf<ModelID<out Any>>()
-        newTransitions.addAll(transitions)
-
-        var toFinalize: Triple<String, Instant, Model<out Any>>? = null
-        for (model in subsequent.deletedModels) {
-            modified.remove(model)
-        }
+        val modified = aggregatedModelState.toMutableMap()
+        val newTransitions = transitions.toMutableList()
+        modified -= subsequent.deletedModels
 
         if (finalizeTransition) {
             val id = requireNotNull(currentModel ?: subsequent.currentModel)
@@ -116,7 +109,7 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
 
             // we first look in subsequent (updates in exit-block).
             val inModified =
-                subsequent.aggregatedModelState[currentModel] ?: modified[currentModel] ?: unFinalizedTransition.third
+                subsequent.aggregatedModelState[currentModel] ?: modified[currentModel] ?: unFinalizedTransition.model
 
             modified[id] = inModified.copy(
                 state = newState,
@@ -126,17 +119,16 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
             newTransitions.add(id)
         } else {
             modified.putAll(subsequent.aggregatedModelState)
-            toFinalize = subsequent.unFinalizedTransition ?: unFinalizedTransition
         }
 
+        val toFinalize = if (finalizeTransition) null else subsequent.unFinalizedTransition ?: unFinalizedTransition
         return CalculatedStuff(modified, newTransitions, toFinalize)
     }
 
     internal fun withTimeTriggersOnModels(): ProcessingData<Primary, C, V> {
-        val aggStates = mutableMapOf<ModelID<out Any>, Model<out Any>>()
-        aggStates.putAll(aggregatedModelState)
+        val aggStates = aggregatedModelState.toMutableMap()
         for ((id, instant) in timeTriggers) {
-            aggStates[id] = aggregatedModelState[id]!!.copy(timeTrigger = instant)   // force non-null. If null -> bug!
+            aggStates[id] = aggregatedModelState.getValue(id).copy(timeTrigger = instant)
         }
         return this.copy(
             aggregatedModelState = aggStates,
@@ -153,3 +145,6 @@ internal data class EventProcessingOptions(
     val idProvider: IdProvider,
     val disregardPreventingRules: Boolean,
 )
+
+/** A state change whose [time] and [state] are written to [model] once its exit blocks have run. */
+internal data class UnfinalizedTransition(val state: String, val time: Instant, val model: Model<out Any>)

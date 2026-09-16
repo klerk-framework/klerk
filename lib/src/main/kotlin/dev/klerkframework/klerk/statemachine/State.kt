@@ -17,7 +17,7 @@ public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal abstract var enterBlock: Block<T, ModelStates, C, V>
     internal abstract var exitBlock: Block<T, ModelStates, C, V>
 
-    internal fun canHandle(eventReference: EventReference): Boolean = getEvents().map { it.id }.contains(eventReference)
+    internal fun canHandle(eventReference: EventReference): Boolean = getEvents().any { it.id == eventReference }
 
     internal fun onKlerkStart(specification: Specification<C, V>) {
 
@@ -53,7 +53,7 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
         val onEventBlock =
             VoidEventBlock<T, P, ModelStates, C, V>("Event block (${event.name}) for initial state", BlockType.Event)
         onEventBlock.init()
-        _onEventBlocks.add(Pair(event, onEventBlock))
+        _onEventBlocks.add(event to onEventBlock)
     }
 
 
@@ -134,7 +134,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
             "Event block (${event.name}) for state '$name'", BlockType.Event,
         )
         onEventBlock.init()
-        _onEventBlocks.add(Pair(event, onEventBlock))
+        _onEventBlocks.add(event to onEventBlock)
     }
 
     /**
@@ -193,8 +193,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
     override fun <P> getBlock(event: Event<T, P>): InstanceEventBlock<T, P, ModelStates, C, V> =
         onEventBlocks.single { it.first == event }.second as InstanceEventBlock<T, P, ModelStates, C, V>
 
-    internal fun getBlockByEventReference(id: EventReference): InstanceEventBlock<T, *, ModelStates, C, V> {
-        return onEventBlocks.single { it.first.id == id }.second
-    }
+    internal fun getBlockByEventReference(id: EventReference): InstanceEventBlock<T, *, ModelStates, C, V> =
+        onEventBlocks.single { it.first.id == id }.second
 
 }

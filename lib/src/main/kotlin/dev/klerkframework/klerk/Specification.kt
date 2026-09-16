@@ -167,10 +167,9 @@ public data class Specification<C : KlerkContext, V>(
             .first { it.id == reference } as Event<Any, Any?>
     }
 
-    internal fun getStateMachine(eventReference: EventReference): StateMachine<out Any, out Enum<*>, C, V> {
-        return managedModels.find { it.stateMachine.type.simpleName == eventReference.modelName }?.stateMachine
-            ?: throw RuntimeException("Can't find state machine for event '$eventReference'")
-    }
+    internal fun getStateMachine(eventReference: EventReference): StateMachine<out Any, out Enum<*>, C, V> =
+        managedModels.find { it.stateMachine.type.simpleName == eventReference.modelName }?.stateMachine
+            ?: error("Can't find state machine for event '$eventReference'")
 
     internal fun <T : Any> getStateMachine(model: Model<T>): StateMachine<T, out Enum<*>, C, V> {
         val sm = managedModels.find { it.kClass == model.props::class }?.stateMachine

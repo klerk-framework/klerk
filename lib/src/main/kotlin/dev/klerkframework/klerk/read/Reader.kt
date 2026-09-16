@@ -161,38 +161,34 @@ internal sealed class ReadResult<T : Any> {
     data class Fail<T : Any>(val problem: Problem) : ReadResult<T>()
     data class Ok<T : Any>(val model: Model<T>) : ReadResult<T>()
 
-    fun getOrNull(): Model<T>? {
-        return when (this) {
+    fun getOrNull(): Model<T>? =
+        when (this) {
             is Fail -> null
             is Ok -> this.model
         }
-    }
 
-    fun getOrThrow(): Model<T> {
+    fun getOrThrow(): Model<T> =
         when (this) {
-            is Fail -> throw this.problem.asException()
-            is Ok -> return this.model
+            is Fail -> throw problem.asException()
+            is Ok -> this.model
         }
-    }
 }
 
 internal sealed class ReadListResult<T : Any> {
     data class Fail<T : Any>(val problem: Problem) : ReadListResult<T>()
     data class Ok<T : Any>(val models: List<Model<T>>) : ReadListResult<T>()
 
-    fun getOrEmpty(): List<Model<T>> {
-        return when (this) {
+    fun getOrEmpty(): List<Model<T>> =
+        when (this) {
             is Fail -> emptyList()
             is Ok -> this.models
         }
-    }
 
-    fun getOrThrow(): List<Model<T>> {
+    fun getOrThrow(): List<Model<T>> =
         when (this) {
-            is Fail -> throw this.problem.asException()
-            is Ok -> return this.models
+            is Fail -> throw problem.asException()
+            is Ok -> this.models
         }
-    }
 }
 
 

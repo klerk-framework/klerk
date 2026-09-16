@@ -69,8 +69,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             }
 
             ModelCache.storeFromPersistence(model)
-            (allLists[model.props::class.simpleName!!]
-                ?: throw NullPointerException()).add(model.id.value)  // the 'all' list-source
+            allLists.getValue(model.props::class.simpleName!!).add(model.id.value)  // the 'all' list-source
 
             val problems = klerk.validator.validateDataContainers(model.props, DefaultTranslation)
             if (problems.isNotEmpty()) {
@@ -154,14 +153,10 @@ internal class EventProcessor<C : KlerkContext, V>(
         val state = klerk.specification.getStateMachine(model).getStateByName(model.state)
         check(state is InstanceState)
         @Suppress("UNCHECKED_CAST")
-        var instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
+        val instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
             LifecycleArgs(model, context, reader),
-        )
-        if (instant == null && state.afterDuration != null) {
-            instant = time.plus(state.afterDuration!!)
-        }
-        instant = instant?.let { makeExactSerializable(instant) }
-        return model.copy(timeTrigger = instant)
+        ) ?: state.afterDuration?.let { time.plus(it) }
+        return model.copy(timeTrigger = instant?.let { makeExactSerializable(it) })
     }
 
     /**
@@ -316,7 +311,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         @Suppress("UNCHECKED_CAST")
         val model = (processingData.aggregatedModelState[modelId] ?: modelId?.let { reader.getOrNull(it) }) as? Model<T>
         val stateMachine = model?.let { klerk.specification.getStateMachine(it) }
-            ?: klerk.specification.getStateMachineForEvent(processingData.currentCommand!!.event)
+            ?: klerk.specification.getStateMachineForEvent(checkNotNull(processingData.currentCommand).event)
 
         @Suppress("UNCHECKED_CAST")
         val view = stateMachine.modelViews as ModelViews<T, C>
@@ -384,10 +379,10 @@ internal class EventProcessor<C : KlerkContext, V>(
     ): ProcessingData<Primary, C, V> {
         val newTimeTriggers =
             processingData.transitions
-                .map { processingData.aggregatedModelState[it]!! }
+                .map { processingData.aggregatedModelState.getValue(it) }
                 .map { model ->
                     @Suppress("UNCHECKED_CAST")
-                    Pair(model.id, findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader), time))
+                    model.id to findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader), time)
                 }
 
         return processingData.copy(timeTriggers = newTimeTriggers.associate { it })
@@ -398,10 +393,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     ): Instant? {
         val state = klerk.specification.getStateMachine(newModel).getStateByName(newModel.state)
         check(state is InstanceState)
-        var instant = state.atTimeFunction?.invoke(transformedArgs)
-        if (instant == null && state.afterDuration != null) {
-            instant = time.plus(state.afterDuration!!)
-        }
+        val instant = state.atTimeFunction?.invoke(transformedArgs) ?: state.afterDuration?.let { time.plus(it) }
         return instant?.let { makeExactSerializable(it) }
     }
 
