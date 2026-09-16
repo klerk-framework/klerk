@@ -1,11 +1,12 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
+import kotlinx.coroutines.runBlocking
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobManagerImpl
-import dev.klerkframework.klerk.log.KlerkLogImpl
+import dev.klerkframework.klerk.log.ActivityLogImpl
 import dev.klerkframework.klerk.log.LogCommandSucceeded
 import dev.klerkframework.klerk.log.LogKlerkStarted
 import dev.klerkframework.klerk.log.LogKlerkStopped
@@ -37,7 +38,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
     internal val eventsManager = EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
-    internal val klerkLog: KlerkLogImpl = KlerkLogImpl()
+    internal val activityLogImpl: ActivityLogImpl = ActivityLogImpl()
     internal val validator = Validator(this)
 
     init {
@@ -55,7 +56,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
         specification.managedModels.forEach { managed ->
             managed.views.initialize()
-            managed.views.getViews().forEach { it.setIdBase(managed.kClass.simpleName) }
+            managed.views.views.forEach { it.setIdBase(managed.kClass.simpleName) }
             managed.stateMachine.setView(managed.views)
         }
 
@@ -82,7 +83,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
 
     override val meta = klerkMeta
 
-    override val log = klerkLog
+    override val activityLog = activityLogImpl
 
     override val attachedData = attachedDataImpl
 
@@ -99,7 +100,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
         }
 
         if (result is CommandResult.Success<T>) {
-            log.add(LogCommandSucceeded(command, context, result))
+            activityLog.add(LogCommandSucceeded(command, context, result))
         }
 
         return result
@@ -123,7 +124,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
             if (installShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(object : Thread() {
                     override fun run() {
-                        klerk.meta.stop()
+                        runBlocking { klerk.meta.stop() }
                     }
                 })
             }
@@ -147,13 +148,13 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                     it.start(klerk)
                 }
             }
-            klerk.log.add(LogKlerkStarted(startTime))
+            klerk.activityLog.add(LogKlerkStarted(startTime))
         } else {
             throw IllegalStateException("Klerk has already been started")
         }
     }
 
-    override fun stop() {
+    override suspend fun stop() {
         val previousState = state.getAndSet(2)
         if (previousState == 0) {
             throw IllegalStateException("Klerk has not been started")
@@ -170,7 +171,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
         }
         klerk.eventsManager.stop()
         klerk.jobs.stop()    // stopping jobs after events in case a job is created that must execute on this instance.
-        klerk.log.add(LogKlerkStopped())
+        klerk.activityLog.add(LogKlerkStopped())
     }
 
     override val modelsCount: Int

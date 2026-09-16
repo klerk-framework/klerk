@@ -13,7 +13,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
  *
  * An uncaught exception thrown by a step is treated as [Fail].
  */
-public sealed interface JobResult<out Cursor, C : KlerkContext, V> {
+public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
 
     /**
      * Diagnostic entries to append to the job's log, committed with the step. Build them with the helpers on
@@ -61,26 +61,26 @@ public sealed interface JobResult<out Cursor, C : KlerkContext, V> {
      *
      * @param command an optional final command, committed together with the terminal status. Convenient, but you never
      * get to see its result — [Yield] instead if the outcome matters.
-     * @param result a value handed to the parent job (if any) as [ChildOutcome.result]. Encode it yourself; Klerk
-     * stores it as an opaque string.
+     * @param result a value handed to the parent job (if any) as [ChildOutcome.result]. Klerk stores it as a string:
+     * encode it with [encodeJobResult] and the parent decodes it with [ChildOutcome.resultAs].
      */
-    public data class Success<C : KlerkContext, V>(
+    public data class Success(
         public val command: Command<*, *>? = null,
         public val options: ProcessingOptions? = null,
         public val progress: JobProgress? = null,
         public val result: String? = null,
         override val log: List<JobLogEntry> = emptyList(),
-    ) : JobResult<Nothing, C, V>
+    ) : JobResult<Nothing, Nothing, Nothing>
 
     /**
      * This attempt failed, but another might work — the API timed out, the host was unreachable.
      *
      * Retried with exponential backoff (base 3 s) until the type's `maxRetries` is reached, then dead-lettered.
      */
-    public data class Fail<C : KlerkContext, V>(
+    public data class Fail(
         public val reason: String,
         override val log: List<JobLogEntry> = emptyList(),
-    ) : JobResult<Nothing, C, V>
+    ) : JobResult<Nothing, Nothing, Nothing>
 
     /**
      * This will never work — the account no longer exists, the file is malformed. Straight to the dead letter with no
@@ -89,9 +89,9 @@ public sealed interface JobResult<out Cursor, C : KlerkContext, V> {
      * @param runHook whether to run `onDeadLettered`. Set it to false when aborting *is* the correct end state and
      * there is deliberately nothing to compensate.
      */
-    public data class Abort<C : KlerkContext, V>(
+    public data class Abort(
         public val reason: String,
         public val runHook: Boolean = true,
         override val log: List<JobLogEntry> = emptyList(),
-    ) : JobResult<Nothing, C, V>
+    ) : JobResult<Nothing, Nothing, Nothing>
 }

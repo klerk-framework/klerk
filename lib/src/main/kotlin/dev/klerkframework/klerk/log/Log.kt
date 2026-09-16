@@ -9,15 +9,15 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
-public interface KlerkLog {
+public interface ActivityLog {
 
     /**
-     * Adds an entry to the Klerk log. Subscribers will be informed about the entry.
+     * Adds an entry to the activity log. Subscribers will be informed about the entry.
      */
     public fun add(entry: LogEntry): Unit
 
     /**
-     * The currently buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include
+     * A snapshot of the buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include
      * read events. The access itself is recorded in the log, which is what [context] is used for.
      */
     public fun entries(context: KlerkContext): List<LogEntry>
@@ -37,7 +37,7 @@ public interface KlerkLog {
 
 }
 
-internal class KlerkLogImpl : KlerkLog {
+internal class ActivityLogImpl : ActivityLog {
 
     private val content: MutableList<LogEntry> = mutableListOf()
     private val maxItems = 1000
@@ -46,21 +46,23 @@ internal class KlerkLogImpl : KlerkLog {
         MutableSharedFlow(replay = 0, extraBufferCapacity = 1000000)
 
     override fun add(entry: LogEntry) {
-        if (content.size > maxItems) {
-            content.removeFirst()
+        synchronized(content) {
+            if (content.size > maxItems) {
+                content.removeFirst()
+            }
+            if (content.firstOrNull()?.let { it.time < Clock.System.now().minus(1.days) } == true) {
+                content.removeFirst()
+            }
+            content.add(entry)
         }
-        if (content.firstOrNull()?.let { it.time < Clock.System.now().minus(1.days) } == true) {
-            content.removeFirst()
-        }
-        content.add(entry)
         if (!logEntryFlow.tryEmit(entry)) {
-            logger.error { "Could not emit to KlerkLog" }
+            logger.error { "Could not emit to ActivityLog" }
         }
     }
 
     override fun entries(context: KlerkContext): List<LogEntry> {
-        add(LogAccessedKlerkLog(context))
-        return content
+        add(LogAccessedActivityLog(context))
+        return synchronized(content) { content.toList() }
     }
 
     override fun subscribe(): SharedFlow<LogEntry> {
@@ -125,7 +127,7 @@ public enum class FactVerb {
     Read,
 }
 
-/** One entry in [KlerkLog]. Implement to define a new kind of loggable event (core Klerk, a plugin, or the application). */
+/** One entry in [ActivityLog]. Implement to define a new kind of loggable event (core Klerk, a plugin, or the application). */
 public interface LogEntry {
     public val time: Instant
     public val actor: dev.klerkframework.klerk.ActorIdentity?
@@ -160,12 +162,25 @@ public interface LogEntry {
     /** The values substituted into [headingTemplate]/[contentTemplate]'s `{name}` placeholders. */
     public val facts: List<Fact>
 
-    /** Renders [headingTemplate]. Override to substitute [facts]/[actor] into the placeholders described there. */
-    public val heading: String get() = headingTemplate
+    /**
+     * [headingTemplate] with each `{name}` replaced by the value of the fact with that name, and `{actor}` by [actor].
+     * Placeholders that match neither are left as they are.
+     */
+    public val heading: String get() = renderLogTemplate(headingTemplate, this)
 
-    /** Renders [contentTemplate], analogous to [heading]. */
-    public val content: String? get() = contentTemplate
+    /** [contentTemplate], rendered like [heading]. */
+    public val content: String? get() = contentTemplate?.let { renderLogTemplate(it, this) }
 }
+
+private val logPlaceholder = Regex("""\{(\w+)}""")
+
+internal fun renderLogTemplate(template: String, entry: LogEntry): String =
+    logPlaceholder.replace(template) { match ->
+        val name = match.groupValues[1]
+        entry.facts.firstOrNull { it.name == name }?.value
+            ?: entry.actor?.takeIf { name == "actor" }?.toString()
+            ?: match.value
+    }
 
 /** How serious a log line is. Klerk's own mapping to the underlying logging framework is an implementation detail. */
 public enum class LogLevel {

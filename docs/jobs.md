@@ -154,7 +154,7 @@ Jobs scheduled by a command are persisted in that command's transaction. If the 
 | Result                                                      | Meaning                                                                                                                                                         |
 |-------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Yield(cursor, command?, spawn?, awaitSpawned?, progress?)` | Not done. Command, spawned children and cursor commit atomically; job re-queued at the tail of its priority class, or moved to `Waiting` if it awaits children. |
-| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status. `result` (a string you encode) reaches the parent, if any.                                  |
+| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status. `result` reaches the parent, if any.                                        |
 | `Fail(reason)`                                              | This attempt failed. Retried with exponential backoff until `maxRetries`, then dead-lettered.                                                                   |
 | `Abort(reason, runHook = true)`                             | This will never work. Straight to dead letter, no retries. Set `runHook = false` when there is deliberately nothing to compensate.                              |
 
@@ -232,7 +232,16 @@ override suspend fun step(args: JobStepArgs.Local<ImportCursor, Ctx, Views>): Jo
 }
 ```
 
-`ChildOutcome` carries the child's id, terminal status, and the `result` value from its `Success`.
+`ChildOutcome` carries the child's id, terminal status, and the `result` value from its `Success`. A result is a
+string on the wire, encoded and decoded with one codec — the same JSON cursors use:
+
+```kotlin
+// in the child
+JobResult.Success(result = encodeJobResult(ImportSummary(imported = 3)))
+
+// in the parent, which is the one that knows what its children return
+val summaries = args.children.mapNotNull { it.resultAs<ImportSummary>() }
+```
 
 ### Reading: Local vs Portable jobs
 
@@ -583,7 +592,7 @@ fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthoriz
 
 The owner is the actor whose context scheduled the job, recorded at scheduling time and available as `args.job.owner`.
 Only the id survives storage, so an actor that was a `ModelIdentity` comes back as a `ModelReferenceIdentity`;
-`isOwnedByActor()` compares ids, so the same user is recognised either way.
+`isOwnedByActor()` uses `ActorIdentity.isSameAs`, so the same user is recognised either way.
 
 ### Restarts and deploys
 
@@ -650,6 +659,9 @@ fun `import emits one CreateBook per file`() = runTest {
 thread, no sleeping:
 
 ```kotlin
+import dev.klerkframework.klerk.testing.runUntilIdle   // step() and runUntilIdle() live in klerk.testing
+import dev.klerkframework.klerk.testing.step
+
 KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 klerk.jobs.runUntilIdle(maxSteps = 10_000)   // returns how many steps ran

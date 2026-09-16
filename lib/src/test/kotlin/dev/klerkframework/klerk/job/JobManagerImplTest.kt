@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -302,7 +304,7 @@ class JobManagerImplTest {
         })
     }
 
-    private fun Fixture.storageResult(id: JobId): String? = storage.getAllJobs().single { it.id == id }.result
+    private fun Fixture.storageResult(id: JobId): String? = storage.allJobs().single { it.id == id }.result
 
     @Test
     fun `a step's command is applied and its outcome reaches the next step`() = runBlocking<Unit> {

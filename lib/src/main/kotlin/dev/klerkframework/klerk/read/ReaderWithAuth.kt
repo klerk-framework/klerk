@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.storage.EventLogEntry
+import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
@@ -31,12 +33,12 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
-    ): EventLogQuery {
+    ): PendingRead<List<EventLogEntry>> {
         checkEventLogAuthorization(klerk, context, withoutAuth)
         return eventLogQuery(klerk, id, after, before)
     }
 
-    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery {
+    override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> {
         checkEventLogAuthorization(klerk, context, withoutAuth)
         return eventLogEntryQuery(klerk, sequenceNumber)
     }
@@ -46,17 +48,22 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.referencingIds(id)
 
     override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
-        withoutAuth.referencing(clazz, id).map { checkAuth(it) }.toSet()
+        withoutAuth.referencing(clazz, id).readable()
 
     override fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = withoutAuth.referencing(property, id).map { checkAuth(it) }.toSet()
+    ): Set<Model<T>> = withoutAuth.referencing(property, id).readable()
 
     override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
-    ): Set<Model<T>> = withoutAuth.referencingInCollection(property, id).map { checkAuth(it) }.toSet()
+    ): Set<Model<T>> = withoutAuth.referencingInCollection(property, id).readable()
+
+    private fun <T : Any> Set<Model<T>>.readable(): Set<Model<T>> =
+        filter { context.actor == SystemIdentity || isAuthorized(it, context, klerk.specification, withoutAuth) }
+            .map { propertyAuth.secure(it) }
+            .toSet()
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
 
@@ -118,15 +125,16 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         attachedDataReader.finish()
     }
 
-    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> =
-        klerk.specification.getPossibleVoidEvents(clazz, context, visibility)
-            .filter { klerk.validator.validateWithoutParameters<T>(it, context, null, withoutAuth) }
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : Any> possibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<VoidEvent<T, *>> =
+        (klerk.specification.getStateMachine(clazz) as StateMachine<T, *, C, V>).getEventsForVoidState(visibility)
+            .filter { klerk.validator.validateWithoutParameters<T>(it.id, context, null, withoutAuth) }
             .toSet()
 
-    override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
+    override fun <T : Any> possibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<InstanceEvent<T, *>> {
         val model = get(id)
-        return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, context, visibility)
-            .filter { klerk.validator.validateWithoutParameters(it, context, model, withoutAuth) }
+        return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, visibility)
+            .filter { klerk.validator.validateWithoutParameters(it.id, context, model, withoutAuth) }
             .toSet()
     }
 

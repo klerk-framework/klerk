@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.ContextValidity
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.view.ModelView
@@ -103,18 +105,12 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         return type == this.type
     }
 
-    internal fun getAvailableEventsForModel(
-        model: Model<*>,
-        context: C,
-        visibility: EventVisibility,
-    ): Set<EventReference> {
-        return getStateByName(model.state).getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }
-            .toSet()
-    }
+    internal fun getAvailableEventsForModel(model: Model<*>, visibility: EventVisibility): Set<InstanceEvent<T, *>> =
+        getStateByName(model.state).getEvents().filter { it.visibility.level >= visibility.level }
+            .map { it as InstanceEvent<T, *> }.toSet()
 
-    internal fun getEventsForVoidState(context: C, visibility: EventVisibility): Set<EventReference> {
-        return voidState.getEvents().filter { it.visibility.level >= visibility.level }.map { it.id }.toSet()
-    }
+    internal fun getEventsForVoidState(visibility: EventVisibility): Set<VoidEvent<T, *>> =
+        voidState.getEvents().filter { it.visibility.level >= visibility.level }.map { it as VoidEvent<T, *> }.toSet()
 
     /*    public fun getExternalEvents(): Set<EventReference> =
             states.flatMap { state -> state.getEvents().filter { it.visibility == EXTERNAL }.map { it.id } }.toSet()
@@ -125,7 +121,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
      * All events declared with any of the [event] overloads for this state machine, regardless of which state(s)
      * reference them in `onEvent`.
      */
-    public fun getAllEvents(): Set<EventReference> =
+    public val eventReferences: Set<EventReference> get() =
         mutableStates.flatMap { state -> state.getEvents().map { it.id } }.toSet()
 
 

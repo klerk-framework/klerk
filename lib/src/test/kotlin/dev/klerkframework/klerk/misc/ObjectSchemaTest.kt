@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.misc
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.attacheddata.collectAttachedData
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.IntContainer
@@ -45,7 +47,7 @@ class LambdaValidated(value: Int) : IntContainer(value) {
 data class SchemaLambdaValidated(val number: LambdaValidated)
 
 data class SchemaLambdaValidatable(val street: Street) : Validatable {
-    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf({ PropertyCollectionValidity.Valid })
+    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf({ Valid })
 }
 
 internal data class SchemaInternalClass(val street: Street)
@@ -196,7 +198,7 @@ class ObjectSchemaTest {
     }
 }
 
-private fun sampleRule(context: Ctx): PropertyCollectionValidity = PropertyCollectionValidity.Valid
+private fun sampleRule(context: Ctx): PropertyCollectionValidity = Valid
 
 class SchemaShort(value: Short) : ShortContainer(value) { override val min = 0.toShort(); override val max = 9.toShort() }
 class SchemaByte(value: Byte) : ByteContainer(value) { override val min = 0.toByte(); override val max = 9.toByte() }
@@ -234,8 +236,8 @@ class NumberContainerTest {
     @Test
     fun `Bounds are readable without knowing the kind`() {
         val uLong = SchemaULong(5uL)
-        assertEquals("0", uLong.minAsText)
-        assertEquals("9", uLong.maxAsText)
+        assertEquals("0", uLong.min.toString())
+        assertEquals("9", uLong.max.toString())
         assertFalse(uLong.hasDecimals)
         assertTrue(SchemaDouble(1.5).hasDecimals)
     }

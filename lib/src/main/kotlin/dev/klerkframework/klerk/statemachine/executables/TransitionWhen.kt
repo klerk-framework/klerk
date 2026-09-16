@@ -3,17 +3,16 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.makeExactSerializable
-import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
+import dev.klerkframework.klerk.statemachine.Executable
 import kotlin.time.Instant
 
-internal class InstanceLifecycleTransitionWhen<ModelStates : Enum<*>, T : Any, C : KlerkContext, V>(
-    internal val branches: LinkedHashMap<(args: LifecycleArgs<T, C, V>) -> Boolean, ModelStates>,
+internal class TransitionWhen<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enum<*>, C : KlerkContext, V>(
+    internal val branches: LinkedHashMap<(args: A) -> Boolean, ModelStates>,
     internal val otherwise: ModelStates?
-) :
-    InstanceLifecycleExecutable<T, C, V> {
+) : Executable<T, A, C, V> {
+
     override fun <Primary : Any> process(
-        args: LifecycleArgs<T, C, V>,
+        args: A,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -21,60 +20,35 @@ internal class InstanceLifecycleTransitionWhen<ModelStates : Enum<*>, T : Any, C
     ): ProcessingData<Primary, C, V> {
         branches.forEach { (condition, targetState) ->
             if (condition.invoke(args)) {
-                return transition(targetState, args.model, args.time, specification, view)
+                return transition(targetState.name, args.model, args.context.time, specification, view)
             }
         }
         if (otherwise != null) {
-            return transition(otherwise, args.model, args.time, specification, view)
+            return transition(otherwise.name, args.model, args.context.time, specification, view)
         }
         return ProcessingData()
     }
 
-    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean) = { true }
+    override val onCondition: ((args: A) -> Boolean) = { true }
 
 }
 
-internal class InstanceEventTransitionWhen<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
-    internal val branches: LinkedHashMap<(args: InstanceEventArgs<T, P, C, V>) -> Boolean, ModelStates>,
-    internal val otherwise: ModelStates?
-) :
-    InstanceEventExecutable<T, P, C, V> {
-    override fun <Primary : Any> process(
-        args: InstanceEventArgs<T, P, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>
-    ): ProcessingData<Primary, C, V> {
-        branches.forEach { (condition, targetState) ->
-            if (condition.invoke(args)) {
-                return transition(targetState, args.model, args.context.time, specification, view)
-            }
-        }
-        if (otherwise != null) {
-            return transition(otherwise, args.model, args.context.time, specification, view)
-        }
-        return ProcessingData()
-    }
-
-    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean) = { true }
-
-}
-
-private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V> transition(
-    targetState: ModelStates,
+/**
+ * The exit block runs before the transition takes effect, so the model is not updated here — the transition is
+ * finalized when the exit block's result is merged.
+ */
+internal fun <Primary : Any, T : Any, C : KlerkContext, V> transition(
+    targetState: String,
     model: Model<T>,
     time: Instant,
     specification: Specification<C, V>,
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     val exitBlock = specification.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
-    val updatedModel = model.copy(state = targetState.name, lastStateTransitionAt = makeExactSerializable(time))
+    val updatedModel = model.copy(state = targetState, lastStateTransitionAt = makeExactSerializable(time))
     val enterBlock =
         specification.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
 
-    // note that we will not update modifiedModel now since we must first execute any exit block using the model as it
-    // currently is.
     return ProcessingData(
         transitions = listOf(updatedModel.id),
         unFinalizedTransition = Triple(updatedModel.state, updatedModel.lastStateTransitionAt, updatedModel),
@@ -82,5 +56,4 @@ private fun <Primary : Any, ModelStates : Enum<*>, T : Any, C : KlerkContext, V>
         functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
         log = listOf("Transition from ${model.state} -> ${updatedModel.state}")
     )
-
 }

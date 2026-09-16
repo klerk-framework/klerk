@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
@@ -63,7 +64,7 @@ public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext,
 )
 
 /**
- * A registered [ModelView] together with the model class it holds, as returned by `Specification.getViews()`.
+ * A registered [ModelView] together with the model class it holds, as returned by `Specification.registeredViews`.
  */
 public data class RegisteredView<C : KlerkContext>(
     val modelClass: KClass<out Any>,
@@ -283,18 +284,35 @@ public abstract class InstanceEventNoParameters<T : Any>(visibility: EventVisibi
 
 
 /**
+ * What every rule is given: the [context] of the operation and a [reader] for looking up other models. Write a
+ * helper against this to use it from rules of any kind.
+ */
+public interface RuleArgs<C : KlerkContext, V> {
+    public val context: C
+    public val reader: ModelReader<C, V>
+}
+
+/** What every rule and executable that acts on an existing model is given. */
+public interface ModelArgs<T : Any, C : KlerkContext, V> : RuleArgs<C, V> {
+    public val model: Model<T>
+}
+
+/**
  * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
  */
-public data class EventLogRuleArgs<C : KlerkContext, V>(val context: C, val reader: ModelReader<C, V>)
+public data class EventLogRuleArgs<C : KlerkContext, V>(
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
 
 /**
  * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
  */
 public data class CommandRuleArgs<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,
-    val context: C,
-    val reader: ModelReader<C, V>
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>
+) : RuleArgs<C, V>
 
 /**
  * Arguments handed to rules that evaluate against an existing [model], e.g. read/authorization rules for instance
@@ -302,9 +320,9 @@ public data class CommandRuleArgs<P, C : KlerkContext, V>(
  */
 public data class ModelReadRuleArgs<C : KlerkContext, V>(
     val model: Model<out Any>,
-    val context: C,
-    val reader: ModelReader<C, V>
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>
+) : RuleArgs<C, V>
 
 /**
  * Arguments handed to property-level authorization rules deciding whether [property] on [model] may be read.
@@ -312,9 +330,9 @@ public data class ModelReadRuleArgs<C : KlerkContext, V>(
 public data class PropertyReadRuleArgs<C : KlerkContext, V>(
     val property: DataContainer<*>,
     val model: Model<out Any>,
-    val context: C,
-    val reader: ModelReader<C, V>,
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
 
 /**
  * @property reader Note that the reader will give you access to the data as it was _before_ the current event was
@@ -323,30 +341,30 @@ public data class PropertyReadRuleArgs<C : KlerkContext, V>(
  */
 public data class VoidEventArgs<T : Any, P, C : KlerkContext, V>(
     val command: Command<T, P>,
-    val context: C,
-    val reader: ModelReader<C, V>,
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
 
 /**
  * @param model The model as it is in the un-committed state. I.e. the model you see may differ from the model as it was
  * before the current processing (of an event or time-trigger).
  */
 public data class InstanceEventArgs<T : Any, P, C : KlerkContext, V>(
-    val model: Model<T>,
+    override val model: Model<T>,
     val command: Command<T, P>,
-    val context: C,
-    val reader: ModelReader<C, V>
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>
+) : ModelArgs<T, C, V>
 
 /**
  * @param model The model as it is in the un-committed state. I.e. the model you see may differ from the model as it was
  * before the current processing (of an event or time-trigger).
  */
 public data class LifecycleArgs<T : Any, C : KlerkContext, V>(
-    val model: Model<T>,
-    val time: Instant,
-    val reader: ModelReader<C, V>
-)
+    override val model: Model<T>,
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : ModelArgs<T, C, V>
 
 
 /**
@@ -534,9 +552,9 @@ public data class AttachedDataMetadata(
  */
 public data class AttachedDataReadRuleArgs<C : KlerkContext, V>(
     val owner: Model<out Any>,
-    val context: C,
-    val reader: ModelReader<C, V>,
-)
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
 
 /**
  * The arguments given to the rules deciding who may prepare attached data (see [KlerkAttachedData.prepare]).
@@ -549,15 +567,15 @@ public data class AttachedDataReadRuleArgs<C : KlerkContext, V>(
 public data class AttachedDataWriteRuleArgs<C : KlerkContext, V>(
     val kind: AttachedDataKind,
 
-    val context: C,
-    val reader: ModelReader<C, V>,
+    override val context: C,
+    override val reader: ModelReader<C, V>,
 
     /**
      * How long the value may stay unclaimed. Long leases keep storage occupied by data no model refers to, so this is
      * the place to decide who may ask for one.
      */
     val lease: Duration,
-)
+) : RuleArgs<C, V>
 
 /**
  * What `SpecificationBuilder.jobContextProvider` is given when a job step is about to run.
@@ -584,26 +602,11 @@ public data class JobContextRequest(
  */
 public data class JobReadRuleArgs<C : KlerkContext, V>(
     val job: JobInfo,
-    val context: C,
-    val reader: ModelReader<C, V>,
-) {
-    /**
-     * True if [context]'s actor is the one that scheduled the job.
-     *
-     * Compares the actor's model id (or external id) rather than the identity object, since the actor that scheduled
-     * the job may have been read from storage under a different identity implementation since.
-     */
-    public fun isOwnedBy(actor: ActorIdentity): Boolean {
-        val owner = job.owner
-        // ModelIdentity and ModelReferenceIdentity are the same actor, so the id decides whenever there is one.
-        if (owner.id != null || actor.id != null) {
-            return owner.id == actor.id
-        }
-        if (owner.externalId != null || actor.externalId != null) {
-            return owner.externalId == actor.externalId
-        }
-        return owner.type == actor.type
-    }
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V> {
+    /** True if [actor] scheduled the job, compared with [ActorIdentity.isSameAs]. */
+    public fun isOwnedBy(actor: ActorIdentity): Boolean = job.owner.isSameAs(actor)
 
     /** True if [context]'s own actor scheduled the job. */
     public fun isOwnedByActor(): Boolean = isOwnedBy(context.actor)
@@ -722,63 +725,6 @@ public object DefaultKlerkTranslation : KlerkTranslation {
 
 }
 
-/**
- * Describes the validity of a collection of properties (i.e. a class) given that each individual property is valid.
- * E.g. for a class containing two properties x: EvenIntContainer and y: OddIntContainer where x and y are valid,
- * a PropertyCollectionValidity can express that {x, y} is not valid since x > y.
- */
-public sealed class PropertyCollectionValidity {
-    public data object Valid : PropertyCollectionValidity()
-
-    /**
-     * @param translationInfo optional detail passed to [KlerkTranslation.invalidPropertyCollection] when building the
-     * end-user message. The message itself comes from the [Translation], so a rule never spells it out.
-     * @param fieldMustBeNull the property the rule requires to be null, e.g. to grey out an input.
-     * @param fieldMustNotBeNull the property the rule requires to be non-null.
-     */
-    public class Invalid(
-        public val translationInfo: String? = null,
-        public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
-        public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
-    ) : PropertyCollectionValidity() {
-        /**
-         * The end-user message for this result, as [Translation] builds it from the rule's name and [translationInfo].
-         *
-         * @param rule the validator function that returned this, whose name identifies it to the [Translation]
-         */
-        public fun message(rule: Function<Any>, translation: Translation): String =
-            translation.klerk.invalidPropertyCollection(
-                functionName(rule) ?: translation.klerk.invalid,
-                translationInfo,
-            )
-
-        /**
-         * The problem Klerk reports when a parameters class rejects itself. Use it when evaluating
-         * [Validatable.validators] yourself, e.g. to show the errors in a form before submitting the command, so the
-         * message is built the same way.
-         */
-        public fun toProblem(rule: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
-            InvalidPropertyCollectionProblem(
-                endUserTranslatedMessage = message(rule, translation),
-                fieldsMustBeNull = if (fieldMustBeNull == null) emptySet() else setOf(fieldMustBeNull),
-                fieldsMustNotBeNull = if (fieldMustNotBeNull == null) emptySet() else setOf(fieldMustNotBeNull),
-            )
-    }
-}
-
-/**
- * Describes whether a command may proceed given the context alone — no property is examined. Returned by a rule
- * registered with `validateWithContext`.
- */
-public sealed class ContextValidity {
-    public data object Valid : ContextValidity()
-
-    /**
-     * @param translationInfo optional detail passed to [KlerkTranslation.preventedByRule] when building the end-user
-     * message.
-     */
-    public class Invalid(public val translationInfo: String? = null) : ContextValidity()
-}
 
 /**
  * Returns microseconds since 1970.

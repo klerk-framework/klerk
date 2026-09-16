@@ -34,7 +34,7 @@ class ValidatableTest {
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions(CommandToken.simple())
+                options = ProcessingOptions()
             )
 
             when (result) {
@@ -67,7 +67,7 @@ class ValidatableTest {
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions(CommandToken.simple())
+                options = ProcessingOptions()
             )
 
             when (result) {
@@ -99,7 +99,7 @@ class ValidatableTest {
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions(CommandToken.simple())
+                options = ProcessingOptions()
             )
 
             when (result) {

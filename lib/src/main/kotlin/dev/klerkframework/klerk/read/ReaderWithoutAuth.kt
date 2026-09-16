@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.PageDirection
 import dev.klerkframework.klerk.view.QueryListCursor
@@ -24,7 +25,7 @@ internal fun <C : KlerkContext, V> ModelReader<C, V>.unauthorized(): ModelReader
 
 /**
  * Used internally, e.g. when executing the functions provided in a statemachine.
- * Note that no logging to KlerkLog is triggered here.
+ * Note that no logging to the activity log is triggered here.
  */
 internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : ModelReader<C, V>, ViewReader<C, V> {
 
@@ -38,9 +39,9 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         id: ModelID<out Any>?,
         after: Instant,
         before: Instant,
-    ): EventLogQuery = eventLogQuery(klerk, id, after, before)
+    ): PendingRead<List<EventLogEntry>> = eventLogQuery(klerk, id, after, before)
 
-    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery = eventLogEntryQuery(klerk, sequenceNumber)
+    override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> = eventLogEntryQuery(klerk, sequenceNumber)
 
     override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.referencingIds(id)
 

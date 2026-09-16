@@ -23,7 +23,7 @@ class EventProcessorTest {
 
     @Test
     fun `Can handle simple commands`() {
-        val options = ProcessingOptions(CommandToken.simple())
+        val options = ProcessingOptions()
 
         val klerk = Klerk.create(specification, testSettings()) as KlerkImpl
         val eventProcessor = EventProcessor(klerk, testSettings(), ReadWriteLock(), MyTimeTriggerManager)
@@ -37,6 +37,20 @@ class EventProcessorTest {
         @Suppress("UNCHECKED_CAST")
         assertEquals("Astrid", (result.aggregatedModelState[primaryId] as Model<Author>).props.firstName.value)
         assertEquals(primaryId.value, result.createdModels.singleOrNull()?.value)
+    }
+
+    @Test
+    fun `A dry run reports the model it would create`() = runBlocking {
+        val klerk = Klerk.create(specification, testSettings())
+        klerk.meta.start()
+        val result = klerk.handle(
+            Command(CreateAuthor, createAstridParameters),
+            Ctx.system(),
+            ProcessingOptions(dryRun = true),
+        ).getOrThrow()
+        val primary = requireNotNull(result.primaryModel)
+        assertEquals(primary, result.createdModels.single())
+        klerk.meta.stop()
     }
 
     @Test
@@ -60,10 +74,7 @@ class EventProcessorTest {
                 ),
                 context,
             )
-            when (willFail) {
-                is CommandResult.Failure -> assertEquals(willFail.problems.first().code, KlerkErrorCode.BrokenReference)
-                is CommandResult.Success -> fail()
-            }
+            assertEquals(KlerkErrorCode.BrokenReference, willFail.fold({ null }, { it.problems.first().code }))
 
             val willNotFail = klerk.handle(
                 Command(

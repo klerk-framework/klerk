@@ -22,7 +22,7 @@ fun updateBook(args: InstanceEventArgs<Book, Nothing?, Ctx, Views>): Book {
 If there is no reader in the argument when you need it, you are probably not using the DSL correctly.
 
 The reader in `args` is a `ModelReader`: models, relations, views, jobs, attached-data metadata and the event log. A
-`klerk.read { }` block gets the larger `Reader`, which adds `getPossibleEvents(id)` and `getPossibleVoidEvents(clazz)`
+`klerk.read { }` block gets the larger `Reader`, which adds `possibleEvents(id)` and `possibleVoidEvents(clazz)`
 — those need an actor to answer for, so they only exist where authorization is enforced.
 
 ### When Klerk has started
@@ -243,11 +243,12 @@ two requests gives no such guarantee.
 |-----------------------------------------------------------|-------------------------------------------|
 | `get(id)`                                                 | throws `AuthorizationException`           |
 | `getOrNull(id)`                                           | returns `null` (also for a missing model) |
-| `referencing(...)` / `referencingInCollection(...)`         | throws `AuthorizationException`           |
+| `referencing(...)` / `referencingInCollection(...)`         | silently skips it                         |
 | `attachedData.getMetadata(id)`                               | throws `AuthorizationException`           |
 | `attachedData.getMetadataOrNull(id)`                         | returns `null` (also for missing data)    |
 | `view.asSequence()` / `view.query(options)`               | silently skips it                         |
 | `view.asSequenceOrThrow()` / `view.queryOrThrow(options)` | throws `AuthorizationException`           |
+| `modelChanges.subscribe(id, context)`                     | silently skips it; deletions are always sent |
 
 `asSequence()` / `query()` skip unreadable matches, which is what a list rendered for an actor that only sees part of
 the data needs (e.g. a supplier that may read only its own rows) — a throw would turn the whole page into a 500. The

@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
@@ -16,6 +17,12 @@ import kotlin.reflect.KProperty1
  * Reading a *view* is done on the view — `view.count()`, `view.asSequence().toList()`, `view.query(...)` and friends, in
  * `dev.klerkframework.klerk.view`. Those take this reader as a context parameter, so inside a read block, or a
  * `with(args.reader) { }` block in a DSL function, you never write it out. See docs/reading.md.
+ *
+ * To find the models that reference a model:
+ * - [referencingIds] — the ids of models of any type, through any relation property. No authorization is checked.
+ * - [referencing] with a class — the models of that class, through any relation property.
+ * - [referencing] with a property — the models whose `ModelID` property is the id.
+ * - [referencingInCollection] — the models whose collection property holds the id.
  *
  * A read block gets the larger [Reader], which can additionally answer which events are possible right now.
  */
@@ -42,9 +49,9 @@ public interface ModelReader<C : KlerkContext, V> {
     public val attachedData: AttachedDataReader
 
     /**
-     * A snapshot of the event log as of this read block. Nothing is read from storage here — call
-     * [EventLogQuery.get] once the read block has ended, so that the database is never queried while the read lock
-     * is held. The returned entries are limited to commands that were visible in this block.
+     * The event log as of this read block, ordered by [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber],
+     * oldest first. Nothing is read from storage here — call [PendingRead.get] once the read block has ended. Only
+     * commands that were visible in this block are included.
      *
      * @param id if given, only entries for that model. If null, entries for all models.
      * @param after only entries whose [dev.klerkframework.klerk.storage.EventLogEntry.time] is at or after this
@@ -55,16 +62,17 @@ public interface ModelReader<C : KlerkContext, V> {
         id: ModelID<out Any>? = null,
         after: Instant = Instant.DISTANT_PAST,
         before: Instant = Instant.DISTANT_FUTURE,
-    ): EventLogQuery
+    ): PendingRead<List<EventLogEntry>>
 
     /**
      * A single event-log entry, as of this read block. Like [eventLog], nothing is read from storage here: call
-     * [EventLogEntryQuery.get] once the read block has ended. Use it for a permalink to one entry.
+     * [PendingRead.get] once the read block has ended. It gives null if there is no such entry or it was not visible
+     * in this block. Use it for a permalink to one entry.
      *
      * @param sequenceNumber the [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber] to look up
      * @throws AuthorizationException if the actor is not allowed to read the event log
      */
-    public fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery
+    public fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?>
 
     /**
      * The model with [id].
@@ -85,17 +93,25 @@ public interface ModelReader<C : KlerkContext, V> {
     // not write it out.
 
     /**
-     * Finds the IDs of all models that reference [id] through any relation property (regardless of model type).
+     * Finds the IDs of all models that reference [id] through any relation property, regardless of model type.
+     *
+     * Only ids are returned, so no read authorization is checked. Use [referencing] to get the models.
      */
     public fun referencingIds(id: ModelID<*>): Set<ModelID<*>>
 
     /**
      * Finds all models of type [clazz] that reference [id] through any relation property.
+     *
+     * Models the actor may not read are left out.
      */
     public fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>>
 
     /**
-     * Finds all models whose [property] equals [id].
+     * Finds all models whose [property] equals [id]. For a property holding a collection of ids, use
+     * [referencingInCollection].
+     *
+     * Models the actor may not read are left out.
+     * @throws NoSuchElementException if there is no model with [id].
      */
     public fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
@@ -104,6 +120,8 @@ public interface ModelReader<C : KlerkContext, V> {
 
     /**
      * Finds all models whose [property] (a collection of IDs) contains [id].
+     *
+     * Models the actor may not read are left out.
      */
     public fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
@@ -122,10 +140,10 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
      * Returns the void events (i.e. events that create a new model of type [clazz]) that the actor could
      * successfully submit right now: authorization and validation rules are both evaluated, but nothing is executed.
      */
-    public fun <T : Any> getPossibleVoidEvents(
+    public fun <T : Any> possibleVoidEvents(
         clazz: KClass<T>,
         visibility: EventVisibility = EventVisibility.Application
-    ): Set<EventReference>
+    ): Set<VoidEvent<T, *>>
 
     /**
      * Returns the instance events that the actor could successfully submit right now against the model with [id],
@@ -133,10 +151,10 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
      *
      * @throws AuthorizationException if the actor is not allowed to read the model itself
      */
-    public fun <T : Any> getPossibleEvents(
+    public fun <T : Any> possibleEvents(
         id: ModelID<T>,
         visibility: EventVisibility = EventVisibility.Application
-    ): Set<EventReference>
+    ): Set<InstanceEvent<T, *>>
 
 }
 

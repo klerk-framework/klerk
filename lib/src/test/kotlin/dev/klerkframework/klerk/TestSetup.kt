@@ -1,12 +1,14 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.ContextValidity
 import dev.klerkframework.klerk.AuthorStates.*
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
-import dev.klerkframework.klerk.PropertyCollectionValidity.Invalid
-import dev.klerkframework.klerk.PropertyCollectionValidity.Valid
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity.Invalid
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
@@ -427,7 +429,7 @@ fun sayHello(args: LifecycleArgs<Author, Ctx, Views>) {
 }
 
 fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant {
-    return args.time.plus(30.seconds)
+    return args.context.time.plus(30.seconds)
 }
 
 fun hasTalent(args: LifecycleArgs<Author, Ctx, Views>): Boolean = true
@@ -534,7 +536,7 @@ fun secretTokenShouldBeZeroIfNameStartsWithM(args: VoidEventArgs<Author, CreateA
 }
 
 fun preventUnauthenticated(context: Ctx): ContextValidity {
-    return if (context.actor == dev.klerkframework.klerk.Unauthenticated) ContextValidity.Invalid() else ContextValidity.Valid
+    return if (context.actor == dev.klerkframework.klerk.Unauthenticated) ContextValidity.Invalid() else Valid
 }
 
 fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
@@ -682,7 +684,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 
     fun mustBeEven(value: Int, t: Translation): PropertyValidity {
         if (value % 2 == 0) {
-            return PropertyValidity.Valid
+            return Valid
         }
         return PropertyValidity.Invalid()
     }
@@ -710,7 +712,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val validators = setOf(::`title must be catchy`)
 
     private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
-        return PropertyValidity.Valid
+        return Valid
     }
 }
 

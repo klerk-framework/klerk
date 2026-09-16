@@ -32,12 +32,12 @@ class BookTitle(value: String) : StringContainer(value) {
     override val validators = setOf(::`title must be catchy`)
 
     private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity {
-        return PropertyValidity.Valid // or PropertyValidity.Invalid("optional translation info")
+        return Valid // or PropertyValidity.Invalid("optional translation info")
     }
 }
 ```
 
-A validator function takes the value and the current `Translation`, and returns `PropertyValidity.Valid` or
+A validator function takes the value and the current `Translation`, and returns `Valid` or
 `PropertyValidity.Invalid(translationInfo)`. This check happens purely on the container's own value — it never sees
 sibling properties, the context, or the model. Since the value is passed in, a rule can be a top-level function shared
 by several containers.
@@ -65,7 +65,8 @@ data class CreateAuthorParams(
 }
 ```
 
-Each validator returns `PropertyCollectionValidity.Valid` or `PropertyCollectionValidity.Invalid(...)`.
+Each validator returns `Valid` or `PropertyCollectionValidity.Invalid(...)`. `Valid` is shared by every kind of rule;
+each kind has its own `Invalid`. All of them are in `dev.klerkframework.klerk.validation`.
 `Invalid` optionally carries:
 
 * `translationInfo` — a detail handed to the `Translation` when it builds the message, e.g. which field is missing.
@@ -101,7 +102,7 @@ event(CreateBook) {
 
   ```kotlin
   fun preventUnauthenticated(context: Ctx): ContextValidity =
-      if (context.actor == Unauthenticated) ContextValidity.Invalid() else ContextValidity.Valid
+      if (context.actor == Unauthenticated) ContextValidity.Invalid() else Valid
   ```
 
 * **`validReferences(property, view)`** — every `ModelID` in the parameters must be declared here, pointing at the

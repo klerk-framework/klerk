@@ -1,19 +1,19 @@
 package dev.klerkframework.klerk.statemachine.executables
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
-
 import dev.klerkframework.klerk.misc.verifyReferencesExist
-import dev.klerkframework.klerk.statemachine.VoidEventExecutable
+import dev.klerkframework.klerk.statemachine.Executable
 import kotlin.time.Instant
 
-internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
+internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
     val initialState: ModelStates,
     val f: (args: VoidEventArgs<T, P, C, V>) -> T,
     override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
-) : VoidEventExecutable<T, P, C, V> {
+) : Executable<T, VoidEventArgs<T, P, C, V>, C, V> {
 
     override fun <Primary : Any> process(
         args: VoidEventArgs<T, P, C, V>,
@@ -22,8 +22,8 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
-        val Any = f(args)
-        val validationProblems = validateModelProps(Any, args.context.translation)
+        val props = f(args)
+        val validationProblems = validateModelProps(props, args.context.translation)
         if (validationProblems.isNotEmpty()) {
             return ProcessingData(problems = validationProblems)
         }
@@ -36,7 +36,7 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
             lastStateTransitionAt = Instant.DISTANT_PAST,
             state = "void",
             timeTrigger = null,
-            props = Any,
+            props = props,
         )
         val referenceProblem = verifyReferencesExist(created, args.reader)
         if (referenceProblem != null) {
@@ -58,12 +58,12 @@ internal class VoidEventCreateModel<ModelStates : Enum<*>, T : Any, P, C : Klerk
 
 }
 
-internal fun validateModelProps(Any: Any, translation: Translation): List<Problem> {
-    if (Any !is Validatable) {
+internal fun validateModelProps(props: Any, translation: Translation): List<Problem> {
+    if (props !is Validatable) {
         return emptyList()
     }
     // Its own error code: the parameters were fine, it is the model they would produce that is not.
-    return Any.validators().mapNotNull { rule ->
+    return props.validators().mapNotNull { rule ->
         (rule.invoke() as? PropertyCollectionValidity.Invalid)?.message(rule, translation)?.let { message ->
             StateProblem(
                 message,

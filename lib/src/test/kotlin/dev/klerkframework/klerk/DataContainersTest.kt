@@ -15,7 +15,7 @@ import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.KlerkJson
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.test.*
@@ -171,7 +171,7 @@ class DataContainersTest {
 
     @Test
     fun timeContainerToString() {
-        assertEquals("2026-01-05", TestDate(LocalDate.of(2026, 1, 5)).toString())
+        assertEquals("2026-01-05", TestDate(LocalDate(2026, 1, 5)).toString())
 
         assertEquals("1h 30m", TestDuration(90.minutes).toString())
         assertEquals("0s", TestDuration(Duration.ZERO).toString())

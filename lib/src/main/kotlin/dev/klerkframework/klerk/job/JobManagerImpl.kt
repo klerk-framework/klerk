@@ -126,7 +126,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
         val now = klerk.settings.now()
         val unloadable = mutableListOf<Pair<JobRecord, String>>()
-        klerk.settings.persistence.getAllJobs().forEach { record ->
+        klerk.settings.persistence.allJobs().forEach { record ->
             when (val problem = whyUnloadable(record)) {
                 null -> records[record.id] = recoverAfterRestart(record, now)
                 else -> unloadable.add(record to problem)
@@ -149,20 +149,18 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * Bounded: a step that will not return within [STOP_TIMEOUT] is abandoned. It has not committed anything, so on
      * the next start its job simply runs that step again.
      */
-    fun stop() {
+    suspend fun stop() {
         if (!started || stopping) {
             return
         }
         stopping = true
         wakeup.trySend(Unit)
         val currentScope = scope ?: return
-        runBlocking {
-            dispatcher?.cancelAndJoin()
-            withTimeoutOrNull(STOP_TIMEOUT) {
-                currentScope.coroutineContext.job.children.toList().joinAll()
-            } ?: logger.warn { "Gave up waiting for job steps to finish after $STOP_TIMEOUT" }
-            currentScope.cancel()
-        }
+        dispatcher?.cancelAndJoin()
+        withTimeoutOrNull(STOP_TIMEOUT) {
+            currentScope.coroutineContext.job.children.toList().joinAll()
+        } ?: logger.warn { "Gave up waiting for job steps to finish after $STOP_TIMEOUT" }
+        currentScope.cancel()
     }
 
     private fun whyUnloadable(record: JobRecord): String? {
@@ -398,7 +396,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         )
 
         exceededLimits(started, now)?.let { reason ->
-            commitOutcome(started, type, JobResult.Abort<C, V>(reason), null)
+            commitOutcome(started, type, JobResult.Abort(reason), null)
             return
         }
 
@@ -466,7 +464,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             klerk = klerk,
                             children = outcomes,
                         )
-                        if (record.hookKind == JobHookKind.Cancelled) local.onCancelled(args)
+                        if (record.hookKind == JobHookKind.OnCancelled) local.onCancelled(args)
                         else local.onDeadLettered(args)
                     }
                 }
@@ -496,7 +494,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             context = context,
                             children = outcomes,
                         )
-                        if (record.hookKind == JobHookKind.Cancelled) portable.onCancelled(args)
+                        if (record.hookKind == JobHookKind.OnCancelled) portable.onCancelled(args)
                         else portable.onDeadLettered(args)
                     }
                 }
@@ -563,7 +561,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             klerk.eventsManager.commitJobStep(
                 command = transition.command,
                 context = if (transition.command == null) null else context,
-                options = transition.options ?: ProcessingOptions(CommandToken.simple()),
+                options = transition.options ?: ProcessingOptions(),
                 jobCommit = transition.commit,
             )
         } catch (e: Exception) {
@@ -709,8 +707,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     /** Which terminal status a job that ran to completion should land in, given what it was doing. */
     private fun terminalStatusFor(record: JobRecord): JobStatus = when (record.hookKind) {
         null -> JobStatus.Succeeded
-        JobHookKind.Cancelled -> JobStatus.Cancelled
-        JobHookKind.DeadLettered -> JobStatus.DeadLettered
+        JobHookKind.OnCancelled -> JobStatus.Cancelled
+        JobHookKind.OnDeadLettered -> JobStatus.DeadLettered
     }
 
     /**
@@ -732,7 +730,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         rows.put(
             dead.copy(
                 status = JobStatus.Ready,
-                hookKind = JobHookKind.DeadLettered,
+                hookKind = JobHookKind.OnDeadLettered,
                 hookCursor = dead.failedAtCursor,
                 attempt = 0,
                 readyAt = now,
@@ -745,7 +743,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     /** Starts the cancellation unwind, or finishes straight away if there is no hook work to await. */
     private fun beginCancellation(record: JobRecord, now: Instant, rows: RowSet): JobRecord = record.copy(
         status = JobStatus.Cancelling,
-        hookKind = JobHookKind.Cancelled,
+        hookKind = JobHookKind.OnCancelled,
         hookCursor = record.cursor,
         failedAtCursor = record.failedAtCursor ?: record.cursor,
         attempt = 0,
@@ -1108,7 +1106,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     reason = it.reason ?: reason,
                     status = JobStatus.Cancelling,
                     readyAt = now,
-                    hookKind = it.hookKind ?: JobHookKind.Cancelled,
+                    hookKind = it.hookKind ?: JobHookKind.OnCancelled,
                     hookCursor = it.hookCursor ?: it.cursor,
                     failedAtCursor = it.failedAtCursor ?: it.cursor,
                 )
@@ -1272,7 +1270,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private var cronLastFired = mutableMapOf<String, Instant>()
 
     private fun initialiseCronState(now: Instant) {
-        cronLastFired = klerk.settings.persistence.getCronState().toMutableMap()
+        cronLastFired = klerk.settings.persistence.cronState().toMutableMap()
         // A schedule that has never fired starts from now, so adding a cron to an existing system does not
         // immediately fire every occurrence since the epoch.
         jobSpec.crons.forEach { cronLastFired.putIfAbsent(it.id, now) }

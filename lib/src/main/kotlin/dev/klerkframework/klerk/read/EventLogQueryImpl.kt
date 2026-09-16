@@ -1,8 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.EventLogRuleArgs
-import dev.klerkframework.klerk.EventLogEntryQuery
-import dev.klerkframework.klerk.EventLogQuery
+import dev.klerkframework.klerk.PendingRead
 import dev.klerkframework.klerk.AuthorizationException
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
@@ -26,11 +25,11 @@ internal class EventLogQueryImpl<C : KlerkContext, V>(
     private val after: Instant,
     private val before: Instant,
     private val upToSequenceNumber: Long,
-) : EventLogQuery {
+) : PendingRead<List<EventLogEntry>> {
 
     override suspend fun get(): List<EventLogEntry> {
         ReadBlockGuard.checkNotInsideReadBlock(
-            "EventLogQuery.get()",
+            "eventLog(...).get()",
             "Create the query inside the read block and call get() after it has ended.",
         )
         return withContext(Dispatchers.IO) {
@@ -46,11 +45,11 @@ internal class EventLogEntryQueryImpl<C : KlerkContext, V>(
     private val klerk: Klerk<C, V>,
     private val sequenceNumber: Long,
     private val upToSequenceNumber: Long,
-) : EventLogEntryQuery {
+) : PendingRead<EventLogEntry?> {
 
     override suspend fun get(): EventLogEntry? {
         ReadBlockGuard.checkNotInsideReadBlock(
-            "EventLogEntryQuery.get()",
+            "eventLogEntry(...).get()",
             "Create the query inside the read block and call get() after it has ended.",
         )
         if (sequenceNumber > upToSequenceNumber) {
@@ -71,7 +70,7 @@ internal fun <C : KlerkContext, V> eventLogQuery(
     id: ModelID<out Any>?,
     after: Instant,
     before: Instant,
-): EventLogQuery = EventLogQueryImpl(
+): PendingRead<List<EventLogEntry>> = EventLogQueryImpl(
     klerk = klerk,
     modelId = id?.value,
     after = after,
@@ -83,7 +82,7 @@ internal fun <C : KlerkContext, V> eventLogQuery(
 internal fun <C : KlerkContext, V> eventLogEntryQuery(
     klerk: Klerk<C, V>,
     sequenceNumber: Long,
-): EventLogEntryQuery = EventLogEntryQueryImpl(
+): PendingRead<EventLogEntry?> = EventLogEntryQueryImpl(
     klerk = klerk,
     sequenceNumber = sequenceNumber,
     upToSequenceNumber = klerk.impl().eventsManager.visibleSequenceNumber,

@@ -193,11 +193,11 @@ When the declaration declares real [steps](#steps-looking-at-the-bytes-and-rewri
 
 ```kotlin
 val blobID = klerk.attachedData.prepare(inputStream, InventoryCsv::class, context)
-klerk.attachedData.awaitProcessing(blobID)   // throws BlobRejected if a step refused the file
+klerk.attachedData.awaitProcessing(blobID)   // throws BlobRejectedException if a step refused the file
 ```
 
 `awaitProcessing` returns immediately when there is nothing to wait for, so it is safe to call for any value. A step
-that refuses the file throws `BlobRejected` with the reason, and the value is deleted. A step that *fails* — a scanner
+that refuses the file throws `BlobRejectedException` with the `reason`, and the value is deleted. A step that *fails* — a scanner
 that is briefly unreachable — is retried with the usual backoff, and ends up in the dead-letter queue if it keeps
 failing; the job is called `klerk-process-attached-data` in the admin UI.
 

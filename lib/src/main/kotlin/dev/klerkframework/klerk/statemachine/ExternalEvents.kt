@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.validation.ContextValidity
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.PropertyKey

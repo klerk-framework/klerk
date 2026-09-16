@@ -222,7 +222,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      *
      * Not authorized: what runs here is what the developer declared on the property, not something an actor chose.
      *
-     * @throws BlobRejected if the step refuses the file, or if it does not satisfy `accept`/`maxSize` — which are
+     * @throws BlobRejectedException if the step refuses the file, or if it does not satisfy `accept`/`maxSize` — which are
      * re-checked first, and again after a step that replaces the bytes.
      * @throws IllegalStateException if the value has already been claimed by a model.
      */
@@ -237,7 +237,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
         // Cheap first: a file the property will not accept anyway should not be scanned or disarmed. The claim
         // checks this again — this is about failing early, not about being the only check.
-        declaration.reasonToReject(metadata)?.let { throw BlobRejected("The file is not acceptable here: $it") }
+        declaration.reasonToReject(metadata)?.let { throw BlobRejectedException("The file is not acceptable here: $it") }
 
         val steps = declaration.stepsToRun
         val total = steps.size
@@ -246,7 +246,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         // name, since a step may be declared twice. Anything else means the declaration changed while the value was
         // being processed, and running its steps again could disarm twice.
         if (steps.take(completed.size).map { it.first } != completed) {
-            throw BlobRejected("The steps of ${declaration::class.simpleName} changed while the file was being processed")
+            throw BlobRejectedException("The steps of ${declaration::class.simpleName} changed while the file was being processed")
         }
         if (completed.size == total) {
             processed(id)
@@ -258,12 +258,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             .use { step(BlobPreAttachStepArgs(it, metadata)) }
         when (result) {
             is BlobPreAttachStepResult.Pass -> Unit
-            is BlobPreAttachStepResult.Reject -> throw BlobRejected(result.reason)
+            is BlobPreAttachStepResult.Reject -> throw BlobRejectedException(result.reason)
             is BlobPreAttachStepResult.Replace -> {
                 metadata = replaceValue(id, result.value, metadata)
                 // A rewrite can change what the file is and how large it is, so the declaration applies again.
                 declaration.reasonToReject(metadata)?.let {
-                    throw BlobRejected("After '$name' the file is not acceptable here: $it")
+                    throw BlobRejectedException("After '$name' the file is not acceptable here: $it")
                 }
             }
         }
@@ -288,7 +288,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         } finally {
             waiters.remove(id.value)
         }
-        rejection?.let { throw BlobRejected(it) }
+        rejection?.let { throw BlobRejectedException(it) }
     }
 
     /** Tells whoever is waiting that every step has run. */

@@ -6,19 +6,30 @@ import kotlin.reflect.KProperty0
 
 /**
  * Base class for everything that can go wrong while processing a command, surfaced in
- * [dev.klerkframework.klerk.CommandResult.Failure.problems]. Each subtype maps to an [asException] and a
- * [recommendedHttpCode] for callers that want to translate a failure into a thrown exception or an HTTP response.
+ * [dev.klerkframework.klerk.CommandResult.Failure.problems]. Each subtype maps to an [asException] for callers
+ * that want to translate a failure into a thrown exception.
  */
 public sealed class Problem(public val endUserTranslatedMessage: String, public val code: KlerkErrorCode) {
-    /** The exception [dev.klerkframework.klerk.CommandResult.getOrThrow] throws for this problem. */
+    /**
+     * The exception [dev.klerkframework.klerk.CommandResult.getOrThrow] throws for this problem. Subclasses narrow
+     * the type: [AuthorizationProblem] and [InternalProblem] give a [KlerkException]; the others give the standard
+     * exception for the situation — [IllegalArgumentException] for invalid input, [IllegalStateException] for a
+     * state conflict or unavailable server, and [NoSuchElementException] for [NotFoundProblem].
+     */
     public abstract fun asException(): Exception
-    public abstract val recommendedHttpCode: Int
 
     /** The validation/authorization rule that caused this problem, if any. */
     public abstract val violatedRule: RuleDescription?
 
     public override fun toString(): String =
         if (violatedRule == null) "[$code] $endUserTranslatedMessage" else "[$code] $endUserTranslatedMessage ($violatedRule)"
+
+    /** Everything that identifies this problem. Subclasses with more properties add them. */
+    internal open val equalityKey: List<Any?> get() = listOf(this::class, endUserTranslatedMessage, code, violatedRule)
+
+    /** Problems are equal if they are of the same class and have equal properties. */
+    public final override fun equals(other: Any?): Boolean = other is Problem && other.equalityKey == equalityKey
+    public final override fun hashCode(): Int = equalityKey.hashCode()
 }
 
 /**
@@ -33,7 +44,7 @@ public class InvalidPropertyCollectionProblem(
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidPropertyCollection) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val recommendedHttpCode: Int = 400
+    override val equalityKey: List<Any?> get() = super.equalityKey + listOf(fieldsMustBeNull, fieldsMustNotBeNull)
 }
 
 /** A rule attached to the event with `validateWithContext` refused the command, based on the context alone. */
@@ -42,7 +53,6 @@ public class PreventedByRuleProblem(
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.PreventedByRule) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val recommendedHttpCode: Int = 400
 }
 
 /** A single property's [DataContainer] rejected the value passed to it (e.g. failed its own validation). */
@@ -52,7 +62,7 @@ public class InvalidPropertyProblem(
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidProperty) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val recommendedHttpCode: Int = 400
+    override val equalityKey: List<Any?> get() = super.equalityKey + propertyName
 }
 
 /** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
@@ -69,27 +79,25 @@ public enum class RuleType {
     Authorization
 }
 
-/** The actor was not authorized to submit this command. Maps to HTTP 403. */
+/** The actor was not authorized to submit this command. */
 public class AuthorizationProblem(
     endUserTranslatedMessage: String,
     override val violatedRule: RuleDescription?,
     code: KlerkErrorCode
 ) : Problem(endUserTranslatedMessage, code) {
     public override fun asException(): AuthorizationException = AuthorizationException(code, endUserTranslatedMessage)
-    public override val recommendedHttpCode: Int = 403
 }
 
-/** A bug in Klerk itself, or in configured code, prevented processing. Maps to HTTP 500. */
+/** A bug in Klerk itself, or in configured code, prevented processing. */
 public class InternalProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
     public override fun asException(): InternalException = InternalException(code, endUserTranslatedMessage)
-    public override val recommendedHttpCode: Int = 500
     public override val violatedRule: RuleDescription? = null
 }
 
 /**
  * The command could not be applied given the model's current state (e.g. the event is not possible in the model's
- * current state machine state). Maps to HTTP 409.
+ * current state machine state).
  * @param internalDescription a non-translated, developer-facing description used in the thrown [IllegalStateException].
  */
 public class StateProblem(
@@ -99,41 +107,37 @@ public class StateProblem(
     override val violatedRule: RuleDescription? = null
 ) : Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalStateException = IllegalStateException(internalDescription)
-    public override val recommendedHttpCode: Int = 409
+    override val equalityKey: List<Any?> get() = super.equalityKey + internalDescription
 }
 
-/** The server is temporarily unable to process the command (e.g. not started, or shutting down). Maps to HTTP 503. */
+/** The server is temporarily unable to process the command (e.g. not started, or shutting down). */
 public class ServerStateProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.ServerNotAvailable) {
     public override fun asException(): IllegalStateException = IllegalStateException(toString())
-    public override val recommendedHttpCode: Int = 503
     public override val violatedRule: RuleDescription? = null
 }
 
-/** The command referenced a model, or referenced data, that does not exist. Maps to HTTP 404. */
+/** The command referenced a model, or referenced data, that does not exist. */
 public class NotFoundProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.NotFound) {
     public override fun asException(): NoSuchElementException = NoSuchElementException(toString())
-    public override val recommendedHttpCode: Int = 404
     public override val violatedRule: RuleDescription? = null
 }
 
-/** The command itself was malformed independent of model state (e.g. type mismatch between event and model). Maps to HTTP 400. */
+/** The command itself was malformed independent of model state (e.g. type mismatch between event and model). */
 public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val recommendedHttpCode: Int = 400
     public override val violatedRule: RuleDescription? = null
 }
 
 /**
  * The [dev.klerkframework.klerk.command.CommandToken] was reused, or referenced a model that was modified since the
- * token was created. See [dev.klerkframework.klerk.command.ProcessingOptions.token]. Maps to HTTP 400.
+ * token was created. See [dev.klerkframework.klerk.command.ProcessingOptions.token].
  */
 public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
     public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val recommendedHttpCode: Int = 400
     public override val violatedRule: RuleDescription? = null
 }
 
@@ -172,7 +176,8 @@ public class PersistedModelMismatchException(
     public val modelType: String,
     public val modelId: Int,
     public val reason: String,
-) : RuntimeException(
+) : KlerkException(
+    KlerkErrorCode.PersistedModelMismatch,
     "The stored $modelType with id $modelId does not match the model classes: $reason. Register a MigrationStep " +
             "that makes the stored data match."
 )
@@ -189,7 +194,8 @@ public class PersistedModelValidationException(
     public val modelType: String,
     public val modelId: Int,
     public val reason: String,
-) : RuntimeException(
+) : KlerkException(
+    KlerkErrorCode.PersistedModelInvalid,
     "The stored $modelType with id $modelId no longer passes validation: $reason. Register a MigrationStep " +
             "that makes the stored data valid."
 )
@@ -219,6 +225,12 @@ public enum class KlerkErrorCode(public val code: String) {
 
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),
+
+    /** A stored model does not match its model class. */
+    PersistedModelMismatch("ERROR-STORAGE-1"),
+
+    /** A stored model no longer passes validation. */
+    PersistedModelInvalid("ERROR-STORAGE-2"),
 
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
     InvalidProperty("ERROR-VALIDATION-2"),
@@ -272,5 +284,10 @@ public enum class KlerkErrorCode(public val code: String) {
     override fun toString(): String = code
 }
 
-/** Thrown by `attachedData.awaitProcessing` when a step refused the file, or when it is not what its property wants. */
-public class BlobRejected(message: String) : RuntimeException(message)
+/**
+ * Thrown by `attachedData.awaitProcessing` when a step refused the file, or when it is not what its property wants.
+ *
+ * @property reason why the file was refused, suitable for showing to the user who uploaded it.
+ */
+public class BlobRejectedException(public val reason: String) :
+    KlerkException(KlerkErrorCode.AttachedDataNotAcceptable, reason)

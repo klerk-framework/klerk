@@ -105,8 +105,8 @@ public enum class JobStatus(public val isTerminal: Boolean) {
 
 /** Which end-of-life hook a job is currently unwinding through, or null if it is running its ordinary steps. */
 public enum class JobHookKind {
-    Cancelled,
-    DeadLettered,
+    OnCancelled,
+    OnDeadLettered,
 }
 
 /**
@@ -180,7 +180,7 @@ public data class JobLogEntry(
  * `awaitSpawned` yield.
  *
  * @property result whatever the child passed to `JobResult.Success(result = ...)`, or null if it passed none or did
- * not succeed. Encoding is the child's business — it is an opaque string here.
+ * not succeed. Stored as a string; read it with [resultAs] when the child encoded it with [encodeJobResult].
  */
 @Serializable
 public data class ChildOutcome(
@@ -243,5 +243,5 @@ public class DeclaredJob<C : KlerkContext, V> internal constructor(
     /** The type of job that will run. */
     public val name: JobName get() = type.name
 
-    override fun toString(): String = "ScheduledJob(${name.value})"
+    override fun toString(): String = "DeclaredJob(${name.value})"
 }

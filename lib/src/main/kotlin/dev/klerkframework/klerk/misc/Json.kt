@@ -5,7 +5,7 @@ import dev.klerkframework.klerk.datatypes.*
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import java.lang.reflect.InvocationTargetException
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.microseconds
 
@@ -72,7 +72,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.String -> JsonPrimitive(value as String)
         ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).value.name)
         ContainerKind.Int -> JsonPrimitive(value as Int)
-        ContainerKind.Date -> JsonPrimitive((container as DateContainer).value.toEpochDay().toInt())
+        ContainerKind.Date -> JsonPrimitive((container as DateContainer).value.toEpochDays().toInt())
         ContainerKind.Long -> JsonPrimitive(value as Long)
         ContainerKind.Instant -> JsonPrimitive((container as InstantContainer).value.to64bitMicroseconds())
         ContainerKind.Duration -> JsonPrimitive((container as DurationContainer).value.inWholeMicroseconds)
@@ -151,7 +151,7 @@ private fun decodeContainerArgument(shape: Shape.Container, json: JsonElement, p
         }
 
         ContainerKind.Instant -> decode64bitMicroseconds(json.long(path))
-        ContainerKind.Date -> LocalDate.ofEpochDay(json.int(path).toLong())
+        ContainerKind.Date -> LocalDate.fromEpochDays(json.int(path))
         ContainerKind.Duration -> json.long(path).microseconds
         ContainerKind.Geo -> GeoPosition(json.long(path).toULong())
     }

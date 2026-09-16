@@ -7,7 +7,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
 import dev.klerkframework.klerk.job.*
-import dev.klerkframework.klerk.log.KlerkLog
+import dev.klerkframework.klerk.log.ActivityLog
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.EventLogEntry
@@ -46,17 +46,21 @@ public interface Klerk<C : KlerkContext, V> {
     public val modelChanges: KlerkModelChanges<C, V>
 
     /**
+     * Large immutable data (blobs and strings) attached to models.
+     */
+    /**
      * Escape hatches that bypass the state machine, validation and authorization. Requires
      * [KlerkSettings.allowUnsafeOperations].
      */
     public val unsafe: KlerkUnsafe<C>
 
-    /**
-     * Large immutable data (blobs and strings) attached to models.
-     */
     public val attachedData: KlerkAttachedData<C>
     public val meta: KlerkMeta
-    public val log: KlerkLog
+    /**
+     * What has happened in the application recently: starts, stops, commands and plugin activity. Not to be confused
+     * with the event log, which is persisted and read with [dev.klerkframework.klerk.read.Reader.eventLog].
+     */
+    public val activityLog: ActivityLog
 
     /**
      * Submits a single event for processing.
@@ -71,7 +75,7 @@ public interface Klerk<C : KlerkContext, V> {
     public suspend fun <T : Any, P> handle(
         command: Command<T, P>,
         context: C,
-        options: ProcessingOptions = ProcessingOptions(CommandToken.simple())
+        options: ProcessingOptions = ProcessingOptions()
     ): CommandResult<T>
 
     /**
@@ -106,36 +110,17 @@ public interface Klerk<C : KlerkContext, V> {
 }
 
 /**
- * A snapshot of the event log, obtained from [Reader.eventLog] inside a read block. The entries themselves are read
- * from storage by [get], after the read lock has been released.
+ * A read prepared inside a read block and performed by [get] after the block has ended, so that storage is never
+ * queried while the read lock is held.
  */
-public interface EventLogQuery {
+public interface PendingRead<out T> {
 
     /**
-     * Reads the matching entries, ordered by [EventLogEntry.sequenceNumber], oldest first.
-     *
-     * Only entries whose command was already visible in the read block that created this query are returned, so the
-     * log never shows an event that has not happened yet. Can be called repeatedly; the result is always as of that
-     * read block.
+     * Performs the read. The result is as of the read block that created this, however late or often it is called.
      *
      * @throws IllegalStateException if called from inside a read block
      */
-    public suspend fun get(): List<EventLogEntry>
-}
-
-/**
- * A single event-log entry, obtained from [Reader.eventLogEntry] inside a read block. The entry itself is read from
- * storage by [get], after the read lock has been released.
- */
-public interface EventLogEntryQuery {
-
-    /**
-     * Reads the entry, or null if there is no such entry or it was not yet visible in the read block that created
-     * this query.
-     *
-     * @throws IllegalStateException if called from inside a read block
-     */
-    public suspend fun get(): EventLogEntry?
+    public suspend fun get(): T
 }
 
 /**
@@ -146,7 +131,8 @@ public interface KlerkModelChanges<C : KlerkContext, V> {
     /**
      * Subscribes to model changes.
      *
-     * If a model is changed but the actor is not authorized to read it, the model will be ignored.
+     * Changes of models the actor may not read are left out, and so are changes of a model that no longer exists when
+     * the change is delivered. Deletions are always sent.
      *
      * @param id if provided, subscribes only to changes of the referenced model. If null, subscribes to all models.
      * @param context containing the actor that will be used for authorization
@@ -270,30 +256,16 @@ public interface JobManager<C : KlerkContext, V> {
      */
     public suspend fun delete(id: JobId, context: C): Unit
 
-    /**
-     * Runs exactly one step, if any job is ready. Only for [dev.klerkframework.klerk.job.JobExecution.Manual].
-     *
-     * @return true if a step ran, false if there was nothing to do.
-     * @throws IllegalStateException if execution is [dev.klerkframework.klerk.job.JobExecution.Automatic].
-     */
-    public suspend fun step(): Boolean
-
-    /**
-     * Runs steps until no job is ready any more. Only for [dev.klerkframework.klerk.job.JobExecution.Manual].
-     *
-     * Jobs waiting for a `scheduleAt` or a backoff that has not arrived on the configured clock are *not* ready, so
-     * this returns rather than spinning — advance a [dev.klerkframework.klerk.misc.MutableClock] and call it again.
-     *
-     * @param maxSteps a safety net against a job that yields forever.
-     * @return how many steps ran.
-     * @throws IllegalStateException if execution is [dev.klerkframework.klerk.job.JobExecution.Automatic], or if
-     * [maxSteps] was reached (which means a test would otherwise have hung).
-     */
-    public suspend fun runUntilIdle(maxSteps: Int = 10_000): Int
 
 }
 
 internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
+
+    /** Runs one step. Exposed to applications as `dev.klerkframework.klerk.testing.step`. */
+    suspend fun step(): Boolean
+
+    /** Runs steps until idle. Exposed to applications as `dev.klerkframework.klerk.testing.runUntilIdle`. */
+    suspend fun runUntilIdle(maxSteps: Int = 10_000): Int
 
     /** True if no job is using this id. Used while allocating ids during command processing. */
     fun isJobIdAvailable(id: Long): Boolean
@@ -458,7 +430,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * itself rather than waiting for something that will never happen.
      *
      * @param timeout how long to wait. The steps keep running afterwards; only the waiting stops.
-     * @throws BlobRejected if a step refused the file, or if it does not satisfy `accept`/`maxSize`. The value is
+     * @throws BlobRejectedException if a step refused the file, or if it does not satisfy `accept`/`maxSize`. The value is
      * deleted, so this is the only place the reason can be read.
      * @throws kotlinx.coroutines.TimeoutCancellationException if [timeout] passes first.
      */
@@ -623,8 +595,11 @@ public interface KlerkMeta {
     /**
      * Shuts down the framework in an ordered manner. Plugins are stopped first, in reverse order. It is recommended
      * to stop clients (Ktor, gRPC etc.) first.
+     *
+     * Suspends until the job steps that are already running have finished, for at most 30 seconds. A step that has not
+     * finished by then is abandoned without committing anything, and runs again on the next start.
      */
-    public fun stop()
+    public suspend fun stop()
 
     /**
      * The number of models currently in the system, including those created by plugins.

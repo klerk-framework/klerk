@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.storage.spi.*
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.misc.MutableClock
@@ -182,16 +184,16 @@ class JobAttachedDataClaimTest {
             val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
             klerk.jobs.runUntilIdle()
             assertEquals(JobStatus.DeadLettered, klerk.jobs.get(id, Ctx.system()).status)
-            assertEquals(1, storage.getAllJobs().size)
+            assertEquals(1, storage.allJobs().size)
 
             clock += 1.hours
             klerk.jobs.runUntilIdle()
-            assertEquals(1, storage.getAllJobs().size, "retention has not elapsed yet")
+            assertEquals(1, storage.allJobs().size, "retention has not elapsed yet")
             assertEquals(1, storage.readAllAttachedDataMetadata().size, "a dead letter keeps its claim")
 
             clock += 25.hours
             klerk.jobs.runUntilIdle()
-            assertEquals(0, storage.getAllJobs().size, "the dead letter should have been deleted")
+            assertEquals(0, storage.allJobs().size, "the dead letter should have been deleted")
 
             storage.deleteExpiredAttachedData(clock.now())
             assertEquals(0, storage.readAllAttachedDataMetadata().size, "its claim should have been released with it")
@@ -226,12 +228,12 @@ class JobAttachedDataClaimTest {
 
         clock += 1.hours
         klerk.jobs.runUntilIdle()
-        assertEquals(1, storage.getAllJobs().size, "retention has not elapsed yet")
+        assertEquals(1, storage.allJobs().size, "retention has not elapsed yet")
         assertEquals(1, storage.readAllAttachedDataMetadata().size, "a cancelled job keeps its claim")
 
         clock += 25.hours
         klerk.jobs.runUntilIdle()
-        assertEquals(0, storage.getAllJobs().size, "the cancelled job should have been deleted")
+        assertEquals(0, storage.allJobs().size, "the cancelled job should have been deleted")
 
         storage.deleteExpiredAttachedData(clock.now())
         assertEquals(0, storage.readAllAttachedDataMetadata().size, "its claim should have been released with it")
@@ -258,15 +260,15 @@ class JobAttachedDataClaimTest {
         val id = klerk.jobs.schedule(Uploader.declare(UploadCursor(attach = true)), Ctx.system())
         klerk.jobs.runUntilIdle()
         assertEquals(JobStatus.Succeeded, klerk.jobs.get(id, Ctx.system()).status)
-        assertEquals(1, storage.getAllJobs().size)
+        assertEquals(1, storage.allJobs().size)
 
         clock += 1.hours
         klerk.jobs.runUntilIdle()
-        assertEquals(1, storage.getAllJobs().size, "retention has not elapsed yet")
+        assertEquals(1, storage.allJobs().size, "retention has not elapsed yet")
 
         clock += 25.hours
         klerk.jobs.runUntilIdle()
-        assertEquals(0, storage.getAllJobs().size, "the succeeded job should have been deleted")
+        assertEquals(0, storage.allJobs().size, "the succeeded job should have been deleted")
         klerk.meta.stop()
     }
 

@@ -6,8 +6,8 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 
 /**
- * Outcome of `Klerk.handle`: either [Success] or [Failure]. Use a `when` on the sealed type, or [getOrThrow]/
- * [getOrElse] for a terser call site.
+ * Outcome of `Klerk.handle`: either [Success] or [Failure]. Use a `when` on the sealed type, or [getOrThrow],
+ * [getOrElse] or [fold] for a terser call site.
  */
 public sealed class CommandResult<T : Any> {
 
@@ -23,11 +23,22 @@ public sealed class CommandResult<T : Any> {
         }
     }
 
-    /** Returns this as [Success], or the [Success] produced by [onFailure] from this [Failure] otherwise. */
-    public fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> {
+    /**
+     * Returns this as [Success], or calls [onFailure] otherwise. [onFailure] typically leaves the enclosing function
+     * with `return` or `throw`; to turn either outcome into another value, use [fold].
+     */
+    public inline fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> {
         return when (this) {
             is Failure -> onFailure(this)
             is Success -> this
+        }
+    }
+
+    /** Returns the result of [onSuccess] or [onFailure], depending on the outcome. */
+    public inline fun <R> fold(onSuccess: (Success<T>) -> R, onFailure: (Failure<T>) -> R): R {
+        return when (this) {
+            is Failure -> onFailure(this)
+            is Success -> onSuccess(this)
         }
     }
 
@@ -39,19 +50,20 @@ public sealed class CommandResult<T : Any> {
      * a [dev.klerkframework.klerk.read.Reader] using the same context, or from [authorizedModels].
      *
      * @property primaryModel the model that was created or updated directly by the command, as opposed to by
-     * secondary events triggered as a consequence. Null if the command's event doesn't target/produce a model
-     * that the caller can be told about (e.g. a dry run, or a void event with no created model).
+     * secondary events triggered as a consequence. For an instance event it is the command's model; for a void event
+     * it is the model the event created, or null if it created none or more than one. A dry run reports the same.
      * @property createdModels all models created as part of processing this command (including secondary events).
      * @property updatedModels all models whose properties were changed.
      * @property deletedModels all models deleted as part of processing this command.
      * @property transitionedModels all models that changed state machine state.
      * @property jobs the ids of the managed jobs this command scheduled, in declaration order.
-     * @property unmanagedJobs descriptions of the unmanaged jobs (actions) that were started by this command.
+     * @property unmanagedJobs the functions passed to `unmanagedJob(...)` that this command started, e.g. for
+     * `assertContains(result.unmanagedJobs, ::sendWelcomeMail)` in a test.
      * @property authorizedModels the affected models as they are after the command, keyed by ID. A model is present
      * only if the context that issued the command is authorized to read it — absence does not mean the model wasn't
      * affected.
-     * @property log human-readable trace of processing steps, populated when requested via
-     * [dev.klerkframework.klerk.command.DebugOptions].
+     * @property log human-readable trace of the processing steps, e.g. which function created a model or which
+     * transition was made. Always populated.
      */
     public data class Success<T : Any>(
         val primaryModel: ModelID<T>?,
@@ -60,10 +72,18 @@ public sealed class CommandResult<T : Any> {
         val deletedModels: Set<ModelID<out Any>>,
         val transitionedModels: Set<ModelID<out Any>>,
         val jobs: List<JobId>,
-        val unmanagedJobs: List<String>,
+        val unmanagedJobs: List<Function<*>>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
-    ) : CommandResult<T>()
+    ) : CommandResult<T>() {
+
+        /** The model with [id] from [authorizedModels], or null if it is absent. */
+        @Suppress("UNCHECKED_CAST")
+        public fun <M : Any> authorizedModel(id: ModelID<M>): Model<M>? = authorizedModels[id] as Model<M>?
+
+        /** The [primaryModel] from [authorizedModels], or null if there is none or the context may not read it. */
+        public val authorizedPrimaryModel: Model<T>? get() = primaryModel?.let { authorizedModel(it) }
+    }
 
     public data class Failure<T : Any>(val problems: List<Problem>) :
         CommandResult<T>()
@@ -94,7 +114,7 @@ public sealed class CommandResult<T : Any> {
                 deletedModels = delta.deletedModels.toSet(),
                 transitionedModels = delta.transitions.toSet(),
                 jobs = delta.newJobs.map { it.id },
-                unmanagedJobs = delta.unmanagedJobs.map { it.description },
+                unmanagedJobs = delta.unmanagedJobs.map { it.function },
                 authorizedModels = authorized,
                 log = delta.log
             )

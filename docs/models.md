@@ -115,12 +115,12 @@ Built-in containers:
 | `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
 | `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
 | `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
-| `DateContainer`        | `java.time.LocalDate`   | none — a calendar date with no time of day or time zone                                                              |
+| `DateContainer`        | `kotlinx.datetime.LocalDate` | none — a calendar date with no time of day or time zone                                                              |
 | `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
 | `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 
 All the numeric containers extend `NumberContainer`, which is what code that handles any number generically uses: it
-exposes `minAsText`, `maxAsText` and `hasDecimals` without knowing the exact kind.
+exposes `min`, `max` and `hasDecimals` without knowing the exact kind.
 
 On top of the built-in constraints, add custom rules via `validators`:
 
@@ -131,7 +131,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
     override val validators = setOf(::mustBeEven)
 
     fun mustBeEven(value: Int, t: Translation): PropertyValidity {
-        return if (value % 2 == 0) PropertyValidity.Valid else PropertyValidity.Invalid()
+        return if (value % 2 == 0) Valid else PropertyValidity.Invalid()
     }
 }
 ```

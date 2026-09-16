@@ -100,5 +100,5 @@ public interface EmailSender<C : KlerkContext, V> {
     public suspend fun sendEmail(email: BasicEmail, context: C): JobId?
 
     /** @return the command that would send [email], if this sender can express sending as a command, else `null`. */
-    public fun getSendEmailCommand(email: BasicEmail): Command<out Any, out Any>?
+    public fun sendEmailCommand(email: BasicEmail): Command<out Any, out Any>?
 }

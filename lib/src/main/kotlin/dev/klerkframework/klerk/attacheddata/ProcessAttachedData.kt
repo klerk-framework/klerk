@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.AttachedBlobID
-import dev.klerkframework.klerk.BlobRejected
+import dev.klerkframework.klerk.BlobRejectedException
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.job.*
@@ -53,9 +53,9 @@ internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessB
                     log = listOf(args.info("The blob ${args.cursor.blobId} is through every step")),
                 )
             }
-        } catch (e: BlobRejected) {
+        } catch (e: BlobRejectedException) {
             // A verdict, not a failure: retrying would reach the same conclusion, and the file must not be stored.
-            val reason = e.message ?: "The file was rejected"
+            val reason = e.reason
             attachedData.rejected(args.cursor.blobId, reason)
             JobResult.Abort(reason, log = listOf(args.warn(reason)))
         }

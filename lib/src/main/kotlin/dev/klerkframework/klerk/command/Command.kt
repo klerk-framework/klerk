@@ -65,7 +65,7 @@ public fun <T : Any> Command(event: InstanceEventNoParameters<T>, model: ModelID
     Command.dynamic(event, model, null)
 
 /**
- * @param token ensures idempotency: a given token can be used to successfully process a command only once: any
+ * @param token ensures idempotency (defaults to [CommandToken.simple]): a given token can be used to successfully process a command only once: any
  * later reuse fails with [dev.klerkframework.klerk.KlerkErrorCode.CommandTokenAlreadyUsed]. If created with
  * [CommandToken.requireUnmodifiedModel]/[CommandToken.requireUnmodifiedModels], the command also fails with
  * [dev.klerkframework.klerk.KlerkErrorCode.ModelModifiedSinceTokenCreation] if any of the referenced models were
@@ -74,13 +74,13 @@ public fun <T : Any> Command(event: InstanceEventNoParameters<T>, model: ModelID
  * normal, but no state is actually changed and no effects (jobs, subscriptions, persistence) are triggered.
  */
 public data class ProcessingOptions(
-    public val token: CommandToken,
+    public val token: CommandToken = CommandToken.simple(),
     public val dryRun: Boolean = false,
-    public val debugOptions: Map<DebugOptions, LogLevel> = defaultDebugOptions
+    public val debugOptions: Map<DebugOption, LogLevel> = defaultDebugOptions
 )
 
 /** Categories of extra logging that can be requested per-command via [ProcessingOptions.debugOptions]. */
-public enum class DebugOptions {
+public enum class DebugOption {
     Sequence,
     Misc,
     Result

@@ -4,69 +4,42 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
-
 import dev.klerkframework.klerk.misc.verifyReferencesExist
-import dev.klerkframework.klerk.read.ModelReader
-import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
-import kotlin.time.Instant
+import dev.klerkframework.klerk.statemachine.Executable
 
-internal class InstanceLifecycleUpdateModel<T : Any, C : KlerkContext, V>(
-    val f: (LifecycleArgs<T, C, V>) -> T,
-    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
-) : InstanceLifecycleExecutable<T, C, V> {
+internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>(
+    val f: (args: A) -> T,
+    override val onCondition: ((args: A) -> Boolean)?
+) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
-        args: LifecycleArgs<T, C, V>,
+        args: A,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
         processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> =
-        // LifecycleArgs carries no context, so the application's Translation cannot be reached from here.
-        process(f(args), args.model, args.time, DefaultTranslation, args.reader, view, extractNameFromFunction(f))
+    ): ProcessingData<Primary, C, V> {
+        val newProperties = f(args)
+        val model = args.model
+        val validationProblems = validateModelProps(newProperties, args.context.translation)
+        if (validationProblems.isNotEmpty()) {
+            return ProcessingData(problems = validationProblems)
+        }
 
-}
-
-internal class InstanceEventUpdateModel<T : Any, P, C : KlerkContext, V>(
-    val f: (InstanceEventArgs<T, P, C, V>) -> T,
-    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
-) : InstanceEventExecutable<T, P, C, V> {
-
-    override fun <Primary : Any> process(
-        args: InstanceEventArgs<T, P, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> =
-        process(f(args), args.model, args.context.time, args.context.translation, args.reader, view, extractNameFromFunction(f))
-
-}
-
-private fun <Primary : Any, T : Any, C : KlerkContext, V> process(
-    newProperties: T,
-    model: Model<T>,
-    time: Instant,
-    translation: Translation,
-    reader: ModelReader<C, V>,
-    view: ModelViews<T, C>,
-    functionName: String,
-): ProcessingData<Primary, C, V> {
-    val validationProblems = validateModelProps(newProperties, translation)
-    if (validationProblems.isNotEmpty()) {
-        return ProcessingData(problems = validationProblems)
+        val updatedModel = model.copy(
+            props = newProperties,
+            lastPropsUpdatedAt = makeExactSerializable(args.context.time),
+        )
+        val referenceProblem = verifyReferencesExist(updatedModel, args.reader)
+        if (referenceProblem != null) {
+            throw referenceProblem.asException()
+        }
+        return ProcessingData(
+            updatedModels = listOf(updatedModel.id),
+            aggregatedModelState = mapOf(updatedModel.id to updatedModel),
+            functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
+            log = listOf("Updating properties using ${extractNameFromFunction(f)}")
+        )
     }
 
-    val updatedModel = model.copy(props = newProperties, lastPropsUpdatedAt = makeExactSerializable(time))
-    val referenceProblem = verifyReferencesExist(updatedModel, reader)
-    if (referenceProblem != null) {
-        throw referenceProblem.asException()
-    }
-    return ProcessingData(
-        updatedModels = listOf(updatedModel.id),
-        aggregatedModelState = mapOf(updatedModel.id to updatedModel),
-        functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
-        log = listOf("Updating properties using $functionName")
-    )
 }

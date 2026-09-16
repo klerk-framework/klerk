@@ -98,6 +98,6 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     }
 
     /** All views of this model type that were [ModelView.register]ed, including [all]. */
-    public fun getViews(): List<ModelView<T, C>> = modelViews
+    public val views: List<ModelView<T, C>> get() = modelViews
 
 }

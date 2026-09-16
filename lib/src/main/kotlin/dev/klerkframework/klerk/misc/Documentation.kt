@@ -34,7 +34,7 @@ private fun toVariable(name: String): String = name.replace(" ", "").lowercase()
 private fun <V> generateVoidTransitions(initialState: VoidState<out Any, out Enum<*>, *, V>): String {
     var result = ""
     initialState.onEventBlocks.forEach { eventBlock ->
-        eventBlock.second.executables.filterIsInstance<VoidEventCreateModel<*, *, *, *, V>>().forEach { createModel ->
+        eventBlock.second.executables.filterIsInstance<CreateModel<*, *, *, *, V>>().forEach { createModel ->
             result += "[*] --> ${toVariable(createModel.initialState.name)}: ${eventBlock.first.name}\n"
         }
     }
@@ -49,13 +49,13 @@ private fun <V> generateTransitions(
     states.forEach { state ->
 
         state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<InstanceEventTransition<*, *, *, *, V>>()
+            eventBlock.second.executables.filterIsInstance<Transition<*, *, *, *, V>>()
                 .forEach { transition ->
                     result += "${toVariable(state.name)} --> ${toVariable(transition.targetState.name)}: ${eventBlock.first.name}\n"
                 }
 
             eventBlock.second.executables
-                .filterIsInstance<InstanceEventTransitionWhen<*, *, *, *, *>>()
+                .filterIsInstance<TransitionWhen<*, *, *, *, *>>()
                 .forEach { transition ->
                     transition.branches.forEach { branch ->
                         result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
@@ -69,13 +69,13 @@ private fun <V> generateTransitions(
             when (enterBlock) {
                 is Block.InstanceLifecycleBlock -> {
                     enterBlock.executables
-                        .filterIsInstance<InstanceLifecycleTransition<*, *, *, *>>()
+                        .filterIsInstance<Transition<*, *, *, *, *>>()
                         .forEach { transition ->
                             result += "${toVariable(state.name)} --> ${toVariable(transition.targetState.name)}: [on enter]\n"
                         }
 
                     enterBlock.executables
-                        .filterIsInstance<InstanceLifecycleTransitionWhen<*, *, *, *>>()
+                        .filterIsInstance<TransitionWhen<*, *, *, *, *>>()
                         .forEach { transition ->
                             transition.branches.forEach { branch ->
                                 result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
@@ -104,13 +104,13 @@ private fun <V> generateUpdateNotes(states: List<InstanceState<out Any, out Enum
         var resultState = ""
 
         state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<InstanceEventUpdateModel<*, *, *, *>>().forEach { _ ->
+            eventBlock.second.executables.filterIsInstance<UpdateModel<*, *, *, *>>().forEach { _ ->
                 resultState += "• ${eventBlock.first.name}\n"
             }
         }
 
         state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<InstanceLifecycleUpdateModel<*, *, *>>().forEach { _ ->
+            eventBlock.second.executables.filterIsInstance<UpdateModel<*, *, *, *>>().forEach { _ ->
                 resultState += "• ${eventBlock.first.name}\n"
             }
         }
@@ -135,7 +135,7 @@ private fun <V> generateDeleteTransitions(states: List<State<out Any, out Enum<*
         if (state is InstanceState) {
             state.onEventBlocks.forEach { eventBlock ->
                 eventBlock.second.executables
-                    .filterIsInstance<InstanceEventDelete<*, *, *, *>>()
+                    .filterIsInstance<DeleteModel<*, *, *, *>>()
                     .forEach { _ ->
                         result += "${toVariable(state.name)} --> [*]: ${eventBlock.first.name}\n"
                     }
@@ -146,7 +146,7 @@ private fun <V> generateDeleteTransitions(states: List<State<out Any, out Enum<*
         state.enterBlock.let { enterBlock ->
             when (enterBlock) {
                 is Block.InstanceLifecycleBlock -> {
-                    enterBlock.executables.filterIsInstance<InstanceEventDelete<*, *, *, *>>()
+                    enterBlock.executables.filterIsInstance<DeleteModel<*, *, *, *>>()
                         .forEach { _ ->
                             result += "${toVariable(state.name)} --> [*]: [on enter]\n"
                         }

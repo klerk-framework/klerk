@@ -3,7 +3,7 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.datatypes.*
 import java.lang.reflect.InvocationTargetException
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -533,7 +533,7 @@ internal enum class ContainerKind(val base: KClass<out DataContainer<*>>, val du
     Boolean(BooleanContainer::class, false),
     Enum(EnumContainer::class, null),
     Instant(InstantContainer::class, kotlin.time.Instant.fromEpochSeconds(0)),
-    Date(DateContainer::class, LocalDate.ofEpochDay(0)),
+    Date(DateContainer::class, LocalDate.fromEpochDays(0)),
     Duration(DurationContainer::class, kotlin.time.Duration.ZERO),
     Geo(GeoPositionContainer::class, GeoPosition(0.0, 0.0)),
 }

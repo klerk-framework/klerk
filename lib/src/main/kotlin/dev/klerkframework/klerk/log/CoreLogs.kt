@@ -21,7 +21,7 @@ internal enum class LogSourceMinor {
     Meta,
     Event,
     Read,
-    KlerkLog
+    ActivityLog
 }
 
 internal class LogKlerkStarted(startupTime: Duration) : CoreLogEntry(Meta, null) {
@@ -36,8 +36,8 @@ internal class LogKlerkStopped : CoreLogEntry(Meta, null) {
     override val facts: List<Fact> = emptyList()
 }
 
-internal class LogAccessedKlerkLog(context: KlerkContext) : CoreLogEntry(KlerkLog, context) {
-    override val headingTemplate = "Klerk log was read"
+internal class LogAccessedActivityLog(context: KlerkContext) : CoreLogEntry(ActivityLog, context) {
+    override val headingTemplate = "Activity log was read"
     override val facts: List<Fact> = emptyList()
 }
 

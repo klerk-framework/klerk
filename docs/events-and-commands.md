@@ -85,13 +85,13 @@ val result: CommandResult<Book> = klerk.handle(
 ```
 
 The third parameter, `ProcessingOptions`, controls how the command is processed. It defaults to
-`ProcessingOptions(CommandToken.simple())` — a command guarded only against being submitted twice.
+`ProcessingOptions()` — a command guarded only against being submitted twice.
 
 ```kotlin
 public data class ProcessingOptions(
-    val token: CommandToken,
+    val token: CommandToken = CommandToken.simple(),
     val dryRun: Boolean = false,
-    val debugOptions: Map<DebugOptions, LogLevel> = defaultDebugOptions
+    val debugOptions: Map<DebugOption, LogLevel> = defaultDebugOptions
 )
 ```
 
@@ -127,7 +127,7 @@ public sealed class CommandResult<T : Any> {
         val deletedModels: Set<ModelID<out Any>>,
         val transitionedModels: Set<ModelID<out Any>>,
         val jobs: List<JobId>,
-        val unmanagedJobs: List<String>,
+        val unmanagedJobs: List<Function<*>>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
     ) : CommandResult<T>()
@@ -139,7 +139,8 @@ public sealed class CommandResult<T : Any> {
 `primaryModel` is the model directly created/updated by your command (as opposed to models affected only as a side
 effect, e.g. via `commands` in the state machine). `authorizedModels` contains the resulting models the *current
 context* is allowed to read — anything it isn't authorized for is simply absent, so it is safe to hand this map to a
-caller without leaking data.
+caller without leaking data. `authorizedModel(id)` and `authorizedPrimaryModel` read from it with the model type
+preserved.
 
 In tests and scripts, `.getOrThrow()` is the common shortcut — it returns `Success` or throws the first `Problem` as an
 exception:
@@ -150,26 +151,30 @@ val bookId = klerk.handle(command, Ctx.system())
     .primaryModel!!
 ```
 
-`getOrElse { failure -> ... }` is the non-throwing equivalent when you want to recover instead.
+`getOrElse { failure -> return ... }` is the non-throwing equivalent when you want to leave the function instead, and
+`fold` turns either outcome into a value:
+
+```kotlin
+val book: Model<Book>? = result.fold({ it.authorizedPrimaryModel }, { null })
+```
 
 ### Problems
 
-A `Failure` carries one or more `Problem`s. The concrete subclass tells you what went wrong and maps to a recommended
-HTTP status if you're exposing this over an API:
+A `Failure` carries one or more `Problem`s. The concrete subclass tells you what went wrong (klerk-web maps it to an HTTP status with
+`Problem.httpStatus`):
 
-| Problem                                                       | HTTP      | Meaning                                                                                          |
-|---------------------------------------------------------------|-----------|--------------------------------------------------------------------------------------------------|
-| `NotFoundProblem`                                             | 404       | The referenced model doesn't exist.                                                              |
-| `InvalidPropertyProblem` / `InvalidPropertyCollectionProblem` | 400       | A `DataContainer` or `Validatable` rule rejected the input — see [validation.md](validation.md). |
-| `StateProblem`                                                | 409       | The event isn't valid for the model's current state, or a `CommandToken` precondition failed.    |
-| `AuthorizationProblem`                                        | 403       | An authorization rule rejected the command — see [authorization.md](authorization.md).           |
-| `BadRequestProblem`                                           | 400       | Malformed request, e.g. event visibility too low.                                                |
-| `IdempotenceProblem`                                          | 400       | The `CommandToken` was already used.                                                             |
-| `InternalProblem` / `ServerStateProblem`                      | 500 / 503 | Framework-internal failure.                                                                      |
+| Problem | Meaning |
+|---|---|
+| `NotFoundProblem` | The referenced model doesn't exist. |
+| `InvalidPropertyProblem` / `InvalidPropertyCollectionProblem` | A `DataContainer` or `Validatable` rule rejected the input — see [validation.md](validation.md). |
+| `StateProblem` | The event isn't valid for the model's current state, or a `CommandToken` precondition failed. |
+| `AuthorizationProblem` | An authorization rule rejected the command — see [authorization.md](authorization.md). |
+| `BadRequestProblem` | Malformed request, e.g. event visibility too low. |
+| `IdempotenceProblem` | The `CommandToken` was already used. |
+| `InternalProblem` / `ServerStateProblem` | Framework-internal failure. |
 
-Every problem also carries a `code` (`KlerkErrorCode`), and `asException()` turns it into the matching exception. The
-exceptions Klerk throws itself — `AuthorizationException`, `InternalException`, `IllegalConfigurationException` — share
-the `KlerkException` base class, so `code` is available on all of them.
+Every problem also carries a `code` (`KlerkErrorCode`), and `asException()` turns it into the matching exception. Every
+exception Klerk throws itself extends `KlerkException`, so `code` is available on all of them.
 
 ```kotlin
 when (val result = klerk.handle(command, context)) {

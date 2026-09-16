@@ -33,7 +33,7 @@ class ValidatorTest {
 
     @AfterTest
     fun tearDown() {
-        klerk.meta.stop()
+        runBlocking { klerk.meta.stop() }
     }
 
     @Test
@@ -51,7 +51,7 @@ class ValidatorTest {
                 params
             
             )
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             when (val result = klerk.handle(command, Ctx.system(), options)) {
                 is CommandResult.Failure -> assertTrue(result.problems.first().violatedRule == null)
                 is CommandResult.Success -> fail()
@@ -74,7 +74,7 @@ class ValidatorTest {
                 params
             
             )
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             val result = klerk.handle(command, Ctx.unauthenticated(), options)
             assertTrue(result is CommandResult.Failure, result.toString())
             val problem = result.problems.single()
@@ -98,7 +98,7 @@ class ValidatorTest {
                 age = PositiveEvenIntContainer(44),
                 secretToken = SecretPasscode(234)
             )
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             val result = klerk.handle(Command(CreateAuthor, params), Ctx.system(), options)
             assertTrue(result is CommandResult.Failure, result.toString())
             val problem = result.problems.single()
@@ -123,7 +123,7 @@ class ValidatorTest {
                 params
             
             )
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             val result = klerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Failure)
         }
@@ -144,7 +144,7 @@ class ValidatorTest {
                 genre = BookGenreContainer(BookGenre.Mystery)
             )
             val command = Command(CreateBook, params)
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             // BookStatemachine declares validEnums(CreateBookParams::genre, BookGenre.entries.toSet())
             // so Mystery should be valid (all entries allowed)
             val result = klerk.handle(command, Ctx.system(), options)
@@ -201,7 +201,7 @@ class ValidatorTest {
                 genre = BookGenreContainer(BookGenre.Mystery)  // not in validEnums
             )
             val command = Command(CreateBook, params)
-            val options = ProcessingOptions(CommandToken.simple())
+            val options = ProcessingOptions()
             val result = restrictedKlerk.handle(command, Ctx.system(), options)
             assertTrue(result is CommandResult.Failure, "Expected failure but got: $result")
             restrictedKlerk.meta.stop()

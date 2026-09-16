@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.validation.Valid
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
 import dev.klerkframework.klerk.command.Command
@@ -29,7 +31,7 @@ class FunctionTest {
         val args = VoidEventArgs(command, Ctx.system(), DummyReader)
 
         val result = onlyAuthenticationIdentityCanCreateDaniel(args)
-        assertEquals(PropertyCollectionValidity.Valid, result)
+        assertEquals(Valid, result)
     }
 
 }
@@ -45,11 +47,11 @@ object DummyReader : Reader<Ctx, Views> {
     override val attachedData: AttachedDataReader
         get() = throw exception
 
-    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): EventLogQuery {
+    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): PendingRead<List<EventLogEntry>> {
         throw exception
     }
 
-    override fun eventLogEntry(sequenceNumber: Long): EventLogEntryQuery {
+    override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> {
         throw exception
     }
 
@@ -80,11 +82,11 @@ object DummyReader : Reader<Ctx, Views> {
         throw exception
     }
 
-    override fun <T : Any> getPossibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<EventReference> {
+    override fun <T : Any> possibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<VoidEvent<T, *>> {
         throw exception
     }
 
-    override fun <T : Any> getPossibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<EventReference> {
+    override fun <T : Any> possibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<InstanceEvent<T, *>> {
         throw exception
     }
 

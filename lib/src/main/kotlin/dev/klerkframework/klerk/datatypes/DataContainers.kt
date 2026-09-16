@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.datatypes
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.job.JobId
 import dev.klerkframework.klerk.validation.PropertyValidity
 import dev.klerkframework.klerk.validation.PropertyValidity.Invalid
@@ -9,7 +10,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import java.io.InputStream
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
+import java.util.concurrent.ConcurrentHashMap
 import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.misc.requireNamedRule
 import kotlin.time.Duration
@@ -100,7 +102,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     /**
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
      * Override to add rules like "must be even". Each function is called with the value and the current [Translation]
-     * and returns [PropertyValidity.Valid] or [PropertyValidity.Invalid].
+     * and returns [Valid] or [PropertyValidity.Invalid].
      *
      * Each must be a named function reference, e.g. `setOf(::mustBeEven)`, since its name identifies the rule in
      * messages and translations. A lambda is rejected when Klerk starts.
@@ -242,15 +244,14 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
 }
 
 // So we don't have to build a Regex every time we validate
-private val regexPatterns: MutableMap<String, Regex> = mutableMapOf()
+private val regexPatterns: ConcurrentHashMap<String, Regex> = ConcurrentHashMap()
 
 /**
  * A [DataContainer] wrapping a number, constrained to the inclusive range [min]..[max].
  *
  * Extend one of the concrete kinds ([IntContainer], [LongContainer], [ShortContainer], [ByteContainer],
  * [UIntContainer], [ULongContainer], [UShortContainer], [UByteContainer], [FloatContainer], [DoubleContainer])
- * rather than this class. Code that handles any number generically — a form, an exporter — can use [minAsText],
- * [maxAsText] and [hasDecimals] without knowing which kind it has.
+ * rather than this class.
  */
 public abstract class NumberContainer<T : Comparable<T>> internal constructor(value: T) : DataContainer<T>(value) {
 
@@ -262,12 +263,6 @@ public abstract class NumberContainer<T : Comparable<T>> internal constructor(va
 
     /** True if the value can have a fractional part, i.e. for [FloatContainer] and [DoubleContainer]. */
     public abstract val hasDecimals: Boolean
-
-    /** [min] as text, e.g. for an HTML `min` attribute. */
-    public val minAsText: String get() = min.toString()
-
-    /** [max] as text, e.g. for an HTML `max` attribute. */
-    public val maxAsText: String get() = max.toString()
 
     /** Lossy for values above [Long.MAX_VALUE]; only used to build messages. */
     internal abstract fun asNumber(value: T): Number

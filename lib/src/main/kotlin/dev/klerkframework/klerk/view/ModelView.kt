@@ -139,17 +139,8 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         children.forEach { it.onModelDeleted(model) }
     }
 
-    /**
-     * Returns a new view containing only models matching [filter]. Passing `null` returns `this` unchanged (useful
-     * for optional filters composed conditionally).
-     */
-    public open fun filter(filter: ((Model<T>) -> Boolean)?): ModelView<T, C> {
-        if (filter == null) {
-            return this
-        }
-        val new = FilteredModelView(this, filter)
-        return new
-    }
+    /** Returns a new view containing only models matching [filter]. */
+    public open fun filter(filter: (Model<T>) -> Boolean): ModelView<T, C> = FilteredModelView(this, filter)
 
     /**
      * Returns a new view restricted by [Model.state]: keep only [included] (if given), and drop any in [excluded] (if
@@ -224,7 +215,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     }
 
     /**
-     * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.getViews()`, so it can be
+     * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.registeredViews`, so it can be
      * looked up by [ViewId] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
      * that is never registered still works if you hold a reference to it, but can't be looked up by id.
      *

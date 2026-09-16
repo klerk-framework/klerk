@@ -14,7 +14,11 @@ import kotlin.time.Instant
  * @property sequenceNumber identifies the entry and orders the log. Assigned by Klerk, one per committed command, in
  * commit order. Unlike [time], which is whatever the command's context said, it is monotonic and unique.
  * @property time the [KlerkContext.time] of the command, i.e. when the application considered it to happen.
- * @property reference the id of the model the command acted on.
+ * @property model the id of the model the command acted on.
+ * @property params the command's parameters as a JSON object keyed by parameter name, with each
+ * [dev.klerkframework.klerk.datatypes.DataContainer] written as its value and each [ModelID] as a number. `null` for an
+ * event without parameters.
+ * @property extra the command's [KlerkContext.eventLogExtra].
  */
 public data class EventLogEntry(
     val sequenceNumber: Long,
@@ -238,14 +242,14 @@ public interface Persistence {
      * Every persisted job, in no particular order. Called once at startup to rebuild the scheduler's state; the job
      * module keeps the rows in memory from then on.
      */
-    public fun getAllJobs(): List<JobRecord>
+    public fun allJobs(): List<JobRecord>
 
     /**
      * When each cron schedule last fired, keyed by [dev.klerkframework.klerk.job.CronSchedule.id]. Cron *definitions*
      * are configuration rather than rows, but the last-fired time has to be persisted or `CatchUp` cannot survive a
      * restart.
      */
-    public fun getCronState(): Map<String, Instant>
+    public fun cronState(): Map<String, Instant>
 
     /** Records that the schedule [scheduleId] fired at [firedAt]. */
     public fun setCronFired(scheduleId: String, firedAt: Instant): Unit
@@ -431,9 +435,9 @@ public open class RamStorage : Persistence {
         ids.forEach { attachedRows.remove(it) }
     }
 
-    override fun getAllJobs(): List<JobRecord> = synchronized(lock) { jobs.values.toList() }
+    override fun allJobs(): List<JobRecord> = synchronized(lock) { jobs.values.toList() }
 
-    override fun getCronState(): Map<String, Instant> = synchronized(lock) { cronState.toMap() }
+    override fun cronState(): Map<String, Instant> = synchronized(lock) { cronState.toMap() }
 
     override fun setCronFired(scheduleId: String, firedAt: Instant): Unit = synchronized(lock) {
         cronState[scheduleId] = firedAt

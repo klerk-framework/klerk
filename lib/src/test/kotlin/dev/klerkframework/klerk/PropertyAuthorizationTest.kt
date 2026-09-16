@@ -126,8 +126,7 @@ class PropertyAuthorizationTest {
                 Ctx.unauthenticated(),
             ).getOrThrow()
 
-            val created = result.createdModels.single()
-            val author = assertNotNull(result.authorizedModels[created]).props as Author
+            val author = assertNotNull(result.authorizedPrimaryModel).props
             assertEquals("Auto", author.firstName.value)
             assertNull(author.lastName.valueOrNullIfNotAuthorized)
         }

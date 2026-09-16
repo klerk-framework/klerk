@@ -87,6 +87,7 @@ when (result) {
 ```
 
 Note that `result.jobs`/`result.unmanagedJobs` tell you what was *scheduled*, not that it has *finished running*.
+`unmanagedJobs` holds the functions themselves, so `assertContains(result.unmanagedJobs, ::sendWelcomeMail)` works.
 
 For jobs, do not poll or sleep. Configure manual execution and drive the scheduler yourself, so the test is
 deterministic under repeat runs:
@@ -95,7 +96,7 @@ deterministic under repeat runs:
 KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))
 
 // ... handle the command that schedules the job ...
-klerk.jobs.runUntilIdle()
+klerk.jobs.runUntilIdle()   // import dev.klerkframework.klerk.testing.runUntilIdle
 assertEquals(JobStatus.Succeeded, klerk.jobs.get(result.jobs.single(), Ctx.system()).status)
 ```
 

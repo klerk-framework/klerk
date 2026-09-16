@@ -51,9 +51,9 @@ off of. `ActorIdentity` is a sealed interface, so these are all of them:
 | `PluginIdentity(plugin)`     | Used by plugins acting on their own behalf.                                                                             |
 
 `ModelIdentity` and `ModelReferenceIdentity` are the same actor in two forms — the first when you already hold the
-model, the second when you only have its id. Compare `actor.id`, never `actor.type`, when deciding whether two
-identities are the same user. `actor.type` is an `ActorType` enum, and only exists to tell id-less actors apart and to
-record who did what in the event log.
+model, the second when you only have its id. Identities compare by value, but `==` is only true for the same form, so
+use `actor.isSameAs(other)` when deciding whether two identities are the same actor. `actor.type` is an `ActorType`
+enum, and only exists to tell id-less actors apart and to record who did what in the event log.
 
 Business and authorization rules narrow on the concrete type, e.g.:
 

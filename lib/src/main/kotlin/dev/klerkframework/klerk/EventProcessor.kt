@@ -2,7 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.DebugOptions
+import dev.klerkframework.klerk.command.DebugOption
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.misc.IdFactory
@@ -124,7 +124,8 @@ internal class EventProcessor<C : KlerkContext, V>(
 
     private fun processTriggerTimeForModels(models: List<Model<out Any>>, reader: ModelReader<C, V>) {
         val time = klerk.settings.now()
-        val calculated = models.map { it to calculateTriggerTime(it, time, reader) }
+        val context = klerk.specification.systemContextProvider.invoke()
+        val calculated = models.map { it to calculateTriggerTime(it, time, context, reader) }
 
         timeTriggerManager.init(calculated.map { it.second })
 
@@ -144,13 +145,14 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun calculateTriggerTime(
         model: Model<out Any>,
         time: Instant,
+        context: C,
         reader: ModelReader<C, V>
     ): Model<out Any> {
         val state = klerk.specification.getStateMachine(model).getStateByName(model.state)
         check(state is InstanceState)
         @Suppress("UNCHECKED_CAST")
         var instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
-            LifecycleArgs(model, time, reader)
+            LifecycleArgs(model, context, reader)
         )
         if (instant == null && state.afterDuration != null) {
             instant = time.plus(state.afterDuration!!)
@@ -255,7 +257,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         check(processingData.remainingCommands.isNotEmpty())
         val currentCommand = processingData.remainingCommands.first()
         val remaining = processingData.remainingCommands.drop(1)
-        logger.log(DebugOptions.Sequence, options) { "Processing command ${currentCommand.event}" }
+        logger.log(DebugOption.Sequence, options) { "Processing command ${currentCommand.event}" }
 
         val commandValidationProblems = klerk.validator.validateCommand(currentCommand, reader, context)
         if (commandValidationProblems.isNotEmpty()) {
@@ -297,7 +299,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
         val currentBlock = processingData.remainingBlocks.first()
         val remaining = processingData.remainingBlocks.drop(1)
-        logger.log(DebugOptions.Sequence, options) { "Processing block ${currentBlock}" }
+        logger.log(DebugOption.Sequence, options) { "Processing block ${currentBlock}" }
 
         val processingOptions = EventProcessingOptions(
             disregardPreventingRules = false,
@@ -330,7 +332,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 )
 
                 @Suppress("UNCHECKED_CAST")
-                currentBlock.executables.map { it as VoidEventExecutable<T, P, C, V> }
+                currentBlock.executables.map { it as Executable<T, VoidEventArgs<T, P, C, V>, C, V> }
                     .filter { it.onCondition?.invoke(args) ?: true }
                     .map { it.process(args, processingOptions, view, klerk.specification, processingData) }
                     .reduceOrNull { acc, delta -> acc.merge(delta) }
@@ -344,7 +346,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 val args = InstanceEventArgs(requireNotNull(model), command, context, reader)
 
                 @Suppress("UNCHECKED_CAST")
-                currentBlock.executables.map { it as InstanceEventExecutable<T, P, C, V> }
+                currentBlock.executables.map { it as Executable<T, InstanceEventArgs<T, P, C, V>, C, V> }
                     .filter { it.onCondition?.invoke(args) ?: true }
                     .map { it.process(args, processingOptions, view, klerk.specification, processingData) }
                     .reduceOrNull { acc, delta -> acc.merge(delta) }
@@ -352,9 +354,9 @@ internal class EventProcessor<C : KlerkContext, V>(
             }
 
             is Block.InstanceLifecycleBlock -> {
-                val args = LifecycleArgs(requireNotNull(model), time, reader)
+                val args = LifecycleArgs(requireNotNull(model), context, reader)
                 @Suppress("UNCHECKED_CAST")
-                currentBlock.executables.map { it as InstanceLifecycleExecutable<T, C, V> }
+                currentBlock.executables.map { it as Executable<T, LifecycleArgs<T, C, V>, C, V> }
                     .filter { it.onCondition?.invoke(args) ?: true }
                     .map { it.process(args, processingOptions, view, klerk.specification, processingData) }
                     .reduceOrNull { acc, delta -> acc.merge(delta) }
@@ -363,7 +365,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
         val updatedDelta = processingData.copy(remainingBlocks = remaining)      // keep the old (except current)
             .merge(result, currentBlock.type == Exit)                          // new block may be added here
-        val withTimeTriggers = withTimeTriggers<Primary, T>(updatedDelta, time, reader)
+        val withTimeTriggers = withTimeTriggers<Primary, T>(updatedDelta, time, context, reader)
         return processBlocks<Primary, T, P>(withTimeTriggers, context, reader, options, time)
     }
 
@@ -373,6 +375,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     private fun <Primary : Any, T : Any> withTimeTriggers(
         processingData: ProcessingData<Primary, C, V>,
         time: Instant,
+        context: C,
         reader: ModelReader<C, V>,
     ): ProcessingData<Primary, C, V> {
         val newTimeTriggers =
@@ -380,7 +383,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 .map { processingData.aggregatedModelState[it]!! }
                 .map { model ->
                     @Suppress("UNCHECKED_CAST")
-                    Pair(model.id, findTimeTrigger(model as Model<T>, LifecycleArgs(model, time, reader)))
+                    Pair(model.id, findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader), time))
                 }
 
         return processingData.copy(timeTriggers = newTimeTriggers.associate { it })/*        return processingData.copy(modifiedModels = processingData.modifiedModels
@@ -391,13 +394,13 @@ internal class EventProcessor<C : KlerkContext, V>(
     }
 
     private fun <T : Any> findTimeTrigger(
-        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>
+        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>, time: Instant
     ): Instant? {
         val state = klerk.specification.getStateMachine(newModel).getStateByName(newModel.state)
         check(state is InstanceState)
         var instant = state.atTimeFunction?.invoke(transformedArgs)
         if (instant == null && state.afterDuration != null) {
-            instant = transformedArgs.time.plus(state.afterDuration!!)
+            instant = time.plus(state.afterDuration!!)
         }
         return instant?.let { makeExactSerializable(it) }
     }

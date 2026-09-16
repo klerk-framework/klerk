@@ -5,9 +5,7 @@ import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.misc.extractNameFromFunction
-import dev.klerkframework.klerk.statemachine.InstanceEventExecutable
-import dev.klerkframework.klerk.statemachine.InstanceLifecycleExecutable
-import dev.klerkframework.klerk.statemachine.VoidEventExecutable
+import dev.klerkframework.klerk.statemachine.Executable
 
 /**
  * Gives every declared job an id while the command is still being processed, so that the ids can be reported back in
@@ -18,13 +16,13 @@ private fun <C : KlerkContext, V> List<DeclaredJob<C, V>>.withIds(
     processingOptions: EventProcessingOptions,
 ): List<PendingJob<C, V>> = map { PendingJob(processingOptions.idProvider.getNextJobID(), it) }
 
-internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
-    val f: (args: VoidEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
-) : VoidEventExecutable<T, P, C, V> {
+internal class ScheduleJobs<T : Any, A, C : KlerkContext, V>(
+    val f: (args: A) -> List<DeclaredJob<C, V>>,
+    override val onCondition: ((args: A) -> Boolean)?
+) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
-        args: VoidEventArgs<T, P, C, V>,
+        args: A,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
@@ -36,85 +34,13 @@ internal class VoidEventJobs<T : Any, P, C : KlerkContext, V>(
 
 }
 
-internal class VoidEventJob<T : Any, P, C : KlerkContext, V>(
-    val f: (args: VoidEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
-) : VoidEventExecutable<T, P, C, V> {
+internal class ScheduleJob<T : Any, A, C : KlerkContext, V>(
+    val f: (args: A) -> DeclaredJob<C, V>,
+    override val onCondition: ((args: A) -> Boolean)?
+) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
-        args: VoidEventArgs<T, P, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = ProcessingData(
-        newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
-    )
-
-}
-
-internal class InstanceLifecycleJobs<T : Any, C : KlerkContext, V>(
-    val f: (args: LifecycleArgs<T, C, V>) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
-) : InstanceLifecycleExecutable<T, C, V> {
-
-    override fun <Primary : Any> process(
-        args: LifecycleArgs<T, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = ProcessingData(
-        newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
-    )
-
-}
-
-internal class InstanceLifecycleJob<T : Any, C : KlerkContext, V>(
-    val f: (args: LifecycleArgs<T, C, V>) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: LifecycleArgs<T, C, V>) -> Boolean)?
-) : InstanceLifecycleExecutable<T, C, V> {
-
-    override fun <Primary : Any> process(
-        args: LifecycleArgs<T, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = ProcessingData(
-        newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
-    )
-
-}
-
-internal class InstanceEventJobs<T : Any, P, C : KlerkContext, V>(
-    val f: (args: InstanceEventArgs<T, P, C, V>) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
-) : InstanceEventExecutable<T, P, C, V> {
-
-    override fun <Primary : Any> process(
-        args: InstanceEventArgs<T, P, C, V>,
-        processingOptions: EventProcessingOptions,
-        view: ModelViews<T, C>,
-        specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>,
-    ): ProcessingData<Primary, C, V> = ProcessingData(
-        newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
-    )
-
-}
-
-internal class InstanceEventJob<T : Any, P, C : KlerkContext, V>(
-    val f: (args: InstanceEventArgs<T, P, C, V>) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: InstanceEventArgs<T, P, C, V>) -> Boolean)?
-) : InstanceEventExecutable<T, P, C, V> {
-
-    override fun <Primary : Any> process(
-        args: InstanceEventArgs<T, P, C, V>,
+        args: A,
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,

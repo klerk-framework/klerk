@@ -81,6 +81,9 @@ In other words: deny always wins, and you need at least one rule to actively opt
 
 ## Rule categories
 
+Every rule receives arguments that implement `RuleArgs<C, V>` (`context`, `reader`), so a helper written against
+`RuleArgs` works in rules of any category.
+
 ### readModels
 
 Gates whether an actor can read a `Model<T>` at all — via `Reader.get`, `view.asSequence()`, `view.query(...)`, etc

@@ -131,7 +131,7 @@ state(AuthorStates.Established) {
     }
 }
 
-fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant = args.time.plus(30.seconds)
+fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant = args.context.time.plus(30.seconds)
 ```
 
 - `after(duration) { }` fires `duration` after the model entered the current state.
@@ -208,8 +208,11 @@ describing everything available at that point:
   ([context.md](context.md)), and `reader` ([reading.md](reading.md)). There is no `model` yet — it doesn't exist.
 - `InstanceEventArgs<T, P, C, V>` — used in `onEvent` inside `state { }`. Adds `model: Model<T>`
   ([models.md](models.md)), the (uncommitted) model the event is acting on.
-- `LifecycleArgs<T, C, V>` — used in `onEnter`, `onExit`, `after`, `atTime`, i.e. anywhere there's no
-  triggering event. Has `model`, `time`, and `reader`, but no `command`.
+- `LifecycleArgs<T, C, V>` — used in `onEnter`, `onExit`, `after`, `atTime`, i.e. anywhere there is no
+  triggering event. Has `model`, `context` and `reader`, but no `command`.
+
+Every block offers the same operations — `commands`, `job`, `jobs` and `unmanagedJob` — and every block except a
+`voidState` one adds `transitionTo`, `transitionWhen`, `update` and `delete`. `createModel` exists only in `voidState`.
 
 `P` is `Nothing?` for events without parameters. The reader you get here reads data as it was *before* the current
 event/trigger started processing — the full mechanics of events, commands and parameters are covered in

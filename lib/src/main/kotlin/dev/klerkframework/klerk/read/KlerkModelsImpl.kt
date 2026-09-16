@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.storage.ModelCache
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 
@@ -14,13 +15,20 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
 
     private val modelsFlow: MutableSharedFlow<ModelModification> = MutableSharedFlow()
 
+    // A deleted model can no longer be authorized against, and a Deleted carries nothing but the id and class.
     override fun subscribe(
         id: ModelID<out Any>?,
         context: C,
-    ): Flow<ModelModification> {
-        // Do we need a separate authorization for subscriptions?
-        return modelsFlow
-    }
+    ): Flow<ModelModification> =
+        modelsFlow
+            .filter { id == null || it.id == id }
+            .filter { it is ModelModification.Deleted || isReadable(it.id, context) }
+
+    private suspend fun isReadable(id: ModelID<out Any>, context: C): Boolean =
+        context.actor == SystemIdentity || readWriteLock.withRead {
+            val model = ModelCache.getOrNull(id) ?: return@withRead false
+            isAuthorized(model, context, klerk.specification, ReaderWithoutAuth(klerk))
+        }
 
     override suspend fun <T : Any> create(model: Model<T>, context: C) {
         check(klerk.settings.allowUnsafeOperations) { "The setting 'allowUnsafeOperations' must be enabled" }
@@ -52,7 +60,7 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         return readWriteLock.withRead {
             try {
                 val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
-                klerk.klerkLog.addReads(reader.modelsRead.distinctBy { it.id }, context)
+                klerk.activityLogImpl.addReads(reader.modelsRead.distinctBy { it.id }, context)
                 result
             } finally {
                 reader.finishRead()
@@ -75,14 +83,4 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         modelsFlow.emit(modification)
     }
 
-}
-
-/**
- * An event emitted by [dev.klerkframework.klerk.KlerkModelChanges.subscribe] describing how a model changed.
- */
-public sealed class ModelModification(public val id: ModelID<out Any>) {
-    public class Created(id: ModelID<out Any>) : ModelModification(id)
-    public class PropsUpdated(id: ModelID<out Any>) : ModelModification(id)
-    public class Transitioned(id: ModelID<out Any>) : ModelModification(id)
-    public class Deleted(id: ModelID<out Any>) : ModelModification(id)
 }

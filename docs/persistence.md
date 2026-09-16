@@ -86,7 +86,7 @@ The same rules apply to nested classes. If a stored model does not match, `start
 `PersistedModelMismatchException` and Klerk does not start:
 
 ```
-The stored Author with id 42 does not match the model classes: 'givenName' is not a property of Author,
+[ERROR-STORAGE-1] The stored Author with id 42 does not match the model classes: 'givenName' is not a property of Author,
 'firstName' is missing. Register a MigrationStep that makes the stored data match.
 ```
 

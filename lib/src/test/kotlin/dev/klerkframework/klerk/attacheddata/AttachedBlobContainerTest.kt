@@ -1,6 +1,8 @@
 package dev.klerkframework.klerk.attacheddata
 
 import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -197,9 +199,9 @@ class AttachedBlobContainerTest {
             Ctx.system(),
         )
 
-        val refusal = assertFailsWith<BlobRejected> { klerk.attachedData.awaitProcessing(wrong) }
+        val refusal = assertFailsWith<BlobRejectedException> { klerk.attachedData.awaitProcessing(wrong) }
 
-        assertTrue(refusal.message!!.contains("quantity,name"), refusal.message!!)
+        assertTrue(refusal.reason.contains("quantity,name"), refusal.reason)
         // the value is gone, and the job that refused it says why
         assertFailsWith<NoSuchElementException> { klerk.attachedData.getMetadata(wrong, Ctx.system()) }
         val job = klerk.jobs.all(Ctx.system()).first { it.name.value == PROCESS_ATTACHED_DATA }

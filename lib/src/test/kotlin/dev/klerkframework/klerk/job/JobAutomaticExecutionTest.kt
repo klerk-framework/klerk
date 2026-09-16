@@ -93,14 +93,14 @@ class JobAutomaticExecutionTest {
         }
         klerk.meta.stop()
 
-        val persisted = storage.getAllJobs().single { it.id == id }
+        val persisted = storage.allJobs().single { it.id == id }
         assertTrue(persisted.step >= 3, "the checkpoint of the last finished step must have been committed")
         assertTrue(!persisted.status.isTerminal, "the job is not done; it should be resumable")
 
         // Nothing keeps running after stop.
         val after = persisted.step
         kotlinx.coroutines.delay(200)
-        assertEquals(after, storage.getAllJobs().single { it.id == id }.step)
+        assertEquals(after, storage.allJobs().single { it.id == id }.step)
     }
 
     @Serializable

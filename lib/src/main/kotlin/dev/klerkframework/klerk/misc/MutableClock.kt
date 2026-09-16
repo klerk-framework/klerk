@@ -21,7 +21,7 @@ import kotlin.time.Instant
  * )
  *
  * clock += 1.hours
- * klerk.jobs.runUntilIdle()
+ * klerk.jobs.runUntilIdle()   // dev.klerkframework.klerk.testing.runUntilIdle
  * ```
  *
  * Safe to move from any thread.

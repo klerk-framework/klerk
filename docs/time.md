@@ -16,7 +16,7 @@ Use `kotlin.time.Clock` and `kotlin.time.Instant` — not the `kotlinx.datetime`
 |------------------------------------------------------------------|------------------------------------------------------------------------|
 | Handling a command                                               | `Ctx.time`, supplied by the caller                                     |
 | Reading                                                          | `Ctx.time`                                                             |
-| Validation, authorization, `onEnter`/`onExit`/`onEvent`          | `args.time`, which is the context's time                               |
+| Validation, authorization, `onEnter`/`onExit`/`onEvent`          | `args.context.time`                                                    |
 | A state-machine time trigger firing                              | The **settings clock**; the context comes from `systemContextProvider` |
 | Deciding a job is ready, a backoff has elapsed, a cron has fired | The **settings clock**                                                 |
 | A job step running                                               | The **settings clock**, via `jobContextProvider`                       |
@@ -79,10 +79,11 @@ retried (see [state-machines.md](state-machines.md)); jobs are.
 
 ## Testing time
 
-- **Actor-driven time** — construct a `Ctx` with the `time` you want. Business logic reading `args.time` sees it.
+- **Actor-driven time** — construct a `Ctx` with the `time` you want. Business logic reading `args.context.time` sees it.
 - **Deferred work** — set a `MutableClock` as the settings clock and advance it. Combined with
-  `KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))` and `klerk.jobs.runUntilIdle()`, this makes
-  `scheduleAt`, retry backoff, cron and delay-based admission fully deterministic with no sleeping.
+  `KlerkSettings(jobs = JobSettings(execution = JobExecution.Manual))` and `klerk.jobs.runUntilIdle()` (from
+  `dev.klerkframework.klerk.testing`), this makes `scheduleAt`, retry backoff, cron and delay-based admission fully
+  deterministic with no sleeping.
   See [jobs.md](jobs.md#testing).
 - **Time triggers** follow the settings clock too, but the thread that polls them still wakes on real time, so advancing
   the clock makes a trigger *eligible* rather than making it fire immediately.

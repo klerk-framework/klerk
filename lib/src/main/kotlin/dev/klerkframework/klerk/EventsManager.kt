@@ -7,8 +7,8 @@ import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
 import dev.klerkframework.klerk.attacheddata.AttachedDataPlan
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.DebugOptions
-import dev.klerkframework.klerk.command.DebugOptions.*
+import dev.klerkframework.klerk.command.DebugOption
+import dev.klerkframework.klerk.command.DebugOption.*
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
@@ -264,6 +264,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             throw e
         }
 
+        val modifications = modificationsOf(delta)
         readWriteLock.withWrite {
             ModelCache.handleDelta(delta)
             attachedData.applyToMemory(attachedDataDelta)
@@ -273,7 +274,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             ModelCache.endCommit()
         }
         jobs.notifyCommitted(jobCommit)
-        notifySubscribers(delta)
+        modifications.forEach { klerk.modelsManager.modelWasModified(it) }
         maybeEraseEventLog(specification, delta.deletedModels)
     }
 
@@ -347,19 +348,17 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         timeTriggerManager.stop()
     }
 
-    private suspend fun <T : Any> notifySubscribers(result: ProcessingData<T, C, V>) {
-        result.createdModels.forEach {
-            klerk.modelsManager.modelWasModified(ModelModification.Created(it))
-        }
-        result.updatedModels.forEach {
-            klerk.modelsManager.modelWasModified(ModelModification.PropsUpdated(it))
-        }
-        result.transitions.forEach {
-            klerk.modelsManager.modelWasModified(ModelModification.Transitioned(it))
-        }
-        result.deletedModels.forEach {
-            klerk.modelsManager.modelWasModified(ModelModification.Deleted(it))
-        }
+    /**
+     * Must run before the delta is applied to the cache, which is where a deleted model's class is looked up. A model
+     * created and deleted by the same command is known by neither, and is left out.
+     */
+    private fun modificationsOf(delta: ProcessingData<*, C, V>): List<ModelModification> {
+        val deleted = delta.deletedModels.toSet()
+        fun classOf(id: ModelID<out Any>) = (delta.aggregatedModelState[id] ?: ModelCache.getOrNull(id))?.props?.let { it::class }
+        return delta.createdModels.filter { it !in deleted }.mapNotNull { id -> classOf(id)?.let { ModelModification.Created(id, it) } } +
+                delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
+                delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
+                delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
     }
 
     private fun maybeEraseEventLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
@@ -373,7 +372,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
     suspend fun modelTriggeredByTime(model: Model<out Any>, now: Instant) {
         logger.info { "Time-block was triggered for $model" }
-        val options = ProcessingOptions(CommandToken.simple())
+        val options = ProcessingOptions()
         val delta = eventProcessor.processTimeTrigger(model, options, now)
         if (delta.problems.isNotEmpty()) {
             val problem = delta.problems.first()
@@ -435,12 +434,12 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
 }
 
-internal fun KLogger.log(debugCategory: DebugOptions, options: ProcessingOptions, function: () -> String) {
+internal fun KLogger.log(debugCategory: DebugOption, options: ProcessingOptions, function: () -> String) {
     val level = options.debugOptions[debugCategory] ?: defaultDebugOptions.getValue(debugCategory)
     atLevel(level.toSlf4j()).log(function)
 }
 
-internal val defaultDebugOptions: Map<DebugOptions, LogLevel> = mapOf(
+internal val defaultDebugOptions: Map<DebugOption, LogLevel> = mapOf(
     Sequence to LogLevel.Debug,
     Misc to LogLevel.Trace,
     Result to LogLevel.Debug

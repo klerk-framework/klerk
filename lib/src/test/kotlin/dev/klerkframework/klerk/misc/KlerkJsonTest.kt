@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -90,7 +90,7 @@ class KlerkJsonTest {
         flag = Flag(true),
         genre = BookGenreContainer(BookGenre.Mystery),
         moment = Moment(Instant.fromEpochMilliseconds(1_700_000_000_123)),
-        day = Day(LocalDate.of(2026, 9, 11)),
+        day = Day(LocalDate(2026, 9, 11)),
         span = Span(90.minutes),
         place = Place(GeoPosition(59.3293, 18.0686)),
         ref = ModelID(7),

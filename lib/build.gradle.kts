@@ -29,7 +29,8 @@ repositories {
 
 dependencies {
     implementation(kotlin("reflect"))
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
+    // api: LocalDate is the value type of DateContainer.
+    api("org.jetbrains.kotlinx:kotlinx-datetime:$datetimeVersion")
     // api: Flow and SharedFlow appear in Klerk's public API (KlerkModels.subscribe, JobManager.subscribe, KlerkLog).
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")

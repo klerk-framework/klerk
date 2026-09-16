@@ -551,7 +551,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
         this[Jobs.cronScheduleId] = record.cronScheduleId
     }
 
-    override fun getAllJobs(): List<JobRecord> =
+    override fun allJobs(): List<JobRecord> =
         transaction(database) {
             Jobs.selectAll().map { row ->
                 JobRecord(
@@ -590,7 +590,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             }
         }
 
-    override fun getCronState(): Map<String, Instant> =
+    override fun cronState(): Map<String, Instant> =
         transaction(database) {
             CronState.selectAll().associate {
                 it[CronState.scheduleId] to decode64bitMicroseconds(it[CronState.lastFiredAt])

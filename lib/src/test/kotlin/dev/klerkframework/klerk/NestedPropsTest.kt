@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.statemachine.StateMachine
@@ -83,7 +84,7 @@ class NestedPropsTest {
                 validReferences(CreateBookParams::author, views.authors.all)
                 validReferences(CreateBookParams::coAuthors, views.authors.all)
                 validReferences(CreateBookParams::previousBooksInSameSeries, views.books.all)
-                validateWithParameters { PropertyCollectionValidity.Valid }
+                validateWithParameters { Valid }
             }
         }
         assertEquals(KlerkErrorCode.RuleMustBeNamed, e.code)
