@@ -83,7 +83,7 @@ class JobSnapshotTest {
         // Anti-vacuity: if nothing was moving, the assertion above proved nothing.
         assertTrue(
             seenAcrossBlocks.size > 1,
-            "the dispatcher never changed any job, so this test would pass even with no snapshot at all"
+            "the dispatcher never changed any job, so this test would pass even with no snapshot at all",
         )
         klerk.meta.stop()
     }
@@ -151,7 +151,7 @@ class JobSnapshotTest {
             }
             assertTrue(
                 failure.message!!.contains("reader.jobs"),
-                "the error should point at the in-block accessor, was: ${failure.message}"
+                "the error should point at the in-block accessor, was: ${failure.message}",
             )
         }
         klerk.meta.stop()
@@ -200,7 +200,7 @@ class JobSnapshotTest {
 
         assertTrue(
             readsCompleted.get() >= readers * readsPerReader,
-            "readers were starved: only ${readsCompleted.get()} reads completed"
+            "readers were starved: only ${readsCompleted.get()} reads completed",
         )
         klerk.meta.stop()
     }
@@ -226,7 +226,7 @@ class JobSnapshotTest {
 
         assertTrue(
             seenAcrossBlocks.size > 1,
-            "job $id never changed, so this test would pass even with no snapshot at all"
+            "job $id never changed, so this test would pass even with no snapshot at all",
         )
         klerk.meta.stop()
     }

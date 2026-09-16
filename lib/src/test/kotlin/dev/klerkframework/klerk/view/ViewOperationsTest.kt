@@ -39,7 +39,7 @@ class ViewOperationsTest {
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                )
+                ),
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!

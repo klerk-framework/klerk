@@ -126,7 +126,7 @@ public sealed class CommandResult<T : Any> {
         val updatedModels: Set<ModelID<out Any>>,
         val deletedModels: Set<ModelID<out Any>>,
         val transitionedModels: Set<ModelID<out Any>>,
-        val jobs: List<JobId>,
+        val jobs: List<JobID>,
         val unmanagedJobs: List<Function<*>>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,

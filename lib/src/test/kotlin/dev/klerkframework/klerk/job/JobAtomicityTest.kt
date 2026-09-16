@@ -40,7 +40,11 @@ class JobAtomicityTest {
         override val name = JobName("writer")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<WriteCursor, Ctx, Views>): JobResult<WriteCursor, Ctx, Views> {
+        override suspend fun step(
+
+            args: JobStepArgs.Local<WriteCursor, Ctx, Views>,
+
+        ): JobResult<WriteCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) {
                 return JobResult.Success()
             }
@@ -53,7 +57,7 @@ class JobAtomicityTest {
                         lastName = LastName("Number${args.cursor.remaining}"),
                         phone = PhoneNumber("+46123456"),
                         secretToken = SecretPasscode(234234902359245345),
-                    )
+                    ),
                 ),
             )
         }
@@ -66,7 +70,11 @@ class JobAtomicityTest {
         override val name = JobName("spawner")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<SpawnerCursor, Ctx, Views>): JobResult<SpawnerCursor, Ctx, Views> {
+        override suspend fun step(
+
+            args: JobStepArgs.Local<SpawnerCursor, Ctx, Views>,
+
+        ): JobResult<SpawnerCursor, Ctx, Views> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
                     cursor = args.cursor.copy(awaiting = true),
@@ -82,7 +90,11 @@ class JobAtomicityTest {
         override val name = JobName("leaf")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<WriteCursor, Ctx, Views>): JobResult<WriteCursor, Ctx, Views> =
+        override suspend fun step(
+
+            args: JobStepArgs.Local<WriteCursor, Ctx, Views>,
+
+        ): JobResult<WriteCursor, Ctx, Views> =
             JobResult.Success(result = "done")
     }
 

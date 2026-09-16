@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.read.PropertyAuthScope
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
@@ -12,7 +12,8 @@ import dev.klerkframework.klerk.read.isAuthorized
 public sealed class CommandResult<T : Any> {
 
     /**
-     * @return this as [Success].
+     * Returns this as [Success].
+     *
      * @throws Exception the first [Problem]'s [Problem.asException] (e.g. [AuthorizationException],
      * [IllegalStateException], [IllegalArgumentException]) if this is a [Failure].
      */
@@ -71,7 +72,7 @@ public sealed class CommandResult<T : Any> {
         val updatedModels: Set<ModelID<out Any>>,
         val deletedModels: Set<ModelID<out Any>>,
         val transitionedModels: Set<ModelID<out Any>>,
-        val jobs: List<JobId>,
+        val jobs: List<JobID>,
         val unmanagedJobs: List<Function<*>>,
         val authorizedModels: Map<ModelID<out Any>, Model<out Any>>,
         val log: List<String>,
@@ -85,6 +86,7 @@ public sealed class CommandResult<T : Any> {
         public val authorizedPrimaryModel: Model<T>? get() = primaryModel?.let { authorizedModel(it) }
     }
 
+    /** The command was rejected for the given [problems]; nothing was changed. */
     public data class Failure<T : Any>(val problems: List<Problem>) :
         CommandResult<T>()
 
@@ -116,7 +118,7 @@ public sealed class CommandResult<T : Any> {
                 jobs = delta.newJobs.map { it.id },
                 unmanagedJobs = delta.unmanagedJobs.map { it.function },
                 authorizedModels = authorized,
-                log = delta.log
+                log = delta.log,
             )
         }
     }

@@ -46,7 +46,7 @@ class AttachedBlobStoreTest {
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
                     picture = picture?.let { AuthorPicture(it) },
-                )
+                ),
             ),
             Ctx.system(),
         )
@@ -121,7 +121,8 @@ class AttachedBlobStoreTest {
         )
         klerk.meta.start(installShutdownHook = false)
 
-        val leased = klerk.attachedData.prepare("survives".byteInputStream(), AuthorPicture::class, Ctx.system(), lease = 1.hours)
+        val survives = "survives".byteInputStream()
+        val leased = klerk.attachedData.prepare(survives, AuthorPicture::class, Ctx.system(), lease = 1.hours)
         val unleased = klerk.attachedData.prepare("does not".byteInputStream(), AuthorPicture::class, Ctx.system())
         Thread.sleep(20)
 
@@ -136,7 +137,7 @@ class AttachedBlobStoreTest {
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
                     picture = AuthorPicture(unleased),
-                )
+                ),
             ),
             Ctx.system(),
         )
@@ -175,7 +176,8 @@ class AttachedBlobStoreTest {
         val klerk = start(SQLiteInMemory.create(), AttachedBlobStore.Database)
         val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)
 
-        val id = klerk.attachedData.prepare(png.inputStream(), AuthorPicture::class, Ctx.system(), custom = mapOf("origin" to "camera"))
+        val custom = mapOf("origin" to "camera")
+        val id = klerk.attachedData.prepare(png.inputStream(), AuthorPicture::class, Ctx.system(), custom = custom)
         createAuthorWithPicture(klerk, id)
 
         // read back through the row rather than from the in-memory entry
@@ -203,7 +205,12 @@ class AttachedBlobStoreTest {
     fun `A lease longer than the maximum is refused`() = runBlocking {
         val klerk = start(RamStorage(), AttachedBlobStore.Database)
         assertFailsWith<IllegalArgumentException> {
-            klerk.attachedData.prepare("too long".byteInputStream(), AuthorPicture::class, Ctx.system(), lease = 48.hours)
+            klerk.attachedData.prepare(
+                "too long".byteInputStream(),
+                AuthorPicture::class,
+                Ctx.system(),
+                lease = 48.hours,
+            )
         }
         klerk.meta.stop()
     }

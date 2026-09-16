@@ -43,7 +43,7 @@ class MutationTest {
                 klerk,
                 author = jk,
                 coAuthors = setOf(astrid),
-                previousBooksInSameSeries = listOf()
+                previousBooksInSameSeries = listOf(),
             )
             klerk.read(Ctx.unauthenticated()) {
                 val name = get(astrid).props.firstName

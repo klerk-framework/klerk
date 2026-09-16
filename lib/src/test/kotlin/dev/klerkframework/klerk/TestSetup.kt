@@ -52,8 +52,8 @@ var onEnterImprovingStateActionCallback: (() -> Unit)? = null
  * The specification the tests share. Everything deployment-specific — storage, clock, blob store, how jobs are run —
  * is in [testSettings] instead.
  *
- * @param configureJobs applied last inside the `jobs` block, so a test can register its own job types or declare crons.
- * @param configureAuthorization applied last inside the `authorization` block, so a test can add rules of its own.
+ * [configureJobs] is applied last inside the `jobs` block, so a test can register its own job types or declare crons.
+ * [configureAuthorization] is applied last inside the `authorization` block, so a test can add rules of its own.
  */
 fun createConfig(
     collections: Views,
@@ -110,8 +110,8 @@ fun createConfig(
 /**
  * The settings the tests share.
  *
- * @param clock what background work (jobs, retries, cron, time triggers) reads the time from.
- * @param jobs manual execution by default: a test that wants a job to run says so, and nothing runs behind its back.
+ * [clock] is what background work (jobs, retries, cron, time triggers) reads the time from. [jobs] uses manual
+ * execution by default: a test that wants a job to run says so, and nothing runs behind its back.
  */
 fun testSettings(
     storage: Persistence = RamStorage(),
@@ -183,13 +183,14 @@ fun everybodyCanPrepareAttachedData(args: AttachedDataWriteRuleArgs<Ctx, Views>)
 fun unauthenticatedCannotPrepareStrings(args: AttachedDataWriteRuleArgs<Ctx, Views>): NegativeAuthorization =
     if (args.kind == AttachedDataKind.String && args.context.actor is Unauthenticated) Deny else Pass
 
-fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Ctx, Views>): dev.klerkframework.klerk.NegativeAuthorization {
+fun unauthenticatedCannotReadAstrid(args: ModelReadRuleArgs<Ctx, Views>): NegativeAuthorization {
     val props = args.model.props
-    return if (props is Author && props.firstName.value == "Astrid" && args.context.actor is dev.klerkframework.klerk.Unauthenticated) Deny else Pass
+    val isAstrid = props is Author && props.firstName.value == "Astrid"
+    return if (isAstrid && args.context.actor is Unauthenticated) Deny else Pass
 }
 
-fun `Everybody can do everything`(argCommandContextReader: CommandRuleArgs<*, Ctx, Views>): dev.klerkframework.klerk.PositiveAuthorization {
-    return dev.klerkframework.klerk.PositiveAuthorization.Allow
+fun `Everybody can do everything`(argCommandContextReader: CommandRuleArgs<*, Ctx, Views>): PositiveAuthorization {
+    return PositiveAuthorization.Allow
 }
 
 
@@ -202,14 +203,12 @@ fun `Everybody can read`(args: ModelReadRuleArgs<Ctx, Views>): PositiveAuthoriza
 }
 
 fun pelleCannotReadOnMornings(
-    args: ModelReadRuleArgs<Ctx, Views>
+    args: ModelReadRuleArgs<Ctx, Views>,
 ): dev.klerkframework.klerk.NegativeAuthorization {
     try {
         if (args.context.user?.props?.name?.value.equals("Pelle")) {
-            return if (args.context.time.toLocalDateTime(TimeZone.currentSystemDefault()).time < kotlinx.datetime.LocalTime.fromSecondOfDay(
-                    3600 * 12
-                )
-            ) Deny else Pass
+            val localTime = args.context.time.toLocalDateTime(TimeZone.currentSystemDefault()).time
+            return if (localTime < kotlinx.datetime.LocalTime.fromSecondOfDay(3600 * 12)) Deny else Pass
         }
     } catch (e: Exception) {
         //
@@ -273,7 +272,7 @@ data class Author(
     val firstName: FirstName,
     val lastName: LastName,
     val address: Address,
-    val picture: AuthorPicture?
+    val picture: AuthorPicture?,
 ) : Validatable {
     override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::noAuthorCanBeNamedJamesClavell)
 
@@ -309,7 +308,8 @@ data class CreateAuthorParams(
         setOf(::augustStrindbergCannotHaveCertainPhoneNumber)
 
     private fun augustStrindbergCannotHaveCertainPhoneNumber(): PropertyCollectionValidity {
-        return if (firstName.value == "August" && lastName.value == "Strindberg" && phone.value == "123456") Invalid() else Valid
+        val isAugust = firstName.value == "August" && lastName.value == "Strindberg"
+        return if (isAugust && phone.value == "123456") Invalid() else Valid
     }
 }
 
@@ -480,7 +480,7 @@ object MyJob2 : JobType.Local<MyJobCursor, Ctx, Views>() {
 fun changeNameOfAuthor(args: InstanceEventArgs<Author, ChangeNameParams, Ctx, Views>): Author {
     return args.model.props.copy(
         firstName = args.command.params.updatedFirstName,
-        lastName = args.command.params.updatedLastName
+        lastName = args.command.params.updatedLastName,
     )
 }
 
@@ -496,7 +496,7 @@ fun eventsToDeleteAuthorAndBooks(args: InstanceEventArgs<Author, Nothing?, Ctx, 
         @Suppress("UNCHECKED_CAST")
         result.add(
             Command(DeleteAuthor, requireNotNull(args.model.id))
-                    as Command<Any, Any>
+                    as Command<Any, Any>,
         )
 
         return result
@@ -509,7 +509,7 @@ fun newAuthor(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): Auth
         firstName = params.firstName,
         lastName = params.lastName,
         address = Address(Street("kjh")),
-        picture = params.picture
+        picture = params.picture,
     )
 }
 
@@ -523,23 +523,32 @@ fun updateAuthor(args: InstanceEventArgs<Author, Author, Ctx, Views>): Author {
 }
 
 
-fun onlyAuthenticationIdentityCanCreateDaniel(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
-    return if (args.command.params.firstName.value == "Daniel" && args.context.actor != dev.klerkframework.klerk.AuthenticationIdentity) Invalid() else Valid
+fun onlyAuthenticationIdentityCanCreateDaniel(
+    args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>,
+): PropertyCollectionValidity {
+    val isDaniel = args.command.params.firstName.value == "Daniel"
+    return if (isDaniel && args.context.actor != AuthenticationIdentity) Invalid() else Valid
 }
 
 fun cannotHaveAnAwfulName(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
-    return if (args.command.params.firstName.value == "Mike" && args.command.params.lastName.value == "Litoris") Invalid() else Valid
+    val params = args.command.params
+    return if (params.firstName.value == "Mike" && params.lastName.value == "Litoris") Invalid() else Valid
 }
 
-fun secretTokenShouldBeZeroIfNameStartsWithM(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
-    return if (args.command.params.firstName.value.startsWith("M") && args.command.params.secretToken.value != 0L) Invalid() else Valid
+fun secretTokenShouldBeZeroIfNameStartsWithM(
+    args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>,
+): PropertyCollectionValidity {
+    val params = args.command.params
+    return if (params.firstName.value.startsWith("M") && params.secretToken.value != 0L) Invalid() else Valid
 }
 
 fun preventUnauthenticated(context: Ctx): ContextValidity {
     return if (context.actor == dev.klerkframework.klerk.Unauthenticated) ContextValidity.Invalid() else Valid
 }
 
-fun onlyAllowAuthorNameAstridIfThereIsNoRowling(args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>): PropertyCollectionValidity {
+fun onlyAllowAuthorNameAstridIfThereIsNoRowling(
+    args: VoidEventArgs<Author, CreateAuthorParams, Ctx, Views>,
+): PropertyCollectionValidity {
     args.reader.apply {
         if (args.command.params.firstName.value != "Astrid") {
             return Valid
@@ -601,7 +610,7 @@ suspend fun createAuthorJKRowling(klerk: Klerk<Ctx, Views>): ModelID<Author> {
                 phone = PhoneNumber("+46123456"),
                 secretToken = SecretPasscode(234234902359245345),
                 //       address = Address(Street("Storgatan"))
-            )
+            ),
         ),
         Ctx.system(),
     )
@@ -612,7 +621,7 @@ suspend fun createAuthorAstrid(klerk: Klerk<Ctx, Views>): ModelID<Author> {
     val result = klerk.handle(
         Command(
             CreateAuthor,
-            createAstridParameters
+            createAstridParameters,
         ),
         Ctx.system(),
     )
@@ -638,8 +647,8 @@ suspend fun createBookHarryPotter1(klerk: Klerk<Ctx, Views>, author: ModelID<Aut
                 previousBooksInSameSeries = emptyList(),
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
                 averageScore = AverageScore(0f),
-                readingTime = ReadingTime(2.hours)
-            )
+                readingTime = ReadingTime(2.hours),
+            ),
         ),
         Ctx.system(),
     )
@@ -650,7 +659,7 @@ suspend fun createBookHarryPotter2(
     klerk: Klerk<Ctx, Views>,
     author: ModelID<Author>,
     previousBooksInSameSeries: List<ModelID<Book>>,
-    coAuthors: Set<ModelID<Author>>
+    coAuthors: Set<ModelID<Author>>,
 ): ModelID<Book> {
     val result = klerk.handle(
         Command(
@@ -662,8 +671,8 @@ suspend fun createBookHarryPotter2(
                 previousBooksInSameSeries = previousBooksInSameSeries,
                 tags = setOf(BookTag("Fiction"), BookTag("Children")),
                 averageScore = AverageScore(0f),
-                readingTime = ReadingTime(2.hours)
-            )
+                readingTime = ReadingTime(2.hours),
+            ),
         ),
         Ctx.system(),
     )
@@ -819,7 +828,7 @@ object ChangeName : InstanceEventWithParameters<Author, ChangeNameParams>(Extern
 
 sealed class AlwaysFalseDecisions(
     override val name: String,
-    override val function: (InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>) -> Boolean
+    override val function: (InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>) -> Boolean,
 ) : Decision<Boolean, InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>> {
     data object Something : AlwaysFalseDecisions("This will always be false", ::alwaysFalse)
 
@@ -833,7 +842,8 @@ fun alwaysFalse(args: InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>)
 object AlwaysFalseAlgorithm :
     FlowChartAlgorithm<InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>, Boolean>("Always false") {
 
-    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>, Boolean>.() -> Unit =
+    override fun configure():
+        AlgorithmBuilder<InstanceEventArgs<Author, CreateAuthorParams, Ctx, Views>, Boolean>.() -> Unit =
         {
             start(Something)
             booleanNode(Something) {
@@ -880,7 +890,11 @@ object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
     override val name = JobName("my-job")
     override val agent: JobAgent = JobAgent.System
     
-    override suspend fun step(args: JobStepArgs.Local<MyJobCursor, Ctx, Views>): JobResult<MyJobCursor, Ctx, Views> {
+    override suspend fun step(
+    
+        args: JobStepArgs.Local<MyJobCursor, Ctx, Views>,
+    
+    ): JobResult<MyJobCursor, Ctx, Views> {
         if (args.cursor.stepsLeft == 0) {
             return JobResult.Success(result = args.cursor.greeting)
         }
@@ -927,7 +941,7 @@ class SwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation 
     override fun invalidProperty(
         propertyName: String,
         functionName: String,
-        translationInfo: String?
+        translationInfo: String?,
     ): String {
         return when (functionName) {
             PositiveEvenIntContainer::mustBeEven.name -> "Förväntade mig ett jämt nummer"
@@ -1026,8 +1040,8 @@ fun paintingStateMachine(): StateMachine<Painting, PaintingStates, Ctx, Views> =
 private fun newPainting(args: VoidEventArgs<Painting, CreatePaintingParams, Ctx, Views>): Painting =
     Painting(args.command.params.title, args.command.params.image)
 
-// Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the attached-data
-// tests need; PaintingImage above is the one that declares real constraints.
+// Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the
+// attached-data tests need; PaintingImage above is the one that declares real constraints.
 class AuthorPicture(id: AttachedBlobID) : AttachedBlobContainer(id) {
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }

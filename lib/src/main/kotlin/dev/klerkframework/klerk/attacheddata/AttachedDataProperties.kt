@@ -31,7 +31,7 @@ internal data class AttachedDataReference(
  */
 internal fun collectAttachedData(props: Any): Map<Int, AttachedDataReference> {
     val found = mutableMapOf<Int, AttachedDataReference>()
-    ObjectSchema.of(props::class).forEachLeaf(props) { leaf ->
+    for (leaf in ObjectSchema.of(props::class).leaves(props)) {
         when (val value = leaf.value) {
             is AttachedBlobID -> found.putIfAbsent(value.value, AttachedDataReference(value.value))
             is AttachedStringID -> found.putIfAbsent(value.value, AttachedDataReference(value.value))
@@ -58,7 +58,7 @@ internal fun <ID, C : AttachedDataContainer<ID>> instantiateDeclaration(kClass: 
         throw IllegalArgumentException(
             "${kClass.qualifiedName ?: kClass} cannot be used as an attached-data declaration: it must have " +
                     "exactly one constructor taking an id, and it must be public, as 'class MyImage(id: " +
-                    "AttachedBlobID) : AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one.", e
+                    "AttachedBlobID) : AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one.", e,
         )
     }
     @Suppress("UNCHECKED_CAST")

@@ -25,7 +25,10 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
         return algoBuilder.build()
     }
 
-    /** Declares the graph: register [Decision] nodes via [AlgorithmBuilder.booleanNode]/[AlgorithmBuilder.enumNode] and set the entry point with [AlgorithmBuilder.start]. */
+    /**
+     * Declares the graph: register [Decision] nodes via [AlgorithmBuilder.booleanNode]/[AlgorithmBuilder.enumNode] and
+     * set the entry point with [AlgorithmBuilder.start].
+     */
     public abstract fun configure(): AlgorithmBuilder<P, R>.() -> Unit
 
     /** Runs the algorithm starting at the configured start node until a node terminates, and returns its result. */
@@ -56,9 +59,11 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
 public class AlgorithmBuilder<P, R>(private val name: String) {
 
     private var startNodeId: Decision<*, P>? = null
-    public val nodes: MutableSet<Node<P, R>> = mutableSetOf<Node<P, R>>()
+    internal val nodes: MutableSet<Node<P, R>> = mutableSetOf()
 
-    /** Marks [decision] as the entry node of the graph. Required — [FlowChartAlgorithm.execute] fails if never called. */
+    /**
+     * Marks [decision] as the entry node of the graph. Required — [FlowChartAlgorithm.execute] fails if never called.
+     */
     public fun start(decision: Decision<*, P>) {
         startNodeId = decision
     }
@@ -66,7 +71,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
     /** Adds a node that branches on a boolean [decision]. Configure each branch with [BooleanNodeBuilder.on]. */
     public fun booleanNode(
         decision: Decision<Boolean, P>,
-        init: BooleanNodeBuilder<Decision<Boolean, P>, P, R>.() -> Unit
+        init: BooleanNodeBuilder<Decision<Boolean, P>, P, R>.() -> Unit,
     ) {
         val builder = BooleanNodeBuilder<Decision<Boolean, P>, P, R>()
         builder.init()
@@ -76,7 +81,7 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
     /** Adds a node that branches on an enum-valued [decision]. Configure each branch with [EnumNodeBuilder.on]. */
     public fun <E : Enum<*>> enumNode(
         decision: Decision<E, P>,
-        init: EnumNodeBuilder<E, Decision<E, P>, P, R>.() -> Unit
+        init: EnumNodeBuilder<E, Decision<E, P>, P, R>.() -> Unit,
     ) {
         val builder = EnumNodeBuilder<E, Decision<E, P>, P, R>()
         builder.init()
@@ -94,17 +99,22 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
 /** A single node in a [FlowChartAlgorithm]'s graph. */
 @ExperimentalKlerkApi
 public sealed class Node<P, R> {
+    /** Evaluates this node's decision on [params]. */
     public abstract fun execute(params: P): NodeExecutionResult<P, R>
 
+    /** Identifies the node in a rendered diagram. */
     public abstract val id: String
+    /** The node's label in a rendered diagram. */
     public abstract val humanReadable: String
+    /** The next node for each decision outcome that continues. */
     public abstract val goTos: Map<*, Decision<out Any, P>>
+    /** The result for each decision outcome that ends the algorithm. */
     public abstract val terminations: Map<*, R>
 
     internal data class BooleanNode<P, R>(
         val decision: Decision<Boolean, P>,
         override val goTos: Map<Boolean, Decision<out Any, P>>,
-        override val terminations: Map<Boolean, R>
+        override val terminations: Map<Boolean, R>,
     ) : Node<P, R>() {
         override fun execute(params: P): NodeExecutionResult<P, R> {
             val functionResult = decision.function.invoke(params)
@@ -123,7 +133,7 @@ public sealed class Node<P, R> {
     internal data class EnumNode<E : Enum<*>, P, R>(
         val decision: Decision<E, P>,
         override val goTos: Map<E, Decision<out Any, P>>,
-        override val terminations: Map<E, R>
+        override val terminations: Map<E, R>,
     ) : Node<P, R>() {
         override fun execute(params: P): NodeExecutionResult<P, R> {
             val functionResult = decision.function.invoke(params)
@@ -191,9 +201,7 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
         throw IllegalArgumentException("Must declare either goTo or finish")
     }
 
-    internal fun build(decision: D): Node<P, R> {
-        return Node.BooleanNode(decision, goTos, terminations)
-    }
+    internal fun build(decision: D): Node<P, R> = Node.BooleanNode(decision, goTos, terminations)
 
 }
 
@@ -220,15 +228,17 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
         throw IllegalArgumentException("Must declare either goTo or finish")
     }
 
-    internal fun build(decision: D): Node<P, R> {
-        return Node.EnumNode(decision, goTos, terminations)
-    }
+    internal fun build(decision: D): Node<P, R> = Node.EnumNode(decision, goTos, terminations)
 
 }
 
-/** A named decision function that inspects the algorithm's parameters [P] and returns a value of type [T] to branch on. */
+/**
+ * A named decision function that inspects the algorithm's parameters [P] and returns a value of type [T] to branch on.
+ */
 @ExperimentalKlerkApi
 public interface Decision<T, P> {
+    /** The decision's name, as shown in a rendered diagram. */
     public val name: String
+    /** Computes the value to branch on. */
     public val function: (P) -> T
 }

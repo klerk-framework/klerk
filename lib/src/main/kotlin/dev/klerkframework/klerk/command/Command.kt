@@ -18,14 +18,14 @@ import kotlin.time.Instant
  * Command(UpdateBook, bookId, params)  // instance event with parameters
  * Command(PublishBook, bookId)         // instance event without parameters
  * ```
- *
- * @param model the model this event applies to: non-null for instance events, null for void events.
- * @param params the event's parameter object, or `Nothing?` (pass `null`) if the event declares no parameters.
  */
 @ConsistentCopyVisibility
 public data class Command<T : Any, P> internal constructor(
+    /** The event to run. */
     public val event: Event<T, P>,
+    /** The model this event applies to: non-null for instance events, null for void events. */
     public val model: ModelID<T>?,
+    /** The event's parameter object, or `null` if the event declares no parameters. */
     public val params: P,
 ) {
     public companion object {
@@ -64,19 +64,23 @@ public fun <T : Any, P : Any> Command(
 public fun <T : Any> Command(event: InstanceEventNoParameters<T>, model: ModelID<T>): Command<T, Nothing?> =
     Command.dynamic(event, model, null)
 
-/**
- * @param token ensures idempotency (defaults to [CommandToken.simple]): a given token can be used to successfully process a command only once: any
- * later reuse fails with [dev.klerkframework.klerk.KlerkErrorCode.CommandTokenAlreadyUsed]. If created with
- * [CommandToken.requireUnmodifiedModel]/[CommandToken.requireUnmodifiedModels], the command also fails with
- * [dev.klerkframework.klerk.KlerkErrorCode.ModelModifiedSinceTokenCreation] if any of the referenced models were
- * modified after the token was created (optimistic concurrency).
- * @param dryRun if true, all rules are evaluated and a [dev.klerkframework.klerk.CommandResult] is produced as
- * normal, but no state is actually changed and no effects (jobs, subscriptions, persistence) are triggered.
- */
+/** How `Klerk.handle` processes a command. */
 public data class ProcessingOptions(
+    /**
+     * Ensures idempotency: a token can be used to successfully process a command only once, and any later reuse fails
+     * with [dev.klerkframework.klerk.KlerkErrorCode.CommandTokenAlreadyUsed]. If created with
+     * [CommandToken.requireUnmodifiedModel]/[CommandToken.requireUnmodifiedModels], the command also fails with
+     * [dev.klerkframework.klerk.KlerkErrorCode.ModelModifiedSinceTokenCreation] if any of the referenced models were
+     * modified after the token was created (optimistic concurrency).
+     */
     public val token: CommandToken = CommandToken.simple(),
+    /**
+     * If true, all rules are evaluated and a [dev.klerkframework.klerk.CommandResult] is produced as normal, but no
+     * state is changed and no effects (jobs, subscriptions, persistence) are triggered.
+     */
     public val dryRun: Boolean = false,
-    public val debugOptions: Map<DebugOption, LogLevel> = defaultDebugOptions
+    /** Extra logging for this command, per category. */
+    public val debugOptions: Map<DebugOption, LogLevel> = defaultDebugOptions,
 )
 
 /** Categories of extra logging that can be requested per-command via [ProcessingOptions.debugOptions]. */
@@ -98,6 +102,14 @@ public class CommandToken private constructor(
     internal val models: Set<ModelID<out Any>>,
 ) {
 
+    override fun toString(): String =
+        "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
+
+    override fun equals(other: Any?): Boolean =
+        other is CommandToken && other.time == time && other.models == models
+
+    override fun hashCode(): Int = 31 * time.hashCode() + models.hashCode()
+
     public companion object {
         /** A token that only guards against being reused (no optimistic-concurrency check). */
         public fun simple(): CommandToken = CommandToken(getCurrentInstant(), emptySet())
@@ -106,7 +118,9 @@ public class CommandToken private constructor(
         public fun requireUnmodifiedModel(id: ModelID<out Any>): CommandToken =
             CommandToken(getCurrentInstant(), setOf(id))
 
-        /** A token that additionally fails the command if any model in [ids] was modified after the token was created. */
+        /**
+         * A token that additionally fails the command if any model in [ids] was modified after the token was created.
+         */
         public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken =
             CommandToken(getCurrentInstant(), ids)
 
@@ -138,12 +152,4 @@ public class CommandToken private constructor(
         /** The token in [string], or null if it is not one. */
         public fun parseOrNull(string: String): CommandToken? = runCatching { parse(string) }.getOrNull()
     }
-
-    override fun toString(): String =
-        "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
-
-    override fun equals(other: Any?): Boolean =
-        other is CommandToken && other.time == time && other.models == models
-
-    override fun hashCode(): Int = 31 * time.hashCode() + models.hashCode()
 }

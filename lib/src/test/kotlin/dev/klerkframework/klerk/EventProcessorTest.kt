@@ -70,7 +70,7 @@ class EventProcessorTest {
             val willFail = klerk.handle(
                 Command(
                     DeleteAuthor,
-                    rowling
+                    rowling,
                 ),
                 context,
             )
@@ -79,7 +79,7 @@ class EventProcessorTest {
             val willNotFail = klerk.handle(
                 Command(
                     DeleteAuthorAndBooks,
-                    rowling
+                    rowling,
                 ),
                 context,
             ).getOrElse {

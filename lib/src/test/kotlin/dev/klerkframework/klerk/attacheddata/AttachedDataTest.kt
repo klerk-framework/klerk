@@ -53,7 +53,7 @@ open class AttachedDataTest {
                     phone = PhoneNumber("+4699999"),
                     secretToken = SecretPasscode(1),
                     picture = picture?.let { AuthorPicture(it) },
-                )
+                ),
             ),
             context,
         )
@@ -71,7 +71,7 @@ open class AttachedDataTest {
             Command(
                 UpdateAuthor,
                 authorID,
-                author.props.copy(picture = picture?.let { AuthorPicture(it) })
+                author.props.copy(picture = picture?.let { AuthorPicture(it) }),
             
             ),
             context,
@@ -89,7 +89,7 @@ open class AttachedDataTest {
         val result = klerk.handle(
             Command(
                 CreatePainting,
-                CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image))
+                CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
             ),
             Ctx.system(),
         )
@@ -225,7 +225,7 @@ open class AttachedDataTest {
         assertEquals(KlerkErrorCode.AttachedDataAlreadyOwned, problem.code)
         assertTrue(
             (problem as StateProblem).internalDescription.contains(firstOwner.value.toString()),
-            "The problem should name the current owner but was: ${problem.internalDescription}"
+            "The problem should name the current owner but was: ${problem.internalDescription}",
         )
         // the first owner still has its data
         assertEquals(id, klerk.read(Ctx.system()) { get(firstOwner).props.picture?.id })
@@ -307,8 +307,8 @@ open class AttachedDataTest {
                 author.props.copy(
                     firstName = FirstName("James"),
                     lastName = LastName("Clavell"),
-                    picture = newPicture?.let { AuthorPicture(it) }
-                )
+                    picture = newPicture?.let { AuthorPicture(it) },
+                ),
             
             ),
             Ctx.system(),
@@ -504,7 +504,7 @@ open class AttachedDataTest {
         assertFailsWith<NoSuchElementException> {
             klerk.attachedData.getMetadata(
                 AttachedBlobID(4711),
-                Ctx.system()
+                Ctx.system(),
             )
         }
         klerk.meta.stop()
@@ -541,7 +541,7 @@ open class AttachedDataTest {
                 blob("x"),
                 AuthorPicture::class,
                 Ctx.system(),
-                custom = mapOf("big" to "y".repeat(1000))
+                custom = mapOf("big" to "y".repeat(1000)),
             )
         }
         klerk.meta.stop()
@@ -627,7 +627,7 @@ open class AttachedDataTest {
         // and the typed id it hands back is the one that reads the value
         assertEquals(
             "a picture",
-            String(klerk.attachedData.get(untypedPicture.asBlob(), Ctx.system()).readAllBytes())
+            String(klerk.attachedData.get(untypedPicture.asBlob(), Ctx.system()).readAllBytes()),
         )
         assertEquals("a chapter", klerk.attachedData.get(untypedChapter.asString(), Ctx.system()))
         klerk.meta.stop()
@@ -671,7 +671,7 @@ open class AttachedDataTest {
             Command(
                 UpdateBook,
                 bookID,
-                book.props.copy(chapters = listOf(BookChapter(second)))
+                book.props.copy(chapters = listOf(BookChapter(second))),
             
             ),
             Ctx.system(),
@@ -690,7 +690,8 @@ open class AttachedDataTest {
         val authorID = createAuthorWithPicture(klerk, picture)
         val bookID = createBookWithChapters(klerk, listOf(chapter))
 
-        val authorJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(authorID) }.props)
+        val author = klerk.read(Ctx.system()) { get(authorID) }
+        val authorJson = dev.klerkframework.klerk.misc.KlerkJson.encode(author.props)
         assertTrue(authorJson.contains("\"picture\":${picture.value}"), "Unexpected JSON: $authorJson")
         val bookJson = dev.klerkframework.klerk.misc.KlerkJson.encode(klerk.read(Ctx.system()) { get(bookID) }.props)
         assertTrue(bookJson.contains("\"chapters\":[${chapter.value}]"), "Unexpected JSON: $bookJson")
@@ -709,8 +710,8 @@ open class AttachedDataTest {
         klerk.meta.stop()
 
         val restarted = start(storage)
-        // this also checks that the value classes survive the JSON and the database — both the nullable (boxed) property
-        // and the one inside a List
+        // this also checks that the value classes survive the JSON and the database — both the nullable (boxed)
+        // property and the one inside a List
         assertEquals(claimed, restarted.read(Ctx.system()) { get(authorID).props.picture?.id })
         assertEquals(listOf(chapter), restarted.read(Ctx.system()) { get(bookID).props.chapters.map { it.id } })
         assertEquals("a chapter", restarted.attachedData.get(chapter, Ctx.system()))
@@ -722,7 +723,7 @@ open class AttachedDataTest {
 
     private suspend fun createBook(
         klerk: Klerk<Ctx, Views>,
-        params: (CreateBookParams) -> CreateBookParams
+        params: (CreateBookParams) -> CreateBookParams,
     ): ModelID<Book> {
         val author = createAuthorWithPicture(klerk, null, lastName = "Author of the book")
         val base = CreateBookParams(
@@ -744,7 +745,7 @@ open class AttachedDataTest {
     private suspend fun createBookWithCoverAndThumbnail(
         klerk: Klerk<Ctx, Views>,
         cover: AttachedBlobID,
-        thumbnail: AttachedBlobID
+        thumbnail: AttachedBlobID,
     ) = createBook(klerk) {
         it.copy(
             cover = cover?.let { c -> BookCover(c) },
@@ -753,7 +754,7 @@ open class AttachedDataTest {
 
     private suspend fun createBookWithChapters(
         klerk: Klerk<Ctx, Views>,
-        chapters: List<AttachedStringID>
+        chapters: List<AttachedStringID>,
     ) = createBook(klerk) { it.copy(chapters = chapters.map { c -> BookChapter(c) }) }
 
     private suspend fun createAuthorWithPictureExpectingFailure(
@@ -770,7 +771,7 @@ open class AttachedDataTest {
                     phone = PhoneNumber("+4611111"),
                     secretToken = SecretPasscode(2),
                     picture = picture?.let { AuthorPicture(it) },
-                )
+                ),
             ),
             context,
         )

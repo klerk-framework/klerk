@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.statemachine.Executable
 
 internal class Transition<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val targetState: ModelStates,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(

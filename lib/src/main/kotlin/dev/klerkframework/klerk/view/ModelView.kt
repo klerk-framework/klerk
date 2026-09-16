@@ -1,8 +1,6 @@
 package dev.klerkframework.klerk.view
 
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
-import dev.klerkframework.klerk.misc.encodeBase64UrlSafe
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.unauthorized
 
@@ -69,7 +67,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     internal open val narrowsByPredicate: Boolean
         get() = false
 
-    /** Whether [model] belongs in this view, given that its parent contains it. Only meaningful if [narrowsByPredicate]. */
+    /**
+     * Whether [model] belongs in this view, given that its parent contains it. Only meaningful if [narrowsByPredicate].
+     */
     internal open fun matches(model: Model<T>): Boolean = true
 
     /** Whether this view contains [id], answered from the index. Only valid once [ensureIndex] has run. */
@@ -96,7 +96,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
             index?.let { return it }
             val parentIds = requireNotNull(parent).ensureIndex(unauthorized) ?: return null
             val built = HashSet<Int>()
-            parentIds.forEach { id ->
+            for (id in parentIds) {
                 if (matches(unauthorized.get(ModelID(id)))) {
                     built.add(id)
                 }
@@ -118,12 +118,16 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /** Drops this view's index, and every derived view's, so that they are rebuilt against freshly loaded models. */
     internal fun clearIndex() {
         index = null
-        children.forEach { it.clearIndex() }
+        for (child in children) {
+            child.clearIndex()
+        }
     }
 
     internal open fun onModelCreated(model: Model<T>) {
         index?.let { if (parent!!.containsId(model.id.value) && matches(model)) it.add(model.id.value) }
-        children.forEach { it.onModelCreated(model) }
+        for (child in children) {
+            child.onModelCreated(model)
+        }
     }
 
     internal open fun onModelUpdated(before: Model<T>, after: Model<T>) {
@@ -131,12 +135,16 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
             val id = after.id.value
             if (parent!!.containsId(id) && matches(after)) it.add(id) else it.remove(id)
         }
-        children.forEach { it.onModelUpdated(before, after) }
+        for (child in children) {
+            child.onModelUpdated(before, after)
+        }
     }
 
     internal open fun onModelDeleted(model: Model<T>) {
         index?.remove(model.id.value)
-        children.forEach { it.onModelDeleted(model) }
+        for (child in children) {
+            child.onModelDeleted(model)
+        }
     }
 
     /** Returns a new view containing only models matching [filter]. */
@@ -186,14 +194,14 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /**
      * The id this view was [register]ed under, combined with the owning model class's name (e.g.
-     * `v.Author.establishedAuthors`). Use [ViewId.shortId] for the id on its own.
+     * `v.Author.establishedAuthors`). Use [ViewID.shortId] for the id on its own.
      *
      * @throws IllegalStateException if this view was never registered
      */
-    public open val id: ViewId
+    public open val id: ViewID
         get() {
             check(idBase != null && _id != null) { "This view was never registered" }
-            return ViewId(idBase!!, _id!!)
+            return ViewID(idBase!!, _id!!)
         }
 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
@@ -204,7 +212,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         ensureIndex(reader)?.size ?: memberIds(reader).count()
 
     /**
-     * @return true if a model with this id is currently in the view
+     * True if a model with the id [value] is currently in the view.
      *
      * Walks [memberIds] unless the view is indexed. Override it when the view can answer membership directly — it is
      * asked once per `validReferences` check, i.e. on the command path.
@@ -216,10 +224,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /**
      * Makes Klerk aware of this view: gives it a stable id and adds it to `Specification.registeredViews`, so it can be
-     * looked up by [ViewId] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
+     * looked up by [ViewID] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
      * that is never registered still works if you hold a reference to it, but can't be looked up by id.
      *
-     * @param id must not contain `.` or spaces
      * @throws IllegalArgumentException if [id] contains `.` or a space
      */
     public fun register(id: String): ModelView<T, C> {
@@ -249,7 +256,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     private val previous: ModelView<T, C>,
     private val selector: (Model<T>) -> R,
-    private val ascending: Boolean
+    private val ascending: Boolean,
 ) : ModelView<T, C>(previous) {
 
     // Sorting does not change what the view contains, so membership questions go straight to the parent and a view
@@ -275,7 +282,7 @@ internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
 internal class IncludeStatesModelView<T : Any, C : KlerkContext>(
     private val previous: ModelView<T, C>,
     private val included: Set<Enum<*>>?,
-    private val excluded: Set<Enum<*>>?
+    private val excluded: Set<Enum<*>>?,
 ) : ModelView<T, C>(previous) {
 
     private val includedNames = included?.map { it.name }?.toSet()
@@ -317,7 +324,7 @@ internal class FilteredModelView<T : Any, C : KlerkContext>(
  */
 internal class AllModelView<T : Any, C : KlerkContext>(
     private val view: ModelViews<T, C>,
-    private val all: List<Int>  // sorted by createdAt
+    private val all: List<Int>,  // sorted by createdAt
 ) : ModelView<T, C>(null) {
 
     init {
@@ -335,132 +342,4 @@ internal class AllModelView<T : Any, C : KlerkContext>(
     override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> = all.asSequence().map { ModelID(it) }
 
     override fun <V> contains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean = view.containsId(value.value)
-}
-
-/** Where [QueryOptions.cursor] sits relative to the page. */
-public enum class PageDirection {
-    /** The page starts at the cursor. This is what the cursors in a [QueryResponse] are meant for. */
-    FROM,
-
-    /** The page starts immediately after the cursor. */
-    AFTER,
-
-    /** The page ends immediately before the cursor. */
-    BEFORE,
-}
-
-/**
- * Page size and starting point for a paginated [ModelView] read (`Reader.query`).
- *
- * @param maxItems the most items the page may hold.
- * @param cursor where the page sits; null means the start of the view.
- * @param direction where [cursor] sits relative to the page.
- * @param countTotal read the whole view to fill in [QueryResponse.totalCount] and
- * [QueryResponse.cursorLastPage]. Off by default, since it costs a full pass.
- * @throws IllegalArgumentException if [maxItems] is not positive
- */
-public data class QueryOptions(
-    val maxItems: Int = 50,
-    val cursor: QueryListCursor? = null,
-    val direction: PageDirection = PageDirection.FROM,
-    val countTotal: Boolean = false,
-) {
-
-    init {
-        require(maxItems > 0)
-    }
-
-}
-
-/**
- * One page of a paginated [ModelView] read, with cursors for the adjacent pages. Every cursor is null when there is
- * no such page, so a pagination control can render a link for exactly the cursors it was given.
- *
- * @param totalCount the size of the whole view, or null unless [QueryOptions.countTotal] was set.
- * @param cursorLastPage null unless [QueryOptions.countTotal] was set.
- */
-public data class QueryResponse<T : Any>(
-    val items: List<Model<T>>,
-    val cursorFirstPage: QueryListCursor?,
-    val cursorPreviousPage: QueryListCursor?,
-    val cursorNextPage: QueryListCursor?,
-    val cursorLastPage: QueryListCursor?,
-    val totalCount: Int?,
-    /** Where [items] start in the view, needed by [cursorAt]. */
-    internal val offset: Int = 0,
-) {
-
-    public val hasPreviousPage: Boolean get() = cursorPreviousPage != null
-    public val hasNextPage: Boolean get() = cursorNextPage != null
-
-    /**
-     * A cursor pointing at the item at [index] of [items]. Use it when every row needs its own position rather than
-     * the page as a whole — a GraphQL edge cursor, for instance.
-     *
-     * @throws IndexOutOfBoundsException if [index] is not an index of [items]
-     */
-    public fun cursorAt(index: Int): QueryListCursor {
-        if (index !in items.indices) {
-            throw IndexOutOfBoundsException("No item at index $index, the page holds ${items.size} items")
-        }
-        return QueryListCursor(offset + index, items[index].id.value)
-    }
-
-}
-
-/**
- * An opaque position in a [ModelView]. Serializes to and from a URL-safe string via [toString]/[parse]; treat
- * that string as meaningless and don't build one yourself.
- *
- * A cursor is a position, not a snapshot: it resolves to the item it was cut at whenever that item is still in the
- * view, so models created or deleted meanwhile neither skip nor repeat a row. If that item is gone, the raw position
- * is used and a row may shift.
- */
-public class QueryListCursor internal constructor(
-    internal val offset: Int,
-    internal val anchor: Int?,
-) {
-
-    init {
-        require(offset >= 0)
-    }
-
-    public companion object {
-        /** The start of the view. */
-        public val first: QueryListCursor = QueryListCursor(0, null)
-
-        /**
-         * Parses a cursor previously serialized with [QueryListCursor.toString].
-         * @throws IllegalArgumentException if [s] is not a validly encoded cursor
-         */
-        public fun parse(s: String): QueryListCursor {
-            val fields = try {
-                s.decodeBase64UrlSafeString().split(",").associate { field ->
-                    val separator = field.indexOf(':')
-                    require(separator > 0)
-                    field.substring(0, separator) to field.substring(separator + 1)
-                }
-            } catch (e: IllegalArgumentException) {
-                throw IllegalArgumentException("Not a cursor: '$s'", e)
-            }
-            val offset = fields["o"]?.toIntOrNull()
-            require(offset != null && offset >= 0) { "Not a cursor: '$s'" }
-            val anchorField = fields["a"]
-            val anchor = if (anchorField == null) null else {
-                requireNotNull(anchorField.toIntOrNull()) { "Not a cursor: '$s'" }
-            }
-            return QueryListCursor(offset, anchor)
-        }
-
-        /** The cursor in [s], or null if it is not one. */
-        public fun parseOrNull(s: String): QueryListCursor? = runCatching { parse(s) }.getOrNull()
-    }
-
-    override fun toString(): String =
-        (if (anchor == null) "o:$offset" else "o:$offset,a:$anchor").encodeBase64UrlSafe()
-
-    override fun equals(other: Any?): Boolean =
-        other is QueryListCursor && other.offset == offset && other.anchor == anchor
-
-    override fun hashCode(): Int = offset * 31 + (anchor ?: 0)
 }

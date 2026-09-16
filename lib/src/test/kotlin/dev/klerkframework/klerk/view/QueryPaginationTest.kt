@@ -47,7 +47,7 @@ class QueryPaginationTest {
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                )
+                ),
             ),
             context,
         ).getOrThrow().primaryModel!!
@@ -65,7 +65,7 @@ class QueryPaginationTest {
         count: Int,
         context: Ctx = Ctx.system(),
     ): List<ModelID<Author>> =
-        (0 until count).map { createAuthor(klerk, if (it % 2 == 0) "Kalle" else "Greta", "%03d".format(it), context) }
+        (0..<count).map { createAuthor(klerk, if (it % 2 == 0) "Kalle" else "Greta", "%03d".format(it), context) }
 
     /** Walks `cursorNextPage` from the start and returns every page. */
     private suspend fun pagesForward(
@@ -271,7 +271,7 @@ class QueryPaginationTest {
         val page = klerk.read(Ctx.system()) {
             val second = views.authors.all.query(QueryOptions(maxItems = 12, cursor = null))
             views.authors.all.query(
-                QueryOptions(maxItems = 5, cursor = second.cursorNextPage, direction = PageDirection.BEFORE),
+                QueryOptions(maxItems = 5, cursor = second.cursorNextPage, direction = PageDirection.Before),
             )
         }
         assertEquals(all.subList(7, 12), page.items.map { it.id })
@@ -327,10 +327,11 @@ class QueryPaginationTest {
 
             var page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10)) }
             while (page.cursorNextPage != null) {
-                page = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10, cursor = page.cursorNextPage)) }
+                val options = QueryOptions(maxItems = 10, cursor = page.cursorNextPage)
+                page = klerk.read(Ctx.system()) { view.query(options) }
             }
             val beyond = page.cursorAt(page.items.lastIndex)
-            (0 until 25).forEach { _ -> deleteAuthor(klerk, order(klerk, view).last()) }
+            (0..<25).forEach { _ -> deleteAuthor(klerk, order(klerk, view).last()) }
 
             val stale = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 10, cursor = beyond)) }
             assertEquals(emptyList(), stale.items)

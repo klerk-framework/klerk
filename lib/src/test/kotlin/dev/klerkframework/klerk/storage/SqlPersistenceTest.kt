@@ -33,8 +33,8 @@ class SqlPersistenceTest {
                     firstName = FirstName("Pelle"),
                     lastName = LastName("Andersson"),
                     phone = PhoneNumber("345"),
-                    secretToken = SecretPasscode(99)
-                )
+                    secretToken = SecretPasscode(99),
+                ),
             
             )
             val options = ProcessingOptions(token = CommandToken.simple())
@@ -88,12 +88,12 @@ class SqlPersistenceTest {
                     firstName = FirstName("Pelle"),
                     lastName = LastName("Andersson"),
                     phone = PhoneNumber("345"),
-                    secretToken = SecretPasscode(99)
-                )
+                    secretToken = SecretPasscode(99),
+                ),
             
             )
             val authorRef = requireNotNull(
-                klerk.handle(command, Ctx.system()).getOrThrow().primaryModel
+                klerk.handle(command, Ctx.system()).getOrThrow().primaryModel,
             )
             assertNotNull(persistence.readModel(authorRef.value))
 

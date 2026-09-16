@@ -4,9 +4,7 @@ import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOption
 import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.misc.IdFactory
-import dev.klerkframework.klerk.misc.IdProvider
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.read.ModelReader
@@ -26,9 +24,9 @@ import kotlin.time.measureTime
 
 /**
  * The system switches between two modes: read and write. In read mode, many coroutines are allowed to access the
- * models simultaneously. When an event is sent to the framework, validation is done while still in read mode. If the event
- * is accepted, the system pauses new reads and when all ongoing reads have completed, the system switches to write mode
- * and all external reads are blocked.
+ * models simultaneously. When an event is sent to the framework, validation is done while still in read mode. If the
+ * event is accepted, the system pauses new reads and when all ongoing reads have completed, the system switches to
+ * write mode and all external reads are blocked.
  */
 internal class EventProcessor<C : KlerkContext, V>(
     private val klerk: KlerkImpl<C, V>,
@@ -56,9 +54,9 @@ internal class EventProcessor<C : KlerkContext, V>(
         require(ModelCache.count == 0) { "ModelCache is not empty" }
 
         val allLists = mutableMapOf<String, MutableList<Int>>()
-        klerk.specification.managedModels.forEach {
-            it.views.prepareForLoad()
-            allLists[it.kClass.simpleName!!] = it.views._all
+        for (managedModel in klerk.specification.managedModels) {
+            managedModel.views.prepareForLoad()
+            allLists[managedModel.kClass.simpleName!!] = managedModel.views._all
         }
 
         val clock = Clock.System
@@ -79,7 +77,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 throw PersistedModelValidationException(
                     model.props::class.simpleName!!,
                     model.id.value,
-                    problems.joinToString()
+                    problems.joinToString(),
                 )
             }
         }
@@ -94,7 +92,9 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
 
         // The load filled the 'all' lists directly, so the matching id sets have to catch up.
-        klerk.specification.managedModels.forEach { it.views.indexLoadedModels() }
+        for (managedModel in klerk.specification.managedModels) {
+            managedModel.views.indexLoadedModels()
+        }
 
         val timeTriggerTime = measureTime {
             updateTimeTriggerOnAllModels()
@@ -102,7 +102,9 @@ internal class EventProcessor<C : KlerkContext, V>(
         logger.info { "Checked timeTriggers in ${timeTriggerTime.inWholeMilliseconds} ms" }
 
         // From here on the set of views is fixed. Views derived later are not indexed and not retained.
-        klerk.specification.managedModels.forEach { it.views.freeze() }
+        for (managedModel in klerk.specification.managedModels) {
+            managedModel.views.freeze()
+        }
 
         timerStartup.record(readModelsMilliS, TimeUnit.MILLISECONDS)
     }
@@ -129,13 +131,14 @@ internal class EventProcessor<C : KlerkContext, V>(
 
         timeTriggerManager.init(calculated.map { it.second })
 
-        calculated.filter {
-            (it.first.timeTrigger == null && it.second.timeTrigger != null) // there was no trigger but now it should be
-                    || (it.first.timeTrigger != null && it.second.timeTrigger == null) // there was a trigger but it shouldn't anymore
-                    || (it.first.timeTrigger != null && it.second.timeTrigger != null && it.first.timeTrigger!! > it.second.timeTrigger!!      // there was a trigger, and still is. However, the new specification says that it should trigger earlier than the stored value. (note that we cannot say anything about the opposite situation)
-                    )
-        }.forEach {
-            ModelCache.store(it.second)
+        for ((stored, recalculated) in calculated) {
+            val before = stored.timeTrigger
+            val after = recalculated.timeTrigger
+            // A trigger that moved later is left alone: nothing can be said about that situation.
+            val changed = (before == null) != (after == null) || (before != null && after != null && before > after)
+            if (changed) {
+                ModelCache.store(recalculated)
+            }
         }
     }
 
@@ -146,13 +149,13 @@ internal class EventProcessor<C : KlerkContext, V>(
         model: Model<out Any>,
         time: Instant,
         context: C,
-        reader: ModelReader<C, V>
+        reader: ModelReader<C, V>,
     ): Model<out Any> {
         val state = klerk.specification.getStateMachine(model).getStateByName(model.state)
         check(state is InstanceState)
         @Suppress("UNCHECKED_CAST")
         var instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
-            LifecycleArgs(model, context, reader)
+            LifecycleArgs(model, context, reader),
         )
         if (instant == null && state.afterDuration != null) {
             instant = time.plus(state.afterDuration!!)
@@ -163,8 +166,8 @@ internal class EventProcessor<C : KlerkContext, V>(
 
     /**
      * Produces a ProcessingData, which contains all the changes, jobs and actions that this command will lead to.
-     * Note that the command may produce other commands, which will also be processed.
-     * @param reader a reader that does not enforce authorization rules
+     * Note that the command may produce other commands, which will also be processed. [reader] must not enforce
+     * authorization rules.
      */
     internal fun <T : Any, P> processPrimaryCommand(
         command: Command<T, P>,
@@ -191,7 +194,6 @@ internal class EventProcessor<C : KlerkContext, V>(
         }
     }
 
-
     /**
      * This is how the processing works:
      * 1. This function receives a ProcessingData object.
@@ -205,8 +207,8 @@ internal class EventProcessor<C : KlerkContext, V>(
      * transform the model immediately since the exit block must be executed using input of how the model exists before
      * the transition. We will therefore finalize the transition when we merge with the result of the exit block.
      *
-     * @param Primary is type of the original state machine. Not used in the processing but needed in the response.
-     * @param isPrimary true if this is the initial state machine (and initial command/time-trigger)
+     * [Primary] is the type of the original state machine. It is not used in the processing but needed in the
+     * response. [isPrimary] is true for the initial state machine (and initial command/time-trigger).
      */
     private fun <Primary : Any> process(
         processingData: ProcessingData<Primary, C, V>,
@@ -225,8 +227,11 @@ internal class EventProcessor<C : KlerkContext, V>(
         val after = processBlocks<Primary, Any, Any>(beforeBlockProcessing, context, reader, options, time)
         val withCorrectPrimary = if (isPrimary && after.primaryModel == null) {
             @Suppress("UNCHECKED_CAST")
-            after.copy(primaryModel = after.aggregatedModelState[after.createdModels.singleOrNull()]?.id as? ModelID<Primary>)
-        } else after
+            val created = after.aggregatedModelState[after.createdModels.singleOrNull()]?.id as? ModelID<Primary>
+            after.copy(primaryModel = created)
+        } else {
+            after
+        }
         return process(withCorrectPrimary, context, reader, isPrimary = false, options, time)
     }
 
@@ -249,7 +254,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             return processingData.copy(
                 remainingTimeTrigger = null,
                 remainingBlocks = listOf(requireNotNull(block)),
-                currentModel = model.id
+                currentModel = model.id,
             )
         }
 
@@ -281,10 +286,9 @@ internal class EventProcessor<C : KlerkContext, V>(
         )
     }
 
-
     /**
-     * @param context is null when we are processing the state machine due to a time-trigger (i.e. not by a command).
-     * But whenever there is an Event, we know that it was caused via a command and therefore we know that context is
+     * [context] is null when we are processing the state machine due to a time-trigger (i.e. not by a command). But
+     * whenever there is an Event, we know that it was caused via a command and therefore we know that [context] is
      * non-null.
      */
     private fun <Primary : Any, T : Any, P> processBlocks(
@@ -292,20 +296,20 @@ internal class EventProcessor<C : KlerkContext, V>(
         context: C,
         reader: ModelReader<C, V>,
         options: ProcessingOptions,
-        time: Instant
+        time: Instant,
     ): ProcessingData<Primary, C, V> {
         if (processingData.remainingBlocks.isEmpty()) {
             return processingData
         }
         val currentBlock = processingData.remainingBlocks.first()
         val remaining = processingData.remainingBlocks.drop(1)
-        logger.log(DebugOption.Sequence, options) { "Processing block ${currentBlock}" }
+        logger.log(DebugOption.Sequence, options) { "Processing block $currentBlock" }
 
         val processingOptions = EventProcessingOptions(
             disregardPreventingRules = false,
             idProvider = IdFactory(klerk.jobs::isJobIdAvailable),
             performActions = false,
-            preventModelUpdates = false
+            preventModelUpdates = false,
         )
         val modelId = processingData.currentCommand?.model ?: processingData.currentModel
 
@@ -328,7 +332,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                 val args = VoidEventArgs(
                     requireNotNull(processingData.currentCommand),
                     context,
-                    reader
+                    reader,
                 )
 
                 @Suppress("UNCHECKED_CAST")
@@ -386,15 +390,11 @@ internal class EventProcessor<C : KlerkContext, V>(
                     Pair(model.id, findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader), time))
                 }
 
-        return processingData.copy(timeTriggers = newTimeTriggers.associate { it })/*        return processingData.copy(modifiedModels = processingData.modifiedModels
-                    .filter { processingData.transitions.keys.contains(it.key) || processingData.createdModels.keys.contains(it.key) }
-                    .map { (id, model) -> id to model.copy(timeTrigger = findTimeTrigger(model as Model<T>, LifecycleArgs(model, context, reader))) }
-                    .toMap())
-         */
+        return processingData.copy(timeTriggers = newTimeTriggers.associate { it })
     }
 
     private fun <T : Any> findTimeTrigger(
-        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>, time: Instant
+        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>, time: Instant,
     ): Instant? {
         val state = klerk.specification.getStateMachine(newModel).getStateByName(newModel.state)
         check(state is InstanceState)
@@ -405,152 +405,4 @@ internal class EventProcessor<C : KlerkContext, V>(
         return instant?.let { makeExactSerializable(it) }
     }
 
-
 }
-
-/**
- * Note that lists are used when ordering matters and maps are used for models as it is possible that a model is
- * updated/transitioned more than once for the same command.
- *
- * @property primaryModel is the model that was created or manipulated by the primary command (i.e. the command that
- * the user initiated).
- * @property currentModel is the model that was created or manipulated by the current command. Will be the same as
- * primary unless the current command is a sub-command.
- * @property aggregatedModelState the models as they are after the last block was executed
- * @property createdModels models that were created. Note that they may have been modified after creation, which means
- * that the model in this map may NOT be the final outcome for this model. See modifiedModels instead.
- * @property updatedModels models that were updated. Note that they may have been modified after the update, which means
- * that the model in this map may NOT be the final outcome for this model. See modifiedModels instead.
- * @property transitions models that changed state. Note that they may have been modified after the transition, which means
- * that the model in this map may NOT be the final outcome for this model. See modifiedModels instead.
- */
-internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
-    val primaryModel: ModelID<Primary>? = null,
-    val currentModel: ModelID<out Any>? = null,
-    val unmanagedJobs: List<UnmanagedJob> = emptyList(),
-    val createdModels: List<ModelID<out Any>> = emptyList(),
-    val updatedModels: List<ModelID<out Any>> = emptyList(),
-    val transitions: List<ModelID<out Any>> = emptyList(),
-    val deletedModels: List<ModelID<out Any>> = emptyList(),
-    val unFinalizedTransition: Triple<String, Instant, Model<out Any>>? = null,
-    val aggregatedModelState: Map<ModelID<out Any>, Model<out Any>> = emptyMap(),
-    val newJobs: List<PendingJob<C, V>> = emptyList(),
-    val remainingBlocks: List<Block<*, *, C, V>> = emptyList(),
-    val currentBlock: Block<*, *, C, V>? = null,
-    val processedBlocks: List<Block<*, *, C, V>> = emptyList(),
-    val remainingCommands: List<Command<out Any, out Any?>> = emptyList(),
-    val currentCommand: Command<out Any, out Any?>? = null,
-    val processedCommands: List<Command<out Any, out Any?>> = emptyList(),
-    val log: List<String> = emptyList(),
-    val functionsToUpdateViews: List<() -> Unit> = emptyList(),
-    val problems: List<Problem> = emptyList(),
-    val timeTriggers: Map<ModelID<out Any>, Instant?> = emptyMap(),
-    val remainingTimeTrigger: Model<out Any>? = null
-) {
-
-    override fun toString(): String = currentBlock?.name ?: "unknown"
-
-    /**
-     * @param subsequentIsExitBlock if true, an exit block has been processed. We thus know there was a transition, and we can
-     * now update the model with transition info.
-     */
-    internal fun merge(
-        subsequent: ProcessingData<Primary, C, V>,
-        subsequentIsExitBlock: Boolean = false
-    ): ProcessingData<Primary, C, V> {
-        val (updatedModifiedModels, updatedTransitions, toFinalize) = calculateModifiedModels(
-            subsequent,
-            subsequentIsExitBlock
-        )
-        return copy(
-            currentModel = currentModel ?: subsequent.currentModel,
-            unmanagedJobs = unmanagedJobs.plus(subsequent.unmanagedJobs),
-            createdModels = createdModels.plus(subsequent.createdModels),
-            updatedModels = updatedModels.plus(subsequent.updatedModels),
-            deletedModels = deletedModels.plus(subsequent.deletedModels),
-            transitions = updatedTransitions,
-            unFinalizedTransition = toFinalize,
-            aggregatedModelState = updatedModifiedModels,
-            newJobs = newJobs.plus(subsequent.newJobs),
-            remainingBlocks = remainingBlocks.plus(subsequent.remainingBlocks),
-            processedBlocks = currentBlock?.let { processedBlocks.plus(it) } ?: processedBlocks,
-            remainingCommands = remainingCommands.plus(subsequent.remainingCommands),
-            processedCommands = currentCommand?.let { processedCommands.plus(it) } ?: processedCommands,
-            functionsToUpdateViews = functionsToUpdateViews.plus(subsequent.functionsToUpdateViews),
-            problems = problems.plus(subsequent.problems),
-            remainingTimeTrigger = subsequent.remainingTimeTrigger,
-            log = log.plus(subsequent.log)
-        )
-    }
-
-    internal data class CalculatedStuff(
-        val modified: Map<ModelID<out Any>, Model<out Any>>,
-        val transitions: List<ModelID<out Any>>,
-        val toFinalize: Triple<String, Instant, Model<out Any>>?,
-    )
-
-    /**
-     * Calculates how modified models look like after the block.
-     * @param subsequent ProcessingData from the result of a processed block.
-     * @param finalizeTransition if true, an exit block has been processed. We thus know there was a transition or creation, and we can
-     * now update the model with transition info.
-     * @return modified models and transitions
-     */
-    private fun <Primary : Any, C : KlerkContext, V> calculateModifiedModels(
-        subsequent: ProcessingData<Primary, C, V>,
-        finalizeTransition: Boolean,
-    ): CalculatedStuff {
-        val modified = mutableMapOf<ModelID<out Any>, Model<out Any>>()
-        modified.putAll(aggregatedModelState)
-
-        val newTransitions = mutableListOf<ModelID<out Any>>()
-        newTransitions.addAll(transitions)
-
-        var toFinalize: Triple<String, Instant, Model<out Any>>? = null
-        subsequent.deletedModels.forEach { modified.remove(it) }
-
-        if (finalizeTransition) {
-            val id = requireNotNull(currentModel ?: subsequent.currentModel)
-            require(subsequent.transitions.isEmpty()) { "There can be no transition in exit blocks" }
-            // we will now apply the transition from the previous block instead
-            val (newState, time) = requireNotNull(unFinalizedTransition)
-
-            // we first look in subsequent (updates in exit-block).
-            val inModified =
-                subsequent.aggregatedModelState[currentModel] ?: modified[currentModel] ?: unFinalizedTransition.third
-
-            modified[id] = inModified.copy(
-                state = newState,
-                lastStateTransitionAt = time
-            )
-
-            newTransitions.add(id)
-        } else {
-            modified.putAll(subsequent.aggregatedModelState)
-            toFinalize = subsequent.unFinalizedTransition ?: unFinalizedTransition
-        }
-
-        return CalculatedStuff(modified, newTransitions, toFinalize)
-    }
-
-    internal fun withTimeTriggersOnModels(): ProcessingData<Primary, C, V> {
-        val aggStates = mutableMapOf<ModelID<out Any>, Model<out Any>>()
-        aggStates.putAll(aggregatedModelState)
-        timeTriggers.forEach { (id, instant) ->
-            aggStates[id] = aggregatedModelState[id]!!.copy(timeTrigger = instant)   // force non-null. If null -> bug!
-        }
-        return this.copy(
-            aggregatedModelState = aggStates
-        )
-    }
-
-}
-
-internal data class EventProcessingOptions(
-    val storeEvent: Boolean = true,
-    val performActions: Boolean,
-    val notifyListeners: Boolean = true,
-    val preventModelUpdates: Boolean,
-    val idProvider: IdProvider,
-    val disregardPreventingRules: Boolean
-)

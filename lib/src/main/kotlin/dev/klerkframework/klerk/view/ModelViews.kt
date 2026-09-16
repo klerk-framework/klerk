@@ -13,7 +13,9 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     /** Called after a model of type `T` was created. Override to react to it; default is a no-op. */
     public open fun didCreate(created: Model<T>) {}
 
-    /** Called after a model of type `T` was updated (props and/or state). Override to react to it; default is a no-op. */
+    /**
+     * Called after a model of type `T` was updated (props and/or state). Override to react to it; default is a no-op.
+     */
     public open fun didUpdate(before: Model<T>, after: Model<T>) {}
 
     /** Called after a model of type `T` was deleted. Override to react to it; default is a no-op. */
@@ -46,7 +48,7 @@ public open class ModelViews<T : Any, C : KlerkContext> {
      * another model type's views and therefore can't be wired up in a property initializer (construction order across
      * model types is unspecified).
      */
-    public open fun initialize(): Unit = Unit
+    public open fun initialize() {}
 
     /**
      * A view of all models of this type (i.e. all models of type T).

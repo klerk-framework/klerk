@@ -8,7 +8,7 @@ import kotlin.time.Instant
 
 internal class TransitionWhen<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val branches: LinkedHashMap<(args: A) -> Boolean, ModelStates>,
-    internal val otherwise: ModelStates?
+    internal val otherwise: ModelStates?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -16,9 +16,9 @@ internal class TransitionWhen<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enu
         processingOptions: EventProcessingOptions,
         view: ModelViews<T, C>,
         specification: Specification<C, V>,
-        processingDataSoFar: ProcessingData<Primary, C, V>
+        processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> {
-        branches.forEach { (condition, targetState) ->
+        for ((condition, targetState) in branches) {
             if (condition.invoke(args)) {
                 return transition(targetState.name, args.model, args.context.time, specification, view)
             }
@@ -44,16 +44,16 @@ internal fun <Primary : Any, T : Any, C : KlerkContext, V> transition(
     specification: Specification<C, V>,
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
-    val exitBlock = specification.getStateMachine(model).mutableStates.single { it.name == model.state }.exitBlock
+    val exitBlock = specification.getStateMachine(model).states.single { it.name == model.state }.exitBlock
     val updatedModel = model.copy(state = targetState, lastStateTransitionAt = makeExactSerializable(time))
     val enterBlock =
-        specification.getStateMachine(updatedModel).mutableStates.single { it.name == updatedModel.state }.enterBlock
+        specification.getStateMachine(updatedModel).states.single { it.name == updatedModel.state }.enterBlock
 
     return ProcessingData(
         transitions = listOf(updatedModel.id),
         unFinalizedTransition = Triple(updatedModel.state, updatedModel.lastStateTransitionAt, updatedModel),
         remainingBlocks = listOf(exitBlock, enterBlock),
         functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
-        log = listOf("Transition from ${model.state} -> ${updatedModel.state}")
+        log = listOf("Transition from ${model.state} -> ${updatedModel.state}"),
     )
 }

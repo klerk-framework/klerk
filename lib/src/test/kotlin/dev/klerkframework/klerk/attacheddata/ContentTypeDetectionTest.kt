@@ -18,7 +18,7 @@ class ContentTypeDetectionTest {
         assertEquals("image/png", DefaultContentTypeDetector.detect(png()))
         assertEquals(
             "image/jpeg",
-            DefaultContentTypeDetector.detect(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()))
+            DefaultContentTypeDetector.detect(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte())),
         )
         assertEquals("image/gif", DefaultContentTypeDetector.detect("GIF89a...".toByteArray()))
         assertEquals("image/webp", DefaultContentTypeDetector.detect("RIFF____WEBPVP8 ".toByteArray()))
@@ -28,10 +28,12 @@ class ContentTypeDetectionTest {
     fun `recognises what an image field must be able to refuse`() {
         assertEquals(
             "image/svg+xml",
-            DefaultContentTypeDetector.detect("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>".toByteArray())
+            DefaultContentTypeDetector.detect("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>".toByteArray()),
         )
-        assertEquals("image/svg+xml", DefaultContentTypeDetector.detect("<?xml version=\"1.0\"?><svg></svg>".toByteArray()))
-        assertEquals("text/html", DefaultContentTypeDetector.detect("<!DOCTYPE html><html><script>alert(1)</script>".toByteArray()))
+        val svg = "<?xml version=\"1.0\"?><svg></svg>"
+        assertEquals("image/svg+xml", DefaultContentTypeDetector.detect(svg.toByteArray()))
+        val html = "<!DOCTYPE html><html><script>alert(1)</script>"
+        assertEquals("text/html", DefaultContentTypeDetector.detect(html.toByteArray()))
         assertEquals("application/zip", DefaultContentTypeDetector.detect(byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0x14)))
         assertEquals("application/x-elf", DefaultContentTypeDetector.detect(byteArrayOf(0x7F, 0x45, 0x4C, 0x46, 0x02)))
     }
@@ -39,7 +41,8 @@ class ContentTypeDetectionTest {
     @Test
     fun `a claimed extension changes nothing`() {
         // the bytes are what decides; the name never reaches this function in the first place
-        assertEquals("text/html", DefaultContentTypeDetector.detect("<html>pretending to be a png</html>".toByteArray()))
+        val disguised = "<html>pretending to be a png</html>"
+        assertEquals("text/html", DefaultContentTypeDetector.detect(disguised.toByteArray()))
     }
 
     @Test

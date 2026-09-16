@@ -11,7 +11,7 @@ import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.job.ChildOutcome
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobHookKind
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.job.JobLogEntry
 import dev.klerkframework.klerk.job.JobName
@@ -36,10 +36,11 @@ import kotlin.time.Instant
  * @property hookCursor the hook's own cursor, checkpointed separately so unwinding never destroys [failedAtCursor].
  * @property noProgressStreak how many consecutive steps changed neither the cursor nor the progress. Three means
  * livelock, and the job is aborted.
- * @property cronScheduleId the [dev.klerkframework.klerk.job.CronSchedule.id] this instance was fired by, or null if it was not.
+ * @property cronScheduleId the [dev.klerkframework.klerk.job.CronSchedule.id] this instance was fired by, or null if it
+ * was not.
  */
 public data class JobRecord(
-    val id: JobId,
+    val id: JobID,
     val name: JobName,
     val cursor: String,
     val status: JobStatus,
@@ -59,8 +60,8 @@ public data class JobRecord(
     val progressTotal: Int?,
     val progressMessage: String?,
     val log: List<JobLogEntry>,
-    val parent: JobId?,
-    val root: JobId,
+    val parent: JobID?,
+    val root: JobID,
     val depth: Int,
     val result: String?,
     val failedAtCursor: String?,
@@ -142,10 +143,11 @@ public data class JobRecord(
  */
 public data class JobCommit(
     val upserted: List<JobRecord> = emptyList(),
-    val deleted: Set<JobId> = emptySet(),
-    val attachedDataClaimed: Map<Int, JobId> = emptyMap(),
+    val deleted: Set<JobID> = emptySet(),
+    val attachedDataClaimed: Map<Int, JobID> = emptyMap(),
     val attachedDataReleased: Set<Int> = emptySet(),
 ) {
+    /** True if nothing changes. */
     public fun isEmpty(): Boolean =
         upserted.isEmpty() && deleted.isEmpty() && attachedDataClaimed.isEmpty() && attachedDataReleased.isEmpty()
 }

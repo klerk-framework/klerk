@@ -24,8 +24,8 @@ class FunctionTest {
                 lastName = LastName("Litoris"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)
-            )
+                secretToken = SecretPasscode(234),
+            ),
         
         )
         val args = VoidEventArgs(command, Ctx.system(), DummyReader)
@@ -77,7 +77,7 @@ object DummyReader : Reader<Ctx, Views> {
 
     override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
-        id: ModelID<*>
+        id: ModelID<*>,
     ): Set<Model<T>> {
         throw exception
     }

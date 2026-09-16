@@ -34,8 +34,11 @@ public enum class ActorType(public val storedValue: Int) {
  * same actor.
  */
 public sealed interface ActorIdentity {
+    /** The kind of identity, as stored. */
     public val type: ActorType
+    /** The model that is the actor, if the identity refers to one. */
     public val id: ModelID<*>?
+    /** An identifier of the actor outside Klerk, if the identity has one. */
     public val externalId: Long?
 
     /**
@@ -53,7 +56,9 @@ public sealed interface ActorIdentity {
     }
 }
 
-/** The framework acting on its own behalf, e.g. when a time-trigger fires or a job runs. See `systemContextProvider`. */
+/**
+ * The framework acting on its own behalf, e.g. when a time-trigger fires or a job runs. See `systemContextProvider`.
+ */
 public object SystemIdentity : ActorIdentity {
     override val type: ActorType = ActorType.System
     override val id: ModelID<*>? = null
@@ -61,7 +66,9 @@ public object SystemIdentity : ActorIdentity {
     override fun toString(): String = "[system]"
 }
 
-/** A trusted identity for code that performs authentication itself, e.g. checking a password before a session exists. */
+/**
+ * A trusted identity for code that performs authentication itself, e.g. checking a password before a session exists.
+ */
 public object AuthenticationIdentity : ActorIdentity {
     override val type: ActorType = ActorType.Authentication
     override val id: ModelID<*>? = null
@@ -74,12 +81,14 @@ public class ModelIdentity<T : Any>(public val model: Model<T>) : ActorIdentity 
     override val type: ActorType = ActorType.Model
     override val id: ModelID<T> = model.id
     override val externalId: Long? = null
-    override fun toString(): String = "modelId: ${model.id} (${model})"
+    override fun toString(): String = "modelId: ${model.id} ($model)"
     override fun equals(other: Any?): Boolean = other is ModelIdentity<*> && other.id == id
     override fun hashCode(): Int = id.hashCode()
 }
 
-/** Like [ModelIdentity], but holds only the id — use when you know the actor's id without having read the model first. */
+/**
+ * Like [ModelIdentity], but holds only the id — use when you know the actor's id without having read the model first.
+ */
 public class ModelReferenceIdentity<T : Any>(private val modelId: ModelID<T>) : ActorIdentity {
     override val type: ActorType = ActorType.ModelReference
     override val id: ModelID<T> = modelId

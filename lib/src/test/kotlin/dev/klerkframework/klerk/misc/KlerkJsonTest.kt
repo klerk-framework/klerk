@@ -157,7 +157,7 @@ class KlerkJsonTest {
         assertEquals("'inner' is a string, expected an object", reasonFor { put("inner", JsonPrimitive("x")) })
         assertEquals(
             "'genre' is 'Horror', which is not a constant of BookGenre",
-            reasonFor { put("genre", JsonPrimitive("Horror")) }
+            reasonFor { put("genre", JsonPrimitive("Horror")) },
         )
     }
 
@@ -166,7 +166,7 @@ class KlerkJsonTest {
         assertEquals("'inner.name' is missing", reasonFor { put("inner", JsonObject(emptyMap())) })
         assertEquals(
             "'names[1]' is an integer, expected a string",
-            reasonFor { put("names", JsonArray(listOf(JsonPrimitive("a"), JsonPrimitive(2)))) }
+            reasonFor { put("names", JsonArray(listOf(JsonPrimitive("a"), JsonPrimitive(2)))) },
         )
     }
 

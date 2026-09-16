@@ -33,7 +33,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val readWriteLock: ReadWriteLock,
     private val settings: KlerkSettings,
     private val jobs: JobManagerInternal<C, V>,
-    private val attachedData: AttachedDataImpl<C, V>
+    private val attachedData: AttachedDataImpl<C, V>,
 ) {
 
     private val mutex = Mutex()
@@ -69,16 +69,17 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 listOf(
                     BadRequestProblem(
                         "This event has visibility ${command.event.visibility} and therefore cannot be processed",
-                        KlerkErrorCode.EventVisibilityTooLow
-                    )
-                )
+                        KlerkErrorCode.EventVisibilityTooLow,
+                    ),
+                ),
             )
         }
 
         if (options.dryRun) {
             logger.log(Misc, options) { "Aborting processing since dryRun" }
             val withoutAuth = ReaderWithoutAuth(klerk)
-            val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
+            val delta =
+                eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
             return CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
         }
 
@@ -91,12 +92,15 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             // is a slightly higher level description of the delta. We don't want to return the delta since it may
             // contain data that the user is not authorized to access.
             val readerWithoutAuth = ReaderWithoutAuth(klerk)
-            val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
-            when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)) {
+            val unrestricted = withoutReadRestrictions(command)
+            val delta = eventProcessor.processPrimaryCommand(unrestricted, context, readerWithoutAuth, options)
+            val commandResult =
+                CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)
+            when (commandResult) {
                 is Failure -> {
-                    logger.log(Result,
-                        options
-                    ) { "Command ${command.event} failed: ${commandResult.problems.joinToString(", ") { it.toString() }}" }
+                    logger.log(Result, options) {
+                        "Command ${command.event} failed: ${commandResult.problems.joinToString(", ")}"
+                    }
                     commandResult
                 }
 
@@ -139,7 +143,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }       // release the lock. Next command can now start processing
 
         try {
-            actions.forEach { it.f.invoke() }
+            for (action in actions) {
+                action.f.invoke()
+            }
         } catch (e: Exception) {
             logger.warn(e) {
                 "The command was successful but an exception was thrown when calling an action function. It is " +
@@ -159,7 +165,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      * command that fails still lets the job's checkpoint commit — the step counted as completed, and the next step
      * gets to see the failure in `previousResult` and decide what to do. Only the model delta is skipped.
      *
-     * @return the outcome of [command], or null if the step emitted none.
+     * Returns the outcome of [command], or null if the step emitted none.
      */
     internal suspend fun <T : Any, P> commitJobStep(
         command: Command<T, P>?,
@@ -178,8 +184,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)
-        val delta = eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
-        when (val commandResult = CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)) {
+        val delta =
+            eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
+        val commandResult =
+            CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)
+        when (commandResult) {
             is Failure -> {
                 checkpointOnly(jobCommit)
                 commandResult
@@ -274,7 +283,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             ModelCache.endCommit()
         }
         jobs.notifyCommitted(jobCommit)
-        modifications.forEach { klerk.modelsManager.modelWasModified(it) }
+        for (modification in modifications) {
+            klerk.modelsManager.modelWasModified(modification)
+        }
         maybeEraseEventLog(specification, delta.deletedModels)
     }
 
@@ -314,7 +325,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private fun <T : Any> updateViews(delta: ProcessingData<T, C, V>) {
         // we could possibly shorten the write lock time by executing these while in read-mode and then just apply a
         // view-delta in write-mode
-        delta.functionsToUpdateViews.forEach { it.invoke() }
+        for (functionsToUpdateView in delta.functionsToUpdateViews) {
+            functionsToUpdateView.invoke()
+        }
     }
 
     private suspend fun validateToken(token: CommandToken, context: C): Problem? {
@@ -330,7 +343,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return StateProblem(
                 "A model has been modified since the token was created",
                 "A model has been modified since the token was created",
-                KlerkErrorCode.ModelModifiedSinceTokenCreation
+                KlerkErrorCode.ModelModifiedSinceTokenCreation,
             )
         }
         return null
@@ -354,8 +367,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      */
     private fun modificationsOf(delta: ProcessingData<*, C, V>): List<ModelModification> {
         val deleted = delta.deletedModels.toSet()
-        fun classOf(id: ModelID<out Any>) = (delta.aggregatedModelState[id] ?: ModelCache.getOrNull(id))?.props?.let { it::class }
-        return delta.createdModels.filter { it !in deleted }.mapNotNull { id -> classOf(id)?.let { ModelModification.Created(id, it) } } +
+        fun classOf(id: ModelID<out Any>) =
+            (delta.aggregatedModelState[id] ?: ModelCache.getOrNull(id))?.props?.let { it::class }
+        return delta.createdModels
+            .filter { it !in deleted }
+            .mapNotNull { id -> classOf(id)?.let { ModelModification.Created(id, it) } } +
                 delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
                 delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
                 delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
@@ -365,8 +381,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         if (specification.eraseEventLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
             return
         }
-        deletedModels.forEach {
-            settings.persistence.modifyEventLog(it.value) { null }
+        for (id in deletedModels) {
+            settings.persistence.modifyEventLog(id.value) { null }
         }
     }
 
@@ -420,7 +436,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         commit<Any, Nothing>(delta, null, null, attachedDataDelta, jobPlan.commit)
 
         try {
-            delta.unmanagedJobs.forEach { it.f.invoke() }
+            for (unmanagedJob in delta.unmanagedJobs) {
+                unmanagedJob.f.invoke()
+            }
         } catch (e: Exception) {
             logger.warn(e) {
                 "The processing of the time-triggered model was successful but an exception was thrown " +
@@ -442,7 +460,7 @@ internal fun KLogger.log(debugCategory: DebugOption, options: ProcessingOptions,
 internal val defaultDebugOptions: Map<DebugOption, LogLevel> = mapOf(
     Sequence to LogLevel.Debug,
     Misc to LogLevel.Trace,
-    Result to LogLevel.Debug
+    Result to LogLevel.Debug,
 )
 
 private fun LogLevel.toSlf4j(): Level = when (this) {

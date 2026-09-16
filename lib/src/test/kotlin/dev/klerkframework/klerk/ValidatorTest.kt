@@ -44,11 +44,11 @@ class ValidatorTest {
                 lastName = LastName("Litoris"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)
+                secretToken = SecretPasscode(234),
             )
             val command = Command(
                 CreateAuthor,
-                params
+                params,
             
             )
             val options = ProcessingOptions()
@@ -67,11 +67,11 @@ class ValidatorTest {
                 lastName = LastName("Svensson"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)
+                secretToken = SecretPasscode(234),
             )
             val command = Command(
                 CreateAuthor,
-                params
+                params,
             
             )
             val options = ProcessingOptions()
@@ -96,7 +96,7 @@ class ValidatorTest {
                 lastName = LastName("Clavell"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)
+                secretToken = SecretPasscode(234),
             )
             val options = ProcessingOptions()
             val result = klerk.handle(Command(CreateAuthor, params), Ctx.system(), options)
@@ -116,11 +116,11 @@ class ValidatorTest {
                 lastName = LastName("Svensson"),
                 phone = PhoneNumber("234"),
                 age = PositiveEvenIntContainer(44),
-                secretToken = SecretPasscode(234)
+                secretToken = SecretPasscode(234),
             )
             val command = Command(
                 CreateAuthor,
-                params
+                params,
             
             )
             val options = ProcessingOptions()
@@ -141,7 +141,7 @@ class ValidatorTest {
                 tags = emptySet(),
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(kotlin.time.Duration.ZERO),
-                genre = BookGenreContainer(BookGenre.Mystery)
+                genre = BookGenreContainer(BookGenre.Mystery),
             )
             val command = Command(CreateBook, params)
             val options = ProcessingOptions()
@@ -198,7 +198,7 @@ class ValidatorTest {
                 tags = emptySet(),
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(kotlin.time.Duration.ZERO),
-                genre = BookGenreContainer(BookGenre.Mystery)  // not in validEnums
+                genre = BookGenreContainer(BookGenre.Mystery),  // not in validEnums
             )
             val command = Command(CreateBook, params)
             val options = ProcessingOptions()

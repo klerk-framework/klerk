@@ -21,8 +21,10 @@ class Delete {
                     tanke:
             om jag beslutar mig för att man ska kunna köra delete på en modell utan att gå genom en statemachine:
             då kan man tänka sig att man kan peta in en funktion i delete(::raderaAndraGrejer).
-            Antingen petar man in en egen funktion. Eller så kanske Klerk kan tillhandahålla en cascade-funktion som tar bort alla relaterade objekt.
-            En fördel med detta är att man vid uppstart kan varna om att ett command troligen kommer att misslyckas om statemachine gör delete på en modell med relationer men inte har petat in en funktion.
+            Antingen petar man in en egen funktion. Eller så kanske Klerk kan tillhandahålla en cascade-funktion som
+            tar bort alla relaterade objekt.
+            En fördel med detta är att man vid uppstart kan varna om att ett command troligen kommer att misslyckas om
+            statemachine gör delete på en modell med relationer men inte har petat in en funktion.
 
              */
         }

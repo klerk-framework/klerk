@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.JobReader
 import dev.klerkframework.klerk.impl
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.job.isJobAuthorized
 
@@ -22,7 +22,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
 
     private var finished = false
 
-    override fun get(id: JobId): JobInfo {
+    override fun get(id: JobID): JobInfo {
         val job = raw(id) ?: throw NoSuchElementException("There is no job with id $id")
         if (!authorized(job)) {
             throw AuthorizationException(
@@ -33,7 +33,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
         return job
     }
 
-    override fun getOrNull(id: JobId): JobInfo? = raw(id)?.takeIf { authorized(it) }
+    override fun getOrNull(id: JobID): JobInfo? = raw(id)?.takeIf { authorized(it) }
 
     override fun all(): List<JobInfo> = allRaw().filter { authorized(it) }
 
@@ -42,7 +42,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
         finished = true
     }
 
-    private fun raw(id: JobId): JobInfo? {
+    private fun raw(id: JobID): JobInfo? {
         checkUsable()
         return klerk.impl().jobs.jobInfoOrNull(id)
     }
@@ -65,10 +65,10 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
  */
 internal class UnauthorizedJobReader<C : KlerkContext, V>(private val klerk: Klerk<C, V>) : JobReader {
 
-    override fun get(id: JobId): JobInfo =
+    override fun get(id: JobID): JobInfo =
         getOrNull(id) ?: throw NoSuchElementException("There is no job with id $id")
 
-    override fun getOrNull(id: JobId): JobInfo? = klerk.impl().jobs.jobInfoOrNull(id)
+    override fun getOrNull(id: JobID): JobInfo? = klerk.impl().jobs.jobInfoOrNull(id)
 
     override fun all(): List<JobInfo> = klerk.impl().jobs.allJobInfo()
 }

@@ -20,18 +20,22 @@ public interface JobLogging {
     public fun log(message: String, level: JobLogLevel = JobLogLevel.Info): JobLogEntry =
         JobLogEntry(time, level, message)
 
+    /** Builds a debug log entry stamped with this step's time. */
     public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
+    /** Builds an info log entry stamped with this step's time. */
     public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
+    /** Builds a warning log entry stamped with this step's time. */
     public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
+    /** Builds an error log entry stamped with this step's time. */
     public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
 }
 
 /**
  * Everything a step is given.
  *
- * The two variants differ only in whether a [ModelReader] is available: [Local] jobs run on the master node and may read;
- * [Portable] jobs must find everything they need in their cursor, which is what will later let them run on a remote
- * worker.
+ * The two variants differ only in whether a [ModelReader] is available: [Local] jobs run on the master node and may
+ * read; [Portable] jobs must find everything they need in their cursor, which is what will later let them run on a
+ * remote worker.
  */
 public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancellationRequested: Boolean) :
     JobLogging {
@@ -52,12 +56,15 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      * A [CommandResult.Failure] here is **data, not a job failure** — the model may simply have moved on while the job
      * was queued. The step still counted as completed; decide what to do and return normally.
      */
+    /** The outcome of the command the previous step returned, if any. */
     public abstract val previousResult: CommandResult<*>?
 
     /** Identity and bookkeeping for the running job: id, step number, attempt, priority, ancestry. */
+    /** The job, as of the start of this step. */
     public abstract val job: JobInfo
 
     /** The context the job runs under, produced from `systemContextProvider` or from the scheduling actor. */
+    /** The context the hook runs under. */
     public abstract val context: C
 
     /**
@@ -69,6 +76,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      * `JobResult.Yield(awaitSpawned = true)` the next step is guaranteed to see all of them, because that is what it
      * waited for.
      */
+    /** The outcomes of the children the job awaited. */
     public abstract val children: List<ChildOutcome>
 
     /**
@@ -155,6 +163,7 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
         override val children: List<ChildOutcome> = emptyList(),
     ) : JobEndArgs<Cursor, C, V>()
 
+    /** The arguments of a [JobType.Portable] hook step. */
     public class Portable<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val failedAtCursor: Cursor,

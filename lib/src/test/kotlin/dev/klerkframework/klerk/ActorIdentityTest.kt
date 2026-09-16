@@ -11,7 +11,10 @@ class ActorIdentityTest {
     @Test
     fun `identities of the same form compare by value`() {
         assertEquals(ModelReferenceIdentity(ModelID<Any>(1)), ModelReferenceIdentity(ModelID<Any>(1)))
-        assertEquals(ModelReferenceIdentity(ModelID<Any>(1)).hashCode(), ModelReferenceIdentity(ModelID<Any>(1)).hashCode())
+        assertEquals(
+            ModelReferenceIdentity(ModelID<Any>(1)).hashCode(),
+            ModelReferenceIdentity(ModelID<Any>(1)).hashCode(),
+        )
         assertNotEquals(ModelReferenceIdentity(ModelID<Any>(1)), ModelReferenceIdentity(ModelID<Any>(2)))
         assertEquals(CustomIdentity(null, 5), CustomIdentity(null, 5))
         assertNotEquals(CustomIdentity(null, 5), CustomIdentity(null, 6))

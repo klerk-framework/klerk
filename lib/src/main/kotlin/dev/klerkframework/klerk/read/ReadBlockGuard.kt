@@ -37,8 +37,9 @@ internal object ReadBlockGuard {
     suspend fun isInsideReadBlock(): Boolean = depth.get() > 0 || coroutineContext[Marker] != null
 
     /**
-     * @param advice what the caller should do instead, appended to the message. Differs per operation: attached data
-     * has to be read after the block, whereas job state has an in-block accessor of its own.
+     * Throws if called inside a read block. [advice] is what the caller should do instead, appended to the message. It
+     * differs per [operation]: attached data has to be read after the block, whereas job state has an in-block
+     * accessor of its own.
      */
     suspend fun checkNotInsideReadBlock(operation: String, advice: String) {
         check(!isInsideReadBlock()) {

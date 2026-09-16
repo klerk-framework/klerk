@@ -132,7 +132,8 @@ internal class CronExpression private constructor(
                     require(parts.size == 2) { "Invalid $name term '$term' in the cron expression '$expression'" }
                     val stepValue = parts[1].toIntOrNull()
                     require(stepValue != null && stepValue > 0) {
-                        "The step in the $name term '$term' of the cron expression '$expression' must be a positive number"
+                        "The step in the $name term '$term' of the cron expression '$expression' must be a positive " +
+                            "number"
                     }
                     parts[0] to stepValue
                 }
@@ -144,7 +145,9 @@ internal class CronExpression private constructor(
                 rangePart == "*" -> min..max
                 rangePart.contains("-") -> {
                     val bounds = rangePart.split("-")
-                    require(bounds.size == 2) { "Invalid $name range '$rangePart' in the cron expression '$expression'" }
+                    require(bounds.size == 2) {
+                        "Invalid $name range '$rangePart' in the cron expression '$expression'"
+                    }
                     val from = bounds[0].toValue(min, max, expression, name)
                     val to = bounds[1].toValue(min, max, expression, name)
                     require(from <= to) {

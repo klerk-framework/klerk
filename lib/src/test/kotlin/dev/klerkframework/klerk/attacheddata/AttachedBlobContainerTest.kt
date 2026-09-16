@@ -45,7 +45,7 @@ class AttachedBlobContainerTest {
     ): CommandResult<Painting> = klerk.handle(
         Command(
             CreatePainting,
-            CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image))
+            CreatePaintingParams(PaintingTitle("Sunflowers"), PaintingImage(image)),
         ),
         context,
     )
@@ -136,7 +136,7 @@ class AttachedBlobContainerTest {
     ): CommandResult<Inventory> = klerk.handle(
         Command(
             CreateInventory,
-            CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows))
+            CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows)),
         ),
         Ctx.system(),
     )
@@ -323,7 +323,9 @@ class AttachedBlobContainerTest {
         klerk.meta.stop()
     }
 
-    /** Counts how often the value is fetched from storage, which is what "a step costs nothing unless declared" means. */
+    /**
+     * Counts how often the value is fetched from storage, which is what "a step costs nothing unless declared" means.
+     */
     private class CountingBlobStore(root: java.nio.file.Path) : AttachedBlobStore.External {
         private val delegate = FileBlobStore(root)
         var fetches: Int = 0

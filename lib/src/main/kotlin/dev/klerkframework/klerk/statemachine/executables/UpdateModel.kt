@@ -9,7 +9,7 @@ import dev.klerkframework.klerk.statemachine.Executable
 
 internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>(
     val f: (args: A) -> T,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -38,7 +38,7 @@ internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
             updatedModels = listOf(updatedModel.id),
             aggregatedModelState = mapOf(updatedModel.id to updatedModel),
             functionsToUpdateViews = listOf { view.internalDidUpdate(model, updatedModel) },
-            log = listOf("Updating properties using ${extractNameFromFunction(f)}")
+            log = listOf("Updating properties using ${extractNameFromFunction(f)}"),
         )
     }
 

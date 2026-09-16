@@ -63,8 +63,8 @@ class ActionTest {
                         previousBooksInSameSeries = emptyList(),
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
                         averageScore = AverageScore(0f),
-                        readingTime = ReadingTime(200.minutes)
-                    )
+                        readingTime = ReadingTime(200.minutes),
+                    ),
                 ),
                 Ctx.system(),
             ).getOrThrow()

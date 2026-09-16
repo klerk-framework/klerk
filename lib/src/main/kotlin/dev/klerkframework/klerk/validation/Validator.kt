@@ -37,7 +37,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
 
     fun isEventPossibleGivenModelState(
         currentCommand: Command<out Any, *>,
-        reader: ModelReader<C, V>
+        reader: ModelReader<C, V>,
     ): Problem? {
         val sm = klerk.specification.getStateMachineForEvent(currentCommand.event)
         if (currentCommand.model == null) {
@@ -46,17 +46,19 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 return StateProblem(
                     "Event '${currentCommand.event}' is not possible in void state",
                     "Event '${currentCommand.event}' is not possible in void state",
-                    KlerkErrorCode.EventNotPossibleInVoidState
+                    KlerkErrorCode.EventNotPossibleInVoidState,
                 )
             }
         } else {
             val model = reader.get(currentCommand.model)
             val smState = sm.instanceStates.single { it.name == model.state }
             if (smState.getEvents().none { it.name == currentCommand.event.name }) {
+                val message = "Event '${currentCommand.event}' is not possible on model ${model.id} " +
+                    "which is in state '${model.state}'"
                 return StateProblem(
-                    "Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'",
-                    "Event '${currentCommand.event}' is not possible on model ${model.id} which is in state '${model.state}'",
-                    KlerkErrorCode.EventNotPossibleInState
+                    message,
+                    message,
+                    KlerkErrorCode.EventNotPossibleInState,
                 )
             }
         }
@@ -68,7 +70,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         event: Event<T, P>,
         id: ModelID<T>?,
         params: P,
-        reader: ModelReader<C, V>
+        reader: ModelReader<C, V>,
     ): List<Problem> {
         val rules = klerk.specification.rulesOf(event.id)
         // The rule function is kept next to its result, so a failure can be named in the message and the problem.
@@ -90,7 +92,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 @Suppress("UNCHECKED_CAST")
                 val command = Command(event as Event<T, P>, null, params)
                 val argsWithParams = VoidEventArgs(command, context, reader)
-                val withParams = rules.withParameters<VoidEventArgs<T, P, C, V>>().map { it to it.invoke(argsWithParams) }
+                val withParams =
+                    rules.withParameters<VoidEventArgs<T, P, C, V>>().map { it to it.invoke(argsWithParams) }
 
                 withoutParams.union(withParams).toList()
             }
@@ -144,18 +147,17 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             return null
         }
         val validEnums = klerk.specification.validEnumsOf(eventReference)
-        var problem: Problem? = null
-        ObjectSchema.of(parameters::class).forEachLeaf(parameters) { leaf ->
-            val container = leaf.value as? EnumContainer<*> ?: return@forEachLeaf
-            val validValues = validEnums[leaf.field.key] ?: return@forEachLeaf
-            if (problem == null && !validValues.contains(container.value)) {
-                problem = InvalidPropertyProblem(
+        for (leaf in ObjectSchema.of(parameters::class).leaves(parameters)) {
+            val container = leaf.value as? EnumContainer<*> ?: continue
+            val validValues = validEnums[leaf.field.key] ?: continue
+            if (!validValues.contains(container.value)) {
+                return InvalidPropertyProblem(
                     "'${container.value}' is not a valid value for parameter ${leaf.path}",
-                    propertyName = leaf.path
+                    propertyName = leaf.path,
                 )
             }
         }
-        return problem
+        return null
     }
 
     /**
@@ -168,43 +170,36 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
         val validReferences = klerk.specification.validReferencesOf(eventReference)
         val reader = ReaderWithoutAuth<C, V>(klerk)
-        var problem: Problem? = null
-        ObjectSchema.of(parameters::class).forEachLeaf(parameters) { leaf ->
-            val id = leaf.value as? ModelID<*> ?: return@forEachLeaf
-            if (problem != null) {
-                return@forEachLeaf
-            }
+        for (leaf in ObjectSchema.of(parameters::class).leaves(parameters)) {
+            val id = leaf.value as? ModelID<*> ?: continue
             if (!validReferences.containsKey(leaf.field.key)) {
-                problem = InvalidPropertyProblem(
+                return InvalidPropertyProblem(
                     "There is no validReferences declared for ${leaf.field.key}",
-                    propertyName = leaf.path
+                    propertyName = leaf.path,
                 )
-                return@forEachLeaf
             }
             val view = requireNotNull(validReferences[leaf.field.key])
             if (!view.internalContains(id, reader)) {
-                problem = InvalidPropertyProblem(
+                return InvalidPropertyProblem(
                     "Did not find $id in ${view.id} for parameter ${leaf.path}",
-                    propertyName = leaf.path
+                    propertyName = leaf.path,
                 )
             }
         }
-        return problem
+        return null
     }
 
     /** Validates every [DataContainer] in [instance], also in collections and nested objects. */
     fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> {
-        val problems = mutableSetOf<InvalidPropertyProblem>()
-        ObjectSchema.of(instance::class).forEachLeaf(instance) { leaf ->
-            (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation)?.let { problems.add(it) }
-        }
-        return problems
+        return ObjectSchema.of(instance::class).leaves(instance)
+            .mapNotNull { leaf -> (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation) }
+            .toSet()
     }
 
     fun <P> validateCommand(
         currentCommand: Command<out Any, P>,
         reader: ModelReader<C, V>,
-        context: C
+        context: C,
     ): List<Problem> {
         currentCommand.model?.let {
             if (reader.getOrNull(it) == null) {
@@ -218,7 +213,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val authorizationProblem = checkAuthorization(
             currentCommand,
             reader,
-            context
+            context,
         )
         if (authorizationProblem != null) {
             return listOf(authorizationProblem)
@@ -229,7 +224,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     private fun <T : Any, P> checkAuthorization(
         command: Command<T, P>,
         reader: ModelReader<C, V>,
-        context: C
+        context: C,
     ): Problem? {
         val negativeAuthProblem =
             klerk.specification.authorization.eventNegativeRules.firstOrNull {
@@ -237,14 +232,14 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                     CommandRuleArgs(
                         command,
                         context,
-                        reader
-                    )
+                        reader,
+                    ),
                 ) == Deny
             }
         if (negativeAuthProblem != null) {
             return AuthorizationProblem(
                 context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization),
-                KlerkErrorCode.CommandNegativeAuthorizationExist
+                KlerkErrorCode.CommandNegativeAuthorizationExist,
             )
         }
         if (klerk.specification.authorization.eventPositiveRules.none {
@@ -252,27 +247,25 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                     CommandRuleArgs(
                         command,
                         context,
-                        reader
-                    )
+                        reader,
+                    ),
                 ) == Allow
             }) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
             return AuthorizationProblem(
                 context.translation.klerk.unauthorized,
                 null,
-                KlerkErrorCode.CommandPositiveAuthorizationMissing
+                KlerkErrorCode.CommandPositiveAuthorizationMissing,
             )
         }
         return null
     }
 
-    /**
-     * @return true if all rules passes
-     */
+    /** True if all rules pass. */
     private fun evaluateContextAndParameterRules(
         eventReference: EventReference,
         parameters: Any?,
-        context: C
+        context: C,
     ): Boolean {
         if (validateWithContext(context, eventReference).any()) return false
         parameters?.let {
@@ -285,7 +278,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     private fun <T : Any, P> validateEvent(
         command: Command<T, P>,
         context: C,
-        reader: ModelReader<C, V>
+        reader: ModelReader<C, V>,
     ): List<Problem> {
         val problems = mutableListOf<Problem>()
         val stateMachine = getStateMachine(command, klerk.specification.managedModels)
@@ -294,9 +287,10 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             if (model.props::class != stateMachine.type) {
                 return listOf(
                     BadRequestProblem(
-                        "The provided Reference refers to a model of type '${model.props::class}' but the state machine handles '${stateMachine.type}'",
-                        KlerkErrorCode.ModelTypeMismatch
-                    )
+                        "The provided Reference refers to a model of type '${model.props::class}' but the state " +
+                            "machine handles '${stateMachine.type}'",
+                        KlerkErrorCode.ModelTypeMismatch,
+                    ),
                 )
             }
         }
@@ -332,7 +326,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         eventRef: EventReference,
         context: C,
         model: Model<T>?,
-        readerWithoutAuth: ReaderWithoutAuth<C, V>
+        readerWithoutAuth: ReaderWithoutAuth<C, V>,
     ): Boolean {
         if (validateWithContext(context, eventRef).isNotEmpty()) {
             return false
@@ -343,7 +337,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             klerk.specification.event(eventRef) as Event<T, Any?>,
             context,
             model,
-            readerWithoutAuth
+            readerWithoutAuth,
         )
             .filterIsInstance<PropertyCollectionValidity.Invalid>()
             .isEmpty()
@@ -353,7 +347,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         event: Event<T, Any?>,
         context: C,
         model: Model<T>?,
-        reader: ReaderWithoutAuth<C, V>
+        reader: ReaderWithoutAuth<C, V>,
     ): List<PropertyCollectionValidity> {
         val rules = klerk.specification.rulesOf(event.id)
         return when (event) {

@@ -36,7 +36,8 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val readWriteLock = ReadWriteLock()
     internal val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
-    internal val eventsManager = EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
+    internal val eventsManager =
+        EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
     internal val activityLogImpl: ActivityLogImpl = ActivityLogImpl()
     internal val validator = Validator(this)
@@ -45,18 +46,12 @@ internal class KlerkImpl<C : KlerkContext, V>(
         specification.initialize(settings)
         ModelCache.initialize(settings.persistence, settings.modelCache)
         ModelCache.initMetrics(settings.meterRegistry)
-        /*
-        SingletonStuff.views = views as Any
-        SingletonStuff.readModelPositiveRules = authorizationReadPositiveRules as Set<(UserIdentity, Model<out Any>, Any) -> PositiveAuthorization>
-        SingletonStuff.readModelNegativeRules = authorizationReadNegativeRules as Set<(UserIdentity, Model<out Any>, Any) -> NegativeAuthorization>
-        SingletonStuff.eventPositiveRules = authorizationEventPositiveRules as Set<(UserIdentity, IEvent, Any) -> PositiveAuthorization>
-        SingletonStuff.eventNegativeRules = authorizationEventNegativeRules as Set<(UserIdentity, IEvent, Any) -> NegativeAuthorization>
 
-         */
-
-        specification.managedModels.forEach { managed ->
+        for (managed in specification.managedModels) {
             managed.views.initialize()
-            managed.views.views.forEach { it.setIdBase(managed.kClass.simpleName) }
+            for (view in managed.views.views) {
+                view.setIdBase(managed.kClass.simpleName)
+            }
             managed.stateMachine.setView(managed.views)
         }
 
@@ -90,7 +85,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     override suspend fun <T : Any, P> handle(
         command: Command<T, P>,
         context: C,
-        options: ProcessingOptions
+        options: ProcessingOptions,
     ): CommandResult<T> {
         val result = try {
             eventsManager.handle(command, context, options)
@@ -143,9 +138,9 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 klerk.attachedDataImpl.start()
                 // Jobs start last: reloading them may need models and attached data to be in place already.
                 klerk.jobs.start()
-                klerk.specification.plugins.forEach {
-                    logger.info { "Initializing plugin: ${it.name}" }
-                    it.start(klerk)
+                for (plugin in klerk.specification.plugins) {
+                    logger.info { "Initializing plugin: ${plugin.name}" }
+                    plugin.start(klerk)
                 }
             }
             klerk.activityLog.add(LogKlerkStarted(startTime))
@@ -162,11 +157,11 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
         if (previousState == 2) {
             return  // already stopped
         }
-        klerk.specification.plugins.asReversed().forEach {
+        for (plugin in klerk.specification.plugins.asReversed()) {
             try {
-                it.stop()
+                plugin.stop()
             } catch (e: Exception) {
-                logger.error(e) { "Plugin ${it.name} failed to stop" }
+                logger.error(e) { "Plugin ${plugin.name} failed to stop" }
             }
         }
         klerk.eventsManager.stop()

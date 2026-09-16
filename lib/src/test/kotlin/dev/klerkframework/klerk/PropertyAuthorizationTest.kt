@@ -198,7 +198,7 @@ class PropertyAuthorizationTest {
                         lastName = readByAnonymous.props.lastName,
                         phone = PhoneNumber("+46123456"),
                         secretToken = SecretPasscode(234234902359245345),
-                    )
+                    ),
                 ),
                 Ctx.system(),
             ).getOrThrow()

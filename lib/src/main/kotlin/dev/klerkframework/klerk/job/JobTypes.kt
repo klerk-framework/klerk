@@ -38,7 +38,7 @@ public value class JobName(public val value: String) {
  */
 @Serializable
 @JvmInline
-public value class JobId(public val value: Long) {
+public value class JobID(public val value: Long) {
     override fun toString(): String = value.toString()
 }
 
@@ -100,7 +100,6 @@ public enum class JobStatus(public val isTerminal: Boolean) {
 
     /** Dead *and* the end-of-life hook could not complete. The queue a human has to look at. */
     CompensationFailed(true),
-    ;
 }
 
 /** Which end-of-life hook a job is currently unwinding through, or null if it is running its ordinary steps. */
@@ -171,6 +170,7 @@ public data class JobLogEntry(
     val message: String,
 ) {
     public companion object {
+        /** The most log entries a job keeps; older ones are dropped. */
         public const val MAX_ENTRIES: Int = 200
     }
 }
@@ -184,7 +184,7 @@ public data class JobLogEntry(
  */
 @Serializable
 public data class ChildOutcome(
-    val id: JobId,
+    val id: JobID,
     val name: JobName,
     val status: JobStatus,
     val result: String? = null,
@@ -205,14 +205,14 @@ public data class ChildOutcome(
  * for a spawned child.
  */
 public data class JobInfo(
-    val id: JobId,
+    val id: JobID,
     val name: JobName,
     val step: Int,
     val attempt: Int,
     val createdAt: Instant,
     val priority: JobPriority,
-    val parent: JobId?,
-    val root: JobId,
+    val parent: JobID?,
+    val root: JobID,
     val depth: Int,
     val status: JobStatus,
     val progress: JobProgress?,
@@ -237,7 +237,9 @@ public data class JobInfo(
 public class DeclaredJob<C : KlerkContext, V> internal constructor(
     internal val type: JobType<*, C, V>,
     internal val encodedCursor: String,
+    /** The earliest time the job may run, or null for as soon as possible. */
     public val scheduleAt: Instant?,
+    /** Overrides the job type's priority, if set. */
     public val priority: JobPriority?,
 ) {
     /** The type of job that will run. */

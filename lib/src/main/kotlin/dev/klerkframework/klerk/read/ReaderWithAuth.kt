@@ -17,7 +17,8 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     internal val withoutAuth = ReaderWithoutAuth(klerk)
 
-    private val propertyAuth = PropertyAuthScope(context, klerk.specification, withoutAuth, klerk.settings.allowBypassAuthRead)
+    private val propertyAuth =
+        PropertyAuthScope(context, klerk.specification, withoutAuth, klerk.settings.allowBypassAuthRead)
 
     override val views = klerk.specification.views
 
@@ -77,18 +78,20 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     override fun <T : Any> query(
         collection: ModelView<T, C>,
         options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
+        filter: ((Model<T>) -> Boolean)?,
     ): QueryResponse<T> =
         // The authorization check goes into the same pass that cuts the page, so pages stay full and the cursors
         // describe what the actor can actually see. It also means `filter` never sees a model the actor may not read.
         withoutAuth.queryInternal(collection, options, filter) { model ->
-            model.takeIf { isAuthorized(it, context, klerk.specification, withoutAuth) }?.let { propertyAuth.secure(it) }
+            model
+                .takeIf { isAuthorized(it, context, klerk.specification, withoutAuth) }
+                ?.let { propertyAuth.secure(it) }
         }
 
     override fun <T : Any> queryOrThrow(
         collection: ModelView<T, C>,
         options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
+        filter: ((Model<T>) -> Boolean)?,
     ): QueryResponse<T> {
         val result = withoutAuth.query(collection, options, filter)
         return result.copy(items = result.items.map { checkAuth(it) })
@@ -144,7 +147,7 @@ internal fun <T : Any, C : KlerkContext, V> isAuthorized(
     model: Model<T>,
     context: C,
     specification: Specification<C, V>,
-    reader: ReaderWithoutAuth<C, V>
+    reader: ReaderWithoutAuth<C, V>,
 ): Boolean =
     evaluateAuthorization(context, model, specification, reader) is ReadResult.Ok
 
@@ -152,7 +155,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
     context: C,
     model: Model<T>,
     specification: Specification<C, V>,
-    reader: ReaderWithoutAuth<C, V>
+    reader: ReaderWithoutAuth<C, V>,
 ): ReadResult<T> {
     if (context.actor == SystemIdentity) {
         return ReadResult.Ok(model)
@@ -164,8 +167,8 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         return ReadResult.Fail(
             AuthorizationProblem(
                 context.translation.klerk.unauthorized,
-                RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist
-            )
+                RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist,
+            ),
         )
     }
 
@@ -176,8 +179,8 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
             AuthorizationProblem(
                 context.translation.klerk.unauthorized,
                 null,
-                KlerkErrorCode.ReadPositiveAuthorizationMissing
-            )
+                KlerkErrorCode.ReadPositiveAuthorizationMissing,
+            ),
         )
     }
     return ReadResult.Ok(model)

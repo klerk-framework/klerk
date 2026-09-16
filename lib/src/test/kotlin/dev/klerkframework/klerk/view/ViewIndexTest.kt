@@ -48,7 +48,7 @@ class ViewIndexTest {
                     lastName = LastName(lastName),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(1),
-                )
+                ),
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!
@@ -76,7 +76,7 @@ class ViewIndexTest {
         assertEquals(3, again.size)
         assertTrue(
             storage.reads.get() < 10,
-            "expected roughly one read per member, but read ${storage.reads.get()} models for a 3-model view"
+            "expected roughly one read per member, but read ${storage.reads.get()} models for a 3-model view",
         )
         klerk.meta.stop()
     }
@@ -108,7 +108,8 @@ class ViewIndexTest {
         val great = createAuthor(klerk, "Linus", "1")
         createAuthor(klerk, "Kalle", "2")
 
-        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList().map { it.id } } }
+        fun members() =
+            runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() } }
         assertEquals(listOf(great), members())   // builds the index
 
         // A create after the index exists must land in it.
@@ -147,7 +148,7 @@ class ViewIndexTest {
         val author = createAuthor(klerk, "Linus", "1")
 
         fun established() =
-            runBlocking { klerk.read(Ctx.system()) { views.authors.establishedGreatAuthors.asSequence().toList().map { it.id } } }
+            runBlocking { klerk.read(Ctx.system()) { views.authors.establishedGreatAuthors.ids().toList() } }
         fun great() =
             runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList().map { it.id } } }
 
@@ -164,7 +165,7 @@ class ViewIndexTest {
         assertEquals(
             if (state == AuthorStates.Established.name) listOf(author) else emptyList(),
             established(),
-            "the derived view disagreed with the model's actual state"
+            "the derived view disagreed with the model's actual state",
         )
         klerk.meta.stop()
     }
@@ -177,7 +178,8 @@ class ViewIndexTest {
         val inRange = createAuthor(klerk, "Kalle", "20")
         createAuthor(klerk, "Kalle", "5")
 
-        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.midrangeAuthors.asSequence().toList().map { it.id } } }
+        fun members() =
+            runBlocking { klerk.read(Ctx.system()) { views.authors.midrangeAuthors.ids().toList() } }
         assertEquals(listOf(inRange), members())
 
         val alsoInRange = createAuthor(klerk, "Kalle", "18")
@@ -261,13 +263,13 @@ class ViewIndexTest {
         val great = createAuthor(first, "Linus", "1")
         createAuthor(first, "Kalle", "2")
         assertEquals(2, first.read(Ctx.system()) { views.authors.all.asSequence().toList() }.size)
-        assertEquals(listOf(great), first.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList().map { it.id } })
+        assertEquals(listOf(great), first.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() })
         first.meta.stop()
 
         val second = Klerk.create(specification, testSettings(storage = storage))
         second.meta.start()
         assertEquals(2, second.read(Ctx.system()) { views.authors.all.asSequence().toList() }.size)
-        assertEquals(listOf(great), second.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList().map { it.id } })
+        assertEquals(listOf(great), second.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() })
         second.meta.stop()
     }
 
@@ -282,7 +284,7 @@ class ViewIndexTest {
         withTimeout(60_000) {
             (1..24).map {
                 launch(Dispatchers.Default) {
-                    val members = klerk.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList().map { it.id } }
+                    val members = klerk.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() }
                     if (members.size != 5) mismatches.incrementAndGet()
                 }
             }.joinAll()

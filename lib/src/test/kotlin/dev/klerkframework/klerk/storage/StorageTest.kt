@@ -20,7 +20,7 @@ class StorageTest {
             firstName = FirstName("Pelle"),
             lastName = LastName("Andersson"),
             address = Address(Street("Storgatan 12")),
-            picture = null
+            picture = null,
         )
 
         val now = Clock.System.now()
@@ -32,7 +32,7 @@ class StorageTest {
             lastStateTransitionAt = now,
             state = AuthorStates.Amateur.name,
             timeTrigger = null,
-            props = authorProps
+            props = authorProps,
         )
         storage.store(CommitBatch(createdModels = listOf(author)))
 
@@ -57,7 +57,7 @@ class StorageTest {
             state = BookStates.Draft.name,
             timeTrigger = null,
             props = bookProps,
-            lastStateTransitionAt = now
+            lastStateTransitionAt = now,
         )
 
         storage.store(CommitBatch(createdModels = listOf(book)))

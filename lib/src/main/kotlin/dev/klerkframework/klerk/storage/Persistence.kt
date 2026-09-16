@@ -2,10 +2,9 @@ package dev.klerkframework.klerk.storage
 
 import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.migration.MigrationStep
 import java.io.InputStream
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
 
 /**
@@ -29,7 +28,7 @@ public data class EventLogEntry(
     val actorReference: Int?,
     val actorExternalId: Long?,
     val params: String,
-    val extra: String?
+    val extra: String?,
 )
 
 /**
@@ -64,7 +63,7 @@ public interface Persistence {
      * Commits everything one command implies: the model delta, its event-log entry, the attached-data delta, and any
      * jobs the command scheduled. All of it in a single transaction.
      */
-    public fun store(batch: CommitBatch): Unit
+    public fun store(batch: CommitBatch)
 
     /**
      * Commits one step of a job.
@@ -90,29 +89,26 @@ public interface Persistence {
      * **If the underlying store cannot do all of this in one transaction, it MUST NOT be used as a Klerk
      * [Persistence] implementation for jobs.**
      */
-    public fun commitJobStep(batch: CommitBatch): Unit
+    public fun commitJobStep(batch: CommitBatch)
 
     /** Reads every stored model. Used once at startup to populate the model cache. */
-    public fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit
+    public fun readAllModels(lambda: (Model<out Any>) -> Unit)
 
     /**
-     * Reads a single model, or null if no model has that id.
+     * Reads the model whose [ModelID.value] is [id], or null if there is none.
      *
      * Called on the read path when a model is not resident in memory, so it must be a keyed lookup rather than a scan,
      * and it must be safe to call concurrently from several threads.
-     *
-     * @param id the [ModelID.value] of the wanted model
      */
     public fun readModel(id: Int): Model<out Any>?
 
     /**
      * Reads event-log entries, ordered by [EventLogEntry.sequenceNumber], oldest first.
      *
-     * @param modelId if given, only entries for that model
-     * @param after only entries whose [EventLogEntry.time] is at or after this
-     * @param before only entries whose [EventLogEntry.time] is at or before this
-     * @param upToSequenceNumber only entries at or below this number. Klerk uses it to hide a commit that is written
-     * to storage but not yet visible to readers, so an implementation must honour it.
+     * If [modelId] is given, only entries for that model are included. [after] and [before] limit the entries to those
+     * whose [EventLogEntry.time] is in that (inclusive) range. Only entries at or below [upToSequenceNumber] are
+     * included: Klerk uses it to hide a commit that is written to storage but not yet visible to readers, so an
+     * implementation must honour it.
      */
     public fun readEventLog(
         modelId: Int? = null,
@@ -132,19 +128,19 @@ public interface Persistence {
      *
      * Used to honour `eraseEventLogAfterModelDeletion`.
      */
-    public fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?): Unit
+    public fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?)
 
     /**
      * Hands the implementation the specification, at startup and before anything is read. An implementation that has
      * to know the model classes (e.g. to migrate) keeps it; one that does not may ignore it.
      */
-    public fun setSpecification(specification: Specification<*, *>): Unit
+    public fun setSpecification(specification: Specification<*, *>)
 
     /**
      * Applies [migrations] to the stored models, in the order given, and records the schema version they lead to in
      * [currentModelSchemaVersion]. Called at startup with the steps not yet applied, and never with an empty list.
      */
-    public fun migrate(migrations: List<MigrationStep>): Unit
+    public fun migrate(migrations: List<MigrationStep>)
 
     /**
      * Inserts an unclaimed value. Must fail if the id is already taken (i.e. insert, never upsert).
@@ -155,15 +151,16 @@ public interface Persistence {
      *
      * The size and hash are not known before the value has been written, since it is streamed rather than held in
      * memory. [digestAfterWrite] provides them, and must therefore be called *after* [value] has been fully consumed
-     * and before the insert is committed, so that a row is never visible without them.
+     * and before the insert is committed, so that a row is never visible without them. It returns the size in bytes and
+     * the SHA-256 (lowercase hex) of what was written, and is already complete when [value] is null, since the bytes
+     * were written before this call.
      *
-     * @param value the bytes to store, or null when they live in an [AttachedBlobStore.External] and this row is only
-     * the record of them. A null value never happens for [AttachedDataKind.String].
-     * @param claimedByJob the job that prepared this value, if it was prepared inside a job step. Such a row is not
-     * reaped for as long as the job lives — see [deleteExpiredAttachedData].
-     * @param preparedFor returned as [AttachedDataMetadata.preparedFor].
-     * @param digestAfterWrite returns the size in bytes and the SHA-256 (lowercase hex) of what was written. Already
-     * complete when [value] is null, since the bytes were written before this call.
+     * [value] is null when the bytes live in an [AttachedBlobStore.External] and this row is only the record of them. A
+     * null value never happens for [AttachedDataKind.String].
+     *
+     * [claimedByJob] is the job that prepared this value, if it was prepared inside a job step. Such a row is not
+     * reaped for as long as the job lives — see [deleteExpiredAttachedData]. [preparedFor] is returned as
+     * [AttachedDataMetadata.preparedFor].
      */
     public fun insertAttachedData(
         id: Int,
@@ -174,9 +171,9 @@ public interface Persistence {
         custom: Map<String, String>,
         preparedFor: String?,
         expires: Instant,
-        claimedByJob: JobId? = null,
+        claimedByJob: JobID? = null,
         digestAfterWrite: () -> AttachedDataDigest,
-    ): Unit
+    )
 
     /**
      * Records what running a value's declared steps did to it: which of them have completed, and — when a step
@@ -185,16 +182,16 @@ public interface Persistence {
      * Only ever called for unclaimed data, which is what makes rewriting safe: nothing can read it, no URL names it
      * and no cache can hold it. Once a model claims a value it never changes again.
      *
-     * @param value the new bytes when they belong in the row and a step replaced them, otherwise null. A blob kept in
+     * [value] holds the new bytes when they belong in the row and a step replaced them, otherwise null. A blob kept in
      * an [AttachedBlobStore.External] is replaced in that store instead, and only the digest is recorded here.
-     * @param digestAfterWrite as in [insertAttachedData]: called after [value] has been consumed.
+     * [digestAfterWrite] is called after [value] has been consumed, as in [insertAttachedData].
      */
     public fun updateAttachedData(
         id: Int,
         value: InputStream?,
         completedSteps: List<String>,
         digestAfterWrite: () -> AttachedDataDigest,
-    ): Unit
+    )
 
     /**
      * One attached-data row, without its value — see [getAttachedValue] for that.
@@ -226,7 +223,7 @@ public interface Persistence {
      * job claim (`claimedByJob`). The reaper deletes only when neither holds, so a long-running job's working set is
      * safe for as long as the job lives — including while it is dead-lettered and awaiting a human.
      *
-     * @return the ids of the rows that were deleted, so that their bytes can be removed from an external blob store.
+     * Returns the ids of the rows that were deleted, so that their bytes can be removed from an external blob store.
      */
     public fun deleteExpiredAttachedData(now: Instant): Set<Int>
 
@@ -236,7 +233,7 @@ public interface Persistence {
      * Called for a value a step refused: it is unclaimed, nothing may ever attach it, and waiting for its lease to run
      * out would only keep a file somebody has already been told is unacceptable.
      */
-    public fun deleteAttachedData(ids: Set<Int>): Unit
+    public fun deleteAttachedData(ids: Set<Int>)
 
     /**
      * Every persisted job, in no particular order. Called once at startup to rebuild the scheduler's state; the job
@@ -252,194 +249,5 @@ public interface Persistence {
     public fun cronState(): Map<String, Instant>
 
     /** Records that the schedule [scheduleId] fired at [firedAt]. */
-    public fun setCronFired(scheduleId: String, firedAt: Instant): Unit
-}
-
-/**
- * Keeps all data in memory. Should only be used for testing.
- */
-public open class RamStorage : Persistence {
-    private val eventLog = mutableSetOf<EventLogEntry>()
-
-    // Concurrent because readModel is called by readers that do not hold the write lock, while a commit writes here
-    // (writes are serialized against each other, but not against readers, since a commit persists before it takes the
-    // write lock).
-    private val models = ConcurrentHashMap<Int, Model<Any>>()
-    override val currentModelSchemaVersion: Int = 1
-
-    // A null value means the bytes are in an external blob store rather than here.
-    private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray?>>()
-    private val jobs = mutableMapOf<JobId, JobRecord>()
-    private val cronState = mutableMapOf<String, Instant>()
-
-    /**
-     * Everything happens under one lock, which is what stands in for a transaction here. It is not a real one — a
-     * crash mid-write leaves memory inconsistent — but RamStorage is wiped on every restart anyway, so there is no
-     * state for a partial write to corrupt.
-     */
-    private val lock = Any()
-
-    override fun store(batch: CommitBatch): Unit = synchronized(lock) {
-        writeAll(batch)
-    }
-
-    override fun commitJobStep(batch: CommitBatch): Unit = synchronized(lock) {
-        writeAll(batch)
-    }
-
-    private fun writeAll(batch: CommitBatch) {
-        applyAttachedDataDelta(batch.attachedData)
-        applyJobCommit(batch.jobs)
-        batch.eventLogEntry?.let { eventLog.add(it) }
-        batch.createdModels.plus(batch.updatedModels).forEach { model ->
-            @Suppress("UNCHECKED_CAST")
-            models[model.id.value] = model as Model<Any>
-        }
-        batch.deletedModels.forEach { models.remove(it.value) }
-    }
-
-    private fun applyJobCommit(commit: JobCommit) {
-        commit.upserted.forEach { jobs[it.id] = it }
-        commit.deleted.forEach { jobs.remove(it) }
-        commit.attachedDataClaimed.forEach { (dataId, jobId) ->
-            attachedRows[dataId]?.let { attachedRows[dataId] = it.copy(claimedByJob = jobId) }
-        }
-        commit.attachedDataReleased.forEach { dataId ->
-            attachedRows[dataId]?.let { attachedRows[dataId] = it.copy(claimedByJob = null) }
-        }
-    }
-
-    override fun readAllModels(lambda: (Model<out Any>) -> Unit): Unit {
-        return models.values.forEach { lambda(it) }
-    }
-
-    override fun readModel(id: Int): Model<out Any>? = models[id]
-
-    override fun readEventLog(
-        modelId: Int?,
-        after: Instant,
-        before: Instant,
-        upToSequenceNumber: Long,
-    ): Iterable<EventLogEntry> = synchronized(lock) {
-        return eventLog
-            .filter { modelId == null || modelId == it.model.value }
-            .filter { it.time >= after && it.time <= before }
-            .filter { it.sequenceNumber <= upToSequenceNumber }
-            .sortedBy { it.sequenceNumber }
-    }
-
-    override fun readEventLogEntry(sequenceNumber: Long): EventLogEntry? = synchronized(lock) {
-        return eventLog.firstOrNull { it.sequenceNumber == sequenceNumber }
-    }
-
-    override fun lastEventLogSequenceNumber(): Long = synchronized(lock) {
-        eventLog.maxOfOrNull { it.sequenceNumber } ?: 0L
-    }
-
-    override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?) {
-        readEventLog(modelId).toList().forEach {
-            eventLog.remove(it)
-            val new = transformer(it)
-            if (new != null) {
-                eventLog.add(new)
-            }
-        }
-    }
-
-    override fun setSpecification(specification: Specification<*, *>): Unit = Unit
-
-    override fun migrate(migrations: List<MigrationStep>) {
-        logger.debug { "Skipping migration since RamStorage is always empty on startup" }
-    }
-
-    private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
-        attachedData.claimed.forEach { (id, claim) ->
-            val row = requireNotNull(attachedRows[id]) { "Could not find attached data with id $id" }
-            attachedRows[id] = row.copy(
-                owner = claim.owner,
-                expires = null,
-                metadata = row.metadata.copy(visibility = claim.visibility),
-            )
-        }
-        attachedData.deleted.forEach { attachedRows.remove(it) }
-    }
-
-    override fun insertAttachedData(
-        id: Int,
-        value: InputStream?,
-        kind: AttachedDataKind,
-        visibility: AttachedDataVisibility,
-        createdAt: Instant,
-        custom: Map<String, String>,
-        preparedFor: String?,
-        expires: Instant,
-        claimedByJob: JobId?,
-        digestAfterWrite: () -> AttachedDataDigest,
-    ) {
-        require(!attachedRows.containsKey(id)) { "There is already attached data with id $id" }
-        val bytes = value?.readAllBytes()
-        val digest = digestAfterWrite()
-        attachedRows[id] = AttachedDataRow(
-            value = bytes,
-            owner = null,
-            metadata = AttachedDataMetadata(
-                AttachedDataID(id), kind, visibility, createdAt, digest.size, digest.hash, custom, digest.contentType,
-                preparedFor = preparedFor,
-            ),
-            expires = expires,
-            claimedByJob = claimedByJob,
-        )
-    }
-
-    override fun updateAttachedData(
-        id: Int,
-        value: InputStream?,
-        completedSteps: List<String>,
-        digestAfterWrite: () -> AttachedDataDigest,
-    ) {
-        val row = requireNotNull(attachedRows[id]) { "There is no attached data with id $id" }
-        val bytes = value?.readAllBytes()
-        val digest = digestAfterWrite()
-        attachedRows[id] = row.copy(
-            value = bytes ?: row.value,
-            metadata = row.metadata.copy(
-                size = digest.size,
-                hash = digest.hash,
-                contentType = digest.contentType,
-                completedSteps = completedSteps,
-            ),
-        )
-    }
-
-    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
-        attachedRows[id]?.let {
-            AttachedDataRow(Unit, it.owner, it.metadata, it.expires, it.claimedByJob)
-        }
-
-    override fun getAttachedValue(id: Int): InputStream? = attachedRows[id]?.value?.inputStream()
-
-    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
-        attachedRows.mapValues {
-            AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires, it.value.claimedByJob)
-        }
-
-    override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
-        val expired = attachedRows.filterValues { row ->
-            row.claimedByJob == null && row.expires?.let { it < now } ?: false
-        }.keys.toSet()
-        expired.forEach { attachedRows.remove(it) }
-        return expired
-    }
-
-    override fun deleteAttachedData(ids: Set<Int>) {
-        ids.forEach { attachedRows.remove(it) }
-    }
-
-    override fun allJobs(): List<JobRecord> = synchronized(lock) { jobs.values.toList() }
-
-    override fun cronState(): Map<String, Instant> = synchronized(lock) { cronState.toMap() }
-
-    override fun setCronFired(scheduleId: String, firedAt: Instant): Unit = synchronized(lock) {
-        cronState[scheduleId] = firedAt
-    }
+    public fun setCronFired(scheduleId: String, firedAt: Instant)
 }

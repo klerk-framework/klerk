@@ -72,7 +72,8 @@ class MigrationStepTest {
 
     @Test
     fun `Startup fails when a property has changed type`() = runBlocking {
-        val reason = startupProblem(storedSampleData(), Step(2, authors { it.withProps { put("firstName", JsonPrimitive(5)) } }))
+        val step = Step(2, authors { it.withProps { put("firstName", JsonPrimitive(5)) } })
+        val reason = startupProblem(storedSampleData(), step)
         assertTrue(reason.contains("'firstName' is an integer, expected a string"), reason)
     }
 
@@ -135,11 +136,11 @@ private class Step(
     override fun migrateModel(original: MigrationModelV1): MigrationModelV1? = transform(original)
 }
 
-private fun authors(change: ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?): ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1? =
-    { if (it.type == "Author") change(it) else it }
+private typealias ModelChange = ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?
 
-private fun books(change: ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1?): ModelMigrationStep.(MigrationModelV1) -> MigrationModelV1? =
-    { if (it.type == "Book") change(it) else it }
+private fun authors(change: ModelChange): ModelChange = { if (it.type == "Author") change(it) else it }
+
+private fun books(change: ModelChange): ModelChange = { if (it.type == "Book") change(it) else it }
 
 private fun MigrationModelV1.withProps(change: MutableMap<String, JsonElement>.() -> Unit): MigrationModelV1 =
     copy(props = JsonObject(props.toMutableMap().apply(change)))

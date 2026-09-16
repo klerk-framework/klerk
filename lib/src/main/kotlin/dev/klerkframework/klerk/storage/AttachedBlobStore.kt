@@ -56,7 +56,7 @@ public sealed interface AttachedBlobStore {
          * Takes ownership of an already written file instead of copying it, if this store can do so cheaply (a rename
          * within one filesystem, say). Lets a completed upload become a stored blob without moving its bytes twice.
          *
-         * @return true if [source] is now stored under [id] and no longer exists at its old location, false if the
+         * Returns true if [source] is now stored under [id] and no longer exists at its old location, false if the
          * caller should fall back to [put]. Never throws for the merely-unsupported case.
          */
         public fun adopt(id: Int, source: Path): Boolean = false
@@ -128,7 +128,7 @@ public class FileBlobStore(private val root: Path) : AttachedBlobStore.External 
         Files.newDirectoryStream(root).use { buckets ->
             buckets.filter { it.isDirectory() }.forEach { bucket ->
                 Files.newDirectoryStream(bucket).use { files ->
-                    files.forEach { file ->
+                    for (file in files) {
                         val id = file.name.toIntOrNull()
                         if (id == null) {
                             logger.warn { "Ignoring unexpected file in the blob store: $file" }

@@ -21,53 +21,58 @@ public sealed class Problem(public val endUserTranslatedMessage: String, public 
     /** The validation/authorization rule that caused this problem, if any. */
     public abstract val violatedRule: RuleDescription?
 
-    public override fun toString(): String =
-        if (violatedRule == null) "[$code] $endUserTranslatedMessage" else "[$code] $endUserTranslatedMessage ($violatedRule)"
+    override fun toString(): String =
+        if (violatedRule == null) {
+            "[$code] $endUserTranslatedMessage"
+        } else {
+            "[$code] $endUserTranslatedMessage ($violatedRule)"
+        }
 
     /** Everything that identifies this problem. Subclasses with more properties add them. */
     internal open val equalityKey: List<Any?> get() = listOf(this::class, endUserTranslatedMessage, code, violatedRule)
 
     /** Problems are equal if they are of the same class and have equal properties. */
-    public final override fun equals(other: Any?): Boolean = other is Problem && other.equalityKey == equalityKey
-    public final override fun hashCode(): Int = equalityKey.hashCode()
+    final override fun equals(other: Any?): Boolean = other is Problem && other.equalityKey == equalityKey
+    final override fun hashCode(): Int = equalityKey.hashCode()
 }
 
 /**
  * A cross-property validation rule was violated (e.g. two mutually-exclusive properties were both non-null).
- * @param fieldsMustBeNull properties the rule requires to be null. Empty if not applicable.
- * @param fieldsMustNotBeNull properties the rule requires to be non-null. Empty if not applicable.
  */
 public class InvalidPropertyCollectionProblem(
     endUserTranslatedMessage: String,
+    /** Properties the rule requires to be null. Empty if not applicable. */
     public val fieldsMustBeNull: Set<KProperty0<DataContainer<*>?>> = emptySet(),
+    /** Properties the rule requires to be non-null. Empty if not applicable. */
     public val fieldsMustNotBeNull: Set<KProperty0<DataContainer<*>?>> = emptySet(),
-    override val violatedRule: RuleDescription? = null
+    override val violatedRule: RuleDescription? = null,
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidPropertyCollection) {
-    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     override val equalityKey: List<Any?> get() = super.equalityKey + listOf(fieldsMustBeNull, fieldsMustNotBeNull)
 }
 
 /** A rule attached to the event with `validateWithContext` refused the command, based on the context alone. */
 public class PreventedByRuleProblem(
     endUserTranslatedMessage: String,
-    override val violatedRule: RuleDescription? = null
+    override val violatedRule: RuleDescription? = null,
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.PreventedByRule) {
-    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
 }
 
 /** A single property's [DataContainer] rejected the value passed to it (e.g. failed its own validation). */
 public class InvalidPropertyProblem(
     endUserTranslatedMessage: String,
+    /** The name of the property whose value was rejected. */
     public val propertyName: String,
-    override val violatedRule: RuleDescription? = null
+    override val violatedRule: RuleDescription? = null,
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidProperty) {
-    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     override val equalityKey: List<Any?> get() = super.equalityKey + propertyName
 }
 
 /** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
 public data class RuleDescription(val function: Function<Any>, val type: RuleType) {
-    public override fun toString(): String = "${type.name}: ${functionName(function)}"
+    override fun toString(): String = "${type.name}: ${functionName(function)}"
 }
 
 /** Which kind of rule produced a [RuleDescription]. */
@@ -83,52 +88,52 @@ public enum class RuleType {
 public class AuthorizationProblem(
     endUserTranslatedMessage: String,
     override val violatedRule: RuleDescription?,
-    code: KlerkErrorCode
+    code: KlerkErrorCode,
 ) : Problem(endUserTranslatedMessage, code) {
-    public override fun asException(): AuthorizationException = AuthorizationException(code, endUserTranslatedMessage)
+    override fun asException(): AuthorizationException = AuthorizationException(code, endUserTranslatedMessage)
 }
 
 /** A bug in Klerk itself, or in configured code, prevented processing. */
 public class InternalProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.Internal) {
-    public override fun asException(): InternalException = InternalException(code, endUserTranslatedMessage)
-    public override val violatedRule: RuleDescription? = null
+    override fun asException(): InternalException = InternalException(code, endUserTranslatedMessage)
+    override val violatedRule: RuleDescription? = null
 }
 
 /**
  * The command could not be applied given the model's current state (e.g. the event is not possible in the model's
  * current state machine state).
- * @param internalDescription a non-translated, developer-facing description used in the thrown [IllegalStateException].
  */
 public class StateProblem(
     endUserTranslatedMessage: String,
+    /** A non-translated, developer-facing description used in the thrown [IllegalStateException]. */
     public val internalDescription: String,
     code: KlerkErrorCode,
-    override val violatedRule: RuleDescription? = null
+    override val violatedRule: RuleDescription? = null,
 ) : Problem(endUserTranslatedMessage, code) {
-    public override fun asException(): IllegalStateException = IllegalStateException(internalDescription)
+    override fun asException(): IllegalStateException = IllegalStateException(internalDescription)
     override val equalityKey: List<Any?> get() = super.equalityKey + internalDescription
 }
 
 /** The server is temporarily unable to process the command (e.g. not started, or shutting down). */
 public class ServerStateProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.ServerNotAvailable) {
-    public override fun asException(): IllegalStateException = IllegalStateException(toString())
-    public override val violatedRule: RuleDescription? = null
+    override fun asException(): IllegalStateException = IllegalStateException(toString())
+    override val violatedRule: RuleDescription? = null
 }
 
 /** The command referenced a model, or referenced data, that does not exist. */
 public class NotFoundProblem(endUserTranslatedMessage: String) :
     Problem(endUserTranslatedMessage, KlerkErrorCode.NotFound) {
-    public override fun asException(): NoSuchElementException = NoSuchElementException(toString())
-    public override val violatedRule: RuleDescription? = null
+    override fun asException(): NoSuchElementException = NoSuchElementException(toString())
+    override val violatedRule: RuleDescription? = null
 }
 
 /** The command itself was malformed independent of model state (e.g. type mismatch between event and model). */
 public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
-    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val violatedRule: RuleDescription? = null
+    override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    override val violatedRule: RuleDescription? = null
 }
 
 /**
@@ -137,8 +142,8 @@ public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErro
  */
 public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
-    public override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
-    public override val violatedRule: RuleDescription? = null
+    override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
+    override val violatedRule: RuleDescription? = null
 }
 
 /** Base class for the exceptions Klerk throws. The [code] identifies what went wrong. */
@@ -179,13 +184,14 @@ public class PersistedModelMismatchException(
 ) : KlerkException(
     KlerkErrorCode.PersistedModelMismatch,
     "The stored $modelType with id $modelId does not match the model classes: $reason. Register a MigrationStep " +
-            "that makes the stored data match."
+            "that makes the stored data match.",
 )
 
 /**
- * Thrown at startup when a stored model's properties no longer pass their [dev.klerkframework.klerk.datatypes.DataContainer.validate]
- * rules, e.g. because a rule (min, max, minLength, ...) was tightened after the model was stored. Register a
- * [dev.klerkframework.klerk.migration.MigrationStep] that fixes the stored data.
+ * Thrown at startup when a stored model's properties no longer pass their
+ * [dev.klerkframework.klerk.datatypes.DataContainer.validate] rules, e.g. because a rule (min, max, minLength, ...) was
+ * tightened after the model was stored. Register a [dev.klerkframework.klerk.migration.MigrationStep] that fixes the
+ * stored data.
  *
  * @property modelType the model's simple class name, as stored
  * @property reason which properties are invalid, and why. Never contains a stored value.
@@ -197,7 +203,7 @@ public class PersistedModelValidationException(
 ) : KlerkException(
     KlerkErrorCode.PersistedModelInvalid,
     "The stored $modelType with id $modelId no longer passes validation: $reason. Register a MigrationStep " +
-            "that makes the stored data valid."
+            "that makes the stored data valid.",
 )
 
 /**

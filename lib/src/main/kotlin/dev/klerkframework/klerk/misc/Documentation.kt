@@ -6,183 +6,141 @@ import dev.klerkframework.klerk.statemachine.*
 import dev.klerkframework.klerk.statemachine.executables.*
 
 /**
- * Renders [stateMachine] as a [Mermaid](https://mermaid.js.org/) `stateDiagram-v2` definition, for documentation/tooling.
- * @param showUpdateNotes if true, adds a note on each state listing events that update properties without transitioning
+ * Renders [stateMachine] as a [Mermaid](https://mermaid.js.org/) `stateDiagram-v2` definition, for
+ * documentation/tooling. If [showUpdateNotes] is true, each state gets a note listing the events that update properties
+ * without transitioning.
  */
 public fun <V> generateStateDiagram(
     stateMachine: StateMachine<out Any, out Enum<*>, *, V>,
     showUpdateNotes: Boolean,
-    translation: KlerkTranslation
-): String {
-    var result = "stateDiagram-v2\n"
-    stateMachine.mutableStates.filterNot { it.name == "void" }.forEach { result += generateStateVariable(it) }
-    result += generateVoidTransitions(stateMachine.voidState)
-    result += generateTransitions(stateMachine.instanceStates, translation)
-    if (showUpdateNotes) {
-        result += generateUpdateNotes(stateMachine.instanceStates)
+    translation: KlerkTranslation,
+): String = buildString {
+    appendLine("stateDiagram-v2")
+    for (state in stateMachine.states) {
+        if (state.name != "void") {
+            appendLine("${toVariable(state.name)}: ${state.name}")
+        }
     }
-    result += generateDeleteTransitions(stateMachine.mutableStates)
-    return result
-}
-
-private fun <V> generateStateVariable(state: State<out Any, out Enum<*>, *, V>): String {
-    return "${toVariable(state.name)}: ${state.name}\n"
+    appendVoidTransitions(stateMachine.voidState)
+    appendTransitions(stateMachine.instanceStates, translation)
+    if (showUpdateNotes) {
+        appendUpdateNotes(stateMachine.instanceStates)
+    }
+    appendDeleteTransitions(stateMachine.states)
 }
 
 private fun toVariable(name: String): String = name.replace(" ", "").lowercase()
 
-private fun <V> generateVoidTransitions(initialState: VoidState<out Any, out Enum<*>, *, V>): String {
-    var result = ""
-    initialState.onEventBlocks.forEach { eventBlock ->
-        eventBlock.second.executables.filterIsInstance<CreateModel<*, *, *, *, V>>().forEach { createModel ->
-            result += "[*] --> ${toVariable(createModel.initialState.name)}: ${eventBlock.first.name}\n"
+private fun <V> StringBuilder.appendVoidTransitions(initialState: VoidState<out Any, out Enum<*>, *, V>) {
+    for ((event, block) in initialState.onEventBlocks) {
+        for (createModel in block.executables.filterIsInstance<CreateModel<*, *, *, *, V>>()) {
+            appendLine("[*] --> ${toVariable(createModel.initialState.name)}: ${event.name}")
         }
     }
-    return result
 }
 
-private fun <V> generateTransitions(
+private fun <V> StringBuilder.appendTransitions(
     states: List<InstanceState<out Any, out Enum<*>, *, V>>,
-    translation: KlerkTranslation
-): String {
-    var result = ""
-    states.forEach { state ->
-
-        state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<Transition<*, *, *, *, V>>()
-                .forEach { transition ->
-                    result += "${toVariable(state.name)} --> ${toVariable(transition.targetState.name)}: ${eventBlock.first.name}\n"
+    translation: KlerkTranslation,
+) {
+    for (state in states) {
+        val from = toVariable(state.name)
+        for ((event, block) in state.onEventBlocks) {
+            for (transition in block.executables.filterIsInstance<Transition<*, *, *, *, V>>()) {
+                appendLine("$from --> ${toVariable(transition.targetState.name)}: ${event.name}")
+            }
+            for (transition in block.executables.filterIsInstance<TransitionWhen<*, *, *, *, *>>()) {
+                for ((condition, target) in transition.branches) {
+                    appendLine("$from --> ${toVariable(target.name)}: ${translation.function(condition)}")
                 }
+            }
+        }
 
-            eventBlock.second.executables
-                .filterIsInstance<TransitionWhen<*, *, *, *, *>>()
-                .forEach { transition ->
-                    transition.branches.forEach { branch ->
-                        result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
-                            translation.function(branch.key)
-                        }\n"
+        when (val enterBlock = state.enterBlock) {
+            is Block.InstanceLifecycleBlock -> {
+                for (transition in enterBlock.executables.filterIsInstance<Transition<*, *, *, *, *>>()) {
+                    appendLine("$from --> ${toVariable(transition.targetState.name)}: [on enter]")
+                }
+                for (transition in enterBlock.executables.filterIsInstance<TransitionWhen<*, *, *, *, *>>()) {
+                    for ((condition, target) in transition.branches) {
+                        appendLine("$from --> ${toVariable(target.name)}: ${translation.function(condition)}")
                     }
                 }
-        }
-
-        state.enterBlock.let { enterBlock ->
-            when (enterBlock) {
-                is Block.InstanceLifecycleBlock -> {
-                    enterBlock.executables
-                        .filterIsInstance<Transition<*, *, *, *, *>>()
-                        .forEach { transition ->
-                            result += "${toVariable(state.name)} --> ${toVariable(transition.targetState.name)}: [on enter]\n"
-                        }
-
-                    enterBlock.executables
-                        .filterIsInstance<TransitionWhen<*, *, *, *, *>>()
-                        .forEach { transition ->
-                            transition.branches.forEach { branch ->
-                                result += "${toVariable(state.name)} --> ${toVariable(branch.value.name)}: ${
-                                    translation.function(branch.key)
-                                }\n"
-                            }
-                        }
-                }
-
-                is Block.VoidLifecycleBlock -> {
-                    // TODO
-                }
-
-                else -> error("Will not happens since enter/exit blocks are non-event blocks")
             }
 
-        }
-
-    }
-    return result
-}
-
-private fun <V> generateUpdateNotes(states: List<InstanceState<out Any, out Enum<*>, *, V>>): String {
-    var result = ""
-    states.forEach { state ->
-        var resultState = ""
-
-        state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<UpdateModel<*, *, *, *>>().forEach { _ ->
-                resultState += "• ${eventBlock.first.name}\n"
+            is Block.VoidLifecycleBlock -> {
+                // TODO
             }
-        }
 
-        state.onEventBlocks.forEach { eventBlock ->
-            eventBlock.second.executables.filterIsInstance<UpdateModel<*, *, *, *>>().forEach { _ ->
-                resultState += "• ${eventBlock.first.name}\n"
-            }
-        }
-
-        if (resultState.isNotEmpty()) {
-            resultState =
-                """note left of ${toVariable(state.name)}
-                    | Events that updates properties:
-                    | ${resultState}
-                    | end note
-                    | """.trimMargin()
-            result += resultState
+            else -> error("Will not happens since enter/exit blocks are non-event blocks")
         }
     }
-    return result
 }
 
-private fun <V> generateDeleteTransitions(states: List<State<out Any, out Enum<*>, *, V>>): String {
-    var result = ""
-    states.forEach { state ->
+private fun <V> StringBuilder.appendUpdateNotes(states: List<InstanceState<out Any, out Enum<*>, *, V>>) {
+    for (state in states) {
+        val updatingEvents = state.onEventBlocks
+            .filter { (_, block) -> block.executables.any { it is UpdateModel<*, *, *, *> } }
+            .map { (event, _) -> event.name }
+        if (updatingEvents.isEmpty()) {
+            continue
+        }
+        appendLine("note left of ${toVariable(state.name)}")
+        appendLine("    Events that updates properties:")
+        for (name in updatingEvents) {
+            appendLine("    • $name")
+        }
+        appendLine("end note")
+    }
+}
 
+private fun <V> StringBuilder.appendDeleteTransitions(states: List<State<out Any, out Enum<*>, *, V>>) {
+    for (state in states) {
+        val from = toVariable(state.name)
         if (state is InstanceState) {
-            state.onEventBlocks.forEach { eventBlock ->
-                eventBlock.second.executables
-                    .filterIsInstance<DeleteModel<*, *, *, *>>()
-                    .forEach { _ ->
-                        result += "${toVariable(state.name)} --> [*]: ${eventBlock.first.name}\n"
-                    }
-
+            for ((event, block) in state.onEventBlocks) {
+                repeat(block.executables.count { it is DeleteModel<*, *, *, *> }) {
+                    appendLine("$from --> [*]: ${event.name}")
+                }
             }
         }
 
-        state.enterBlock.let { enterBlock ->
-            when (enterBlock) {
-                is Block.InstanceLifecycleBlock -> {
-                    enterBlock.executables.filterIsInstance<DeleteModel<*, *, *, *>>()
-                        .forEach { _ ->
-                            result += "${toVariable(state.name)} --> [*]: [on enter]\n"
-                        }
+        when (val enterBlock = state.enterBlock) {
+            is Block.InstanceLifecycleBlock -> {
+                repeat(enterBlock.executables.count { it is DeleteModel<*, *, *, *> }) {
+                    appendLine("$from --> [*]: [on enter]")
                 }
-
-                is Block.VoidLifecycleBlock -> {
-                    // TODO
-                }
-
-                else -> error("Will not happens since enter/exit blocks are non-event blocks")
             }
+
+            is Block.VoidLifecycleBlock -> {
+                // TODO
+            }
+
+            else -> error("Will not happens since enter/exit blocks are non-event blocks")
         }
 
         // what about InstanceLifecycleDelete ?
     }
-    return result
 }
 
 /**
  * Renders [algo]'s nodes as a [Mermaid](https://mermaid.js.org/) `flowchart TD` definition, for documentation/tooling.
  */
 @ExperimentalKlerkApi
-public fun generateFlowChart(algo: FlowChartAlgorithm<*, *>): String {
-    return """flowchart TD
-        ${algo.nodes.joinToString(separator = System.lineSeparator()) { renderNode(it) }}
-    """.trimMargin()
+public fun generateFlowChart(algo: FlowChartAlgorithm<*, *>): String = buildString {
+    appendLine("flowchart TD")
+    for (node in algo.nodes) {
+        appendNode(node)
+    }
 }
 
 @OptIn(ExperimentalKlerkApi::class)
-private fun renderNode(node: Node<*, *>): String {
-    var result = ""
-    node.goTos.forEach { goTo ->
-        result += "${node.id}[${node.humanReadable}] --> |${goTo.key}| ${goTo.value}${System.lineSeparator()}"
+private fun StringBuilder.appendNode(node: Node<*, *>) {
+    val label = "${node.id}[${node.humanReadable}]"
+    for ((condition, target) in node.goTos) {
+        appendLine("$label --> |$condition| $target")
     }
-    node.terminations.forEach { termination ->
-        result += "${node.id}[${node.humanReadable}] --> |${termination.key}| ${termination.value}(Result: ${termination.value})${System.lineSeparator()}"
+    for ((condition, result) in node.terminations) {
+        appendLine("$label --> |$condition| $result(Result: $result)")
     }
-    return result
 }

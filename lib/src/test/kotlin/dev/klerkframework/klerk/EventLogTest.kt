@@ -26,7 +26,9 @@ import kotlin.time.Duration.Companion.days
  */
 class EventLogTest {
 
-    /** Holds [store] open until released, i.e. after the event log entry is durable but before the cache knows about it. */
+    /**
+     * Holds [store] open until released, i.e. after the event log entry is durable but before the cache knows about it.
+     */
     private class BlockingStore(private val delegate: Persistence) : Persistence by delegate {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -43,8 +45,10 @@ class EventLogTest {
         }
     }
 
-    private fun start(storage: Persistence, configureAuthorization: SpecificationBuilder.AuthorizationRulesBlock<Ctx, Views>.() -> Unit = {}):
-            Pair<Klerk<Ctx, Views>, Views> {
+    private fun start(
+        storage: Persistence,
+        configureAuthorization: SpecificationBuilder.AuthorizationRulesBlock<Ctx, Views>.() -> Unit = {},
+    ): Pair<Klerk<Ctx, Views>, Views> {
         val books = BookViews()
         val views = Views(books, AuthorViews(books.all))
         val klerk = Klerk.create(
@@ -63,17 +67,22 @@ class EventLogTest {
                     lastName = LastName("Author"),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(42),
-                )
+                ),
             ),
             context,
         ).getOrThrow().primaryModel!!
 
-    private suspend fun rename(klerk: Klerk<Ctx, Views>, author: ModelID<Author>, to: String, context: Ctx = Ctx.system()) =
+    private suspend fun rename(
+        klerk: Klerk<Ctx, Views>,
+        author: ModelID<Author>,
+        to: String,
+        context: Ctx = Ctx.system(),
+    ) =
         klerk.handle(
             Command(
                 ChangeName,
                 author,
-                ChangeNameParams(FirstName(to), LastName("Author"))
+                ChangeNameParams(FirstName(to), LastName("Author")),
             ),
             context,
         ).getOrThrow()
@@ -123,7 +132,8 @@ class EventLogTest {
         val entries = snapshot.get()
         assertEquals(FirstName("Solo"), nameWhenTaken)
         assertTrue(entries.none { it.eventReference == ChangeName.id }, "the snapshot must not grow after its block")
-        assertEquals(1, klerk.read(Ctx.system()) { eventLog(author) }.get().count { it.eventReference == ChangeName.id })
+        val entriesAfter = klerk.read(Ctx.system()) { eventLog(author) }.get()
+        assertEquals(1, entriesAfter.count { it.eventReference == ChangeName.id })
         klerk.meta.stop()
     }
 
@@ -179,7 +189,7 @@ class EventLogTest {
         assertEquals(beforeRestart.map { it.sequenceNumber }, afterRestart.dropLast(1).map { it.sequenceNumber })
         assertTrue(
             afterRestart.last().sequenceNumber > beforeRestart.last().sequenceNumber,
-            "a restart must not hand out a number that is already used"
+            "a restart must not hand out a number that is already used",
         )
         second.meta.stop()
     }

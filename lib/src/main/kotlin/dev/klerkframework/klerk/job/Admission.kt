@@ -42,7 +42,7 @@ public sealed interface AdmissionDecision {
                     "The system is busy. Please try again shortly.",
                     message,
                     KlerkErrorCode.JobQueueOverloaded,
-                )
+                ),
             )
         }
     }
@@ -95,8 +95,11 @@ public class JobQueueSnapshot internal constructor(
 
 /** The job being considered for admission. */
 public class JobCandidate internal constructor(
+    /** The job type's name. */
     public val name: JobName,
+    /** The priority the job will be queued with. */
     public val priority: JobPriority,
+    /** The earliest time the job may run, or null for as soon as possible. */
     public val scheduleAt: Instant?,
 )
 
@@ -107,9 +110,12 @@ public class JobCandidate internal constructor(
  * processing: **do no IO here**, a database lookup makes every command in the system slower.
  */
 public class AdmissionArgs<C : KlerkContext> internal constructor(
+    /** The state of the queue right now. */
     public val queue: JobQueueSnapshot,
+    /** The job being considered. */
     public val job: JobCandidate,
     public val context: C,
+    /** The current time. */
     public val now: Instant,
 )
 
@@ -152,7 +158,7 @@ public object AdmissionPolicy {
         }
         val next = priority.oneClassLower()
             ?: return AdmissionDecision.Deny.overloaded(
-                "The ${priority.name} job queue has been over its ${args.queue.budget(priority)} budget since $since"
+                "The ${priority.name} job queue has been over its ${args.queue.budget(priority)} budget since $since",
             )
         return AdmissionDecision.Downgrade(next)
     }

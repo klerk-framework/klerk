@@ -160,7 +160,7 @@ internal object ModelCache {
         return getBody(id.value)?.copy() as? Model<T>
     }
 
-    internal fun <T : Any> store(model: Model<T>): Unit {
+    internal fun <T : Any> store(model: Model<T>) {
         updateRelations(model, relationsTo, true)
         ids.add(model.id.value)
         bodies.put(model.id.value, model.copy())
@@ -186,7 +186,7 @@ internal object ModelCache {
      * shadow the real ones indefinitely.
      */
     internal fun beginCommit(modelIds: Collection<ModelID<out Any>>) {
-        modelIds.forEach { id ->
+        for (id in modelIds) {
             // getBody, not bodies[..], so an already-evicted model is fetched from storage -- which is still the
             // pre-commit state, since this runs before persistence is written.
             getBody(id.value)?.let { preCommitBodies[id.value] = it }
@@ -206,8 +206,10 @@ internal object ModelCache {
         preCommitBodies.clear()
     }
 
-    internal fun <T : Any> delete(modelId: ModelID<T>): Unit {
-        relationsTo.forEach { (_, relationSet) -> relationSet.remove(modelId.value) }
+    internal fun <T : Any> delete(modelId: ModelID<T>) {
+        for ((_, relationSet) in relationsTo) {
+            relationSet.remove(modelId.value)
+        }
         relationsTo.remove(modelId.value)
         ids.remove(modelId.value)
         bodies.invalidate(modelId.value)
@@ -234,7 +236,7 @@ internal object ModelCache {
 
     internal fun <T : Any, U : Any> referencing(
         property: KProperty1<T, ModelID<U>?>,
-        id: ModelID<*>
+        id: ModelID<*>,
     ): Set<Model<T>> {
         if (!ids.contains(id.value)) throw NoSuchElementException("Could not find model with id $id")
         return relatedThrough(PropertyKey.of(property), id)
@@ -242,19 +244,15 @@ internal object ModelCache {
 
     internal fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
-        id: ModelID<*>
+        id: ModelID<*>,
     ): Set<Model<T>> = relatedThrough(PropertyKey.of(property), id)
 
     /** The models that refer to [id] through the property [key], wherever in their props it is. */
     private fun <T : Any> relatedThrough(key: PropertyKey, id: ModelID<*>): Set<Model<T>> =
         referencingIds(id).mapNotNull { relatedId ->
             val related = getBody(relatedId.value)?.copy() ?: return@mapNotNull null
-            var refers = false
-            ObjectSchema.of(related.props::class).forEachLeaf(related.props) { leaf ->
-                if (leaf.field.key == key && leaf.value == id) {
-                    refers = true
-                }
-            }
+            val refers = ObjectSchema.of(related.props::class).leaves(related.props)
+                .any { leaf -> leaf.field.key == key && leaf.value == id }
             @Suppress("UNCHECKED_CAST")
             if (refers) related as Model<T> else null
         }.toSet()
@@ -265,7 +263,7 @@ internal object ModelCache {
     private fun <T : Any> updateRelations(
         model: Model<T>,
         relationsMap: MutableMap<Int, MutableSet<Int>>,
-        klerkHasStarted: Boolean
+        klerkHasStarted: Boolean,
     ) {
         // optimization: do this before write lock
         val fromId = model.id.value
@@ -273,11 +271,14 @@ internal object ModelCache {
         // we don't have to do this for new models. Note that this asks the id set rather than the body cache, so an
         // evicted model still counts as existing.
         if (klerkHasStarted && ids.contains(fromId)) {
-            // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations for this model
-            relationsMap.forEach { (_, relationSet) -> relationSet.remove(fromId) }
+            // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations
+            // for this model
+            for ((_, relationSet) in relationsMap) {
+                relationSet.remove(fromId)
+            }
         }
 
-        ObjectSchema.of(model.props::class).forEachLeaf(model.props) { leaf ->
+        for (leaf in ObjectSchema.of(model.props::class).leaves(model.props)) {
             (leaf.value as? ModelID<*>)?.let { createReference(fromId, it.value, relationsMap) }
         }
     }
@@ -293,9 +294,7 @@ internal object ModelCache {
 
     fun isEmpty(): Boolean = ids.isEmpty()
 
-    fun isIdAvailable(uInt: Int): Boolean {
-        return !ids.contains(uInt)
-    }
+    fun isIdAvailable(uInt: Int): Boolean = !ids.contains(uInt)
 
     fun clear() {
         ids.clear()
@@ -304,7 +303,9 @@ internal object ModelCache {
     }
 
     fun <T : Any, C : KlerkContext, V> handleDelta(delta: ProcessingData<T, C, V>) {
-        delta.deletedModels.forEach { modelId -> delete(modelId) }
+        for (modelId in delta.deletedModels) {
+            delete(modelId)
+        }
         delta.createdModels
             .union(delta.updatedModels)
             .union(delta.transitions)
@@ -314,8 +315,8 @@ internal object ModelCache {
     }
 
     /**
-     * The id of every model that exists.
-     * @param reader is not used but must be provided to prove that there will be no concurrent modification
+     * The id of every model that exists. [reader] is not used but must be provided to prove that there will be no
+     * concurrent modification.
      */
     internal fun allIds(reader: ModelReader<*, *>): Set<Int> = ids.toSet()
 

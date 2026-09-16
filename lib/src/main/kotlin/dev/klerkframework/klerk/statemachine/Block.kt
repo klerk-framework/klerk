@@ -23,22 +23,29 @@ internal interface Executable<T : Any, A, C : KlerkContext, V> {
 /** A pending fire-and-forget job produced by `unmanagedJob`, to be run after the command commits. */
 internal class UnmanagedJob(internal val f: () -> Unit, val function: Function<*>, val description: String)
 
+/** A block of a state machine: what happens when an event arrives, or when a state is entered or left. */
 @SpecificationMarker
 public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal val name: String,
-    internal val type: BlockType
+    internal val type: BlockType,
 ) {
 
     internal class VoidLifecycleBlock<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         name: String,
-        type: BlockType
+        type: BlockType,
     ) : Block<T, ModelStates, C, V>(name, type)
 
     /**
      * What every block can do, whatever triggered it. [A] is the block's args type: [VoidEventArgs] in a void
      * `onEvent`, [InstanceEventArgs] in an instance `onEvent`, [LifecycleArgs] in `onEnter`/`onExit`/`after`/`atTime`.
      */
-    public sealed class ExecutableBlock<T : Any, A : RuleArgs<C, V>, ModelStates : Enum<*>, C : KlerkContext, V> protected constructor(
+    public sealed class ExecutableBlock<
+        T : Any,
+        A : RuleArgs<C, V>,
+        ModelStates : Enum<*>,
+        C : KlerkContext,
+        V,
+    > protected constructor(
         name: String,
         type: BlockType,
     ) : Block<T, ModelStates, C, V>(name, type) {
@@ -51,19 +58,19 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun commands(
             function: (args: A) -> List<Command<out Any, out Any?>>,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(CreateCommands(function, onCondition))
         }
 
         /**
-         * Schedules managed background work: [function] returns the jobs to schedule, built with `MyJobType.declare(cursor)`.
-         * They are persisted in this command's own transaction, so a failing command schedules nothing. See
-         * [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
+         * Schedules managed background work: [function] returns the jobs to schedule, built with
+         * `MyJobType.declare(cursor)`. They are persisted in this command's own transaction, so a failing command
+         * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
         public fun jobs(
             function: (args: A) -> List<DeclaredJob<C, V>>,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(ScheduleJobs(function, onCondition))
         }
@@ -75,7 +82,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun job(
             function: (args: A) -> DeclaredJob<C, V>,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(ScheduleJob(function, onCondition))
         }
@@ -86,12 +93,13 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * Note that exceptions thrown by the job will be pretty much ignored, so make sure that the job
          * catches all exceptions.
          *
-         * The job will be executed on the main node in the background after the command has been processed. This may have an impact on
-         * system performance, so consider a normal job instead if you need to do anything non-trivial.
+         * The job will be executed on the main node in the background after the command has been processed. This may
+         * have an impact on system performance, so consider a normal job instead if you need to do anything
+         * non-trivial.
          */
         public fun unmanagedJob(
             function: (args: A) -> Unit,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(RunUnmanagedJob(function, onCondition))
         }
@@ -100,7 +108,13 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     }
 
     /** What a block can do when there is a model to act on, i.e. everywhere except a void `onEvent`. */
-    public sealed class ModelBlock<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enum<*>, C : KlerkContext, V> protected constructor(
+    public sealed class ModelBlock<
+        T : Any,
+        A : ModelArgs<T, C, V>,
+        ModelStates : Enum<*>,
+        C : KlerkContext,
+        V,
+    > protected constructor(
         name: String,
         type: BlockType,
     ) : ExecutableBlock<T, A, ModelStates, C, V>(name, type) {
@@ -112,7 +126,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun transitionTo(
             targetState: ModelStates,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             require(executables.none { it is Transition<*, *, *, *, *> }) { "A block can only have one transition" }
             executables.add(Transition(targetState, onCondition))
@@ -149,7 +163,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          */
         public fun update(
             function: (args: A) -> T,
-            onCondition: ((args: A) -> Boolean)? = null
+            onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(UpdateModel(function, onCondition))
         }
@@ -169,7 +183,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         public fun createModel(
             initialState: ModelStates,
             function: (args: VoidEventArgs<T, P, C, V>) -> T,
-            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null
+            onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)? = null,
         ) {
             executables.add(CreateModel(initialState, function, onCondition))
         }

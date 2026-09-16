@@ -29,7 +29,10 @@ public sealed interface MigrationStep {
     /** Must be shorter than 200 characters (enforced at specification validation). */
     public val description: String
 
-    /** The schema version this step migrates data *to*. Must be exactly one more than the previous step's, starting at 2. */
+    /**
+     * The schema version this step migrates data *to*. Must be exactly one more than the previous step's, starting at
+     * 2.
+     */
     public val migratesToVersion: Int
 }
 

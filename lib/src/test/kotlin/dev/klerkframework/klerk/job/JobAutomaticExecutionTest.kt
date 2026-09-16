@@ -41,7 +41,7 @@ class JobAutomaticExecutionTest {
 
     private suspend fun awaitStatus(
         klerk: Klerk<Ctx, Views>,
-        id: JobId,
+        id: JobID,
         status: JobStatus,
     ): JobInfo = withTimeout(20.seconds) {
         while (true) {

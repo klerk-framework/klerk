@@ -8,7 +8,7 @@ import dev.klerkframework.klerk.statemachine.Executable
 
 internal class CreateCommands<T : Any, A, C : KlerkContext, V>(
     val f: (args: A) -> List<Command<out Any, out Any?>>,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(

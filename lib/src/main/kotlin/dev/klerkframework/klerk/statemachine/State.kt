@@ -1,4 +1,4 @@
-package dev.klerkframework.klerk.statemachine;
+package dev.klerkframework.klerk.statemachine
 
 import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.statemachine.Block.*
@@ -6,12 +6,14 @@ import dev.klerkframework.klerk.statemachine.BlockType.*
 import kotlin.time.Duration
 import kotlin.time.Instant
 
+/** A state in a [StateMachine]. */
 @SpecificationMarker
 public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
-    public val name: String, internal val modelName: String
+    public val name: String, internal val modelName: String,
 ) {
 
-    public val id: StateId = StateId(modelName, name)
+    /** Identifies this state among all state machines. */
+    public val id: StateID = StateID(modelName, name)
     internal abstract var enterBlock: Block<T, ModelStates, C, V>
     internal abstract var exitBlock: Block<T, ModelStates, C, V>
 
@@ -26,17 +28,20 @@ public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
 }
 
-public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(name: String, modelName: String) :
-    State<T, ModelStates, C, V>(name, modelName) {
+/** The state a model is in before it exists. Only void events are handled here, typically by creating the model. */
+public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(
+    name: String,
+    modelName: String,
+) : State<T, ModelStates, C, V>(name, modelName) {
 
     override var enterBlock: Block<T, ModelStates, C, V> = VoidLifecycleBlock("Enter block for state '$name'", Enter)
     override var exitBlock: Block<T, ModelStates, C, V> = VoidLifecycleBlock("Exit block for state '$name'", Exit)
-    private val mutableOnEventBlocks: MutableList<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>> =
+    private val _onEventBlocks: MutableList<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
 
     /** The `onEvent` blocks declared for this state, in declaration order. */
     public val onEventBlocks: List<Pair<VoidEvent<T, *>, VoidEventBlock<T, *, ModelStates, C, V>>>
-        get() = mutableOnEventBlocks
+        get() = _onEventBlocks
 
     /**
      * Declares what happens when [event] is received while the model doesn't exist yet. [event] must already be
@@ -48,7 +53,7 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
         val onEventBlock =
             VoidEventBlock<T, P, ModelStates, C, V>("Event block (${event.name}) for initial state", BlockType.Event)
         onEventBlock.init()
-        mutableOnEventBlocks.add(Pair(event, onEventBlock))
+        _onEventBlocks.add(Pair(event, onEventBlock))
     }
 
 
@@ -63,18 +68,22 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
 
 }
 
-public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(name: String, modelName: String) :
-    State<T, ModelStates, C, V>(name, modelName) {
+/** A state an existing model can be in. */
+public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> internal constructor(
+    name: String,
+    modelName: String,
+) : State<T, ModelStates, C, V>(name, modelName) {
 
-    override var enterBlock: Block<T, ModelStates, C, V> = InstanceLifecycleBlock("Enter block for state '$name'", Enter)
+    override var enterBlock: Block<T, ModelStates, C, V> =
+        InstanceLifecycleBlock("Enter block for state '$name'", Enter)
     override var exitBlock: Block<T, ModelStates, C, V> = InstanceLifecycleBlock("Exit block for state '$name'", Exit)
     internal var timeBlock: InstanceLifecycleBlock<T, ModelStates, C, V>? = null
-    private val mutableOnEventBlocks: MutableList<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>> =
+    private val _onEventBlocks: MutableList<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>> =
         mutableListOf()
 
     /** The `onEvent` blocks declared for this state, in declaration order. */
     public val onEventBlocks: List<Pair<InstanceEvent<T, *>, InstanceEventBlock<T, *, ModelStates, C, V>>>
-        get() = mutableOnEventBlocks
+        get() = _onEventBlocks
     internal var afterDuration: Duration? = null
     private var enterBlockDeclared = false
     private var exitBlockDeclared = false
@@ -88,7 +97,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
         if (enterBlockDeclared) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.InvalidStateMachine,
-                "The state '$name' declares onEnter more than once"
+                "The state '$name' declares onEnter more than once",
             )
         }
         val b = InstanceLifecycleBlock<T, ModelStates, C, V>("Enter block for state '$name'", Enter)
@@ -105,7 +114,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
         if (exitBlockDeclared) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.InvalidStateMachine,
-                "The state '$name' declares onExit more than once"
+                "The state '$name' declares onExit more than once",
             )
         }
         val b = InstanceLifecycleBlock<T, ModelStates, C, V>("Exit block for state '$name'", Exit)
@@ -122,10 +131,10 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
     public fun <P> onEvent(event: InstanceEvent<T, P>, init: InstanceEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
         require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
         val onEventBlock = InstanceEventBlock<T, P, ModelStates, C, V>(
-            "Event block (${event.name}) for state '$name'", BlockType.Event
+            "Event block (${event.name}) for state '$name'", BlockType.Event,
         )
         onEventBlock.init()
-        mutableOnEventBlocks.add(Pair(event, onEventBlock))
+        _onEventBlocks.add(Pair(event, onEventBlock))
     }
 
     /**
@@ -160,7 +169,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
      */
     public fun atTime(
         f: (args: LifecycleArgs<T, C, V>) -> Instant,
-        init: InstanceLifecycleBlock<T, ModelStates, C, V>.() -> Unit
+        init: InstanceLifecycleBlock<T, ModelStates, C, V>.() -> Unit,
     ) {
         checkNoTimeBlock()
         val b = InstanceLifecycleBlock<T, ModelStates, C, V>("At-time block for state '$name'", Time)
@@ -173,7 +182,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
         if (timeBlock != null) {
             throw IllegalConfigurationException(
                 KlerkErrorCode.InvalidStateMachine,
-                "The state '$name' declares more than one of after/atTime"
+                "The state '$name' declares more than one of after/atTime",
             )
         }
     }

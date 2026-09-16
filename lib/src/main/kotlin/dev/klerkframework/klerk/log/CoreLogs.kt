@@ -54,22 +54,22 @@ internal class LogCommandSucceeded<C : KlerkContext>(
                 type = FactType.Command,
                 name = "command",
                 value = command.event.toString(),
-                verb = FactVerb.Issued
+                verb = FactVerb.Issued,
             ),
             Fact(
                 type = FactType.Result,
                 name = "result",
                 value = "Success",
-            )
+            ),
         )
-        result.createdModels.forEach {
+        for (model in result.createdModels) {
             factsList.add(
                 Fact(
                     type = FactType.ModelID,
                     name = "created",
-                    value = it.toString(),
-                    verb = FactVerb.Created
-                )
+                    value = model.toString(),
+                    verb = FactVerb.Created,
+                ),
             )
         }
         factsList

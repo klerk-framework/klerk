@@ -8,9 +8,9 @@ import dev.klerkframework.klerk.view.QueryResponse
 
 /**
  * How a view is actually read. Not part of [Reader]'s public surface: reading a view is done on the view
- * (`view.count()`, `view.asSequence().toList()`, `view.query(...)`, see `collection/ViewOperations.kt`), and those extensions
- * dispatch through here. An extension cannot be overridden, and each of these means something different for an
- * authorizing reader than for the internal one, so the polymorphism has to live somewhere.
+ * (`view.count()`, `view.asSequence().toList()`, `view.query(...)`, see `collection/ViewOperations.kt`), and those
+ * extensions dispatch through here. An extension cannot be overridden, and each of these means something different for
+ * an authorizing reader than for the internal one, so the polymorphism has to live somewhere.
  */
 internal interface ViewReader<C : KlerkContext, V> {
 

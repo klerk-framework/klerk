@@ -37,13 +37,17 @@ class JobAttachedDataClaimTest {
         override val name = JobName("uploader")
         override val agent: JobAgent = JobAgent.System
 
-        override suspend fun step(args: JobStepArgs.Local<UploadCursor, Ctx, Views>): JobResult<UploadCursor, Ctx, Views> {
+        override suspend fun step(
+
+            args: JobStepArgs.Local<UploadCursor, Ctx, Views>,
+
+        ): JobResult<UploadCursor, Ctx, Views> {
             val prepared = args.cursor.prepared
             if (prepared == null) {
                 val id = klerkForTest!!.attachedData.prepare(
                     "a portrait".byteInputStream(),
                     AuthorPicture::class,
-                    args.context
+                    args.context,
                 )
                 return JobResult.Yield(cursor = UploadCursor(prepared = id))
             }
@@ -63,7 +67,7 @@ class JobAttachedDataClaimTest {
                         phone = PhoneNumber("+4699999"),
                         secretToken = SecretPasscode(1),
                         picture = AuthorPicture(prepared),
-                    )
+                    ),
                 ),
             )
         }
@@ -173,7 +177,7 @@ class JobAttachedDataClaimTest {
             collections,
             storage,
             clock,
-            jobs = JobSettings(execution = JobExecution.Manual, deadLetterRetention = 24.hours)
+            jobs = JobSettings(execution = JobExecution.Manual, deadLetterRetention = 24.hours),
         ) {
             register(Uploader)
         }
@@ -213,7 +217,7 @@ class JobAttachedDataClaimTest {
             collections,
             storage,
             clock,
-            jobs = JobSettings(execution = JobExecution.Manual, cancelledRetention = 24.hours)
+            jobs = JobSettings(execution = JobExecution.Manual, cancelledRetention = 24.hours),
         ) {
             register(Uploader)
         }
@@ -250,7 +254,7 @@ class JobAttachedDataClaimTest {
             collections,
             storage,
             clock,
-            jobs = JobSettings(execution = JobExecution.Manual, succeededRetention = 24.hours)
+            jobs = JobSettings(execution = JobExecution.Manual, succeededRetention = 24.hours),
         ) {
             register(Uploader)
         }

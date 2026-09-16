@@ -15,8 +15,11 @@ public data object Valid : PropertyValidity, PropertyCollectionValidity, Context
 /** The result of a single [DataContainer] validator function (see `DataContainer.validators`). */
 public sealed interface PropertyValidity : Validity {
 
-    /** @param translationInfo optional detail passed to [Translation] when building the end-user error message */
-    public class Invalid(public val translationInfo: String? = null) : PropertyValidity
+    /** The value is invalid. */
+    public class Invalid(
+        /** Optional detail passed to [Translation] when building the end-user error message. */
+        public val translationInfo: String? = null,
+    ) : PropertyValidity
 }
 
 /**
@@ -26,21 +29,21 @@ public sealed interface PropertyValidity : Validity {
  */
 public sealed interface PropertyCollectionValidity : Validity {
 
-    /**
-     * @param translationInfo optional detail passed to [dev.klerkframework.klerk.KlerkTranslation.invalidPropertyCollection]
-     * when building the end-user message. The message itself comes from the [Translation], so a rule never spells it out.
-     * @param fieldMustBeNull the property the rule requires to be null, e.g. to grey out an input.
-     * @param fieldMustNotBeNull the property the rule requires to be non-null.
-     */
+    /** The combination of properties is invalid. */
     public class Invalid(
+        /**
+         * Optional detail passed to [dev.klerkframework.klerk.KlerkTranslation.invalidPropertyCollection] when building
+         * the end-user message. The message itself comes from the [Translation], so a rule never spells it out.
+         */
         public val translationInfo: String? = null,
+        /** The property the rule requires to be null, e.g. to grey out an input. */
         public val fieldMustBeNull: KProperty0<DataContainer<*>?>? = null,
-        public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null
+        /** The property the rule requires to be non-null. */
+        public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null,
     ) : PropertyCollectionValidity {
         /**
-         * The end-user message for this result, as [Translation] builds it from the rule's name and [translationInfo].
-         *
-         * @param rule the validator function that returned this, whose name identifies it to the [Translation]
+         * The end-user message for this result, as [Translation] builds it from the name of [rule] (the validator
+         * function that returned this) and [translationInfo].
          */
         public fun message(rule: Function<Any>, translation: Translation): String =
             translation.klerk.invalidPropertyCollection(
@@ -68,9 +71,12 @@ public sealed interface PropertyCollectionValidity : Validity {
  */
 public sealed interface ContextValidity : Validity {
 
-    /**
-     * @param translationInfo optional detail passed to [dev.klerkframework.klerk.KlerkTranslation.preventedByRule] when
-     * building the end-user message.
-     */
-    public class Invalid(public val translationInfo: String? = null) : ContextValidity
+    /** The command may not proceed. */
+    public class Invalid(
+        /**
+         * Optional detail passed to [dev.klerkframework.klerk.KlerkTranslation.preventedByRule] when building the
+         * end-user message.
+         */
+        public val translationInfo: String? = null,
+    ) : ContextValidity
 }

@@ -78,7 +78,7 @@ class EvictionTest {
                     lastName = LastName("Author"),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(42),
-                )
+                ),
             ),
             Ctx.system(),
         ).getOrThrow().primaryModel!!
@@ -95,7 +95,7 @@ class EvictionTest {
         // actually being dropped rather than that some exact number is resident.
         assertTrue(
             ModelCache.residentCount < klerk.meta.modelsCount,
-            "expected bodies to be evicted, but all ${ModelCache.residentCount} were resident"
+            "expected bodies to be evicted, but all ${ModelCache.residentCount} were resident",
         )
         klerk.meta.stop()
     }
@@ -107,8 +107,9 @@ class EvictionTest {
         generateSampleData(12, 2, klerk)
 
         val (author, expectedBooks) = klerk.read(Ctx.system()) {
-            val author = views.authors.all.asSequence().toList().first { a -> views.books.all.asSequence().toList().any { it.props.author == a.id } }
-            author to views.books.all.asSequence().toList().filter { it.props.author == author.id }.map { it.id }.toSet()
+            val books = views.books.all.asSequence().toList()
+            val author = views.authors.all.asSequence().first { a -> books.any { it.props.author == a.id } }
+            author to books.filter { it.props.author == author.id }.map { it.id }.toSet()
         }
         assertTrue(expectedBooks.isNotEmpty())
 
@@ -230,7 +231,7 @@ class EvictionTest {
                 Command(
                     ChangeName,
                     author,
-                    ChangeNameParams(FirstName("Renamed"), LastName("Author"))
+                    ChangeNameParams(FirstName("Renamed"), LastName("Author")),
                 ),
                 Ctx.system(),
             ).getOrThrow()
@@ -283,7 +284,7 @@ class EvictionTest {
             Command(
                 ChangeName,
                 author,
-                ChangeNameParams(FirstName(to), LastName("Author"))
+                ChangeNameParams(FirstName(to), LastName("Author")),
             ),
             Ctx.system(),
         ).getOrThrow()
@@ -292,10 +293,11 @@ class EvictionTest {
             val readers = (1..12).map {
                 launch(Dispatchers.Default) {
                     while (done.get() == 0) {
-                        klerk.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList() }.forEach { listed ->
+                        val great = klerk.read(Ctx.system()) { views.authors.greatAuthors.asSequence().toList() }
+                        for (listed in great) {
                             if (listed.props.firstName.value !in greatNames) {
                                 violations.add(
-                                    "greatAuthors listed ${listed.id} whose name is '${listed.props.firstName.value}'"
+                                    "greatAuthors listed ${listed.id} whose name is '${listed.props.firstName.value}'",
                                 )
                             }
                         }
@@ -353,14 +355,14 @@ class EvictionTest {
         first.meta.start()
         generateSampleData(12, 2, first)
         val before = first.read(Ctx.system()) {
-            (views.authors.all.asSequence().toList() + views.books.all.asSequence().toList()).associateBy { it.id.value }
+            (views.authors.all.asSequence() + views.books.all.asSequence()).associateBy { it.id.value }
         }
         first.meta.stop()
 
         val (second, views2) = start(storage, tiny)
         second.meta.start()
         val after = second.read(Ctx.system()) {
-            (views2.authors.all.asSequence().toList() + views2.books.all.asSequence().toList()).associateBy { it.id.value }
+            (views2.authors.all.asSequence() + views2.books.all.asSequence()).associateBy { it.id.value }
         }
         assertEquals(before, after)
         second.meta.stop()

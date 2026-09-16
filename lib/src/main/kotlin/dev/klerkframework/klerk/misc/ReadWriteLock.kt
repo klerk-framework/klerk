@@ -93,7 +93,9 @@ internal class ReadWriteLock {
             activeReaders--
             grantLocked()
         }
-        granted.forEach { it.complete(Unit) }
+        for (waiter in granted) {
+            waiter.complete(Unit)
+        }
     }
 
     private fun releaseWrite() {
@@ -102,7 +104,9 @@ internal class ReadWriteLock {
             writerActive = false
             grantLocked()
         }
-        granted.forEach { it.complete(Unit) }
+        for (waiter in granted) {
+            waiter.complete(Unit)
+        }
     }
 
     /**

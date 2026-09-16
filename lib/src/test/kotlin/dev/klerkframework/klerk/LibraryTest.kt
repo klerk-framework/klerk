@@ -100,7 +100,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(23290409),
                     //address = Address(Street("Lugna gatan"))
-                )
+                ),
             ),
             Ctx.system(),
         )
@@ -109,12 +109,12 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
             klerk.handle(
                 Command(
                     ImproveAuthor,
-                    requireNotNull(result.getOrThrow().primaryModel)
+                    requireNotNull(result.getOrThrow().primaryModel),
                 ),
                 context = Ctx.system(),
                 ProcessingOptions(
-                    CommandToken.simple()
-                )
+                    CommandToken.simple(),
+                ),
             )
         }
 
@@ -134,8 +134,8 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                         previousBooksInSameSeries = emptyList(),
                         tags = setOf(BookTag("Fiction"), BookTag("Children")),
                         averageScore = AverageScore(0f),
-                        readingTime = ReadingTime(1.days)
-                    )
+                        readingTime = ReadingTime(1.days),
+                    ),
                 ),
                 Ctx.system(),
             )

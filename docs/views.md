@@ -72,9 +72,9 @@ immutable value, as `greatAuthorNames` does above, is fine. If membership genuin
 custom `ModelView` instead: those are evaluated on every query.
 
 Every view you want to expose must be registered with `.register("someId")`. Registering does two things: it gives the
-view a stable string id, combined with the owning model's class name into a `ViewId(modelName, shortId)`
+view a stable string id, combined with the owning model's class name into a `ViewID(modelName, shortId)`
 (rendered as `v.Author.establishedAuthors`); and it adds the view to `Specification.registeredViews`, which is how
-Klerk knows the view exists at all. That `ViewId` is what `Specification.view(id)` uses to look a view up
+Klerk knows the view exists at all. That `ViewID` is what `Specification.view(id)` uses to look a view up
 by id, and it's what shows up in the error message when a `validReferences` check rejects a command (`"Did not find 42 in
 v.Author.all for parameter favouriteColleague"`). An unregistered `filter`/`sorted` result still works if you hold a
 reference to it, but it won't show up in `Specification.registeredViews` and can't be looked up by id. Ids may not

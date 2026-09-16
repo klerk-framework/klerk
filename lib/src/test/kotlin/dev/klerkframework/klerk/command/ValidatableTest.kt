@@ -30,11 +30,11 @@ class ValidatableTest {
                         age = PositiveEvenIntContainer(44),
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
-                    )
+                    ),
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions()
+                options = ProcessingOptions(),
             )
 
             when (result) {
@@ -62,12 +62,12 @@ class ValidatableTest {
                         FirstName("James"),
                         LastName("Clavell"),
                         Address(Street("Some street")),
-                        picture = null
-                    )
+                        picture = null,
+                    ),
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions()
+                options = ProcessingOptions(),
             )
 
             when (result) {
@@ -95,11 +95,11 @@ class ValidatableTest {
                         age = PositiveEvenIntContainer(44),
                         secretToken = SecretPasscode(345),
                         //favouriteColleague = null
-                    )
+                    ),
                 
                 ),
                 context = Ctx.system(),
-                options = ProcessingOptions()
+                options = ProcessingOptions(),
             )
 
             when (result) {

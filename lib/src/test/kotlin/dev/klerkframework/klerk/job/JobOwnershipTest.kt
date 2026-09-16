@@ -14,14 +14,14 @@ import kotlin.time.Instant
 class JobOwnershipTest {
 
     private fun jobOwnedBy(owner: ActorIdentity) = JobInfo(
-        id = JobId(1),
+        id = JobID(1),
         name = JobName("test"),
         step = 0,
         attempt = 0,
         createdAt = Instant.DISTANT_PAST,
         priority = JobPriority.Interactive,
         parent = null,
-        root = JobId(1),
+        root = JobID(1),
         depth = 0,
         status = JobStatus.Ready,
         progress = null,

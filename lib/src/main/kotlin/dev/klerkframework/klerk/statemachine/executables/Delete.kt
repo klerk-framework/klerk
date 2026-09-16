@@ -6,7 +6,7 @@ import dev.klerkframework.klerk.statemachine.Executable
 import dev.klerkframework.klerk.storage.ModelCache
 
 internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>(
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -25,19 +25,18 @@ internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
                     problems = listOf(
                         StateProblem(
                             endUserTranslatedMessage = "Cannot delete since it is used elsewhere.",
-                            internalDescription = "Cannot delete model ${model.id} since these models have a reference to it: ${
-                                currentReferencesToModel.joinToString(", ") { it.toString() }
-                            }",
-                            KlerkErrorCode.BrokenReference
-                        )
-                    )
+                            internalDescription = "Cannot delete model ${model.id} since these models have a " +
+                                "reference to it: ${currentReferencesToModel.joinToString(", ")}",
+                            KlerkErrorCode.BrokenReference,
+                        ),
+                    ),
                 )
             }
         }
         return ProcessingData(
             deletedModels = listOf(model.id),
             functionsToUpdateViews = listOf { view.internalDidDelete(model) },
-            log = listOf("Deleting model ${model.id}")
+            log = listOf("Deleting model ${model.id}"),
         )
     }
 

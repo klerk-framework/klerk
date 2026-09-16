@@ -102,7 +102,7 @@ class NestedPropsTest {
         klerk.handle(Command(CreateBook, params), Ctx.system())
 
     private fun startWithBookRules(
-        rules: VoidEventRulesWithParameters<Book, CreateBookParams, Ctx, Views>.(Views) -> Unit
+        rules: VoidEventRulesWithParameters<Book, CreateBookParams, Ctx, Views>.(Views) -> Unit,
     ) = runBlocking {
         val bookViews = BookViews()
         val views = Views(bookViews, AuthorViews(bookViews.all))

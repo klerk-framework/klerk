@@ -15,7 +15,8 @@ import kotlin.time.Duration.Companion.seconds
 
 class ModelModificationTest {
 
-    private val pippiParameters = createAstridParameters.copy(firstName = FirstName("Pippi"), phone = PhoneNumber("+4611111"))
+    private val pippiParameters =
+        createAstridParameters.copy(firstName = FirstName("Pippi"), phone = PhoneNumber("+4611111"))
 
     @Test
     fun `subscribers are told which class of model changed`() = runBlocking {
@@ -42,7 +43,8 @@ class ModelModificationTest {
     @Test
     fun `only changes of the subscribed model are sent`() = runBlocking {
         val klerk = startedKlerk()
-        val astrid = klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system()).getOrThrow().primaryModel!!
+        val astrid =
+            klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system()).getOrThrow().primaryModel!!
         val pippi = klerk.handle(Command(CreateAuthor, pippiParameters), Ctx.system()).getOrThrow().primaryModel!!
         val got = mutableListOf<ModelModification>()
         val received = async(start = CoroutineStart.UNDISPATCHED) {
@@ -67,7 +69,8 @@ class ModelModificationTest {
             klerk.modelChanges.subscribe(null, Ctx.unauthenticated()).onEach { got += it }.take(3).toList()
         }
 
-        val astrid = klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system()).getOrThrow().primaryModel!!
+        val astrid =
+            klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system()).getOrThrow().primaryModel!!
         val pippi = klerk.handle(Command(CreateAuthor, pippiParameters), Ctx.system()).getOrThrow().primaryModel!!
         klerk.handle(Command(DeleteAuthor, astrid), Ctx.system()).getOrThrow()
 

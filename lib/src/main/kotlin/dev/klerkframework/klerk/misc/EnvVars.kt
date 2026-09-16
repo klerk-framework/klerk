@@ -28,6 +28,6 @@ internal fun envDuration(name: String): Duration? {
 internal inline fun <reified T : Enum<T>> envEnum(name: String): T? {
     val value = System.getenv(name) ?: return null
     return enumValues<T>().firstOrNull { it.name == value } ?: throw IllegalArgumentException(
-        "Environment variable $name must be one of ${enumValues<T>().joinToString { it.name }}, was '$value'"
+        "Environment variable $name must be one of ${enumValues<T>().joinToString { it.name }}, was '$value'",
     )
 }

@@ -33,7 +33,7 @@ class AttachedStringContainerTest {
     ): CommandResult<Note> = klerk.handle(
         Command(
             CreateNote,
-            CreateNoteParams(NoteTitle("Reminder"), NoteBody(body))
+            CreateNoteParams(NoteTitle("Reminder"), NoteBody(body)),
         ),
         context,
     )

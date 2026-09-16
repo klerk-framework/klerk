@@ -29,7 +29,7 @@ class ReaderTest {
                 FirstName("Anakin"),
                 LastName("Skywalker"),
                 Address(Street("Tatooine")),
-                picture = null
+                picture = null,
             )
             val originalAuthor = Model(
                 id = ref,
@@ -38,7 +38,7 @@ class ReaderTest {
                 lastStateTransitionAt = Clock.System.now(),
                 state = "test",
                 timeTrigger = null,
-                props = originalAuthorProps
+                props = originalAuthorProps,
             )
 
             klerk.unsafe.create(originalAuthor, Ctx.unauthenticated())

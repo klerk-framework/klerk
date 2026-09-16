@@ -17,7 +17,7 @@ class ModelIDTest {
         }
 
         listOf(
-            Int.MIN_VALUE, Int.MAX_VALUE, Int.MAX_VALUE - 1, 1, 0, -1, 1234, 23642645, -1254287
+            Int.MIN_VALUE, Int.MAX_VALUE, Int.MAX_VALUE - 1, 1, 0, -1, 1234, 23642645, -1254287,
         ).forEach { testInt(it) }
 
         val rand = Random(System.currentTimeMillis())

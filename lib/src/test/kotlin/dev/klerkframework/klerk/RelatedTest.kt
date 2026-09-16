@@ -29,8 +29,8 @@ class RelatedTest {
                     previousBooksInSameSeries = emptyList(),
                     tags = emptySet(),
                     averageScore = AverageScore(0f),
-                    readingTime = ReadingTime(1.days)
-                )
+                    readingTime = ReadingTime(1.days),
+                ),
             )
 
             when (val result = klerk.handle(
@@ -38,7 +38,7 @@ class RelatedTest {
                 Ctx.system(),
             )) {
                 is CommandResult.Failure -> assert(
-                    result.problems.first().asException().message!!.contains("Did not find")
+                    result.problems.first().asException().message!!.contains("Did not find"),
                 )
 
                 is CommandResult.Success -> fail("Should not succeed")

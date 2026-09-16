@@ -9,12 +9,15 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
+/**
+ * What has happened in the application recently, as [dev.klerkframework.klerk.Klerk.activityLog]. Kept in memory only.
+ */
 public interface ActivityLog {
 
     /**
      * Adds an entry to the activity log. Subscribers will be informed about the entry.
      */
-    public fun add(entry: LogEntry): Unit
+    public fun add(entry: LogEntry)
 
     /**
      * A snapshot of the buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include
@@ -65,18 +68,14 @@ internal class ActivityLogImpl : ActivityLog {
         return synchronized(content) { content.toList() }
     }
 
-    override fun subscribe(): SharedFlow<LogEntry> {
-        return logEntryFlow
-    }
+    override fun subscribe(): SharedFlow<LogEntry> = logEntryFlow
 
-    override fun subscribeToReads(): SharedFlow<LogEntry> {
-        return logEntryReadFlow
-    }
+    override fun subscribeToReads(): SharedFlow<LogEntry> = logEntryReadFlow
 
     /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
     internal fun addReads(models: List<Model<*>>, context: KlerkContext) {
-        models.forEach {
-            logEntryReadFlow.tryEmit(LogReadModel(it, context))
+        for (model in models) {
+            logEntryReadFlow.tryEmit(LogReadModel(model, context))
         }
     }
 
@@ -97,10 +96,14 @@ public class LogSource(public val major: MajorSource, public val minor: String? 
  * via `{name}` placeholders (see [LogEntry.headingTemplate]).
  */
 public class Fact(
+    /** The kind of value. */
     public val type: FactType,
+    /** The name used for the `{name}` placeholder. */
     public val name: String,
+    /** The value, as text. */
     public val value: String,
-    public val verb: FactVerb? = null
+    /** The action the fact describes, if any. */
+    public val verb: FactVerb? = null,
 )
 
 /** The kind of value a [Fact] carries. */
@@ -127,13 +130,22 @@ public enum class FactVerb {
     Read,
 }
 
-/** One entry in [ActivityLog]. Implement to define a new kind of loggable event (core Klerk, a plugin, or the application). */
+/**
+ * One entry in [ActivityLog]. Implement to define a new kind of loggable event (core Klerk, a plugin, or the
+ * application).
+ */
 public interface LogEntry {
+    /** When it happened. */
     public val time: Instant
+    /** Who did it, if anyone. */
     public val actor: dev.klerkframework.klerk.ActorIdentity?
+    /** Which part of the system produced the entry. */
     public val source: LogSource
 
-    /** A short machine-readable name for this kind of entry, e.g. for filtering. Distinct from a Klerk [dev.klerkframework.klerk.Event]. */
+    /**
+     * A short machine-readable name for this kind of entry, e.g. for filtering. Distinct from a Klerk
+     * [dev.klerkframework.klerk.Event].
+     */
     public val kind: String
 
     /**

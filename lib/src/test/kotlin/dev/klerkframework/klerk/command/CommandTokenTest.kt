@@ -41,7 +41,7 @@ class CommandTokenTest {
             klerk.handle(
                 Command(
                     CreateAuthor,
-                    createAstridParameters
+                    createAstridParameters,
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),
@@ -50,7 +50,7 @@ class CommandTokenTest {
             val result = klerk.handle(
                 Command(
                     CreateAuthor,
-                    createAstridParameters
+                    createAstridParameters,
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),
@@ -79,7 +79,7 @@ class CommandTokenTest {
             klerk.handle(
                 Command(
                     ImproveAuthor,
-                    astrid
+                    astrid,
                 ),
                 Ctx.system(),
             ).getOrThrow()
@@ -87,7 +87,7 @@ class CommandTokenTest {
             val result = klerk.handle(
                 Command(
                     DeleteAuthor,
-                    astrid
+                    astrid,
                 ),
                 Ctx.system(),
                 ProcessingOptions(token),

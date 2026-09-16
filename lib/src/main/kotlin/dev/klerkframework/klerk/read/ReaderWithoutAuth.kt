@@ -41,7 +41,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         before: Instant,
     ): PendingRead<List<EventLogEntry>> = eventLogQuery(klerk, id, after, before)
 
-    override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> = eventLogEntryQuery(klerk, sequenceNumber)
+    override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> =
+        eventLogEntryQuery(klerk, sequenceNumber)
 
     override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = ModelCache.referencingIds(id)
 
@@ -55,23 +56,21 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         id: ModelID<*>,
     ): Set<Model<T>> = ModelCache.referencing(property, id)
 
-    override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> {
-        return ModelCache.referencing(clazz, id)
-    }
+    override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
+        ModelCache.referencing(clazz, id)
 
     override fun <T : Any> query(
         collection: ModelView<T, C>,
         options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
+        filter: ((Model<T>) -> Boolean)?,
     ): QueryResponse<T> = queryInternal(collection, options, filter, null)
 
     /**
      * Cuts one page out of [collection], in the view's own order.
      *
      * One pass over the view's ids. Models outside the page are read only when [authorize] or [filter] has to look at
-     * them; both run before the page is cut, so a page is full whenever enough models match.
-     *
-     * @param authorize applied before [filter], and may replace the model (masked properties). Returning null drops it.
+     * them; both run before the page is cut, so a page is full whenever enough models match. [authorize] is applied
+     * before [filter], and may replace the model (masked properties). Returning null drops it.
      */
     internal fun <T : Any> queryInternal(
         collection: ModelView<T, C>,
@@ -86,9 +85,9 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
         // Where the page starts, relative to the item the cursor points at.
         val delta = when (opts.direction) {
-            PageDirection.FROM -> 0
-            PageDirection.AFTER -> 1
-            PageDirection.BEFORE -> -maxItems
+            PageDirection.From -> 0
+            PageDirection.After -> 1
+            PageDirection.Before -> -maxItems
         }
         // How far the cursor's position may move when its anchor is found somewhere else than where it was cut.
         val slack = if (anchor == null) 0 else maxItems
@@ -129,7 +128,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         // it — beyond that we are no longer looking at the same part of the view.
         val anchorIndex = anchor?.let { wanted ->
             val inWindow = window.indexOfFirst { it.id.value == wanted }
-            if (inWindow < 0) null else (windowFrom + inWindow).takeIf { it in (cursorOffset - maxItems)..(cursorOffset + maxItems) }
+            val nearCursor = (cursorOffset - maxItems)..(cursorOffset + maxItems)
+            if (inWindow < 0) null else (windowFrom + inWindow).takeIf { it in nearCursor }
         }
         val resolved = anchorIndex ?: cursorOffset
         val pageStart = maxOf(0, resolved + delta)
@@ -172,15 +172,12 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
     override fun <T : Any> queryOrThrow(
         collection: ModelView<T, C>,
         options: QueryOptions?,
-        filter: ((Model<T>) -> Boolean)?
+        filter: ((Model<T>) -> Boolean)?,
     ): QueryResponse<T> = queryInternal(collection, options, filter, null)
 
-    override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
-        return ModelCache.getOrNull(id)
-    }
+    override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? = ModelCache.getOrNull(id)
 
-    override fun <T : Any> get(id: ModelID<T>): Model<T> {
-        return getOrNull(id) ?: throw NoSuchElementException("Could not find model with id=$id")
-    }
+    override fun <T : Any> get(id: ModelID<T>): Model<T> =
+        getOrNull(id) ?: throw NoSuchElementException("Could not find model with id=$id")
 
 }

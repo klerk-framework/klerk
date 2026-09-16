@@ -2,7 +2,7 @@ package dev.klerkframework.klerk.ecosystem
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 
 /*
 These classes and interfaces are not used by core Klerk. The purpose of them is to form a foundation for plugins so
@@ -35,7 +35,8 @@ explicit dependency to PostmarkEmailService.
  * A plain-data email description, independent of any specific email provider. Used by [EmailSender] so plugins can
  * depend on "something that sends email" without depending on a specific provider plugin.
  *
- * @throws IllegalArgumentException if neither [htmlBody] nor [textBody] is set, or if [to]/[cc]/[bcc] exceed 50 recipients
+ * @throws IllegalArgumentException if neither [htmlBody] nor [textBody] is set, or if [to]/[cc]/[bcc] exceed 50
+ * recipients
  */
 public data class BasicEmail(
     val from: EmailAndName,
@@ -51,20 +52,19 @@ public data class BasicEmail(
 
     init {
         require(htmlBody != null || textBody != null) { "At least one of textBody and htmlBody must be set" }
-        require(to.size <= maxRecipients) { "Too many recipients (max is ${maxRecipients})" }
-        require(cc.size <= maxRecipients) { "Too many cc (max is ${maxRecipients})" }
-        require(bcc.size <= maxRecipients) { "Too many bcc (max is ${maxRecipients})" }
+        require(to.size <= maxRecipients) { "Too many recipients (max is $maxRecipients)" }
+        require(cc.size <= maxRecipients) { "Too many cc (max is $maxRecipients)" }
+        require(bcc.size <= maxRecipients) { "Too many bcc (max is $maxRecipients)" }
     }
 
+    /** An email address and the name of its owner. [name] may be empty. */
     public data class EmailAndName(val email: String, val name: String) {
         init {
             require(email.isNotEmpty())
             // more validation? Which??
         }
 
-        override fun toString(): String {
-            return if (name.isEmpty()) email else "$name <$email>"
-        }
+        override fun toString(): String = if (name.isEmpty()) email else "$name <$email>"
 
         public companion object {
             /**
@@ -89,16 +89,17 @@ public data class BasicEmail(
  * rationale behind these ecosystem interfaces.
  */
 public interface EmailSender<C : KlerkContext, V> {
+    /** The sender used when the application does not specify one. */
     public val defaultFromAddress: BasicEmail.EmailAndName
 
     /**
-     * Sends [email], or schedules it.
+     * Sends [email], or schedules it. Returns the [JobID] if sending was scheduled as a background job, or null if it
+     * was sent directly.
      *
-     * @return the [JobId] if sending was scheduled as a background job, or null if it was sent directly.
      * @throws Exception if the email could not be sent or scheduled
      */
-    public suspend fun sendEmail(email: BasicEmail, context: C): JobId?
+    public suspend fun sendEmail(email: BasicEmail, context: C): JobID?
 
-    /** @return the command that would send [email], if this sender can express sending as a command, else `null`. */
+    /** The command that would send [email], if this sender can express sending as a command, else `null`. */
     public fun sendEmailCommand(email: BasicEmail): Command<out Any, out Any>?
 }

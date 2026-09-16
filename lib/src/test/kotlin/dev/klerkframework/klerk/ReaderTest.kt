@@ -51,7 +51,7 @@ class ReaderTest {
                 assertEquals(2, booksRelatedToRowling.size)
                 assertEquals(
                     "Harry Potter and the Philosopher's Stone",
-                    booksRelatedToRowling.first().props.title.value
+                    booksRelatedToRowling.first().props.title.value,
                 )
 
                 val authorsRelatedToRowling = referencing(Author::class, rowling)
@@ -67,7 +67,7 @@ class ReaderTest {
                 assertEquals(1, booksWhereLinusIsCoAuthor.size)
                 assertEquals(
                     "Harry Potter and the Chamber of Secrets",
-                    booksWhereLinusIsCoAuthor.first().props.title.value
+                    booksWhereLinusIsCoAuthor.first().props.title.value,
                 )
             }
 
@@ -160,8 +160,8 @@ class ReaderTest {
                 Command(ImproveAuthor, astrid),
                 Ctx.system(),
                 ProcessingOptions(
-                    CommandToken.simple()
-                )
+                    CommandToken.simple(),
+                ),
             )
             val harryPotter1 = createBookHarryPotter1(klerk, rowling)
             createBookHarryPotter2(klerk, astrid, listOf(harryPotter1), setOf(astrid))

@@ -30,7 +30,7 @@ class MyValidEventParams(
     val list: List<NonEmptyString>,
     val firstContainer: FirstContainer,
     val containerList: List<FirstContainer>,
-    val containerSet: Set<FirstContainer>
+    val containerSet: Set<FirstContainer>,
 )
 
 data class FirstContainer(val stringTwo: NonEmptyString, val secondContainer: SecondContainer)
@@ -50,5 +50,5 @@ class MyInvalidEventParams(
     val list: List<NonEmptyString>,
     val firstContainer: FirstContainer,
     val containerList: List<FirstContainer>,
-    val containerSet: Set<BadContainer>
+    val containerSet: Set<BadContainer>,
 )

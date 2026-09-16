@@ -8,7 +8,7 @@ import dev.klerkframework.klerk.statemachine.UnmanagedJob
 
 internal class RunUnmanagedJob<T : Any, A, C : KlerkContext, V>(
     val action: (args: A) -> Unit,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -23,10 +23,10 @@ internal class RunUnmanagedJob<T : Any, A, C : KlerkContext, V>(
                 UnmanagedJob(
                     f = { action(args) },
                     function = action,
-                    description = "Action: ${extractNameFromFunction(action)}"
-                )
+                    description = "Action: ${extractNameFromFunction(action)}",
+                ),
             ),
-            log = listOf("Adding action '${extractNameFromFunction(action)}'")
+            log = listOf("Adding action '${extractNameFromFunction(action)}'"),
         )
 
 }

@@ -40,6 +40,7 @@ public class MutableClock(initial: Instant) : Clock {
     /** Moves the clock forward by [duration] and returns the new time. */
     public fun advance(duration: Duration): Instant = current.updateAndGet { it.plus(duration) }
 
+    /** Moves the clock forward by [duration]. */
     public operator fun plusAssign(duration: Duration) {
         advance(duration)
     }

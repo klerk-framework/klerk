@@ -120,7 +120,8 @@ class ObjectSchemaTest {
         val e = assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaLambdaValidated::class) }
         assertEquals(KlerkErrorCode.RuleMustBeNamed, e.code)
         assertFailsWith<IllegalConfigurationException> { LambdaValidated(1).validate("number", DefaultTranslation) }
-        val validatable = assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaLambdaValidatable::class) }
+        val validatable =
+            assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaLambdaValidatable::class) }
         assertEquals(KlerkErrorCode.RuleMustBeNamed, validatable.code)
     }
 
@@ -128,7 +129,7 @@ class ObjectSchemaTest {
     fun `Only public classes are accepted`() {
         assertTrue(
             assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaInternalClass::class) }
-                .message!!.contains("SchemaInternalClass is not public")
+                .message!!.contains("SchemaInternalClass is not public"),
         )
         assertFailsWith<IllegalConfigurationException> { ObjectSchema.of(SchemaOuter.Nested::class) }
     }
@@ -142,11 +143,10 @@ class ObjectSchemaTest {
 
     @Test
     fun `Leaves are found in nested objects and collections`() {
-        val paths = mutableListOf<String>()
-        ObjectSchema.of(SchemaPerson::class).forEachLeaf(person) { paths.add(it.path) }
+        val paths = ObjectSchema.of(SchemaPerson::class).leaves(person).map { it.path }.toList()
         assertEquals(
             listOf("name", "address.street", "address.owner", "nicknames[0]", "nicknames[1]", "friends[0]"),
-            paths
+            paths,
         )
     }
 
@@ -194,18 +194,28 @@ class ObjectSchemaTest {
 
     @Test
     fun `A rule is described by its function name`() {
-        assertEquals("ContextValidation: sampleRule", RuleDescription(::sampleRule, RuleType.ContextValidation).toString())
+        val description = RuleDescription(::sampleRule, RuleType.ContextValidation)
+        assertEquals("ContextValidation: sampleRule", description.toString())
     }
 }
 
 private fun sampleRule(context: Ctx): PropertyCollectionValidity = Valid
 
-class SchemaShort(value: Short) : ShortContainer(value) { override val min = 0.toShort(); override val max = 9.toShort() }
+class SchemaShort(value: Short) : ShortContainer(value) {
+    override val min = 0.toShort()
+    override val max = 9.toShort()
+}
 class SchemaByte(value: Byte) : ByteContainer(value) { override val min = 0.toByte(); override val max = 9.toByte() }
 class SchemaUInt(value: UInt) : UIntContainer(value) { override val min = 0u; override val max = 9u }
 class SchemaULong(value: ULong) : ULongContainer(value) { override val min = 0uL; override val max = 9uL }
-class SchemaUShort(value: UShort) : UShortContainer(value) { override val min = 0.toUShort(); override val max = 9.toUShort() }
-class SchemaUByte(value: UByte) : UByteContainer(value) { override val min = 0.toUByte(); override val max = 9.toUByte() }
+class SchemaUShort(value: UShort) : UShortContainer(value) {
+    override val min = 0.toUShort()
+    override val max = 9.toUShort()
+}
+class SchemaUByte(value: UByte) : UByteContainer(value) {
+    override val min = 0.toUByte()
+    override val max = 9.toUByte()
+}
 class SchemaDouble(value: Double) : DoubleContainer(value) { override val min = 0.0; override val max = 9.0 }
 
 data class SchemaNumbers(

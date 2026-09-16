@@ -2,7 +2,7 @@ package dev.klerkframework.klerk.storage.spi
 
 import dev.klerkframework.klerk.AttachedDataMetadata
 import dev.klerkframework.klerk.AttachedDataVisibility
-import dev.klerkframework.klerk.job.JobId
+import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.storage.Persistence
 import kotlin.time.Instant
 
@@ -21,7 +21,7 @@ public data class AttachedDataRow<T>(
     val owner: Int?,
     val metadata: AttachedDataMetadata,
     val expires: Instant?,
-    val claimedByJob: JobId? = null,
+    val claimedByJob: JobID? = null,
 )
 
 /**
@@ -37,8 +37,8 @@ public data class AttachedDataDigest(
 )
 
 /**
- * The changes to attached data that a command implies (see [dev.klerkframework.klerk.KlerkAttachedData]). Applied in the
- * same transaction as the models, so a failing command leaves the data untouched.
+ * The changes to attached data that a command implies (see [dev.klerkframework.klerk.KlerkAttachedData]). Applied in
+ * the same transaction as the models, so a failing command leaves the data untouched.
  *
  * Blobs and strings share one id space, so neither map needs to distinguish between them.
  *
@@ -49,6 +49,7 @@ public data class AttachedDataDelta(
     val claimed: Map<Int, AttachedDataClaim> = emptyMap(),
     val deleted: Set<Int> = emptySet(),
 ) {
+    /** True if nothing changes. */
     public fun isEmpty(): Boolean = claimed.isEmpty() && deleted.isEmpty()
 }
 

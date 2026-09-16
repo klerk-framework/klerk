@@ -16,7 +16,7 @@ class ProcessingFactTest {
             firstName = FirstName("Astrid"),
             lastName = LastName("Lindgren"),
             address = Address(Street("Storgatan 1")),
-            picture = null
+            picture = null,
         )
         val authorModel = Model(
             id = authorId,
@@ -25,12 +25,12 @@ class ProcessingFactTest {
             lastPropsUpdatedAt = Instant.DISTANT_PAST,
             state = "first",
             timeTrigger = null,
-            props = author
+            props = author,
         )
 
         val withTransition = ProcessingData<Author, Ctx, Views>(
             currentModel = authorId,
-            unFinalizedTransition = Triple("second", transitionTime, authorModel)
+            unFinalizedTransition = Triple("second", transitionTime, authorModel),
         )
 
         val withUpdate = ProcessingData<Author, Ctx, Views>(
@@ -38,9 +38,9 @@ class ProcessingFactTest {
             aggregatedModelState = mapOf(
                 authorId to authorModel.copy(
                     lastPropsUpdatedAt = updateTime,
-                    props = author.copy(firstName = FirstName("Another"))
-                )
-            )
+                    props = author.copy(firstName = FirstName("Another")),
+                ),
+            ),
         )
 
         @Suppress("UNCHECKED_CAST")

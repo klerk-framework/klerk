@@ -12,7 +12,7 @@ import kotlin.time.Clock
 val algorithmParams = AlgorithmParams(
     State(threadMessage = true, userSubscribed = true, userDnd = true, dndOverride = true),
     Preferences(channelMuted = false, false, false, Everything),
-    "Hejsan @everyone"
+    "Hejsan @everyone",
 )
 
 
@@ -32,8 +32,8 @@ class FlowChartAlgorithmTest {
             firstName = FirstName("Astrid"),
             lastName = LastName("Lindgren"),
             address = Address(Street("Storgatan 12")),
-            picture = null
-        )
+            picture = null,
+        ),
     )
 
     @Test
@@ -44,7 +44,7 @@ class FlowChartAlgorithmTest {
         assertEquals(4, resultWithLogs.first)
         assertEquals(
             "ChannelMuted=false -> UserInDnD=true -> DnDOverride=true -> ChannelEveryoneHereMessage=true -> Result: 4",
-            resultWithLogs.second
+            resultWithLogs.second,
         )
     }
 
@@ -55,8 +55,20 @@ class FlowChartAlgorithmTest {
         val resultWithLogs = ShouldSendNotificationAlgorithm.executeWithLogs(args)
         assertEquals(true, resultWithLogs.first)
         assertEquals(
-            "ChannelMuted=false -> UserInDnD=true -> DnDOverride=true -> ChannelEveryoneHereMessage=true -> ChannelMentionsSuppressed=false -> ThreadMessageAndUserSubscribed2=true -> ThreadsEverythingPrefOn=false -> WhatIsTheUserChannelNotificationPrefForThisDevice=Everything -> ThreadMessage1=true -> UserSubscribed1=true -> Result: true",
-            resultWithLogs.second
+            listOf(
+                "ChannelMuted=false",
+                "UserInDnD=true",
+                "DnDOverride=true",
+                "ChannelEveryoneHereMessage=true",
+                "ChannelMentionsSuppressed=false",
+                "ThreadMessageAndUserSubscribed2=true",
+                "ThreadsEverythingPrefOn=false",
+                "WhatIsTheUserChannelNotificationPrefForThisDevice=Everything",
+                "ThreadMessage1=true",
+                "UserSubscribed1=true",
+                "Result: true",
+            ).joinToString(" -> "),
+            resultWithLogs.second,
         )
     }
 }
@@ -67,19 +79,19 @@ data class State(
     val threadMessage: Boolean,
     val userSubscribed: Boolean,
     val userDnd: Boolean,
-    val dndOverride: Boolean
+    val dndOverride: Boolean,
 )
 
 data class Preferences(
     val channelMuted: Boolean,
     val channelMentionsSurpressed: Boolean,
     val threadsEverything: Boolean,
-    val channelNotification: ChannelNotificationPref
+    val channelNotification: ChannelNotificationPref,
 )
 
 sealed class ShowNotificationDecisions<T>(
     override val name: String,
-    override val function: (InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) -> T
+    override val function: (InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) -> T,
 ) : Decision<T, InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>> {
 
     data object ChannelMuted : ShowNotificationDecisions<Boolean>("Is channel muted?", ::isChannelMuted)
@@ -104,19 +116,21 @@ sealed class ShowNotificationDecisions<T>(
         ShowNotificationDecisions<Boolean>("threads_everything pref on?", ::threadsEverythingPrefOn)
 
     data object ChannelNotificationPrefIsNothing : ShowNotificationDecisions<Boolean>(
-        "Channel notification pref is 'nothing'?", ::channelNotificationPrefIsNothing
+        "Channel notification pref is 'nothing'?", ::channelNotificationPrefIsNothing,
     )
 
     data object WhatIsTheUserChannelNotificationPrefForThisDevice : ShowNotificationDecisions<ChannelNotificationPref>(
         "What is the user channel notification pref for this device?",
-        ::whatIsTheUserChannelNotificationPrefForThisDevice
+        ::whatIsTheUserChannelNotificationPrefForThisDevice,
     )
 
     data object ThreadMessage1 : ShowNotificationDecisions<Boolean>("Thread message?", ::threadMessage)
     data object UserSubscribed1 : ShowNotificationDecisions<Boolean>("User subscribed?", ::userSubscribed)
 }
 
-fun whatIsTheUserChannelNotificationPrefForThisDevice(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): ChannelNotificationPref =
+fun whatIsTheUserChannelNotificationPrefForThisDevice(
+    params: InstanceEventArgs<Author, Nothing?, Ctx, Views>,
+): ChannelNotificationPref =
     algorithmParams.preferences.channelNotification
 
 fun channelNotificationPrefIsNothing(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
@@ -199,11 +213,12 @@ object MyAlgoWhichReturnsInt :
 }
 
 // Note that the functions in this algorithm are not pure since they use algorithmParams rather than the BlockParams.
-// The reason of this is that we want to test with a complicated algorithm (inspired by https://d34u8crftukxnk.cloudfront.net/slackpress/prod/sites/7/0_PV_09olld6K1l8jQ.png)
+// The reason of this is that we want to test with a complicated algorithm (inspired by
+// https://d34u8crftukxnk.cloudfront.net/slackpress/prod/sites/7/0_PV_09olld6K1l8jQ.png)
 object ShouldSendNotificationAlgorithm :
-    FlowChartAlgorithm<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Boolean>("Should we send a notification?") {
+    FlowChartAlgorithm<InstanceEventArgs<Author, Nothing?, Ctx, Views>, Boolean>("Should we send a notification?") {
 
-    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Boolean>.() -> Unit =
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, Nothing?, Ctx, Views>, Boolean>.() -> Unit =
         {
             start(ChannelMuted)
 

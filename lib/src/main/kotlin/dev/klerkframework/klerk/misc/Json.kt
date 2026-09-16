@@ -13,8 +13,8 @@ import kotlin.time.Duration.Companion.microseconds
  * The JSON that model props and event parameters are stored as.
  *
  * Driven by each class's [ObjectSchema]: an object has exactly one key per constructor parameter, a [DataContainer] is
- * written as its value (regardless of authorization) and a [ModelID] as a number. Decoding is strict: an unknown key, a missing
- * key (also for a nullable property or one with a default value) or a value of the wrong type throws
+ * written as its value (regardless of authorization) and a [ModelID] as a number. Decoding is strict: an unknown key, a
+ * missing key (also for a nullable property or one with a default value) or a value of the wrong type throws
  * [JsonMismatchException].
  */
 internal object KlerkJson {
@@ -58,8 +58,8 @@ private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
     return when (val shape = type.shape) {
         is Shape.Container -> encodeContainer(shape.kind, value as DataContainer<*>)
         Shape.Reference -> JsonPrimitive((value as ModelID<*>).value)
-        Shape.BlobId -> JsonPrimitive((value as AttachedBlobID).value)
-        Shape.StringId -> JsonPrimitive((value as AttachedStringID).value)
+        Shape.BlobID -> JsonPrimitive((value as AttachedBlobID).value)
+        Shape.StringID -> JsonPrimitive((value as AttachedStringID).value)
         is Shape.Many -> JsonArray((value as Collection<*>).map { encodeValue(shape.element, it) })
         is Shape.Nested -> encodeObject(shape.schema, value)
     }
@@ -68,7 +68,8 @@ private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
 private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): JsonElement {
     val value = container.rawValue
     return when (kind) {
-        ContainerKind.AttachedBlob, ContainerKind.AttachedString -> JsonPrimitive((container as AttachedDataContainer<*>).rawId)
+        ContainerKind.AttachedBlob, ContainerKind.AttachedString ->
+            JsonPrimitive((container as AttachedDataContainer<*>).rawId)
         ContainerKind.String -> JsonPrimitive(value as String)
         ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).value.name)
         ContainerKind.Int -> JsonPrimitive(value as Int)
@@ -115,8 +116,8 @@ private fun decodeValue(type: SchemaType, json: JsonElement, path: String): Any?
             construct(shape.kClass.simpleName, path) { shape.create(decodeContainerArgument(shape, json, path)) }
 
         Shape.Reference -> ModelID<Any>(json.int(path))
-        Shape.BlobId -> AttachedBlobID(json.int(path))
-        Shape.StringId -> AttachedStringID(json.int(path))
+        Shape.BlobID -> AttachedBlobID(json.int(path))
+        Shape.StringID -> AttachedStringID(json.int(path))
         is Shape.Many -> {
             val array = json as? JsonArray ?: mismatch(path, "is ${describe(json)}, expected an array")
             val items = array.mapIndexed { index, item -> decodeValue(shape.element, item, "$path[$index]") }
@@ -192,8 +193,7 @@ private fun JsonElement.number(path: String, expected: String): JsonPrimitive {
 
 private fun JsonElement.int(path: String): Int {
     val content = number(path, "an integer").content
-    return content.toIntOrNull()
-        ?: mismatch(path, if (content.toLongOrNull() != null) "is too large for an Int" else "is ${describe(this)}, expected an integer")
+    return content.toIntOrNull() ?: integerMismatch(path, content, "an Int")
 }
 
 private fun JsonElement.long(path: String): Long =
@@ -201,15 +201,18 @@ private fun JsonElement.long(path: String): Long =
 
 private fun JsonElement.short(path: String): Short {
     val content = number(path, "an integer").content
-    return content.toShortOrNull()
-        ?: mismatch(path, if (content.toLongOrNull() != null) "is too large for a Short" else "is ${describe(this)}, expected an integer")
+    return content.toShortOrNull() ?: integerMismatch(path, content, "a Short")
 }
 
 private fun JsonElement.byte(path: String): Byte {
     val content = number(path, "an integer").content
-    return content.toByteOrNull()
-        ?: mismatch(path, if (content.toLongOrNull() != null) "is too large for a Byte" else "is ${describe(this)}, expected an integer")
+    return content.toByteOrNull() ?: integerMismatch(path, content, "a Byte")
 }
+
+private fun JsonElement.integerMismatch(path: String, content: String, type: String): Nothing = mismatch(
+    path,
+    if (content.toLongOrNull() != null) "is too large for $type" else "is ${describe(this)}, expected an integer",
+)
 
 private fun JsonElement.uLong(path: String): ULong {
     val primitive = this as? JsonPrimitive
@@ -248,4 +251,5 @@ private fun JsonElement.boolean(path: String): Boolean =
         ?: mismatch(path, "is ${describe(this)}, expected a boolean")
 
 private fun JsonElement.string(path: String): String =
-    (this as? JsonPrimitive)?.takeIf { it.isString }?.content ?: mismatch(path, "is ${describe(this)}, expected a string")
+    (this as? JsonPrimitive)?.takeIf { it.isString }?.content
+        ?: mismatch(path, "is ${describe(this)}, expected a string")

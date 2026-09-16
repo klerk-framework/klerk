@@ -18,7 +18,7 @@ private fun <C : KlerkContext, V> List<DeclaredJob<C, V>>.withIds(
 
 internal class ScheduleJobs<T : Any, A, C : KlerkContext, V>(
     val f: (args: A) -> List<DeclaredJob<C, V>>,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -29,14 +29,14 @@ internal class ScheduleJobs<T : Any, A, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = f.invoke(args).withIds(processingOptions),
-        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'")
+        log = listOf("Adding jobs using '${extractNameFromFunction(f)}'"),
     )
 
 }
 
 internal class ScheduleJob<T : Any, A, C : KlerkContext, V>(
     val f: (args: A) -> DeclaredJob<C, V>,
-    override val onCondition: ((args: A) -> Boolean)?
+    override val onCondition: ((args: A) -> Boolean)?,
 ) : Executable<T, A, C, V> {
 
     override fun <Primary : Any> process(
@@ -47,7 +47,7 @@ internal class ScheduleJob<T : Any, A, C : KlerkContext, V>(
         processingDataSoFar: ProcessingData<Primary, C, V>,
     ): ProcessingData<Primary, C, V> = ProcessingData(
         newJobs = listOf(f.invoke(args)).withIds(processingOptions),
-        log = listOf("Adding job using '${extractNameFromFunction(f)}'")
+        log = listOf("Adding job using '${extractNameFromFunction(f)}'"),
     )
 
 }

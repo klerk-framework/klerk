@@ -11,7 +11,7 @@ class JobResultValueTest {
     data class ImportSummary(val imported: Int, val skipped: Int = 0)
 
     private fun outcome(result: String?) = ChildOutcome(
-        id = JobId(1),
+        id = JobID(1),
         name = JobName("child"),
         status = JobStatus.Succeeded,
         result = result,

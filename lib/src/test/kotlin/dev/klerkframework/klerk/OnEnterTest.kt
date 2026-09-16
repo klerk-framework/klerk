@@ -42,7 +42,7 @@ class OnEnterTest {
 
             val result = klerk.handle(
                 Command(
-                    ImproveAuthor, rowling
+                    ImproveAuthor, rowling,
                 ),
                 Ctx.system(),
             )

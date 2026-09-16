@@ -24,7 +24,7 @@ internal interface TriggerTimeManager {
 internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
     val eventsManager: EventsManagerImpl<C, V>,
     val readWriteLock: ReadWriteLock,
-    val klerk: KlerkImpl<C, V>
+    val klerk: KlerkImpl<C, V>,
 ) : TriggerTimeManager {
 
     private var worker: Job? = null
@@ -34,8 +34,8 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
         require(worker == null)
         val modelsWithTriggers = models.filter { it.timeTrigger != null }
         timeTriggers = PriorityBlockingQueue<TimeTriggerModel>(max(modelsWithTriggers.size, 1000))
-        modelsWithTriggers.forEach {
-            timeTriggers.add(TimeTriggerModel(it.timeTrigger!!, it.id.value))
+        for (modelsWithTrigger in modelsWithTriggers) {
+            timeTriggers.add(TimeTriggerModel(modelsWithTrigger.timeTrigger!!, modelsWithTrigger.id.value))
         }
     }
 
@@ -93,7 +93,10 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
             return true
         }
         if (model.timeTrigger == null || model.timeTrigger > now) {
-            logger.error { "I thought that model ${model.id} should be time-triggered but on a closer look it is not the case. Times: ${model.timeTrigger?.toEpochMilliseconds()} - ${now.toEpochMilliseconds()}" }
+            logger.error {
+                "I thought that model ${model.id} should be time-triggered but on a closer look it is not the case. " +
+                    "Times: ${model.timeTrigger?.toEpochMilliseconds()} - ${now.toEpochMilliseconds()}"
+            }
             return true
         }
         eventsManager.modelTriggeredByTime(model, now)

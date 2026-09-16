@@ -26,25 +26,31 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
      *
      * The [command] (if any), the spawned children, the new [cursor] and the [progress] all commit together, and the
      * job is then re-queued at the tail of its priority class — or moved to [JobStatus.Waiting] if [awaitSpawned].
-     *
-     * @param cursor the job's state for the next step. Serialized by Klerk; treat its type as a persisted schema.
-     * @param command at most one command, applied on the job's behalf. Its outcome is handed to the next step as
-     * `previousResult`.
-     * @param options processing options for [command], e.g. `ProcessingOptions(CommandToken.requireUnmodifiedModel(id))`
-     * to make the step conditional on the model not having changed. Defaults to a plain token.
-     * @param spawn children to schedule. Declared rather than scheduled imperatively so that a step which throws after
-     * scheduling cannot spawn them twice on the retry.
-     * @param awaitSpawned if true the job moves to [JobStatus.Waiting] and is re-queued once every job in [spawn] —
-     * and every job spawned in earlier steps that is still outstanding — has reached a terminal status. The outcomes
-     * arrive as `args.children`.
-     * @param progress how far the job has got, for display.
      */
     public data class Yield<Cursor, C : KlerkContext, V>(
+        /** The job's state for the next step. Serialized by Klerk; treat its type as a persisted schema. */
         public val cursor: Cursor,
+        /**
+         * At most one command, applied on the job's behalf. Its outcome is handed to the next step as `previousResult`.
+         */
         public val command: Command<*, *>? = null,
+        /**
+         * Processing options for [command], e.g. `ProcessingOptions(CommandToken.requireUnmodifiedModel(id))` to make
+         * the step conditional on the model not having changed. Defaults to a plain token.
+         */
         public val options: ProcessingOptions? = null,
+        /**
+         * Children to schedule. Declared rather than scheduled imperatively so that a step which throws after
+         * scheduling cannot spawn them twice on the retry.
+         */
         public val spawn: List<DeclaredJob<C, V>> = emptyList(),
+        /**
+         * If true, the job moves to [JobStatus.Waiting] and is re-queued once every job in [spawn] — and every job
+         * spawned in earlier steps that is still outstanding — has reached a terminal status. The outcomes arrive as
+         * `args.children`.
+         */
         public val awaitSpawned: Boolean = false,
+        /** How far the job has got, for display. */
         public val progress: JobProgress? = null,
         override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Cursor, C, V> {
@@ -58,16 +64,21 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
 
     /**
      * Done. The job is not retried.
-     *
-     * @param command an optional final command, committed together with the terminal status. Convenient, but you never
-     * get to see its result — [Yield] instead if the outcome matters.
-     * @param result a value handed to the parent job (if any) as [ChildOutcome.result]. Klerk stores it as a string:
-     * encode it with [encodeJobResult] and the parent decodes it with [ChildOutcome.resultAs].
      */
     public data class Success(
+        /**
+         * An optional final command, committed together with the terminal status. Convenient, but you never get to see
+         * its result — [Yield] instead if the outcome matters.
+         */
         public val command: Command<*, *>? = null,
+        /** Processing options for [command]. */
         public val options: ProcessingOptions? = null,
+        /** How far the job got, for display. */
         public val progress: JobProgress? = null,
+        /**
+         * A value handed to the parent job (if any) as [ChildOutcome.result]. Klerk stores it as a string: encode it
+         * with [encodeJobResult] and the parent decodes it with [ChildOutcome.resultAs].
+         */
         public val result: String? = null,
         override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>
@@ -78,6 +89,7 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
      * Retried with exponential backoff (base 3 s) until the type's `maxRetries` is reached, then dead-lettered.
      */
     public data class Fail(
+        /** Why the attempt failed, for the job's log. */
         public val reason: String,
         override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>
@@ -85,12 +97,14 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
     /**
      * This will never work — the account no longer exists, the file is malformed. Straight to the dead letter with no
      * retries.
-     *
-     * @param runHook whether to run `onDeadLettered`. Set it to false when aborting *is* the correct end state and
-     * there is deliberately nothing to compensate.
      */
     public data class Abort(
+        /** Why the job gave up, for a human looking at the dead letter. */
         public val reason: String,
+        /**
+         * Whether to run `onDeadLettered`. Set it to false when aborting *is* the correct end state and there is
+         * deliberately nothing to compensate.
+         */
         public val runHook: Boolean = true,
         override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>

@@ -12,7 +12,7 @@ import kotlin.time.Instant
 internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
     val initialState: ModelStates,
     val f: (args: VoidEventArgs<T, P, C, V>) -> T,
-    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?
+    override val onCondition: ((args: VoidEventArgs<T, P, C, V>) -> Boolean)?,
 ) : Executable<T, VoidEventArgs<T, P, C, V>, C, V> {
 
     override fun <Primary : Any> process(
@@ -44,7 +44,7 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
         }
         val sm = specification.getStateMachine(created)
         val voidExitBlock = sm.voidState.exitBlock
-        val enterBlock = sm.mutableStates.single { it.name == initialState.name }.enterBlock
+        val enterBlock = sm.states.single { it.name == initialState.name }.enterBlock
         return ProcessingData(
             createdModels = listOf(created.id),
             unFinalizedTransition = Triple(initialState.name, time, created),
@@ -69,7 +69,7 @@ internal fun validateModelProps(props: Any, translation: Translation): List<Prob
                 message,
                 message,
                 violatedRule = RuleDescription(rule, RuleType.ModelValidation),
-                code = KlerkErrorCode.CommandModelValidation
+                code = KlerkErrorCode.CommandModelValidation,
             )
         }
     }

@@ -19,10 +19,11 @@ package dev.klerkframework.klerk.attacheddata
 public fun interface ContentTypeDetector {
 
     /**
-     * @param head up to [SNIFF_LENGTH] bytes from the start of the value.
-     * @return an IANA media type, or null when the bytes match nothing known. Null is not a verdict: plenty of
-     * legitimate values (CSV, an unknown binary format) have no signature at all, so a caller deciding whether to
-     * reject has to say what "unrecognised" means for it.
+     * Returns the IANA media type of the value whose first bytes (up to [SNIFF_LENGTH]) are [head], or null when the
+     * bytes match nothing known.
+     *
+     * Null is not a verdict: plenty of legitimate values (CSV, an unknown binary format) have no signature at all, so a
+     * caller deciding whether to reject has to say what "unrecognised" means for it.
      */
     public fun detect(head: ByteArray): String?
 
@@ -37,8 +38,8 @@ public fun interface ContentTypeDetector {
 
 /**
  * The default [ContentTypeDetector]: a short list of magic-byte signatures for the formats an application is likely
- * to declare in a [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], not an attempt at a complete format database.
- * Has no dependencies beyond the JDK.
+ * to declare in a [dev.klerkframework.klerk.datatypes.AttachedBlobContainer], not an attempt at a complete format
+ * database. Has no dependencies beyond the JDK.
  */
 public object DefaultContentTypeDetector : ContentTypeDetector {
     override fun detect(head: ByteArray): String? = detectContentType(head)
@@ -49,7 +50,7 @@ private fun detectContentType(head: ByteArray): String? {
         return null
     }
 
-    signatures.forEach { (signature, contentType) ->
+    for ((signature, contentType) in signatures) {
         if (head.startsWith(signature.offset, signature.bytes)) {
             // A few formats share a prefix and need a second look further in.
             if (signature.confirm?.invoke(head) != false) {
@@ -108,7 +109,7 @@ private fun ByteArray.startsWith(offset: Int, prefix: ByteArray): Boolean {
     if (size < offset + prefix.size) {
         return false
     }
-    prefix.indices.forEach { i ->
+    for (i in prefix.indices) {
         if (this[offset + i] != prefix[i]) {
             return false
         }

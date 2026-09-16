@@ -8,7 +8,7 @@ package dev.klerkframework.klerk
  */
 @RequiresOptIn(
     level = RequiresOptIn.Level.ERROR,
-    message = "This is an experimental part of Klerk and may change or be removed in any release."
+    message = "This is an experimental part of Klerk and may change or be removed in any release.",
 )
 @Retention(AnnotationRetention.BINARY)
 @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY, AnnotationTarget.TYPEALIAS)
