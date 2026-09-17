@@ -153,6 +153,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      * Declares the authorization rules that govern reads, commands, the event log, and attached data. Required — see
      * [AuthorizationRulesBlock] for the sub-blocks, or [AuthorizationRulesBlock.allowEverythingInsecurely] to opt out
      * of authorization entirely (development/testing only).
+     *
+     * A rule runs under the lock of whatever it guards — the command mutex, or the read lock — so one that throws
+     * propagates out of `handle`/`read`, and one that does IO delays everything else. See docs/concurrency.md.
      */
     public fun authorization(init: AuthorizationRulesBlock<C, V>.() -> Unit) {
         authorizationRulesBlock = AuthorizationRulesBlock<C, V>()

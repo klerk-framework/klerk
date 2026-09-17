@@ -53,7 +53,7 @@ private val stringListSerializer = ListSerializer(String.serializer())
  * attached data, jobs), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
  * Model `props` and command `params` are stored as JSON.
  */
-public class SqlPersistence(dataSource: DataSource) : Persistence {
+public class SqlPersistence(private val dataSource: DataSource) : Persistence {
 
     private val database: Database
     override var currentModelSchemaVersion: Int = 0
@@ -646,5 +646,7 @@ public class SqlPersistence(dataSource: DataSource) : Persistence {
             }
         }
     }
+
+    override fun toString(): String = "SqlPersistence($dataSource)"
 
 }

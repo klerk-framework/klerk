@@ -11,6 +11,10 @@ import dev.klerkframework.klerk.read.unauthorized
  *
  * Views are read through [ModelReader] (the `count`/`asSequence`/`query` extensions), never queried
  * directly — that's what makes their content authorization-checked and lock-consistent with the rest of a read.
+ *
+ * A subclass only has to implement [memberIds], but it must keep two promises: the order it returns is stable
+ * between calls as long as the data has not changed, and it reads nothing except through the [ModelReader] it is
+ * given.
  */
 public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: ModelView<T, C>?) {
 
@@ -147,7 +151,12 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         }
     }
 
-    /** Returns a new view containing only models matching [filter]. */
+    /**
+     * Returns a new view containing only models matching [filter].
+     *
+     * [filter] is evaluated inside the read block, under the read lock, so it must not throw or do IO. See
+     * docs/concurrency.md.
+     */
     public open fun filter(filter: (Model<T>) -> Boolean): ModelView<T, C> = FilteredModelView(this, filter)
 
     /**
@@ -165,7 +174,12 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         return new
     }
 
-    /** Returns a new view with the same models, ordered by [selector]. */
+    /**
+     * Returns a new view with the same models, ordered by [selector].
+     *
+     * [selector] is evaluated inside the read block, under the read lock, so it must not throw or do IO. See
+     * docs/concurrency.md.
+     */
     public fun <R : Comparable<R>> sorted(selector: (Model<T>) -> R, ascending: Boolean = true): ModelView<T, C> {
         val new = SortedModelView(this, selector, ascending)
         return new
@@ -238,6 +252,9 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     /** The id given to [register], or null for a view that was never registered. Available before startup. */
     internal val registeredId: String? get() = _id
+
+    override fun toString(): String =
+        "${this::class.simpleName}(${idBase ?: "?"}.${_id ?: "unregistered"})"
 
     internal fun setIdBase(idBase: String?) {
         this.idBase = idBase

@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
 
 plugins {
     kotlin("jvm") version "2.4.10"
-    kotlin("plugin.serialization") version "2.3.10"
+    kotlin("plugin.serialization") version "2.4.10"
     `java-library`
     `maven-publish`
     id("org.jetbrains.dokka") version "2.2.0"
@@ -65,6 +65,11 @@ java {
 kotlin {
     jvmToolchain(17)
     explicitApi = ExplicitApiMode.Strict
+    compilerOptions {
+        // Pinned, so a Kotlin upgrade cannot silently move the language or the API consumers compile against.
+        languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_4)
+        apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_4)
+    }
 }
 
 // Klerk's own tests exercise the experimental API.

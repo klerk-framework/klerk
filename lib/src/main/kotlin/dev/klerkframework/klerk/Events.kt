@@ -18,15 +18,15 @@ public data class EventReference(val modelName: String, val eventName: String) {
     override fun toString(): String = "$modelName:$eventName"
 
     public companion object {
-        /** @throws IllegalArgumentException if [eventId] is not of the form `<modelName>:<eventName>` */
-        public fun parse(eventId: String): EventReference {
-            val splitted = eventId.split(":")
+        /** @throws IllegalArgumentException if [value] is not of the form `<modelName>:<eventName>` */
+        public fun parse(value: String): EventReference {
+            val splitted = value.split(":")
             require(splitted.size == 2)
             return EventReference(splitted.first(), splitted.last())
         }
 
-        /** The reference in [eventId], or null if it is not one. */
-        public fun parseOrNull(eventId: String): EventReference? = runCatching { parse(eventId) }.getOrNull()
+        /** The reference in [value], or null if it is not one. */
+        public fun parseOrNull(value: String): EventReference? = runCatching { parse(value) }.getOrNull()
     }
 }
 

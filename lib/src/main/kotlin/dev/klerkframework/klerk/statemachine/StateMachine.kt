@@ -18,7 +18,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal lateinit var modelViews: ModelViews<T, C>
     private val _states: MutableList<State<T, ModelStates, C, V>> = mutableListOf()
     /** Every state, including the void state, in declaration order. */
-    public val states: List<State<T, ModelStates, C, V>> get() = _states
+    public val states: List<State<T, ModelStates, C, V>> get() = _states.toList()
     private lateinit var _voidState: VoidState<T, ModelStates, C, V>
 
     /** The void state — where a model of type [T] is before it exists. Declared with `voidState { }`. */
@@ -37,6 +37,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     private val declaredRules = mutableMapOf<EventReference, DeclaredEventRules>()
 
     internal fun rulesFor(event: EventReference): DeclaredEventRules = declaredRules[event] ?: DeclaredEventRules()
+
+    override fun toString(): String =
+        "StateMachine(${type.simpleName}, states=${_states.joinToString(", ") { it.name }})"
 
     private var voidStateDeclared = false
     private val declaredModelStates = mutableSetOf<ModelStates>()

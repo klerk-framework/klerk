@@ -196,7 +196,9 @@ public typealias BlobPreAttachStep = suspend (BlobPreAttachStepArgs) -> BlobPreA
  * nothing.
  * @property metadata what Klerk knows about the value, including the content type it recognised and the size.
  */
-public class BlobPreAttachStepArgs(public val value: InputStream, public val metadata: AttachedDataMetadata)
+public class BlobPreAttachStepArgs(public val value: InputStream, public val metadata: AttachedDataMetadata) {
+    override fun toString(): String = "BlobPreAttachStepArgs($metadata)"
+}
 
 /**
  * A [BlobPreAttachStep] that does nothing, for an [AttachedBlobContainer] that wants the bytes exactly as they arrived:

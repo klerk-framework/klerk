@@ -85,9 +85,14 @@ public data class ProcessingOptions(
 
 /** Categories of extra logging that can be requested per-command via [ProcessingOptions.debugOptions]. */
 public enum class DebugOption {
+    /** The steps the command goes through. */
     Sequence,
+
+    /** Everything that does not fit the other categories. */
     Misc,
-    Result
+
+    /** The resulting [dev.klerkframework.klerk.CommandResult]. */
+    Result,
 }
 
 /**
@@ -126,22 +131,22 @@ public class CommandToken private constructor(
 
         /**
          * Parses a token previously produced by [CommandToken.toString].
-         * @throws IllegalArgumentException if [string] is not a validly encoded token.
+         * @throws IllegalArgumentException if [value] is not a validly encoded token.
          */
-        public fun parse(string: String): CommandToken {
-            val fields = string.decodeBase64String().split(":").associate { field ->
+        public fun parse(value: String): CommandToken {
+            val fields = value.decodeBase64String().split(":").associate { field ->
                 val keyValue = field.split("=")
                 require(keyValue.size == 2)
                 keyValue.first() to keyValue.last()
             }
             val time = decode64bitMicroseconds(requireNotNull(fields["t"]).toLong())
-            val models = requireNotNull(fields["m"]).let { value ->
-                if (value.isEmpty()) emptySet() else value.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
+            val models = requireNotNull(fields["m"]).let { ids ->
+                if (ids.isEmpty()) emptySet() else ids.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
             }
             return CommandToken(time, models)
         }
 
-        /** The token in [string], or null if it is not one. */
-        public fun parseOrNull(string: String): CommandToken? = runCatching { parse(string) }.getOrNull()
+        /** The token in [value], or null if it is not one. */
+        public fun parseOrNull(value: String): CommandToken? = runCatching { parse(value) }.getOrNull()
     }
 }

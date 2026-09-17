@@ -25,7 +25,7 @@ Now add the dependency in build.gradle.kts:
 
 ```
 dependencies {
-    implementation("com.github.klerk-framework:<version>")
+    implementation("dev.klerkframework:klerk:<version>")
 }
 ```
 

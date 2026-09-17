@@ -91,6 +91,9 @@ public class JobQueueSnapshot internal constructor(
      * its own instead.
      */
     public fun budget(priority: JobPriority): Duration = AdmissionPolicy.defaultBudgets.getValue(priority)
+
+    override fun toString(): String = "JobQueueSnapshot(total=$total, hardLimit=$hardLimit, depths=$depths, " +
+        "running=$running)"
 }
 
 /** The job being considered for admission. */
@@ -101,23 +104,28 @@ public class JobCandidate internal constructor(
     public val priority: JobPriority,
     /** The earliest time the job may run, or null for as soon as possible. */
     public val scheduleAt: Instant?,
-)
+) {
+    override fun toString(): String = "JobCandidate($name, $priority, scheduleAt=$scheduleAt)"
+}
 
 /**
  * The arguments handed to an admission policy.
  *
- * @property context the scheduling actor's context. Note that the policy runs on the single writer inside command
- * processing: **do no IO here**, a database lookup makes every command in the system slower.
+ * The policy runs on the single writer inside command processing: **do no IO here**, a database lookup makes every
+ * command in the system slower.
  */
 public class AdmissionArgs<C : KlerkContext> internal constructor(
     /** The state of the queue right now. */
     public val queue: JobQueueSnapshot,
     /** The job being considered. */
     public val job: JobCandidate,
+    /** The scheduling actor's context. */
     public val context: C,
     /** The current time. */
     public val now: Instant,
-)
+) {
+    override fun toString(): String = "AdmissionArgs($job, $queue, now=$now)"
+}
 
 /**
  * The built-in admission policies.

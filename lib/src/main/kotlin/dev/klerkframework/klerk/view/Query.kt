@@ -36,7 +36,7 @@ public data class QueryOptions(
 ) {
 
     init {
-        require(maxItems > 0)
+        require(maxItems > 0) { "maxItems must be positive but was $maxItems" }
     }
 
 }
@@ -113,25 +113,25 @@ public class QueryListCursor internal constructor(
 
         /**
          * Parses a cursor previously serialized with [QueryListCursor.toString].
-         * @throws IllegalArgumentException if [s] is not a validly encoded cursor
+         * @throws IllegalArgumentException if [value] is not a validly encoded cursor
          */
-        public fun parse(s: String): QueryListCursor {
+        public fun parse(value: String): QueryListCursor {
             val fields = try {
-                s.decodeBase64UrlSafeString().split(",").associate { field ->
+                value.decodeBase64UrlSafeString().split(",").associate { field ->
                     val separator = field.indexOf(':')
                     require(separator > 0)
                     field.substring(0, separator) to field.substring(separator + 1)
                 }
             } catch (e: IllegalArgumentException) {
-                throw IllegalArgumentException("Not a cursor: '$s'", e)
+                throw IllegalArgumentException("Not a cursor: '$value'", e)
             }
             val offset = fields["o"]?.toIntOrNull()
-            require(offset != null && offset >= 0) { "Not a cursor: '$s'" }
-            val anchor = fields["a"]?.let { requireNotNull(it.toIntOrNull()) { "Not a cursor: '$s'" } }
+            require(offset != null && offset >= 0) { "Not a cursor: '$value'" }
+            val anchor = fields["a"]?.let { requireNotNull(it.toIntOrNull()) { "Not a cursor: '$value'" } }
             return QueryListCursor(offset, anchor)
         }
 
-        /** The cursor in [s], or null if it is not one. */
-        public fun parseOrNull(s: String): QueryListCursor? = runCatching { parse(s) }.getOrNull()
+        /** The cursor in [value], or null if it is not one. */
+        public fun parseOrNull(value: String): QueryListCursor? = runCatching { parse(value) }.getOrNull()
     }
 }

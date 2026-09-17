@@ -76,7 +76,7 @@ public interface Persistence {
      * model delta nor an event-log entry.
      *
      * **The contract.** `commitJobStep` MUST apply all of the following in a single atomic unit, and the result MUST
-     * NOT be observable in a partial state by any reader, or by a subsequent [getAllJobs] after a crash:
+     * NOT be observable in a partial state by any reader, or by a subsequent [allJobs] after a crash:
      *
      * 1. the model delta produced by the step's command, if any;
      * 2. the attached-data delta, including new job claims from [JobCommit.attachedDataClaimed];

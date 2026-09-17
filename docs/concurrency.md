@@ -88,3 +88,28 @@ httpClient.post(book.props.title.value)
 
 This matters most for [jobs](jobs.md), which routinely call out to external systems — don't wrap the network call itself
 in a read lock.
+
+## Code you give Klerk
+
+Rules, selectors and callbacks declared in the specification are called by Klerk, on Klerk's threads. Where each one
+runs decides what a slow one costs and what a thrown exception does.
+
+| What you declare | Where it runs | If it throws |
+|---|---|---|
+| Validation rules (`validate`, `validateWithParameters`, `validateWithContext`) | On the calling coroutine, inside the command mutex — one command at a time | Propagates out of `handle`; nothing is committed |
+| Command authorization rules | Same as validation rules | Propagates out of `handle`; nothing is committed |
+| Read authorization rules (model, property, event log, attached data, job) | Inside the read block, under the read lock, on `Dispatchers.IO` | Propagates out of `read`/`readSuspend` |
+| `ModelView.filter` predicates and `sorted` selectors | Inside the read block, under the read lock, on `Dispatchers.IO` | Propagates out of `read`/`readSuspend` |
+| Block executables (`commands`, `jobs`, `job`, `transitionTo`, `update`, `createModel`, `delete`, and their `onCondition`) | On the calling coroutine, inside the command mutex | Propagates out of `handle`; nothing is committed |
+| `ModelViews.didCreate`/`didUpdate`/`didDelete` | Under the write lock, **after** the commit has been written to storage | Propagates out of `handle`, leaving the in-memory cache and views inconsistent with storage |
+| `unmanagedJob` | After the lock is released, in the background | Logged and swallowed |
+| Admission policy | On the single writer, inside command processing | Propagates out of `handle`; nothing is committed |
+
+Two consequences worth keeping in mind:
+
+- **Don't throw from `didCreate`/`didUpdate`/`didDelete`.** They run after the data is already durable, so an exception
+  there cannot undo the command — it only leaves memory out of step with storage until the next restart. Anything that
+  can fail belongs in a validation rule, which runs before anything is written.
+- **Don't do IO in any of them.** Everything above except `unmanagedJob` holds either the command mutex or the read
+  lock. A database lookup or an HTTP call inside a rule makes every other command in the system wait for it. Read what
+  you need from the args, or schedule a [job](jobs.md).

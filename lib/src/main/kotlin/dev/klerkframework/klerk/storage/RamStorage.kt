@@ -10,6 +10,10 @@ import kotlin.time.Instant
 
 /**
  * Keeps all data in memory. Should only be used for testing.
+ *
+ * Open so that a test can subclass it and override any [Persistence] member — counting the reads that reach storage,
+ * or throwing at a chosen commit to simulate a crash. An override is expected to call `super`, since the state every
+ * other member reads is private to this class.
  */
 public open class RamStorage : Persistence {
     private val eventLog = mutableSetOf<EventLogEntry>()
@@ -212,4 +216,6 @@ public open class RamStorage : Persistence {
             cronState[scheduleId] = firedAt
         }
     }
+
+    override fun toString(): String = "RamStorage(models=${models.size}, jobs=${jobs.size})"
 }

@@ -9,7 +9,9 @@ import kotlin.time.Instant
 /** A state in a [StateMachine]. */
 @SpecificationMarker
 public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
-    public val name: String, internal val modelName: String,
+    /** The name of the state, as declared in the state machine. */
+    public val name: String,
+    internal val modelName: String,
 ) {
 
     /** Identifies this state among all state machines. */
@@ -25,6 +27,8 @@ public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
     internal abstract fun getEvents(): Set<Event<T, *>>
     internal abstract fun <P> getBlock(event: Event<T, P>): Block<T, ModelStates, C, V>
+
+    override fun toString(): String = id.toString()
 
 }
 

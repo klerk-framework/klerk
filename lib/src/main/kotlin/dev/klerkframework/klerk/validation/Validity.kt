@@ -19,7 +19,9 @@ public sealed interface PropertyValidity : Validity {
     public class Invalid(
         /** Optional detail passed to [Translation] when building the end-user error message. */
         public val translationInfo: String? = null,
-    ) : PropertyValidity
+    ) : PropertyValidity {
+        override fun toString(): String = "Invalid(${translationInfo ?: ""})"
+    }
 }
 
 /**
@@ -62,6 +64,10 @@ public sealed interface PropertyCollectionValidity : Validity {
                 fieldsMustBeNull = setOfNotNull(fieldMustBeNull),
                 fieldsMustNotBeNull = setOfNotNull(fieldMustNotBeNull),
             )
+
+        override fun toString(): String =
+            "Invalid(${translationInfo ?: ""}, mustBeNull=${fieldMustBeNull?.name}, " +
+                "mustNotBeNull=${fieldMustNotBeNull?.name})"
     }
 }
 
@@ -78,5 +84,7 @@ public sealed interface ContextValidity : Validity {
          * end-user message.
          */
         public val translationInfo: String? = null,
-    ) : ContextValidity
+    ) : ContextValidity {
+        override fun toString(): String = "Invalid(${translationInfo ?: ""})"
+    }
 }

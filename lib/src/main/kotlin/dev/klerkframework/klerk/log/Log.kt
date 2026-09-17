@@ -82,13 +82,20 @@ internal class ActivityLogImpl : ActivityLog {
 }
 
 /** Which part of the system produced a [LogEntry]. */
-public enum class MajorSource() {
-    Core, Plugin, Application,
+public enum class MajorSource {
+    /** Klerk itself. */
+    Core,
+
+    /** A [dev.klerkframework.klerk.KlerkPlugin]. */
+    Plugin,
+
+    /** The application. */
+    Application,
 }
 
 /** Where a [LogEntry] came from: a [major] category plus an optional free-text [minor] detail (e.g. a plugin name). */
 public data class LogSource(public val major: MajorSource, public val minor: String? = null) {
-    override fun toString(): String = "${major.name}: $minor"
+    override fun toString(): String = if (minor == null) major.name else "${major.name}: $minor"
 }
 
 /**
@@ -104,7 +111,9 @@ public class Fact(
     public val value: String,
     /** The action the fact describes, if any. */
     public val verb: FactVerb? = null,
-)
+) {
+    override fun toString(): String = "$name=$value"
+}
 
 /** The kind of value a [Fact] carries. */
 public enum class FactType {

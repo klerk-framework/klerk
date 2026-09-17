@@ -22,17 +22,17 @@ public data class ViewID(val modelName: String, val shortId: String) {
 
     public companion object {
         /**
-         * @throws IllegalArgumentException if [string] is not of the form `v.<modelName>.<shortId>`
+         * @throws IllegalArgumentException if [value] is not of the form `v.<modelName>.<shortId>`
          */
-        public fun parse(string: String): ViewID {
-            val parts = string.split(".")
+        public fun parse(value: String): ViewID {
+            val parts = value.split(".")
             require(parts.size == 3) { "ViewID must contain three parts separated by dots" }
             require(parts.first() == "v") { "ViewID must start with 'v.'" }
             return ViewID(parts[1], parts[2])
         }
 
-        /** The id in [string], or null if it is not one. */
-        public fun parseOrNull(string: String): ViewID? = runCatching { parse(string) }.getOrNull()
+        /** The id in [value], or null if it is not one. */
+        public fun parseOrNull(value: String): ViewID? = runCatching { parse(value) }.getOrNull()
     }
 }
 

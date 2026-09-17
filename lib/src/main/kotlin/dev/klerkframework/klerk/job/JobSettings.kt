@@ -38,9 +38,8 @@ public enum class JobExecution {
     Automatic,
 
     /**
-     * Nothing runs until [dev.klerkframework.klerk.JobManager.step] or
-     * [dev.klerkframework.klerk.JobManager.runUntilIdle] is called. For tests: no background thread, no sleeping, and
-     * a deterministic order.
+     * Nothing runs until [dev.klerkframework.klerk.testing.step] or [dev.klerkframework.klerk.testing.runUntilIdle]
+     * is called. For tests: no background thread, no sleeping, and a deterministic order.
      */
     Manual,
 }

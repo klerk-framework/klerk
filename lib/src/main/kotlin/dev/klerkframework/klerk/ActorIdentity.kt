@@ -93,7 +93,7 @@ public class ModelReferenceIdentity<T : Any>(private val modelId: ModelID<T>) : 
     override val type: ActorType = ActorType.ModelReference
     override val id: ModelID<T> = modelId
     override val externalId: Long? = null
-    override fun toString(): String = "model id: $modelId"
+    override fun toString(): String = "modelId: $modelId"
     override fun equals(other: Any?): Boolean = other is ModelReferenceIdentity<*> && other.id == id
     override fun hashCode(): Int = id.hashCode()
 }
@@ -104,7 +104,7 @@ public class CustomIdentity(
     override val externalId: Long?,
 ) : ActorIdentity {
     override val type: ActorType = ActorType.Custom
-    override fun toString(): String = "[custom]"
+    override fun toString(): String = "[custom] modelId: $id, externalId: $externalId"
     override fun equals(other: Any?): Boolean =
         other is CustomIdentity && other.id == id && other.externalId == externalId
     override fun hashCode(): Int = 31 * id.hashCode() + externalId.hashCode()

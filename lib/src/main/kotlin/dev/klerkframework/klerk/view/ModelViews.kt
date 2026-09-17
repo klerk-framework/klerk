@@ -10,15 +10,26 @@ import dev.klerkframework.klerk.logger
  * initializer, override [initialize]). See docs/views.md.
  */
 public open class ModelViews<T : Any, C : KlerkContext> {
-    /** Called after a model of type `T` was created. Override to react to it; default is a no-op. */
+    /**
+     * Called after a model of type `T` was created. Override to react to it; default is a no-op.
+     *
+     * Runs under the write lock, after the command is already durable, so it must not throw or do IO — see
+     * docs/concurrency.md. Put anything that can fail in a validation rule instead.
+     */
     public open fun didCreate(created: Model<T>) {}
 
     /**
      * Called after a model of type `T` was updated (props and/or state). Override to react to it; default is a no-op.
+     *
+     * Same constraints as [didCreate]: no throwing, no IO.
      */
     public open fun didUpdate(before: Model<T>, after: Model<T>) {}
 
-    /** Called after a model of type `T` was deleted. Override to react to it; default is a no-op. */
+    /**
+     * Called after a model of type `T` was deleted. Override to react to it; default is a no-op.
+     *
+     * Same constraints as [didCreate]: no throwing, no IO.
+     */
     public open fun didDelete(deleted: Model<T>) {}
 
     internal val _all: MutableList<Int> = mutableListOf()
@@ -100,6 +111,8 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     }
 
     /** All views of this model type that were [ModelView.register]ed, including [all]. */
-    public val views: List<ModelView<T, C>> get() = modelViews
+    public val views: List<ModelView<T, C>> get() = modelViews.toList()
+
+    override fun toString(): String = "${this::class.simpleName}(views=${modelViews.size}, models=${_all.size})"
 
 }

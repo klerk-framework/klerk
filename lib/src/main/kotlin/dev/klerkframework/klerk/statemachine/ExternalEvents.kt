@@ -13,6 +13,9 @@ import kotlin.reflect.KProperty1
  * rules are attached. See [dev.klerkframework.klerk.statemachine.StateMachine.event].
  *
  * Every rule must be a named function reference, e.g. `validate(::myRule)`. A lambda is rejected when Klerk starts.
+ *
+ * Rules run inside the command mutex, so one that throws fails the command without committing anything, and one that
+ * does IO delays every other command. See docs/concurrency.md.
  */
 @SpecificationMarker
 public abstract class EventRules<C : KlerkContext> {
@@ -112,8 +115,8 @@ public class VoidEventRulesNoParameters<T : Any, C : KlerkContext, V> : EventRul
     internal val withoutParametersValidationRules = mutableSetOf<ValidationRule<VoidEventArgs<T, Nothing?, C, V>>>()
 
     /** Adds a rule that validates against [VoidEventArgs]. */
-    public fun validate(f: (VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
-        withoutParametersValidationRules.add(f)
+    public fun validate(function: (VoidEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+        withoutParametersValidationRules.add(function)
     }
 }
 
@@ -125,7 +128,7 @@ public class InstanceEventRulesNoParameters<T : Any, C : KlerkContext, V> : Even
     internal val withoutParametersValidationRules = mutableSetOf<ValidationRule<InstanceEventArgs<T, Nothing?, C, V>>>()
 
     /** Adds a rule that validates against [InstanceEventArgs]. */
-    public fun validate(f: (InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
-        withoutParametersValidationRules.add(f)
+    public fun validate(function: (InstanceEventArgs<T, Nothing?, C, V>) -> PropertyCollectionValidity) {
+        withoutParametersValidationRules.add(function)
     }
 }

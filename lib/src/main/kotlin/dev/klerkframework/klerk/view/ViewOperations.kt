@@ -11,7 +11,10 @@ import dev.klerkframework.klerk.read.viewReader
  * taken as a context parameter, so inside a `klerk.read { }` block (where it is the receiver) or a
  * `with(args.reader) { }` block it does not have to be written out.
  *
- * They are ordered by cost. See docs/reading.md.
+ * They are ordered by cost.
+ *
+ * The `OrThrow` suffix is deliberately the opposite of the standard library's: the plain `asSequence`/`query` skip
+ * the models the actor may not read, and the `OrThrow` variants throw. See docs/reading.md.
  */
 
 /**

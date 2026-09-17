@@ -38,6 +38,10 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     /**
      * What every block can do, whatever triggered it. [A] is the block's args type: [VoidEventArgs] in a void
      * `onEvent`, [InstanceEventArgs] in an instance `onEvent`, [LifecycleArgs] in `onEnter`/`onExit`/`after`/`atTime`.
+     *
+     * Every function here (and every `onCondition`) runs inside the command mutex, so one that throws fails the
+     * command without committing anything, and one that does IO delays every other command. [unmanagedJob] is the
+     * exception: it runs after the commit. See docs/concurrency.md.
      */
     public sealed class ExecutableBlock<
         T : Any,

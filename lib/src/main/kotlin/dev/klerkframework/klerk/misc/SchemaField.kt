@@ -142,7 +142,9 @@ public enum class PropertyType {
 }
 
 /** A value found by [ObjectSchema.leaves]. [path] is e.g. `address.street` or `tags[1]`. */
-public class Leaf internal constructor(public val path: String, public val field: SchemaField, public val value: Any)
+public class Leaf internal constructor(public val path: String, public val field: SchemaField, public val value: Any) {
+    override fun toString(): String = "$path=$value"
+}
 
 /** A place found by [ObjectSchema.leafFields]. [path] is e.g. `address.street` or `tags`. */
 internal class LeafField(val path: String, val field: SchemaField, val shape: Shape)

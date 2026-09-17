@@ -77,11 +77,20 @@ public data class RuleDescription(val function: Function<Any>, val type: RuleTyp
 
 /** Which kind of rule produced a [RuleDescription]. */
 public enum class RuleType {
+    /** A rule that validates the event parameters. */
     ParametersValidation,
+
+    /** A `validateWithContext` rule, which sees the context alone. */
     ContextValidation,
+
+    /** A rule that validates the event parameters together with the context. */
     ParametersAndContextValidation,
+
+    /** A rule declared on the model props, checking the model the event would produce. */
     ModelValidation,
-    Authorization
+
+    /** An authorization rule. */
+    Authorization,
 }
 
 /** The actor was not authorized to submit this command. */
@@ -211,25 +220,61 @@ public class PersistedModelValidationException(
  * removed or modified, the old code should not be reused.
  */
 public enum class KlerkErrorCode(public val code: String) {
+    /** An event was used in a command, but it is not declared in any state machine. */
     EventNotDeclared("ERROR-SPEC-1"),
+
+    /** A property holding model references lacks a `validReferences` declaration. */
     MissingValidReferences("ERROR-SPEC-2"),
+
+    /** The specification has no `systemContextProvider`. */
     MissingSystemContextProvider("ERROR-SPEC-3"),
+
+    /** The specification has no `authorization` block. */
     MissingAuthorization("ERROR-SPEC-4"),
+
+    /** The specification has no `managedModels`. */
     MissingManagedModels("ERROR-SPEC-5"),
+
+    /** A model property is not a [dev.klerkframework.klerk.datatypes.DataContainer]. */
     PropertyMustBeDataContainer("ERROR-SPEC-6"),
+
+    /** A job was scheduled by a name that is not registered in the `jobs` block. */
     UnregisteredJobName("ERROR-SPEC-7"),
+
+    /** A stored job cursor cannot be deserialized into the type its job declares. */
     UnloadableJobCursor("ERROR-SPEC-8"),
+
+    /** A job needs a context, but the specification has no `jobContextProvider`. */
     MissingJobContextProvider("ERROR-SPEC-9"),
+
+    /** A model property is a bare [dev.klerkframework.klerk.AttachedBlobID] instead of an `AttachedBlobContainer`. */
     BlobMustBeDeclaredInAContainer("ERROR-SPEC-10"),
+
+    /** An `AttachedBlobContainer` declares no pre-attach step. */
     MissingPreAttachStep("ERROR-SPEC-11"),
+
+    /** A model property is a bare `AttachedStringID` instead of an `AttachedStringContainer`. */
     StringMustBeDeclaredInAContainer("ERROR-SPEC-12"),
+
+    /** A validation rule refers to a property the model does not have. */
     ValidationRuleForUnknownProperty("ERROR-SPEC-13"),
+
+    /** A rule was given as a lambda; it must be a named function reference (`::myRule`). */
     RuleMustBeNamed("ERROR-SPEC-14"),
+
+    /** A state machine is not usable, e.g. it has an unreachable state or a duplicate event. */
     InvalidStateMachine("ERROR-SPEC-15"),
+
+    /** A migration step is not usable. */
     InvalidMigration("ERROR-SPEC-16"),
+
+    /** A view is not usable, e.g. it filters on a state belonging to another model. */
     InvalidView("ERROR-SPEC-17"),
 
+    /** Blobs are used, but [dev.klerkframework.klerk.KlerkSettings] has no `attachedBlobStore`. */
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
+
+    /** The configured `attachedBlobStore` does not have the bytes for blobs the database refers to. */
     AttachedBlobStoreMissingData("ERROR-SETTINGS-3"),
 
     /** A stored model does not match its model class. */
@@ -238,45 +283,100 @@ public enum class KlerkErrorCode(public val code: String) {
     /** A stored model no longer passes validation. */
     PersistedModelInvalid("ERROR-STORAGE-2"),
 
+    /** A cross-property validation rule was violated, e.g. two mutually-exclusive properties were both non-null. */
     InvalidPropertyCollection("ERROR-VALIDATION-1"),
+
+    /** A property failed validation. */
     InvalidProperty("ERROR-VALIDATION-2"),
 
     /** A `validateWithContext` rule refused the command. No property was examined. */
     PreventedByRule("ERROR-VALIDATION-3"),
 
+    /** A bug in Klerk itself, or in configured code, prevented processing. */
     Internal("ERROR-INTERNAL-1"),
 
     /** The server cannot process commands right now, e.g. because it has not been started or is shutting down. */
     ServerNotAvailable("ERROR-SERVER-1"),
 
+    /** The command referenced a model, or referenced data, that does not exist. */
     NotFound("ERROR-USER-1"),
 
+    /** A negative authorization rule refused the command. */
     CommandNegativeAuthorizationExist("ERROR-AUTH-1"),
+
+    /** No positive authorization rule allowed the command. */
     CommandPositiveAuthorizationMissing("ERROR-AUTH-2"),
+
+    /** A negative authorization rule refused the read. */
     ReadNegativeAuthorizationExist("ERROR-AUTH-3"),
+
+    /** No positive authorization rule allowed the read. */
     ReadPositiveAuthorizationMissing("ERROR-AUTH-4"),
+
+    /** No positive authorization rule allowed reading the event log. */
     EventLogPositiveAuthorizationMissing("ERROR-AUTH-5"),
+
+    /** A negative authorization rule refused reading the event log. */
     EventLogNegativeAuthorizationExist("ERROR-AUTH-6"),
+
+    /** The actor may read the model, but not this property. */
     UnauthorizedPropertyRead("ERROR-AUTH-7"),
+
+    /** No positive authorization rule allowed reading the attached data. */
     AttachedDataReadPositiveAuthorizationMissing("ERROR-AUTH-8"),
+
+    /** A negative authorization rule refused reading the attached data. */
     AttachedDataReadNegativeAuthorizationExist("ERROR-AUTH-9"),
+
+    /** No positive authorization rule allowed writing attached data. */
     AttachedDataWritePositiveAuthorizationMissing("ERROR-AUTH-10"),
+
+    /** A negative authorization rule refused writing attached data. */
     AttachedDataWriteNegativeAuthorizationExist("ERROR-AUTH-11"),
+
+    /** No positive authorization rule allowed reading the job. */
     JobReadPositiveAuthorizationMissing("ERROR-AUTH-12"),
+
+    /** A negative authorization rule refused reading the job. */
     JobReadNegativeAuthorizationExist("ERROR-AUTH-13"),
+
+    /** A read bypassed authorization, but `KlerkSettings.allowBypassAuthRead` is off. */
     BypassAuthReadNotAllowed("ERROR-AUTH-14"),
 
+    /** The event cannot create a model, i.e. it is not declared in the void state. */
     EventNotPossibleInVoidState("ERROR-COMMAND-1"),
+
+    /** The model's current state does not handle the event. */
     EventNotPossibleInState("ERROR-COMMAND-2"),
+
+    /** The command refers to a model of another type than the event expects. */
     ModelTypeMismatch("ERROR-COMMAND-3"),
+
+    /** The event's visibility is lower than the command requires. */
     EventVisibilityTooLow("ERROR-COMMAND-4"),
+
+    /** The [dev.klerkframework.klerk.command.CommandToken] has already been used. */
     CommandTokenAlreadyUsed("ERROR-COMMAND-5"),
+
+    /** The model changed after the [dev.klerkframework.klerk.command.CommandToken] was created. */
     ModelModifiedSinceTokenCreation("ERROR-COMMAND-6"),
+
+    /** The resulting model failed validation. */
     CommandModelValidation("ERROR-COMMAND-7"),
+
+    /** A model cannot be deleted, because other models still reference it. */
     BrokenReference("ERROR-COMMAND-8"),
+
+    /** The attached data the command refers to does not exist. */
     AttachedDataNotFound("ERROR-COMMAND-9"),
+
+    /** The attached data is already owned by another model. */
     AttachedDataAlreadyOwned("ERROR-COMMAND-10"),
+
+    /** A pre-attach step refused the file, or it is not what the property wants. */
     AttachedDataNotAcceptable("ERROR-COMMAND-11"),
+
+    /** The attached data has not finished being checked by its pre-attach steps. */
     AttachedDataNotProcessed("ERROR-COMMAND-12"),
 
     /**
@@ -284,7 +384,11 @@ public enum class KlerkErrorCode(public val code: String) {
      * retries, spawned children and end-of-life hooks are never refused.
      */
     JobQueueOverloaded("ERROR-JOB-1"),
+
+    /** The job does not exist. */
     JobNotFound("ERROR-JOB-2"),
+
+    /** The job has already finished, so it cannot be cancelled or modified. */
     JobAlreadyTerminal("ERROR-JOB-3");
 
     override fun toString(): String = code

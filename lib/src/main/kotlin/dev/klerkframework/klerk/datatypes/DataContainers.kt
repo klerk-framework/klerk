@@ -365,15 +365,15 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
 
         /**
          * Deserializes a GeoPosition from an ISO 6709 string, e.g. "+48.8577+002.2950/".
-         * @throws IllegalArgumentException if [iso6709] is not such a string
+         * @throws IllegalArgumentException if [value] is not such a string
          */
-        public fun parse(iso6709: String): GeoPosition {
-            val s = iso6709.trimEnd('/')
+        public fun parse(value: String): GeoPosition {
+            val s = value.trimEnd('/')
             // Find the second sign character (+ or -) which starts the longitude
             val lonStart = s.indexOfFirst { it == '+' || it == '-' }.let { first ->
-                require(first == 0) { "Invalid ISO 6709 string: $iso6709" }
+                require(first == 0) { "Invalid ISO 6709 string: $value" }
                 s.drop(1).indexOfFirst { it == '+' || it == '-' }.let { rel ->
-                    require(rel >= 0) { "Invalid ISO 6709 string: $iso6709" }
+                    require(rel >= 0) { "Invalid ISO 6709 string: $value" }
                     rel + 1
                 }
             }
@@ -382,8 +382,8 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
             return GeoPosition(latitude, longitude)
         }
 
-        /** The position in [iso6709], or null if it is not an ISO 6709 string. */
-        public fun parseOrNull(iso6709: String): GeoPosition? = runCatching { parse(iso6709) }.getOrNull()
+        /** The position in [value], or null if it is not an ISO 6709 string. */
+        public fun parseOrNull(value: String): GeoPosition? = runCatching { parse(value) }.getOrNull()
     }
 }
 

@@ -88,6 +88,8 @@ public class FileBlobStore(private val root: Path) : AttachedBlobStore.External 
         require(Files.isWritable(root)) { "The blob store directory $root is not writable" }
     }
 
+    override fun toString(): String = "FileBlobStore($root)"
+
     override fun put(id: Int, value: InputStream) {
         val target = pathFor(id)
         Files.createDirectories(target.parent)

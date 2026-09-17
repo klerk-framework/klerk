@@ -95,6 +95,8 @@ public class ObjectSchema<T : Any> private constructor(
     /** The field called [name], or null if there is none. */
     public fun field(name: String): SchemaField? = fields.firstOrNull { it.name == name }
 
+    override fun toString(): String = "ObjectSchema(${kClass.simpleName}: ${fields.joinToString(", ") { it.name }})"
+
     /**
      * Creates an instance from values keyed by field name. A field that is left out gets the default value of its
      * constructor parameter.

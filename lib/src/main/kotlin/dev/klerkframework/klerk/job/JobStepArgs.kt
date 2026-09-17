@@ -53,18 +53,15 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      * The outcome of the command the previous step emitted, or null on the first step and whenever the previous step
      * emitted none.
      *
-     * A [CommandResult.Failure] here is **data, not a job failure** — the model may simply have moved on while the job
-     * was queued. The step still counted as completed; decide what to do and return normally.
+     * A [CommandResult.Failure] here is **data, not a job failure** — the model may simply have moved on while
+     * the job was queued. The step still counted as completed; decide what to do and return normally.
      */
-    /** The outcome of the command the previous step returned, if any. */
     public abstract val previousResult: CommandResult<*>?
 
     /** Identity and bookkeeping for the running job: id, step number, attempt, priority, ancestry. */
-    /** The job, as of the start of this step. */
     public abstract val job: JobInfo
 
     /** The context the job runs under, produced from `systemContextProvider` or from the scheduling actor. */
-    /** The context the hook runs under. */
     public abstract val context: C
 
     /**
@@ -76,7 +73,6 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      * `JobResult.Yield(awaitSpawned = true)` the next step is guaranteed to see all of them, because that is what it
      * waited for.
      */
-    /** The outcomes of the children the job awaited. */
     public abstract val children: List<ChildOutcome>
 
     /**
@@ -91,20 +87,22 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
 
     override val time: Instant get() = context.time
 
-    /**
-     * The arguments of a [JobType.Local] step. [reader] reads the models as they are committed right now; it is valid
-     * only for the duration of the step.
-     *
-     * @property klerk the framework itself, for the subsystems a step may need — `attachedData` above all. **Not** for
-     * issuing commands: return the command from the step instead, so that it commits atomically with the checkpoint.
-     * Reading goes through [reader], which is already inside the step's read block.
-     */
+    override fun toString(): String =
+        "JobStepArgs.${this::class.simpleName}(job=${job.id}, step=${job.step}, cursor=$cursor)"
+
+    /** The arguments of a [JobType.Local] step. */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
+        /** Reads the models as they are committed right now; valid only for the duration of the step. */
         public val reader: ModelReader<C, V>,
+        /**
+         * The framework itself, for the subsystems a step may need — `attachedData` above all. **Not** for issuing
+         * commands: return the command from the step instead, so that it commits atomically with the checkpoint.
+         * Reading goes through [reader], which is already inside the step's read block.
+         */
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
         cancellationRequested: Boolean = false,
@@ -128,21 +126,31 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
  * one-command-per-step rule, same atomic checkpointing — so compensation that needs three mutations takes three steps
  * and survives a restart halfway through.
  *
- * @property failedAtCursor the job's cursor at the moment it died, preserved read-only for the life of the job. Use
- * *this*, not the event log, to decide what needs undoing: the cursor is a record your own code designed, while the
- * event log is authorization-gated and may have been erased by retention rules.
- * @property cursor the hook's own cursor, checkpointed separately so that unwinding never destroys [failedAtCursor].
- * It starts out equal to [failedAtCursor].
- * @property reason why the job is ending: the `Fail`/`Abort` reason, or the cancellation reason.
+ * Use [failedAtCursor], not the event log, to decide what needs undoing: the cursor is a record your own code
+ * designed, while the event log is authorization-gated and may have been erased by retention rules. The hook's own
+ * [cursor] is checkpointed separately, so unwinding never destroys [failedAtCursor].
  */
 public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
 
+    /** The hook's own state, as returned by the previous hook step (it starts out equal to [failedAtCursor]). */
     public abstract val cursor: Cursor
+
+    /** The job's cursor at the moment it died, read-only for the life of the hook. */
     public abstract val failedAtCursor: Cursor
+
+    /** Why the job is ending: the `Fail`/`Abort` reason, or the cancellation reason. */
     public abstract val reason: String
+
+    /** The outcome of the command the previous hook step emitted, or null if there was none. */
     public abstract val previousResult: CommandResult<*>?
+
+    /** Identity and bookkeeping for the ending job: id, step number, attempt, priority, ancestry. */
     public abstract val job: JobInfo
+
+    /** The context the hook runs under, produced from `systemContextProvider` or from the scheduling actor. */
     public abstract val context: C
+
+    /** What the job's children reported: every child that has reached a terminal status, oldest first. */
     public abstract val children: List<ChildOutcome>
 
     /** Which hook is running. */
@@ -150,7 +158,10 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
 
     override val time: Instant get() = context.time
 
-    /** @property klerk as on [JobStepArgs.Local.klerk]. */
+    override fun toString(): String =
+        "JobEndArgs.${this::class.simpleName}(job=${job.id}, cursor=$cursor, reason=$reason)"
+
+    /** The arguments of a [JobType.Local] hook step. */
     public class Local<Cursor : Any, C : KlerkContext, V>(
         override val cursor: Cursor,
         override val failedAtCursor: Cursor,
@@ -158,7 +169,9 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
         override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
+        /** Reads the models as they are committed right now; valid only for the duration of the step. */
         public val reader: ModelReader<C, V>,
+        /** As on [JobStepArgs.Local.klerk]. */
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
     ) : JobEndArgs<Cursor, C, V>()
