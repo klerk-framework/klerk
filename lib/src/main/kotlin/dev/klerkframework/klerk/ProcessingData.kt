@@ -3,7 +3,8 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.misc.IdProvider
-import dev.klerkframework.klerk.statemachine.*
+import dev.klerkframework.klerk.statemachine.Block
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import kotlin.time.Instant
 
 /**
@@ -134,7 +135,6 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
             aggregatedModelState = aggStates,
         )
     }
-
 }
 
 internal data class EventProcessingOptions(

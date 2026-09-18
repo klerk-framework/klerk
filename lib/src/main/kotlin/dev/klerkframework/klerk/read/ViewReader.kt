@@ -36,6 +36,5 @@ internal interface ViewReader<C : KlerkContext, V> {
  * @throws IllegalStateException if [this] is a [Reader] Klerk did not create, which cannot read views.
  */
 @Suppress("UNCHECKED_CAST")
-internal fun <C : KlerkContext, V> ModelReader<C, V>.viewReader(): ViewReader<C, V> =
-    this as? ViewReader<C, V>
-        ?: error("${this::class.simpleName} cannot read views; use the Reader from a klerk.read block")
+internal fun <C : KlerkContext, V> ModelReader<C, V>.viewReader(): ViewReader<C, V> = this as? ViewReader<C, V>
+    ?: error("${this::class.simpleName} cannot read views; use the Reader from a klerk.read block")

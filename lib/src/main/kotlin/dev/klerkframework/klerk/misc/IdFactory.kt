@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk.misc
 
-
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.storage.ModelCache
@@ -51,7 +50,6 @@ internal class IdFactory(val isJobIdAvailable: (Long) -> Boolean) : IdProvider {
     private val random = SecureRandom.getInstanceStrong()
 
     override fun <T : Any> getNextModelID(): ModelID<T> {
-
         // We should switch to UInt so we can use the full range. However, there is a problem: KT-69674 (I haven't tried
         // to work around that problem, it is likely possible). And we cannot use negative numbers as it will introduce
         // minus signs.
@@ -74,5 +72,4 @@ internal class IdFactory(val isJobIdAvailable: (Long) -> Boolean) : IdProvider {
             }
         }
     }
-
 }

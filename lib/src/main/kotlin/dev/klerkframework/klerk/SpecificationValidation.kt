@@ -1,10 +1,15 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.attacheddata.instantiateDeclaration
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
-import dev.klerkframework.klerk.job.*
-import dev.klerkframework.klerk.misc.*
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.misc.ContainerKind
+import dev.klerkframework.klerk.misc.KlerkJson
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyKey
+import dev.klerkframework.klerk.misc.Shape
+import dev.klerkframework.klerk.misc.declaringClass
+import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.statemachine.Block
 import dev.klerkframework.klerk.statemachine.Executable
 import dev.klerkframework.klerk.statemachine.InstanceState
@@ -12,9 +17,7 @@ import dev.klerkframework.klerk.statemachine.VoidState
 import dev.klerkframework.klerk.statemachine.executables.Transition
 import dev.klerkframework.klerk.statemachine.executables.TransitionWhen
 import dev.klerkframework.klerk.storage.AttachedBlobStore
-import java.util.*
-import kotlin.reflect.*
-import kotlin.reflect.full.*
+import kotlin.reflect.KClass
 import kotlin.time.Duration
 
 private fun <C : KlerkContext, V> Specification<C, V>.modelsAndParametersMustBeStorable() {
@@ -128,8 +131,8 @@ private fun <C : KlerkContext, V> Specification<C, V>.schedulerJobsMustHaveAJobC
     throw IllegalConfigurationException(
         KlerkErrorCode.MissingJobContextProvider,
         "The job type(s) ${needsOne.joinToString(", ") { "'${it.name.value}'" }} run as JobAgent.Scheduler, " +
-                "which means their commands are applied as the actor that scheduled them. Klerk therefore needs " +
-                "'jobContextProvider(...)' in the specification to build a context for that actor.",
+            "which means their commands are applied as the actor that scheduled them. Klerk therefore needs " +
+            "'jobContextProvider(...)' in the specification to build a context for that actor.",
     )
 }
 
@@ -169,8 +172,8 @@ private fun <C : KlerkContext, V> Specification<C, V>.attachedBlobStoreMustMatch
         throw IllegalConfigurationException(
             KlerkErrorCode.MissingAttachedBlobStore,
             "$where holds a blob, so 'attachedBlobStore' is required in KlerkSettings. Choose " +
-                    "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
-                    "keep them on disk. Pick before you have data: Klerk does not move blobs between stores.",
+                "AttachedBlobStore.Database to keep the bytes in the database, or FileBlobStore(path) to " +
+                "keep them on disk. Pick before you have data: Klerk does not move blobs between stores.",
         )
     }
 }
@@ -205,15 +208,14 @@ private fun <C : KlerkContext, V> Specification<C, V>.declaredAttachedDataProper
 private fun <C : KlerkContext, V> Specification<C, V>.attachedDataPropertyNames(
     kClass: KClass<*>,
     kind: AttachedDataDeclaration,
-): List<String> =
-    ObjectSchema.of(kClass).leafFields().filter { leaf ->
-        when (kind) {
-            AttachedDataDeclaration.BareBlobID -> leaf.shape == Shape.BlobID
-            AttachedDataDeclaration.BareStringID -> leaf.shape == Shape.StringID
-            AttachedDataDeclaration.BlobContainerDeclaration ->
-                (leaf.shape as? Shape.Container)?.kind == ContainerKind.AttachedBlob
-        }
-    }.map { it.path }
+): List<String> = ObjectSchema.of(kClass).leafFields().filter { leaf ->
+    when (kind) {
+        AttachedDataDeclaration.BareBlobID -> leaf.shape == Shape.BlobID
+        AttachedDataDeclaration.BareStringID -> leaf.shape == Shape.StringID
+        AttachedDataDeclaration.BlobContainerDeclaration ->
+            (leaf.shape as? Shape.Container)?.kind == ContainerKind.AttachedBlob
+    }
+}.map { it.path }
 
 /**
  * A string, like a blob, has to be declared in a container — the way every other property has a DataContainer —
@@ -298,9 +300,10 @@ private fun <C : KlerkContext, V> Specification<C, V>.checkContextProviderExistI
     // TODO("Not yet implemented")
 }
 
-private fun Executable<*, *, *, *>.transitionsTo(state: StateID): Boolean =
-    this is Transition<*, *, *, *, *> && targetState.name == state.stateName ||
-        this is TransitionWhen<*, *, *, *, *> && branches.values.any { it.name == state.stateName }
+private fun Executable<*, *, *, *>.transitionsTo(state: StateID): Boolean = this is Transition<*, *, *, *, *> &&
+    targetState.name == state.stateName ||
+    this is TransitionWhen<*, *, *, *, *> &&
+    branches.values.any { it.name == state.stateName }
 
 /**
  * Checks that all transitions lead to another state
@@ -312,8 +315,8 @@ private fun <C : KlerkContext, V> Specification<C, V>.noTransitionToCurrentState
 
             is Block.InstanceLifecycleBlock -> block.executables.any { it.transitionsTo(state) }
 
-            is Block.VoidEventBlock<*, *, *, *, *> -> false         // there can be no transitions in void-states
-            is Block.VoidLifecycleBlock -> false                     // there can be no transitions in void-states
+            is Block.VoidEventBlock<*, *, *, *, *> -> false // there can be no transitions in void-states
+            is Block.VoidLifecycleBlock -> false // there can be no transitions in void-states
         }
         check(!problem) { "State ${state.withoutPrefix()} has a transition to itself" }
     }
@@ -342,11 +345,13 @@ private fun <C : KlerkContext, V> Specification<C, V>.stateMachinesMustBeComplet
 /** Every decision function passed to a `transitionWhen { on(...) }`, with the state it was declared in. */
 private fun <C : KlerkContext, V> Specification<C, V>.transitionDecisions(): List<Pair<StateID, Function<*>>> {
     fun decisionsIn(block: Block<*, *, *, *>): List<Function<*>> = when (block) {
-        is Block.InstanceEventBlock<*, *, *, *, *> -> block.executables
-            .filterIsInstance<TransitionWhen<*, *, *, *, *>>().flatMap { it.branches.keys }
+        is Block.InstanceEventBlock<*, *, *, *, *> ->
+            block.executables
+                .filterIsInstance<TransitionWhen<*, *, *, *, *>>().flatMap { it.branches.keys }
 
-        is Block.InstanceLifecycleBlock -> block.executables
-            .filterIsInstance<TransitionWhen<*, *, *, *, *>>().flatMap { it.branches.keys }
+        is Block.InstanceLifecycleBlock ->
+            block.executables
+                .filterIsInstance<TransitionWhen<*, *, *, *, *>>().flatMap { it.branches.keys }
 
         else -> emptyList()
     }
@@ -418,7 +423,8 @@ private fun <C : KlerkContext, V> Specification<C, V>.checkRefParam(
     val references = leaves.filter { it.shape == Shape.Reference }
     references.firstOrNull { it.field.key !in validRefs }?.let {
         throw IllegalConfigurationException(
-            KlerkErrorCode.MissingValidReferences, """
+            KlerkErrorCode.MissingValidReferences,
+            """
             '${it.path}' in '${parametersClass.simpleName}' for '$event' is a ModelID, but there is no
             'validReferences' declared for it in the state machine. Declare which view the ids must be in, e.g.:
             event(${event.name}) {
@@ -430,12 +436,12 @@ private fun <C : KlerkContext, V> Specification<C, V>.checkRefParam(
     }
     val enums = leaves.filter { (it.shape as? Shape.Container)?.kind == ContainerKind.Enum }
     val unknown = (validRefs - references.map { it.field.key }.toSet()).map { "validReferences($it, ...)" } +
-            (validEnums - enums.map { it.field.key }.toSet()).map { "validEnums($it, ...)" }
+        (validEnums - enums.map { it.field.key }.toSet()).map { "validEnums($it, ...)" }
     if (unknown.isNotEmpty()) {
         throw IllegalConfigurationException(
             KlerkErrorCode.ValidationRuleForUnknownProperty,
             "${unknown.joinToString(", ")} is declared for '$event', but the property is not a matching property " +
-                    "of ${parametersClass.simpleName} or a class nested in it",
+                "of ${parametersClass.simpleName} or a class nested in it",
         )
     }
 }

@@ -10,8 +10,7 @@ import kotlin.test.assertNull
  */
 class ContentTypeDetectionTest {
 
-    private fun png(): ByteArray =
-        byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(20)
+    private fun png(): ByteArray = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(20)
 
     @Test
     fun `recognises the common image formats`() {

@@ -1,9 +1,9 @@
 package dev.klerkframework.klerk.read
 
-import dev.klerkframework.klerk.PropertyReadRuleArgs
-import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.PropertyReadRuleArgs
+import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer

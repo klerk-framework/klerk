@@ -1,6 +1,19 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.ActorIdentity
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.JobReadRuleArgs
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ModelIdentity
+import dev.klerkframework.klerk.ModelReferenceIdentity
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.Unauthenticated
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.createAuthorJKRowling
+import dev.klerkframework.klerk.createKlerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertFalse

@@ -4,7 +4,6 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.attacheddata.PROCESS_ATTACHED_DATA
 import dev.klerkframework.klerk.attacheddata.ProcessAttachedData
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
 
 @DslMarker
 internal annotation class JobsSpecificationMarker
@@ -36,8 +35,7 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
     internal val allTypes: Map<JobName, JobType<*, C, V>> =
         types + (processAttachedData.name to processAttachedData)
 
-    override fun toString(): String =
-        "JobsSpecification(types=${types.keys.joinToString(", ")}, crons=${crons.size})"
+    override fun toString(): String = "JobsSpecification(types=${types.keys.joinToString(", ")}, crons=${crons.size})"
 
     /**
      * The same specification with more job types and crons in it, and the admission policy untouched.

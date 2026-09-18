@@ -62,11 +62,7 @@ private fun detectContentType(head: ByteArray): String? {
     return detectText(head)
 }
 
-private class Signature(
-    val bytes: ByteArray,
-    val offset: Int = 0,
-    val confirm: ((ByteArray) -> Boolean)? = null,
-)
+private class Signature(val bytes: ByteArray, val offset: Int = 0, val confirm: ((ByteArray) -> Boolean)? = null)
 
 private fun bytesOf(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }
 

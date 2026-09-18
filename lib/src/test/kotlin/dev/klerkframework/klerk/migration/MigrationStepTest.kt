@@ -1,8 +1,22 @@
 package dev.klerkframework.klerk.migration
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.Book
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.PersistedModelMismatchException
+import dev.klerkframework.klerk.SQLiteInMemory
+import dev.klerkframework.klerk.SpecificationBuilder
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.addStandardTestConfiguration
+import dev.klerkframework.klerk.authorStateMachine
+import dev.klerkframework.klerk.bookStateMachine
+import dev.klerkframework.klerk.generateSampleData
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.SqlPersistence
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -79,9 +93,12 @@ class MigrationStepTest {
 
     @Test
     fun `Startup fails when a nested property is missing`() = runBlocking {
-        val step = Step(2, authors {
-            it.withProps { put("address", JsonObject(getValue("address").jsonObject - "street")) }
-        })
+        val step = Step(
+            2,
+            authors {
+                it.withProps { put("address", JsonObject(getValue("address").jsonObject - "street")) }
+            },
+        )
         val reason = startupProblem(storedSampleData(), step)
         assertTrue(reason.contains("'address.street' is missing"), reason)
     }
@@ -95,8 +112,15 @@ class MigrationStepTest {
     @Test
     fun `renameKey throws if the key does not exist`() {
         val step = Step(2) { it }
-        val model = MigrationModelV1("Author", 1, kotlin.time.Clock.System.now(), kotlin.time.Clock.System.now(),
-            kotlin.time.Clock.System.now(), "Created", JsonObject(emptyMap()))
+        val model = MigrationModelV1(
+            "Author",
+            1,
+            kotlin.time.Clock.System.now(),
+            kotlin.time.Clock.System.now(),
+            kotlin.time.Clock.System.now(),
+            "Created",
+            JsonObject(emptyMap()),
+        )
         assertFailsWith<IllegalStateException> { step.renameKey(model, "nope", "other") }
     }
 

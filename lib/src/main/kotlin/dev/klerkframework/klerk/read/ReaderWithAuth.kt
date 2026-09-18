@@ -1,19 +1,37 @@
 package dev.klerkframework.klerk.read
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.storage.EventLogEntry
+import dev.klerkframework.klerk.AttachedDataReader
+import dev.klerkframework.klerk.AuthorizationProblem
+import dev.klerkframework.klerk.EventVisibility
+import dev.klerkframework.klerk.InstanceEvent
+import dev.klerkframework.klerk.JobReader
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkImpl
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ModelReadRuleArgs
+import dev.klerkframework.klerk.NegativeAuthorization
+import dev.klerkframework.klerk.PendingRead
+import dev.klerkframework.klerk.PositiveAuthorization
+import dev.klerkframework.klerk.RuleDescription
+import dev.klerkframework.klerk.RuleType
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.VoidEvent
+import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.statemachine.StateMachine
+import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
 import kotlin.reflect.KClass
-import kotlin.time.Instant
 import kotlin.reflect.KProperty1
+import kotlin.time.Instant
 
-internal class ReaderWithAuth<C : KlerkContext, V>(
-    val klerk: KlerkImpl<C, V>,
-    val context: C,
-) : Reader<C, V>, ViewReader<C, V> {
+internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, val context: C) :
+    Reader<C, V>,
+    ViewReader<C, V> {
 
     internal val withoutAuth = ReaderWithoutAuth(klerk)
 
@@ -30,11 +48,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
 
     override val attachedData: AttachedDataReader get() = attachedDataReader
 
-    override fun eventLog(
-        id: ModelID<out Any>?,
-        after: Instant,
-        before: Instant,
-    ): PendingRead<List<EventLogEntry>> {
+    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): PendingRead<List<EventLogEntry>> {
         checkEventLogAuthorization(klerk, context, withoutAuth)
         return eventLogQuery(klerk, id, after, before)
     }
@@ -51,10 +65,8 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
     override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
         withoutAuth.referencing(clazz, id).readable()
 
-    override fun <T : Any, U : Any> referencing(
-        property: KProperty1<T, ModelID<U>?>,
-        id: ModelID<*>,
-    ): Set<Model<T>> = withoutAuth.referencing(property, id).readable()
+    override fun <T : Any, U : Any> referencing(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>> =
+        withoutAuth.referencing(property, id).readable()
 
     override fun <T : Any, U : Any> referencingInCollection(
         property: KProperty1<T, Collection<ModelID<U>>?>,
@@ -105,7 +117,6 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
         return if (isAuthorized(model, context, klerk.specification, withoutAuth)) propertyAuth.secure(model) else null
     }
 
-
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
         if (context.actor == SystemIdentity) {
             return model
@@ -140,7 +151,6 @@ internal class ReaderWithAuth<C : KlerkContext, V>(
             .filter { klerk.validator.validateWithoutParameters(it.id, context, model, withoutAuth) }
             .toSet()
     }
-
 }
 
 internal fun <T : Any, C : KlerkContext, V> isAuthorized(
@@ -148,8 +158,7 @@ internal fun <T : Any, C : KlerkContext, V> isAuthorized(
     context: C,
     specification: Specification<C, V>,
     reader: ReaderWithoutAuth<C, V>,
-): Boolean =
-    evaluateAuthorization(context, model, specification, reader) is ReadResult.Ok
+): Boolean = evaluateAuthorization(context, model, specification, reader) is ReadResult.Ok
 
 internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
     context: C,
@@ -167,13 +176,15 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         return ReadResult.Fail(
             AuthorizationProblem(
                 context.translation.klerk.unauthorized,
-                RuleDescription(brokenRule, RuleType.Authorization), KlerkErrorCode.ReadNegativeAuthorizationExist,
+                RuleDescription(brokenRule, RuleType.Authorization),
+                KlerkErrorCode.ReadNegativeAuthorizationExist,
             ),
         )
     }
 
     if (specification.authorization.readModelPositiveRules.map { it(ModelReadRuleArgs(model, context, reader)) }
-            .none { it == PositiveAuthorization.Allow }) {
+            .none { it == PositiveAuthorization.Allow }
+    ) {
         logger.info("No policy explicitly allowed the request")
         return ReadResult.Fail(
             AuthorizationProblem(

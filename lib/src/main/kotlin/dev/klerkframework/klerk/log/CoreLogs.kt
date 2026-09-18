@@ -4,7 +4,10 @@ import dev.klerkframework.klerk.CommandResult
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.log.LogSourceMinor.*
+import dev.klerkframework.klerk.log.LogSourceMinor.ActivityLog
+import dev.klerkframework.klerk.log.LogSourceMinor.Event
+import dev.klerkframework.klerk.log.LogSourceMinor.Meta
+import dev.klerkframework.klerk.log.LogSourceMinor.Read
 import dev.klerkframework.klerk.misc.getCurrentInstant
 import kotlin.time.Duration
 import kotlin.time.Instant
@@ -21,7 +24,7 @@ internal enum class LogSourceMinor {
     Meta,
     Event,
     Read,
-    ActivityLog
+    ActivityLog,
 }
 
 internal class LogKlerkStarted(startupTime: Duration) : CoreLogEntry(Meta, null) {
@@ -74,7 +77,6 @@ internal class LogCommandSucceeded<C : KlerkContext>(
         }
         factsList
     }
-
 }
 
 internal class LogReadModel(model: Model<*>, context: KlerkContext) : CoreLogEntry(Read, context) {

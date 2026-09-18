@@ -1,12 +1,25 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.testing.runUntilIdle
-import dev.klerkframework.klerk.testing.step
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AuthorPicture
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
+import dev.klerkframework.klerk.view.asSequence
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
@@ -15,7 +28,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Instant
-import dev.klerkframework.klerk.view.*
 
 /**
  * Attached data has two independent claims: a reference from a model, and a claim by a job. The orphan reaper deletes
@@ -38,9 +50,7 @@ class JobAttachedDataClaimTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<UploadCursor, Ctx, Views>,
-
         ): JobResult<UploadCursor, Ctx, Views> {
             val prepared = args.cursor.prepared
             if (prepared == null) {
@@ -147,7 +157,7 @@ class JobAttachedDataClaimTest {
         val klerk = start(storage, clock)
 
         val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
-        klerk.jobs.step()                       // prepares the blob
+        klerk.jobs.step() // prepares the blob
         klerk.jobs.cancel(id, Ctx.system()) // stops it before the data is ever attached
         klerk.jobs.runUntilIdle()
 
@@ -225,7 +235,7 @@ class JobAttachedDataClaimTest {
         Uploader.klerkForTest = klerk
 
         val id = klerk.jobs.schedule(Uploader.declare(UploadCursor()), Ctx.system())
-        klerk.jobs.step()                       // prepares the blob
+        klerk.jobs.step() // prepares the blob
         klerk.jobs.cancel(id, Ctx.system())
         klerk.jobs.runUntilIdle()
         assertEquals(JobStatus.Cancelled, klerk.jobs.get(id, Ctx.system()).status)

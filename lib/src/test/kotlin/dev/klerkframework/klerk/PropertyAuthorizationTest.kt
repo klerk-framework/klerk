@@ -3,14 +3,17 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.view.asSequence
 import kotlinx.coroutines.runBlocking
-import kotlin.test.*
-import dev.klerkframework.klerk.view.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The read authorization of a property must belong to the read that produced the model, not to the container
@@ -228,8 +231,8 @@ class PropertyAuthorizationTest {
  */
 internal var propertyRuleEvaluations: Int = 0
 
-fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> {
-    return SpecificationBuilder<Ctx, Views>(collections).build {
+fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> =
+    SpecificationBuilder<Ctx, Views>(collections).build {
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)
@@ -251,7 +254,6 @@ fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> {
         }
         systemContextProvider(::myContextProvider)
     }
-}
 
 fun anonymousCannotReadSensitiveProperties(args: PropertyReadRuleArgs<Ctx, Views>): NegativeAuthorization {
     propertyRuleEvaluations++

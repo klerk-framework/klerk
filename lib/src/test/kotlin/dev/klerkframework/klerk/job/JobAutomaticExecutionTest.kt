@@ -1,6 +1,11 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -39,21 +44,18 @@ class JobAutomaticExecutionTest {
         }
     }
 
-    private suspend fun awaitStatus(
-        klerk: Klerk<Ctx, Views>,
-        id: JobID,
-        status: JobStatus,
-    ): JobInfo = withTimeout(20.seconds) {
-        while (true) {
-            val info = klerk.jobs.get(id, Ctx.system())
-            if (info.status == status) {
-                return@withTimeout info
+    private suspend fun awaitStatus(klerk: Klerk<Ctx, Views>, id: JobID, status: JobStatus): JobInfo =
+        withTimeout(20.seconds) {
+            while (true) {
+                val info = klerk.jobs.get(id, Ctx.system())
+                if (info.status == status) {
+                    return@withTimeout info
+                }
+                kotlinx.coroutines.delay(10)
             }
-            kotlinx.coroutines.delay(10)
+            @Suppress("UNREACHABLE_CODE")
+            error("unreachable")
         }
-        @Suppress("UNREACHABLE_CODE")
-        error("unreachable")
-    }
 
     @Test
     fun `the background dispatcher runs a yielding job to completion without being told to`() = runBlocking<Unit> {

@@ -1,13 +1,19 @@
 package dev.klerkframework.klerk.read
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedDataReader
+import dev.klerkframework.klerk.JobReader
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.PendingRead
 import dev.klerkframework.klerk.storage.EventLogEntry
+import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.PageDirection
 import dev.klerkframework.klerk.view.QueryListCursor
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
-import dev.klerkframework.klerk.storage.ModelCache
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.time.Instant
@@ -27,7 +33,9 @@ internal fun <C : KlerkContext, V> ModelReader<C, V>.unauthorized(): ModelReader
  * Used internally, e.g. when executing the functions provided in a statemachine.
  * Note that no logging to the activity log is triggered here.
  */
-internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : ModelReader<C, V>, ViewReader<C, V> {
+internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
+    ModelReader<C, V>,
+    ViewReader<C, V> {
 
     override val views = klerk.specification.views
 
@@ -35,11 +43,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
     override val attachedData: AttachedDataReader = UnauthorizedAttachedDataReader(klerk)
 
-    override fun eventLog(
-        id: ModelID<out Any>?,
-        after: Instant,
-        before: Instant,
-    ): PendingRead<List<EventLogEntry>> = eventLogQuery(klerk, id, after, before)
+    override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): PendingRead<List<EventLogEntry>> =
+        eventLogQuery(klerk, id, after, before)
 
     override fun eventLogEntry(sequenceNumber: Long): PendingRead<EventLogEntry?> =
         eventLogEntryQuery(klerk, sequenceNumber)
@@ -51,10 +56,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         id: ModelID<*>,
     ): Set<Model<T>> = ModelCache.referencingInCollection(property, id)
 
-    override fun <T : Any, U : Any> referencing(
-        property: KProperty1<T, ModelID<U>?>,
-        id: ModelID<*>,
-    ): Set<Model<T>> = ModelCache.referencing(property, id)
+    override fun <T : Any, U : Any> referencing(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>> =
+        ModelCache.referencing(property, id)
 
     override fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
         ModelCache.referencing(clazz, id)
@@ -135,8 +138,11 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         val pageStart = maxOf(0, resolved + delta)
 
         val pageFrom = pageStart - windowFrom
-        val items = if (pageFrom >= window.size) emptyList() else
+        val items = if (pageFrom >= window.size) {
+            emptyList()
+        } else {
             window.subList(pageFrom, minOf(pageFrom + maxItems, window.size)).toList()
+        }
 
         val hasNextPage = pageFrom + maxItems < window.size
         val hasPreviousPage = pageStart > 0
@@ -147,10 +153,16 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
         return QueryResponse(
             items,
             cursorFirstPage = if (hasPreviousPage) QueryListCursor.first else null,
-            cursorPreviousPage = if (hasPreviousPage)
-                QueryListCursor(previousStart, window.getOrNull(previousStart - windowFrom)?.id?.value) else null,
-            cursorNextPage = if (hasNextPage)
-                QueryListCursor(pageStart + maxItems, window.getOrNull(pageFrom + maxItems)?.id?.value) else null,
+            cursorPreviousPage = if (hasPreviousPage) {
+                QueryListCursor(previousStart, window.getOrNull(previousStart - windowFrom)?.id?.value)
+            } else {
+                null
+            },
+            cursorNextPage = if (hasNextPage) {
+                QueryListCursor(pageStart + maxItems, window.getOrNull(pageFrom + maxItems)?.id?.value)
+            } else {
+                null
+            },
             cursorLastPage = lastPageCursor(totalCount, maxItems, pageStart),
             totalCount = totalCount,
             offset = pageStart,
@@ -179,5 +191,4 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) : 
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> =
         getOrNull(id) ?: throw NoSuchElementException("Could not find model with id=$id")
-
 }

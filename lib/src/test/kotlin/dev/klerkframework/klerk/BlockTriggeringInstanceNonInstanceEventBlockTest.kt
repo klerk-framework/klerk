@@ -3,10 +3,7 @@
  */
 package dev.klerkframework.klerk
 
-
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
@@ -15,14 +12,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-
 class BlockTriggeringInstanceNonInstanceEventBlockTest {
 
     private val logger = KotlinLogging.logger {}
 
     @Test
     fun read() {
-
         runBlocking {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))

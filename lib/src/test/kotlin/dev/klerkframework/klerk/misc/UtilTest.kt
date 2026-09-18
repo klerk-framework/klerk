@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk.misc
 
-
 import dev.klerkframework.klerk.camelCaseToPretty
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,5 +20,4 @@ class UtilTest {
         assertNotEquals(original, encoded)
         assertEquals(original, decoded)
     }
-
 }

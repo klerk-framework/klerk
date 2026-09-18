@@ -1,7 +1,6 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ReaderWithAuth
@@ -11,9 +10,6 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.fail
-import dev.klerkframework.klerk.view.*
-
 
 class EventProcessorTest {
 
@@ -116,7 +112,6 @@ class EventProcessorTest {
 
 private object MyTimeTriggerManager : TriggerTimeManager {
     override fun init(models: List<Model<out Any>>) {
-
     }
 
     override fun start() {
@@ -124,5 +119,4 @@ private object MyTimeTriggerManager : TriggerTimeManager {
 
     override fun stop() {
     }
-
 }

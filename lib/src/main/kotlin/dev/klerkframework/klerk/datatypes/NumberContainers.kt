@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.datatypes
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.InvalidPropertyProblem
+import dev.klerkframework.klerk.Translation
 
 /**
  * A [DataContainer] wrapping a number, constrained to the inclusive range [min]..[max].

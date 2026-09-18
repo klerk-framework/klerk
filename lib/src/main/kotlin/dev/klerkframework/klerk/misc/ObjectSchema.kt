@@ -1,7 +1,12 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Validatable
+import dev.klerkframework.klerk.datatypes.DataContainer
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
@@ -67,6 +72,7 @@ public class ObjectSchema<T : Any> private constructor(
         fields = constructor.parameters.map { parameter ->
             val name = requireNotNull(parameter.name)
             val fieldWhere = "$className.$name"
+
             @Suppress("UNCHECKED_CAST")
             val property = propertiesByName[name] as KProperty1<Any, *>?
                 ?: unsupported(fieldWhere, "the constructor parameter is not a property")
@@ -207,7 +213,13 @@ public class ObjectSchema<T : Any> private constructor(
                 element?.let { transformValue(shape.element.shape, it, transform) }
                     .also { if (it !== element) changed = true }
             }
-            if (!changed) value else if (shape.isSet) items.toSet() else items
+            if (!changed) {
+                value
+            } else if (shape.isSet) {
+                items.toSet()
+            } else {
+                items
+            }
         }
 
         is Shape.Nested -> shape.schema.transformLeaves(value, transform)
@@ -260,15 +272,15 @@ internal fun isPublic(kClass: KClass<*>): Boolean =
 
 private fun isPlatformClass(kClass: KClass<*>): Boolean {
     val packageName = kClass.java.packageName
-    return kClass.java.isPrimitive || packageName == "kotlin" ||
-            listOf("kotlin.", "kotlinx.", "java.", "javax.").any { packageName.startsWith(it) }
+    return kClass.java.isPrimitive ||
+        packageName == "kotlin" ||
+        listOf("kotlin.", "kotlinx.", "java.", "javax.").any { packageName.startsWith(it) }
 }
 
 private fun join(path: String, key: String) = if (path.isEmpty()) key else "$path.$key"
 
-internal fun unsupported(where: String?, problem: String): Nothing =
-    throw IllegalConfigurationException(
-        KlerkErrorCode.PropertyMustBeDataContainer,
-        "$where cannot be used by Klerk: $problem. Properties must be vals of DataContainers, ModelIDs, List/Set " +
-                "thereof, or classes made of these, and every class, primary constructor and property must be public.",
-    )
+internal fun unsupported(where: String?, problem: String): Nothing = throw IllegalConfigurationException(
+    KlerkErrorCode.PropertyMustBeDataContainer,
+    "$where cannot be used by Klerk: $problem. Properties must be vals of DataContainers, ModelIDs, List/Set " +
+        "thereof, or classes made of these, and every class, primary constructor and property must be public.",
+)

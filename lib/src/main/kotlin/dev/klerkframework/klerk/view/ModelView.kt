@@ -1,6 +1,9 @@
 package dev.klerkframework.klerk.view
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ViewID
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.unauthorized
 
@@ -221,6 +224,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /** The [ModelViews] this view (or, for a derived view, its ultimate ancestor) belongs to. */
     public open val modelViews: ModelViews<T, C>
         get() = parent?.modelViews ?: error("This view has no ModelViews")
+
     /** Answered from the index when there is one, so no model is read. Override it when the view can do better. */
     protected open fun <V> count(reader: ModelReader<C, V>): Int =
         ensureIndex(reader)?.size ?: memberIds(reader).count()
@@ -253,8 +257,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /** The id given to [register], or null for a view that was never registered. Available before startup. */
     internal val registeredId: String? get() = _id
 
-    override fun toString(): String =
-        "${this::class.simpleName}(${idBase ?: "?"}.${_id ?: "unregistered"})"
+    override fun toString(): String = "${this::class.simpleName}(${idBase ?: "?"}.${_id ?: "unregistered"})"
 
     internal fun setIdBase(idBase: String?) {
         this.idBase = idBase
@@ -264,9 +267,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
 
     internal fun <V> internalIsEmpty(reader: ModelReader<C, V>): Boolean = isEmpty(reader)
 
-    internal fun <V> internalContains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean =
-        contains(value, reader)
-
+    internal fun <V> internalContains(value: ModelID<*>, reader: ModelReader<C, V>): Boolean = contains(value, reader)
 }
 
 /** The result of [ModelView.sorted]. */
@@ -292,7 +293,6 @@ internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
         val models = previous.withReader(reader)
         return (if (ascending) models.sortedBy(selector) else models.sortedByDescending(selector)).map { it.id }
     }
-
 }
 
 /** The result of [ModelView.filterStates]. */
@@ -309,14 +309,11 @@ internal class IncludeStatesModelView<T : Any, C : KlerkContext>(
 
     override val filteredStates: Set<Enum<*>> get() = (included ?: emptySet()) + (excluded ?: emptySet())
 
-    override fun matches(model: Model<T>): Boolean =
-        (includedNames == null || model.state in includedNames) &&
-                (excludedNames == null || model.state !in excludedNames)
+    override fun matches(model: Model<T>): Boolean = (includedNames == null || model.state in includedNames) &&
+        (excludedNames == null || model.state !in excludedNames)
 
-    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
-        indexedMemberIds(reader)
-            ?: previous.memberIds(reader).filter { matches(reader.get(it)) }
-
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> = indexedMemberIds(reader)
+        ?: previous.memberIds(reader).filter { matches(reader.get(it)) }
 }
 
 /** The result of [ModelView.filter]. */
@@ -329,10 +326,8 @@ internal class FilteredModelView<T : Any, C : KlerkContext>(
 
     override fun matches(model: Model<T>): Boolean = predicate(model)
 
-    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> =
-        indexedMemberIds(reader)
-            ?: previous.memberIds(reader).filter { predicate(reader.get(it)) }
-
+    override fun <V> memberIds(reader: ModelReader<C, V>): Sequence<ModelID<T>> = indexedMemberIds(reader)
+        ?: previous.memberIds(reader).filter { predicate(reader.get(it)) }
 }
 
 /**
@@ -341,7 +336,7 @@ internal class FilteredModelView<T : Any, C : KlerkContext>(
  */
 internal class AllModelView<T : Any, C : KlerkContext>(
     private val view: ModelViews<T, C>,
-    private val all: List<Int>,  // sorted by createdAt
+    private val all: List<Int>, // sorted by createdAt
 ) : ModelView<T, C>(null) {
 
     init {

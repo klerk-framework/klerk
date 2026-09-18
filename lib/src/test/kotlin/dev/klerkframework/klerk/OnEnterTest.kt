@@ -1,9 +1,6 @@
 package dev.klerkframework.klerk
 
-
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.lang.Thread.sleep
@@ -11,16 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
-import dev.klerkframework.klerk.view.*
 
 class OnEnterTest {
 
     private val logger = KotlinLogging.logger {}
 
-
     @Test
     fun onEventActionIsTriggered() {
-
         var improvedTriggered = false
         var amateurTriggered = false
 
@@ -42,7 +36,8 @@ class OnEnterTest {
 
             val result = klerk.handle(
                 Command(
-                    ImproveAuthor, rowling,
+                    ImproveAuthor,
+                    rowling,
                 ),
                 Ctx.system(),
             )

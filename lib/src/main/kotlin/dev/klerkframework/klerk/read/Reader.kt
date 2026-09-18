@@ -1,13 +1,23 @@
 package dev.klerkframework.klerk.read
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedDataReader
+import dev.klerkframework.klerk.EventVisibility
+import dev.klerkframework.klerk.InstanceEvent
+import dev.klerkframework.klerk.JobReader
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.NegativeAuthorization
+import dev.klerkframework.klerk.PendingRead
+import dev.klerkframework.klerk.PositiveAuthorization
+import dev.klerkframework.klerk.Problem
+import dev.klerkframework.klerk.PropertyReadRuleArgs
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.VoidEvent
 import dev.klerkframework.klerk.storage.EventLogEntry
-import dev.klerkframework.klerk.view.ModelView
-import dev.klerkframework.klerk.view.QueryOptions
-import dev.klerkframework.klerk.view.QueryResponse
 import kotlin.reflect.KClass
-import kotlin.time.Instant
 import kotlin.reflect.KProperty1
+import kotlin.time.Instant
 
 /**
  * Read-only access to models, available both inside a [dev.klerkframework.klerk.Klerk.read] (or `readSuspend`) block
@@ -112,10 +122,7 @@ public interface ModelReader<C : KlerkContext, V> {
      * Models the actor may not read are left out.
      * @throws NoSuchElementException if there is no model with [id].
      */
-    public fun <T : Any, U : Any> referencing(
-        property: KProperty1<T, ModelID<U>?>,
-        id: ModelID<*>,
-    ): Set<Model<T>>
+    public fun <T : Any, U : Any> referencing(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>>
 
     /**
      * Finds all models whose [property] (a collection of IDs) contains [id].
@@ -126,7 +133,6 @@ public interface ModelReader<C : KlerkContext, V> {
         property: KProperty1<T, Collection<ModelID<U>>?>,
         id: ModelID<*>,
     ): Set<Model<T>>
-
 }
 
 /**
@@ -154,43 +160,37 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
         id: ModelID<T>,
         visibility: EventVisibility = EventVisibility.Application,
     ): Set<InstanceEvent<T, *>>
-
 }
 
 internal sealed class ReadResult<T : Any> {
     data class Fail<T : Any>(val problem: Problem) : ReadResult<T>()
     data class Ok<T : Any>(val model: Model<T>) : ReadResult<T>()
 
-    fun getOrNull(): Model<T>? =
-        when (this) {
-            is Fail -> null
-            is Ok -> this.model
-        }
+    fun getOrNull(): Model<T>? = when (this) {
+        is Fail -> null
+        is Ok -> this.model
+    }
 
-    fun getOrThrow(): Model<T> =
-        when (this) {
-            is Fail -> throw problem.asException()
-            is Ok -> this.model
-        }
+    fun getOrThrow(): Model<T> = when (this) {
+        is Fail -> throw problem.asException()
+        is Ok -> this.model
+    }
 }
 
 internal sealed class ReadListResult<T : Any> {
     data class Fail<T : Any>(val problem: Problem) : ReadListResult<T>()
     data class Ok<T : Any>(val models: List<Model<T>>) : ReadListResult<T>()
 
-    fun getOrEmpty(): List<Model<T>> =
-        when (this) {
-            is Fail -> emptyList()
-            is Ok -> this.models
-        }
+    fun getOrEmpty(): List<Model<T>> = when (this) {
+        is Fail -> emptyList()
+        is Ok -> this.models
+    }
 
-    fun getOrThrow(): List<Model<T>> =
-        when (this) {
-            is Fail -> throw problem.asException()
-            is Ok -> this.models
-        }
+    fun getOrThrow(): List<Model<T>> = when (this) {
+        is Fail -> throw problem.asException()
+        is Ok -> this.models
+    }
 }
-
 
 internal fun <C : KlerkContext, V> isReadPropertyAuthorized(
     args: PropertyReadRuleArgs<C, V>,

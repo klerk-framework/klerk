@@ -57,7 +57,7 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
         init {
             require(!awaitSpawned || spawn.isNotEmpty()) {
                 "awaitSpawned = true but nothing was spawned, and no earlier step can be awaited retroactively. " +
-                        "Either spawn children or yield without awaiting."
+                    "Either spawn children or yield without awaiting."
             }
         }
     }

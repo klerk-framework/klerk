@@ -1,22 +1,47 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.storage.CommitBatch
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.ActorType
+import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.JobContextRequest
+import dev.klerkframework.klerk.JobManagerInternal
+import dev.klerkframework.klerk.JobReader
+import dev.klerkframework.klerk.JobRejectedException
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkImpl
+import dev.klerkframework.klerk.NewJobPlan
+import dev.klerkframework.klerk.Problem
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.read.AuthorizingJobReader
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
-import kotlinx.coroutines.*
+import dev.klerkframework.klerk.storage.CommitBatch
+import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.storage.spi.JobRecord
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import mu.KotlinLogging
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
@@ -193,10 +218,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             UnloadableJobPolicy.FailToStart -> throw IllegalConfigurationException(
                 KlerkErrorCode.UnregisteredJobName,
                 "${unloadable.size} persisted job(s) cannot be loaded:\n$described\n" +
-                        "Either restore the job types and cursor shapes, or set " +
-                        "'jobs { onUnloadableJob = UnloadableJobPolicy.DeadLetter }' to dead-letter them instead. " +
-                        "Treat cursor types as a persisted schema: add optional fields, never remove or retype them " +
-                        "while jobs may be in flight.",
+                    "Either restore the job types and cursor shapes, or set " +
+                    "'jobs { onUnloadableJob = UnloadableJobPolicy.DeadLetter }' to dead-letter them instead. " +
+                    "Treat cursor types as a persisted schema: add optional fields, never remove or retype them " +
+                    "while jobs may be in flight.",
             )
 
             UnloadableJobPolicy.DeadLetter -> {
@@ -465,8 +490,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             klerk = klerk,
                             children = outcomes,
                         )
-                        if (record.hookKind == JobHookKind.OnCancelled) local.onCancelled(args)
-                        else local.onDeadLettered(args)
+                        if (record.hookKind == JobHookKind.OnCancelled) {
+                            local.onCancelled(args)
+                        } else {
+                            local.onDeadLettered(args)
+                        }
                     }
                 }
             }
@@ -495,8 +523,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             context = context,
                             children = outcomes,
                         )
-                        if (record.hookKind == JobHookKind.OnCancelled) portable.onCancelled(args)
-                        else portable.onDeadLettered(args)
+                        if (record.hookKind == JobHookKind.OnCancelled) {
+                            portable.onCancelled(args)
+                        } else {
+                            portable.onDeadLettered(args)
+                        }
                     }
                 }
             }
@@ -579,8 +610,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         // the state readers do not see (previousResults) and the Running overlay, which they do.
         lock.withLock {
             klerk.readWriteLock.withWrite { running.remove(record.id) }
-            if (commandResult == null) previousResults.remove(record.id)
-            else previousResults[record.id] = commandResult
+            if (commandResult == null) {
+                previousResults.remove(record.id)
+            } else {
+                previousResults[record.id] = commandResult
+            }
         }
         // Spawned children are in records now, so they no longer need reserving.
         releaseReservations(transition.commit.upserted.map { it.id })
@@ -683,8 +717,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 if (attempt > maxRetries) {
                     val reason = "Failed $attempt times, last: ${result.reason}"
                     return Transition(
-                        if (record.hookKind == null) deadLetter(logged, type, reason, runHook = true, now, rows)
-                        else finish(logged.copy(reason = reason), JobStatus.CompensationFailed, now, rows),
+                        if (record.hookKind == null) {
+                            deadLetter(logged, type, reason, runHook = true, now, rows)
+                        } else {
+                            finish(logged.copy(reason = reason), JobStatus.CompensationFailed, now, rows)
+                        },
                     )
                 }
                 rows.put(
@@ -786,11 +823,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         records.values.any { it.parent == id && !it.status.isTerminal }
 
     /** What the children of [id] reported, read from their own rows at the moment the parent asks. */
-    private fun childOutcomesOf(id: JobID): List<ChildOutcome> =
-        records.values
-            .filter { it.parent == id && it.status.isTerminal }
-            .sortedBy { it.createdAt }
-            .map { it.toChildOutcome() }
+    private fun childOutcomesOf(id: JobID): List<ChildOutcome> = records.values
+        .filter { it.parent == id && it.status.isTerminal }
+        .sortedBy { it.createdAt }
+        .map { it.toChildOutcome() }
 
     /**
      * The spawn budgets. Children bypass admission control — refusing them would strand the parent mid-job — so this
@@ -816,8 +852,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      * has to be read and written, and two jobs spawning at the same instant both read it before either writes, so one
      * of the increments is lost and the budget is quietly larger than configured.
      */
-    private fun descendantCountOf(root: JobID): Int =
-        records.values.count { it.root == root && it.id != root }
+    private fun descendantCountOf(root: JobID): Int = records.values.count { it.root == root && it.id != root }
 
     private fun spawnRecord(parent: JobRecord, child: DeclaredJob<C, V>, now: Instant): JobRecord = newRecord(
         id = allocateId(),
@@ -832,8 +867,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         depth = parent.depth + 1,
     )
 
-    private fun backoffFor(attempt: Int): Duration =
-        jobSettings.backoffBase * 3.0.pow(attempt - 1)
+    private fun backoffFor(attempt: Int): Duration = jobSettings.backoffBase * 3.0.pow(attempt - 1)
 
     /** Bookkeeping for the rows one commit touches, so that a row updated twice is written once. */
     private inner class RowSet(private val current: Map<JobID, JobRecord>) {
@@ -1200,14 +1234,14 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         }
         throw IllegalStateException(
             "runUntilIdle ran $maxSteps steps without the queue going idle. Either raise maxSteps, or a job is " +
-                    "yielding forever.",
+                "yielding forever.",
         )
     }
 
     private fun requireManual() {
         check(jobSettings.execution == JobExecution.Manual) {
             "step()/runUntilIdle() are only available with 'jobs { execution = JobExecution.Manual }'. With " +
-                    "JobExecution.Automatic, Klerk runs jobs on its own."
+                "JobExecution.Automatic, Klerk runs jobs on its own."
         }
     }
 
@@ -1362,9 +1396,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     private fun hasActiveRun(schedule: CronSchedule<C, V>): Boolean =
         records.values.any { it.cronScheduleId == schedule.id && !it.status.isTerminal }
 
-    private fun jitterFor(schedule: CronSchedule<C, V>): Duration =
-        if (schedule.jitter <= Duration.ZERO) Duration.ZERO
-        else schedule.jitter * random.nextDouble()
+    private fun jitterFor(schedule: CronSchedule<C, V>): Duration = if (schedule.jitter <= Duration.ZERO) {
+        Duration.ZERO
+    } else {
+        schedule.jitter * random.nextDouble()
+    }
 
     /** How late an occurrence may be and still count as "now" rather than "missed". */
     private fun missedThreshold(): Duration = maxOf(jobSettings.pollInterval * 5, 1.minutes)

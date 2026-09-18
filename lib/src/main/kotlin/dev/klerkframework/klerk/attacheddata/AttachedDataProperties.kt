@@ -15,10 +15,7 @@ import kotlin.reflect.KClass
  * @property declaration the [AttachedDataContainer] the reference was found in, or null for a bare id. It is what a
  * command checks the value against before letting the model claim it.
  */
-internal data class AttachedDataReference(
-    val id: Int,
-    val declaration: AttachedDataContainer<*>? = null,
-)
+internal data class AttachedDataReference(val id: Int, val declaration: AttachedDataContainer<*>? = null)
 
 /**
  * Finds the [AttachedBlobID] and [AttachedStringID] values in a model's props, including those inside a `List`, a
@@ -57,8 +54,9 @@ internal fun <ID, C : AttachedDataContainer<ID>> instantiateDeclaration(kClass: 
     } catch (e: IllegalConfigurationException) {
         throw IllegalArgumentException(
             "${kClass.qualifiedName ?: kClass} cannot be used as an attached-data declaration: it must have " +
-                    "exactly one constructor taking an id, and it must be public, as 'class MyImage(id: " +
-                    "AttachedBlobID) : AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one.", e,
+                "exactly one constructor taking an id, and it must be public, as 'class MyImage(id: " +
+                "AttachedBlobID) : AttachedBlobContainer(id)' does. An anonymous or inner class cannot be one.",
+            e,
         )
     }
     @Suppress("UNCHECKED_CAST")

@@ -65,9 +65,8 @@ public sealed interface PropertyCollectionValidity : Validity {
                 fieldsMustNotBeNull = setOfNotNull(fieldMustNotBeNull),
             )
 
-        override fun toString(): String =
-            "Invalid(${translationInfo ?: ""}, mustBeNull=${fieldMustBeNull?.name}, " +
-                "mustNotBeNull=${fieldMustNotBeNull?.name})"
+        override fun toString(): String = "Invalid(${translationInfo ?: ""}, mustBeNull=${fieldMustBeNull?.name}, " +
+            "mustNotBeNull=${fieldMustNotBeNull?.name})"
     }
 }
 

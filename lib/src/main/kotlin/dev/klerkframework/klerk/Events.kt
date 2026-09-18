@@ -62,7 +62,7 @@ public enum class EventVisibility(internal val level: Int) {
      * [Application], but this level can be used as a signal to other code (e.g., auto-generated UI or API) that it
      * should handle this event.
      */
-    External(5)
+    External(5),
 }
 
 /**
@@ -105,13 +105,12 @@ public sealed class Event<T : Any, P>(public val visibility: EventVisibility) {
             ?: throw IllegalConfigurationException(
                 KlerkErrorCode.InvalidStateMachine,
                 "Could not work out the type arguments of the event '${this::class.simpleName}'. Declare it as an " +
-                        "object (or a class) that names them concretely, e.g. " +
-                        "'object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)'.",
+                    "object (or a class) that names them concretely, e.g. " +
+                    "'object CreateBook : VoidEventWithParameters<Book, CreateBookParams>(External)'.",
             )
     }
 
     override fun toString(): String = id.toString()
-
 }
 
 private val eventKinds = setOf(
@@ -149,9 +148,8 @@ public abstract class VoidEventNoParameters<T : Any>(visibility: EventVisibility
  * An instance event (acts on an existing model of type [T]) that takes parameters of type [P] when handled.
  * Declare a handler function `fun update(arg: InstanceEventArgs<T, P, C, V>): T`.
  */
-public abstract class InstanceEventWithParameters<T : Any, P : Any>(
-    visibility: EventVisibility,
-) : InstanceEvent<T, P>(visibility) {
+public abstract class InstanceEventWithParameters<T : Any, P : Any>(visibility: EventVisibility) :
+    InstanceEvent<T, P>(visibility) {
     /** The class of the event's parameters. */
     @Suppress("UNCHECKED_CAST")
     public val parametersClass: KClass<P> = typeArgument(1) as KClass<P>

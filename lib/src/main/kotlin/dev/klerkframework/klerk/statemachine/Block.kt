@@ -1,10 +1,27 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.EventProcessingOptions
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.LifecycleArgs
+import dev.klerkframework.klerk.ModelArgs
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.RuleArgs
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.SpecificationMarker
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.DeclaredJob
-import dev.klerkframework.klerk.statemachine.executables.*
+import dev.klerkframework.klerk.statemachine.executables.CreateCommands
+import dev.klerkframework.klerk.statemachine.executables.CreateModel
+import dev.klerkframework.klerk.statemachine.executables.DeleteModel
+import dev.klerkframework.klerk.statemachine.executables.RunUnmanagedJob
+import dev.klerkframework.klerk.statemachine.executables.ScheduleJob
+import dev.klerkframework.klerk.statemachine.executables.ScheduleJobs
+import dev.klerkframework.klerk.statemachine.executables.Transition
+import dev.klerkframework.klerk.statemachine.executables.TransitionWhen
+import dev.klerkframework.klerk.statemachine.executables.UpdateModel
+import dev.klerkframework.klerk.view.ModelViews
 
 /** One thing a block does when it runs. [A] is the args type of the block it belongs to. */
 internal interface Executable<T : Any, A, C : KlerkContext, V> {
@@ -49,7 +66,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         ModelStates : Enum<*>,
         C : KlerkContext,
         V,
-    > protected constructor(
+        > protected constructor(
         name: String,
         type: BlockType,
     ) : Block<T, ModelStates, C, V>(name, type) {
@@ -72,10 +89,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * `MyJobType.declare(cursor)`. They are persisted in this command's own transaction, so a failing command
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
-        public fun jobs(
-            function: (args: A) -> List<DeclaredJob<C, V>>,
-            onCondition: ((args: A) -> Boolean)? = null,
-        ) {
+        public fun jobs(function: (args: A) -> List<DeclaredJob<C, V>>, onCondition: ((args: A) -> Boolean)? = null) {
             executables.add(ScheduleJobs(function, onCondition))
         }
 
@@ -84,10 +98,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * `MyJobType.declare(cursor)`. It is persisted in this command's own transaction, so a failing command
          * schedules nothing. See [dev.klerkframework.klerk.job.JobType] for the distinction from [unmanagedJob].
          */
-        public fun job(
-            function: (args: A) -> DeclaredJob<C, V>,
-            onCondition: ((args: A) -> Boolean)? = null,
-        ) {
+        public fun job(function: (args: A) -> DeclaredJob<C, V>, onCondition: ((args: A) -> Boolean)? = null) {
             executables.add(ScheduleJob(function, onCondition))
         }
 
@@ -101,10 +112,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * have an impact on system performance, so consider a normal job instead if you need to do anything
          * non-trivial.
          */
-        public fun unmanagedJob(
-            function: (args: A) -> Unit,
-            onCondition: ((args: A) -> Boolean)? = null,
-        ) {
+        public fun unmanagedJob(function: (args: A) -> Unit, onCondition: ((args: A) -> Boolean)? = null) {
             executables.add(RunUnmanagedJob(function, onCondition))
         }
 
@@ -118,7 +126,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         ModelStates : Enum<*>,
         C : KlerkContext,
         V,
-    > protected constructor(
+        > protected constructor(
         name: String,
         type: BlockType,
     ) : ExecutableBlock<T, A, ModelStates, C, V>(name, type) {
@@ -128,10 +136,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          * or `transitionWhen`) — a second call throws `IllegalArgumentException`. Rejected at startup if
          * [targetState] equals the state this block belongs to.
          */
-        public fun transitionTo(
-            targetState: ModelStates,
-            onCondition: ((args: A) -> Boolean)? = null,
-        ) {
+        public fun transitionTo(targetState: ModelStates, onCondition: ((args: A) -> Boolean)? = null) {
             require(executables.none { it is Transition<*, *, *, *, *> }) { "A block can only have one transition" }
             executables.add(Transition(targetState, onCondition))
         }
@@ -165,10 +170,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         /**
          * Replaces the model's properties with whatever [function] returns.
          */
-        public fun update(
-            function: (args: A) -> T,
-            onCondition: ((args: A) -> Boolean)? = null,
-        ) {
+        public fun update(function: (args: A) -> T, onCondition: ((args: A) -> Boolean)? = null) {
             executables.add(UpdateModel(function, onCondition))
         }
     }
@@ -211,9 +213,8 @@ internal enum class BlockType {
     Enter,
     Exit,
     Event,
-    Time
+    Time,
 }
-
 
 /**
  * The branches of a `transitionWhen { }`. Each [on] is evaluated in declaration order, and the model transitions to

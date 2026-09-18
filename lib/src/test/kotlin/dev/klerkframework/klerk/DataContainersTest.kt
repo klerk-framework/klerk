@@ -13,12 +13,17 @@ import dev.klerkframework.klerk.datatypes.ULongContainer
 import dev.klerkframework.klerk.datatypes.UShortContainer
 import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.KlerkJson
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.LocalDate
 import kotlin.math.absoluteValue
 import kotlin.random.Random
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -77,18 +82,15 @@ class DataContainersTest {
 
     @Test
     fun getValueType() {
-
         val bc = BookViews()
         val collections = Views(bc, AuthorViews(bc.all))
         val specification = createConfig(collections)
 
         println(specification)
-
     }
 
     @Test
     fun geoPosition() {
-
         try {
             GeoPosition(latitude = 95.0, longitude = 34.2)
             fail()
@@ -132,7 +134,6 @@ class DataContainersTest {
             assertTrue((pos.latitude - decoded.latitude).absoluteValue < 0.0000001)
             assertTrue((pos.longitude - decoded.longitude).absoluteValue < 0.0000001)
         }
-
     }
 
     @Test
@@ -239,5 +240,4 @@ class DataContainersTest {
         assertEquals(original, deserialized)
         assertEquals(BookGenre.Mystery, deserialized.genre.value)
     }
-
 }

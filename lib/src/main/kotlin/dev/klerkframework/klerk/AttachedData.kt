@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import kotlin.reflect.KClass
 import kotlin.time.Instant
 
 /**

@@ -53,5 +53,4 @@ public interface ModelMigrationStep : MigrationStep {
         check(from in original.props) { "Could not find any key '$from'" }
         return original.copy(props = JsonObject(original.props.mapKeys { (key, _) -> if (key == from) to else key }))
     }
-
 }

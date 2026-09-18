@@ -1,28 +1,44 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity
-import dev.klerkframework.klerk.validation.ContextValidity
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.EventVisibility
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.InstanceEvent
+import dev.klerkframework.klerk.InstanceEventNoParameters
+import dev.klerkframework.klerk.InstanceEventWithParameters
+import dev.klerkframework.klerk.InternalException
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.SpecificationMarker
+import dev.klerkframework.klerk.VoidEvent
+import dev.klerkframework.klerk.VoidEventNoParameters
+import dev.klerkframework.klerk.VoidEventWithParameters
 import dev.klerkframework.klerk.misc.PropertyKey
-import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.validation.ContextValidity
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
 import kotlin.reflect.KClass
 
 /** The states and events of a managed model of type [T]. Built with [stateMachine]. */
 @SpecificationMarker
-public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
-    internal val type: KClass<T>,
-) {
+public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(internal val type: KClass<T>) {
 
     internal lateinit var modelViews: ModelViews<T, C>
     private val _states: MutableList<State<T, ModelStates, C, V>> = mutableListOf()
+
     /** Every state, including the void state, in declaration order. */
     public val states: List<State<T, ModelStates, C, V>> get() = _states.toList()
     private lateinit var _voidState: VoidState<T, ModelStates, C, V>
 
     /** The void state — where a model of type [T] is before it exists. Declared with `voidState { }`. */
     public val voidState: VoidState<T, ModelStates, C, V> get() = _voidState
+
     /** Every state except the void state, in declaration order. */
     public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
         get() = _states.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
@@ -97,7 +113,7 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             ?: throw IllegalStateException(
                 "The statemachine has not defined the state '${model.state}'. The defined available are: ${
                     _states.joinToString(
-                        ","
+                        ",",
                     ) { it.name }
                 }",
             )
@@ -130,7 +146,6 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
      */
     public val eventReferences: Set<EventReference> get() =
         _states.flatMap { state -> state.getEvents().map { it.id } }.toSet()
-
 
     // -------- Builder ---------------------
 
@@ -275,18 +290,19 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
         validRefs: Map<PropertyKey, ModelView<out Any, *>> = emptyMap(),
         validEnums: Map<PropertyKey, Set<Enum<*>>> = emptyMap(),
     ) {
-        require(declaredRules.put(
-            event.id,
-            DeclaredEventRules(
-                contextRules = contextRules as Set<(KlerkContext) -> ContextValidity>,
-                noParamRules = noParamRules as Set<(Nothing) -> PropertyCollectionValidity>,
-                paramRules = paramRules as Set<(Nothing) -> PropertyCollectionValidity>,
-                validRefs = validRefs,
-                validEnums = validEnums,
-            ),
-        ) == null) { "The event ${event.id} is declared more than once in this state machine" }
+        require(
+            declaredRules.put(
+                event.id,
+                DeclaredEventRules(
+                    contextRules = contextRules as Set<(KlerkContext) -> ContextValidity>,
+                    noParamRules = noParamRules as Set<(Nothing) -> PropertyCollectionValidity>,
+                    paramRules = paramRules as Set<(Nothing) -> PropertyCollectionValidity>,
+                    validRefs = validRefs,
+                    validEnums = validEnums,
+                ),
+            ) == null,
+        ) { "The event ${event.id} is declared more than once in this state machine" }
     }
-
 }
 
 /**
@@ -315,8 +331,7 @@ internal data class DeclaredEventRules(
 
     /** The rules that run against the context alone. */
     @Suppress("UNCHECKED_CAST")
-    fun <C : KlerkContext> forContext(): Set<(C) -> ContextValidity> =
-        contextRules as Set<(C) -> ContextValidity>
+    fun <C : KlerkContext> forContext(): Set<(C) -> ContextValidity> = contextRules as Set<(C) -> ContextValidity>
 }
 
 /** Builds the state machine of the model [T], whose states are the constants of [ModelStates]. */

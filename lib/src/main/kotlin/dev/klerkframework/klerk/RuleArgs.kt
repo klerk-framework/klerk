@@ -14,6 +14,7 @@ import kotlin.time.Instant
 public interface RuleArgs<C : KlerkContext, V> {
     /** The context of the operation, including the actor. */
     public val context: C
+
     /** Reads other models, as of the operation. */
     public val reader: ModelReader<C, V>
 }
@@ -139,11 +140,7 @@ public data class AttachedDataWriteRuleArgs<C : KlerkContext, V>(
  * @property time the current time according to the configured clock. Use it as the context's time so that job steps,
  * and the event log entries of the commands they emit, follow the clock a test controls.
  */
-public data class JobContextRequest(
-    val actor: ActorIdentity,
-    val time: Instant,
-    val job: JobInfo,
-)
+public data class JobContextRequest(val actor: ActorIdentity, val time: Instant, val job: JobInfo)
 
 /**
  * The arguments given to the rules deciding who may see a job's metadata (see [JobManager.get]).

@@ -1,20 +1,14 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.storage.AttachedBlobStore
-import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import dev.klerkframework.klerk.view.*
-
 
 class MutationTest {
 
     @Test
     fun event() {
-
         runBlocking {
-
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
             val specification = SpecificationBuilder<Ctx, Views>(collections).build {

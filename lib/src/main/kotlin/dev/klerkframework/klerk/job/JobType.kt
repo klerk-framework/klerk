@@ -123,11 +123,8 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
      * [cursor] is the job's initial state. [scheduleAt] is the earliest time the job may run; null means as soon as a
      * dispatch slot is free. [priority] overrides the type's [JobType.priority] for this instance.
      */
-    public fun declare(
-        cursor: Cursor,
-        scheduleAt: Instant? = null,
-        priority: JobPriority? = null,
-    ): DeclaredJob<C, V> = DeclaredJob(this, encodeCursor(cursor), scheduleAt, priority)
+    public fun declare(cursor: Cursor, scheduleAt: Instant? = null, priority: JobPriority? = null): DeclaredJob<C, V> =
+        DeclaredJob(this, encodeCursor(cursor), scheduleAt, priority)
 
     internal fun encodeCursor(cursor: Cursor): String =
         codec?.encode(cursor) ?: cursorJson.encodeToString(cursorSerializer, cursor)
@@ -153,7 +150,7 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
         } catch (e: Exception) {
             throw IllegalArgumentException(
                 "Cannot serialize the cursor of the job type '${name.value}'. Annotate the cursor class with " +
-                        "@Serializable, or override 'cursorSerializer' or 'codec' on the job type.",
+                    "@Serializable, or override 'cursorSerializer' or 'codec' on the job type.",
                 e,
             )
         }
@@ -164,14 +161,14 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
         val cursorType = findCursorType()
             ?: throw IllegalArgumentException(
                 "Could not work out the cursor type of the job type '${name.value}'. Override 'cursorSerializer' " +
-                        "(e.g. 'override val cursorSerializer = MyCursor.serializer()') or supply a 'codec'.",
+                    "(e.g. 'override val cursorSerializer = MyCursor.serializer()') or supply a 'codec'.",
             )
         try {
             return serializer(cursorType) as KSerializer<Cursor>
         } catch (e: SerializationException) {
             throw IllegalArgumentException(
                 "There is no serializer for '$cursorType', the cursor of the job type '${name.value}'. Annotate it " +
-                        "with @Serializable, or override 'cursorSerializer' or 'codec' on the job type.",
+                    "with @Serializable, or override 'cursorSerializer' or 'codec' on the job type.",
                 e,
             )
         }
@@ -182,10 +179,9 @@ public sealed class JobType<Cursor : Any, C : KlerkContext, V> {
      * that names its cursor concretely (which is the normal case) records it in its supertype, so no annotation is
      * needed on the job type itself.
      */
-    private fun findCursorType(): KType? =
-        this::class.allSupertypes
-            .firstOrNull { (it.classifier as? KClass<*>) in cursorBearingClasses }
-            ?.arguments?.firstOrNull()?.type
+    private fun findCursorType(): KType? = this::class.allSupertypes
+        .firstOrNull { (it.classifier as? KClass<*>) in cursorBearingClasses }
+        ?.arguments?.firstOrNull()?.type
 
     /**
      * A job that runs on the master node and may read. Use this by default.

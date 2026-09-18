@@ -1,7 +1,13 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.camelCaseToPretty
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.FloatContainer
+import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.logger
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty1
@@ -55,7 +61,7 @@ public class SchemaField internal constructor(
     @Suppress("UNCHECKED_CAST")
     public val blobDeclaration: KClass<out AttachedBlobContainer>? =
         (elementType.shape as? Shape.Container)?.takeIf { it.kind == ContainerKind.AttachedBlob }?.kClass
-                as KClass<out AttachedBlobContainer>?
+            as KClass<out AttachedBlobContainer>?
 
     internal val owner: KClass<*> get() = schema.kClass
 

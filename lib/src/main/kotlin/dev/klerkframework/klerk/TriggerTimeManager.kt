@@ -9,7 +9,6 @@ import kotlinx.coroutines.runBlocking
 import java.util.concurrent.PriorityBlockingQueue
 import kotlin.concurrent.thread
 import kotlin.math.max
-import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -18,7 +17,6 @@ internal interface TriggerTimeManager {
     fun init(models: List<Model<out Any>>)
     fun start()
     fun stop()
-
 }
 
 internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
@@ -99,7 +97,6 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
         eventsManager.modelTriggeredByTime(model, now)
         return true
     }
-
 }
 
 private data class TimeTriggerModel(val instant: Instant, val id: Int) : Comparable<TimeTriggerModel> {

@@ -1,15 +1,14 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.ModelViews
-import dev.klerkframework.klerk.job.*
+import dev.klerkframework.klerk.job.JobsBlock
+import dev.klerkframework.klerk.job.JobsSpecification
 import dev.klerkframework.klerk.migration.MigrationStep
-import dev.klerkframework.klerk.misc.*
+import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.statemachine.StateMachine
-import java.util.*
-import kotlin.reflect.*
-import kotlin.reflect.full.*
+import dev.klerkframework.klerk.view.ModelViews
+import java.util.SortedSet
+import kotlin.reflect.KClass
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 
 @DslMarker
 internal annotation class SpecificationMarker
@@ -226,7 +225,6 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             }
             value.add(ManagedModel(clazz, stateMachine, view))
         }
-
     }
 
     /**
@@ -266,7 +264,6 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization>()
         internal val jobPositiveRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val jobNegativeRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> NegativeAuthorization>()
-
 
         /**
          * Rules deciding who may read a model as a whole (returned by `get`/`list`/views).
@@ -396,9 +393,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
         private fun everybodyCanReadEventLog(args: EventLogRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
-
     }
-
 
     /**
      * The rules of one authorization category, where [A] is the argument type its rules take (e.g.
@@ -430,7 +425,6 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             negativeRules.addAll(rule)
         }
     }
-
 }
 
 private fun <T : Any> validateModelClass(clazz: KClass<T>) {

@@ -1,9 +1,37 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Address
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.ImproveAuthor
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.KlerkImpl
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Street
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.misc.ChannelNotificationPref.*
-import dev.klerkframework.klerk.misc.ShowNotificationDecisions.*
+import dev.klerkframework.klerk.createKlerk
+import dev.klerkframework.klerk.misc.ChannelNotificationPref.Default
+import dev.klerkframework.klerk.misc.ChannelNotificationPref.Everything
+import dev.klerkframework.klerk.misc.ChannelNotificationPref.Mentions
+import dev.klerkframework.klerk.misc.ChannelNotificationPref.Nothing
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ChannelEveryoneHereMessage
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ChannelMentionsSuppressed
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ChannelMuted
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ChannelNotificationPrefIsNothing
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.DnDOverride
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ThreadMessage1
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ThreadMessageAndUserSubscribed
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ThreadMessageAndUserSubscribed2
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.ThreadsEverythingPrefOn
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.UserInDnD
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.UserSubscribed1
+import dev.klerkframework.klerk.misc.ShowNotificationDecisions.WhatIsTheUserChannelNotificationPrefForThisDevice
 import dev.klerkframework.klerk.read.ReaderWithAuth
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,7 +42,6 @@ val algorithmParams = AlgorithmParams(
     Preferences(channelMuted = false, false, false, Everything),
     "Hejsan @everyone",
 )
-
 
 class FlowChartAlgorithmTest {
 
@@ -116,7 +143,8 @@ sealed class ShowNotificationDecisions<T>(
         ShowNotificationDecisions<Boolean>("threads_everything pref on?", ::threadsEverythingPrefOn)
 
     data object ChannelNotificationPrefIsNothing : ShowNotificationDecisions<Boolean>(
-        "Channel notification pref is 'nothing'?", ::channelNotificationPrefIsNothing,
+        "Channel notification pref is 'nothing'?",
+        ::channelNotificationPrefIsNothing,
     )
 
     data object WhatIsTheUserChannelNotificationPrefForThisDevice : ShowNotificationDecisions<ChannelNotificationPref>(
@@ -130,8 +158,7 @@ sealed class ShowNotificationDecisions<T>(
 
 fun whatIsTheUserChannelNotificationPrefForThisDevice(
     params: InstanceEventArgs<Author, Nothing?, Ctx, Views>,
-): ChannelNotificationPref =
-    algorithmParams.preferences.channelNotification
+): ChannelNotificationPref = algorithmParams.preferences.channelNotification
 
 fun channelNotificationPrefIsNothing(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.preferences.channelNotification == Nothing
@@ -139,16 +166,14 @@ fun channelNotificationPrefIsNothing(params: InstanceEventArgs<Author, kotlin.No
 fun userSubscribed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.state.userSubscribed
 
-fun threadMessage(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
-    algorithmParams.state.threadMessage
+fun threadMessage(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) = algorithmParams.state.threadMessage
 
 enum class ChannelNotificationPref {
     Nothing,
     Everything,
     Mentions,
-    Default
+    Default,
 }
-
 
 fun isChannelMuted(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     algorithmParams.preferences.channelMuted
@@ -156,17 +181,15 @@ fun isChannelMuted(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views
 fun threadMessageAndUserSubscribed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
     threadMessage(params) && userSubscribed(params)
 
-fun userInDnD(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
-    algorithmParams.state.userDnd
+fun userInDnD(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) = algorithmParams.state.userDnd
 
-fun dnDOverride(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) =
-    algorithmParams.state.dndOverride
+fun dnDOverride(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>) = algorithmParams.state.dndOverride
 
 fun channelEveryoneHereMessage(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): Boolean {
     val p = algorithmParams
     return p.message.contains("@channel") ||
-            p.message.contains("@everyone") ||
-            p.message.contains("@here")
+        p.message.contains("@everyone") ||
+        p.message.contains("@here")
 }
 
 fun channelMentionsSuppressed(params: InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>): Boolean =
@@ -180,7 +203,6 @@ object MyAlgoWhichReturnsInt :
 
     override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, kotlin.Nothing?, Ctx, Views>, Int>.() -> Unit =
         {
-
             start(ChannelMuted)
 
             booleanNode(ChannelMuted) {
@@ -207,9 +229,7 @@ object MyAlgoWhichReturnsInt :
                 on(true, terminateWith = 4)
                 on(false, terminateWith = 5)
             }
-
         }
-
 }
 
 // Note that the functions in this algorithm are not pure since they use algorithmParams rather than the BlockParams.
@@ -218,72 +238,69 @@ object MyAlgoWhichReturnsInt :
 object ShouldSendNotificationAlgorithm :
     FlowChartAlgorithm<InstanceEventArgs<Author, Nothing?, Ctx, Views>, Boolean>("Should we send a notification?") {
 
-    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, Nothing?, Ctx, Views>, Boolean>.() -> Unit =
-        {
-            start(ChannelMuted)
+    override fun configure(): AlgorithmBuilder<InstanceEventArgs<Author, Nothing?, Ctx, Views>, Boolean>.() -> Unit = {
+        start(ChannelMuted)
 
-            booleanNode(ChannelMuted) {
-                on(true, next = ThreadMessageAndUserSubscribed)
-                on(false, next = UserInDnD)
-            }
-
-            booleanNode(ThreadMessageAndUserSubscribed) {
-                on(true, next = UserInDnD)
-                on(false, terminateWith = false)
-            }
-
-            booleanNode(UserInDnD) {
-                on(true, next = DnDOverride)
-                on(false, terminateWith = true)
-            }
-
-            booleanNode(DnDOverride) {
-                on(true, next = ChannelEveryoneHereMessage)
-                on(false, terminateWith = false)
-            }
-
-            booleanNode(ChannelEveryoneHereMessage) {
-                on(true, next = ChannelMentionsSuppressed)
-                on(false, next = ThreadMessageAndUserSubscribed2)
-            }
-
-            booleanNode(ChannelMentionsSuppressed) {
-                on(true, next = ThreadsEverythingPrefOn)
-                on(false, next = ThreadMessageAndUserSubscribed2)
-            }
-
-            booleanNode(ThreadsEverythingPrefOn) {
-                on(true, next = ChannelNotificationPrefIsNothing)
-                on(false, next = WhatIsTheUserChannelNotificationPrefForThisDevice)
-            }
-
-            booleanNode(ChannelNotificationPrefIsNothing) {
-                on(true, terminateWith = false)
-                on(false, terminateWith = true)
-            }
-
-            booleanNode(ThreadMessageAndUserSubscribed2) {
-                on(true, next = ThreadsEverythingPrefOn)
-                on(false, next = WhatIsTheUserChannelNotificationPrefForThisDevice)
-            }
-
-            enumNode(WhatIsTheUserChannelNotificationPrefForThisDevice) {
-                on(Nothing, terminateWith = false)
-                on(Mentions, terminateWith = true)          //
-                on(Everything, next = ThreadMessage1)
-                on(Default, terminateWith = true)           //
-            }
-
-            booleanNode(ThreadMessage1) {
-                on(true, next = UserSubscribed1)
-                on(false, terminateWith = true)
-            }
-
-            booleanNode(UserSubscribed1) {
-                on(true, terminateWith = true)
-                on(false, terminateWith = false)    //
-            }
-
+        booleanNode(ChannelMuted) {
+            on(true, next = ThreadMessageAndUserSubscribed)
+            on(false, next = UserInDnD)
         }
 
+        booleanNode(ThreadMessageAndUserSubscribed) {
+            on(true, next = UserInDnD)
+            on(false, terminateWith = false)
+        }
+
+        booleanNode(UserInDnD) {
+            on(true, next = DnDOverride)
+            on(false, terminateWith = true)
+        }
+
+        booleanNode(DnDOverride) {
+            on(true, next = ChannelEveryoneHereMessage)
+            on(false, terminateWith = false)
+        }
+
+        booleanNode(ChannelEveryoneHereMessage) {
+            on(true, next = ChannelMentionsSuppressed)
+            on(false, next = ThreadMessageAndUserSubscribed2)
+        }
+
+        booleanNode(ChannelMentionsSuppressed) {
+            on(true, next = ThreadsEverythingPrefOn)
+            on(false, next = ThreadMessageAndUserSubscribed2)
+        }
+
+        booleanNode(ThreadsEverythingPrefOn) {
+            on(true, next = ChannelNotificationPrefIsNothing)
+            on(false, next = WhatIsTheUserChannelNotificationPrefForThisDevice)
+        }
+
+        booleanNode(ChannelNotificationPrefIsNothing) {
+            on(true, terminateWith = false)
+            on(false, terminateWith = true)
+        }
+
+        booleanNode(ThreadMessageAndUserSubscribed2) {
+            on(true, next = ThreadsEverythingPrefOn)
+            on(false, next = WhatIsTheUserChannelNotificationPrefForThisDevice)
+        }
+
+        enumNode(WhatIsTheUserChannelNotificationPrefForThisDevice) {
+            on(Nothing, terminateWith = false)
+            on(Mentions, terminateWith = true) //
+            on(Everything, next = ThreadMessage1)
+            on(Default, terminateWith = true) //
+        }
+
+        booleanNode(ThreadMessage1) {
+            on(true, next = UserSubscribed1)
+            on(false, terminateWith = true)
+        }
+
+        booleanNode(UserSubscribed1) {
+            on(true, terminateWith = true)
+            on(false, terminateWith = false) //
+        }
+    }
 }

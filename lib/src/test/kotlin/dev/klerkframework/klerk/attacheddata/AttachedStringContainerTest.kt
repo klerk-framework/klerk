@@ -1,15 +1,36 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.CreateNote
+import dev.klerkframework.klerk.CreateNoteParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.Note
+import dev.klerkframework.klerk.NoteBody
+import dev.klerkframework.klerk.NoteTitle
+import dev.klerkframework.klerk.Scribble
+import dev.klerkframework.klerk.SpecificationBuilder
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
+import dev.klerkframework.klerk.generousAuthRules
+import dev.klerkframework.klerk.scribbleStateMachine
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.runBlocking
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /**
  * What a string property declares is enforced the same way a blob property's is: in the command pipeline, against

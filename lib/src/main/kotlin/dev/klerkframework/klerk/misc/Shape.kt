@@ -1,9 +1,31 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.*
-import java.lang.reflect.InvocationTargetException
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.AttachedStringContainer
+import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.ByteContainer
+import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DoubleContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.EnumContainer
+import dev.klerkframework.klerk.datatypes.FloatContainer
+import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.datatypes.GeoPositionContainer
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.datatypes.ShortContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.datatypes.UByteContainer
+import dev.klerkframework.klerk.datatypes.UIntContainer
+import dev.klerkframework.klerk.datatypes.ULongContainer
+import dev.klerkframework.klerk.datatypes.UShortContainer
 import kotlinx.datetime.LocalDate
+import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -41,13 +63,17 @@ internal class SchemaType(
      * A placeholder value of this type, e.g. to create an instance when only the declaration matters. Never use it as
      * data.
      */
-    fun dummy(): Any? = if (nullable) null else when (shape) {
-        is Shape.Container -> shape.dummy()
-        Shape.Reference -> ModelID<Any>(0)
-        Shape.BlobID -> AttachedBlobID(0)
-        Shape.StringID -> AttachedStringID(0)
-        is Shape.Many -> if (shape.isSet) emptySet<Any>() else emptyList<Any>()
-        is Shape.Nested -> shape.schema.create(shape.schema.fields.map { it.schemaType.dummy() })
+    fun dummy(): Any? = if (nullable) {
+        null
+    } else {
+        when (shape) {
+            is Shape.Container -> shape.dummy()
+            Shape.Reference -> ModelID<Any>(0)
+            Shape.BlobID -> AttachedBlobID(0)
+            Shape.StringID -> AttachedStringID(0)
+            is Shape.Many -> if (shape.isSet) emptySet<Any>() else emptyList<Any>()
+            is Shape.Nested -> shape.schema.create(shape.schema.fields.map { it.schemaType.dummy() })
+        }
     }
 }
 
@@ -80,7 +106,7 @@ internal sealed class Shape {
 
         fun dummy(): DataContainer<*> = create(
             kind.dummy ?: enumConstants.firstOrNull()
-            ?: throw IllegalArgumentException("${kClass.simpleName} holds an enum without constants"),
+                ?: throw IllegalArgumentException("${kClass.simpleName} holds an enum without constants"),
         )
 
         /** Checks the validators of a placeholder instance; a class that cannot make one is checked when validating. */

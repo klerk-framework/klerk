@@ -1,12 +1,12 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.ModelView
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.StateMachine
-import kotlin.reflect.KClass
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.ModelViews
 import kotlin.enums.enumEntries
+import kotlin.reflect.KClass
 import kotlin.time.Instant
 
 /**
@@ -22,10 +22,7 @@ public data class ManagedModel<T : Any, ModelStates : Enum<*>, C : KlerkContext,
 /**
  * A registered [ModelView] together with the model class it holds, as returned by `Specification.registeredViews`.
  */
-public data class RegisteredView<C : KlerkContext>(
-    val modelClass: KClass<out Any>,
-    val view: ModelView<out Any, C>,
-)
+public data class RegisteredView<C : KlerkContext>(val modelClass: KClass<out Any>, val view: ModelView<out Any, C>)
 
 /**
  * A stored instance: metadata (id, timestamps, current [state]) plus the model's props of type [T].

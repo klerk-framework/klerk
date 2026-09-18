@@ -114,5 +114,4 @@ public open class ModelViews<T : Any, C : KlerkContext> {
     public val views: List<ModelView<T, C>> get() = modelViews.toList()
 
     override fun toString(): String = "${this::class.simpleName}(views=${modelViews.size}, models=${_all.size})"
-
 }

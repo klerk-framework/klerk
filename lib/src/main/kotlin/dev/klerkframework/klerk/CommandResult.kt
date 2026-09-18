@@ -17,28 +17,25 @@ public sealed class CommandResult<T : Any> {
      * @throws Exception the first [Problem]'s [Problem.asException] (e.g. [AuthorizationException],
      * [IllegalStateException], [IllegalArgumentException]) if this is a [Failure].
      */
-    public fun getOrThrow(): Success<T> =
-        when (this) {
-            is Failure -> throw this.problems.firstOrNull()?.asException() ?: IllegalStateException("Unknown problem")
-            is Success -> this
-        }
+    public fun getOrThrow(): Success<T> = when (this) {
+        is Failure -> throw this.problems.firstOrNull()?.asException() ?: IllegalStateException("Unknown problem")
+        is Success -> this
+    }
 
     /**
      * Returns this as [Success], or calls [onFailure] otherwise. [onFailure] typically leaves the enclosing function
      * with `return` or `throw`; to turn either outcome into another value, use [fold].
      */
-    public inline fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> =
-        when (this) {
-            is Failure -> onFailure(this)
-            is Success -> this
-        }
+    public inline fun getOrElse(onFailure: (Failure<T>) -> Success<T>): Success<T> = when (this) {
+        is Failure -> onFailure(this)
+        is Success -> this
+    }
 
     /** Returns the result of [onSuccess] or [onFailure], depending on the outcome. */
-    public inline fun <R> fold(onSuccess: (Success<T>) -> R, onFailure: (Failure<T>) -> R): R =
-        when (this) {
-            is Failure -> onFailure(this)
-            is Success -> onSuccess(this)
-        }
+    public inline fun <R> fold(onSuccess: (Success<T>) -> R, onFailure: (Failure<T>) -> R): R = when (this) {
+        is Failure -> onFailure(this)
+        is Success -> onSuccess(this)
+    }
 
     /**
      * The result of a successfully processed command.
@@ -84,8 +81,7 @@ public sealed class CommandResult<T : Any> {
     }
 
     /** The command was rejected for the given [problems]; nothing was changed. */
-    public data class Failure<T : Any>(val problems: List<Problem>) :
-        CommandResult<T>()
+    public data class Failure<T : Any>(val problems: List<Problem>) : CommandResult<T>()
 
     internal companion object {
         fun <T : Any, V, C : KlerkContext> from(

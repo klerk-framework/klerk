@@ -12,6 +12,7 @@ public interface KlerkContext {
 
     /** Optional free-text stored alongside the event log entry for whatever command uses this context. */
     public val eventLogExtra: String?
+
     /** The language that end-user messages, such as validation problems, are produced in. */
     public val translation: Translation
 

@@ -1,17 +1,18 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
-import dev.klerkframework.klerk.storage.AttachedBlobStore
-import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
-import kotlin.test.*
-import dev.klerkframework.klerk.view.*
-
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class ValidatorTest {
 
@@ -49,7 +50,7 @@ class ValidatorTest {
             val command = Command(
                 CreateAuthor,
                 params,
-            
+
             )
             val options = ProcessingOptions()
             when (val result = klerk.handle(command, Ctx.system(), options)) {
@@ -72,7 +73,7 @@ class ValidatorTest {
             val command = Command(
                 CreateAuthor,
                 params,
-            
+
             )
             val options = ProcessingOptions()
             val result = klerk.handle(command, Ctx.unauthenticated(), options)
@@ -121,7 +122,7 @@ class ValidatorTest {
             val command = Command(
                 CreateAuthor,
                 params,
-            
+
             )
             val options = ProcessingOptions()
             val result = klerk.handle(command, Ctx.system(), options)
@@ -198,7 +199,7 @@ class ValidatorTest {
                 tags = emptySet(),
                 averageScore = AverageScore(0f),
                 readingTime = ReadingTime(kotlin.time.Duration.ZERO),
-                genre = BookGenreContainer(BookGenre.Mystery),  // not in validEnums
+                genre = BookGenreContainer(BookGenre.Mystery), // not in validEnums
             )
             val command = Command(CreateBook, params)
             val options = ProcessingOptions()
@@ -216,7 +217,6 @@ class ValidatorTest {
     }
 }
 
-
 open class EvenIntContainer(value: Int) : IntContainer(value) {
 
     init {
@@ -227,7 +227,6 @@ open class EvenIntContainer(value: Int) : IntContainer(value) {
     override val min: Int = 0
 
     override val max: Int = 100
-
 }
 
 class IntWithTwoOrFourOrThree(value: Int) : EvenIntContainer(value) {
@@ -239,5 +238,4 @@ class IntWithTwoOrFourOrThree(value: Int) : EvenIntContainer(value) {
     override val min: Int = 0
 
     override val max: Int = 100
-
 }

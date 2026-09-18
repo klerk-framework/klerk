@@ -1,20 +1,30 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.testing.runUntilIdle
-import dev.klerkframework.klerk.testing.step
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
+import dev.klerkframework.klerk.view.asSequence
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Instant
-import dev.klerkframework.klerk.view.*
 
 /**
  * The `commitJobStep` contract says a step's command, its checkpoint and any children it spawned land together or not
@@ -41,9 +51,7 @@ class JobAtomicityTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<WriteCursor, Ctx, Views>,
-
         ): JobResult<WriteCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) {
                 return JobResult.Success()
@@ -71,9 +79,7 @@ class JobAtomicityTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<SpawnerCursor, Ctx, Views>,
-
         ): JobResult<SpawnerCursor, Ctx, Views> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
@@ -91,11 +97,8 @@ class JobAtomicityTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<WriteCursor, Ctx, Views>,
-
-        ): JobResult<WriteCursor, Ctx, Views> =
-            JobResult.Success(result = "done")
+        ): JobResult<WriteCursor, Ctx, Views> = JobResult.Success(result = "done")
     }
 
     /**
@@ -127,10 +130,7 @@ class JobAtomicityTest {
 
     private class SimulatedCrash : RuntimeException("simulated crash")
 
-    private suspend fun klerkOver(
-        storage: RamStorage,
-        clock: MutableClock,
-    ): Klerk<Ctx, Views> {
+    private suspend fun klerkOver(storage: RamStorage, clock: MutableClock): Klerk<Ctx, Views> {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val klerk = createKlerk(collections, storage, clock) {

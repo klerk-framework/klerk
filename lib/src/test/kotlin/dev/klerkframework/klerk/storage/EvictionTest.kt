@@ -1,11 +1,32 @@
 package dev.klerkframework.klerk.storage
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorStates
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.Book
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.ChangeName
+import dev.klerkframework.klerk.ChangeNameParams
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.ImproveAuthor
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SQLiteInMemory
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createConfig
+import dev.klerkframework.klerk.generateSampleData
 import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.testSettings
+import dev.klerkframework.klerk.view.asSequence
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -21,7 +42,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.view.*
 
 /**
  * Everything here runs with a cache far smaller than the data, so practically every read is a miss that has to be
@@ -32,10 +52,7 @@ class EvictionTest {
 
     private val tiny = ModelCacheSettings(maxResidentModels = 2)
 
-    private fun start(
-        storage: Persistence,
-        cache: ModelCacheSettings,
-    ): Pair<Klerk<Ctx, Views>, Views> {
+    private fun start(storage: Persistence, cache: ModelCacheSettings): Pair<Klerk<Ctx, Views>, Views> {
         val bc = BookViews()
         val views = Views(bc, AuthorViews(bc.all))
         val klerk = Klerk.create(
@@ -69,19 +86,18 @@ class EvictionTest {
         (views.authors.all.asSequence().toList() + views.books.all.asSequence().toList()).associateBy { it.id.value }
 
     /** A brand new author: Amateur, and with no books referring to it. */
-    private suspend fun createAuthor(klerk: Klerk<Ctx, Views>): ModelID<Author> =
-        klerk.handle(
-            Command(
-                CreateAuthor,
-                CreateAuthorParams(
-                    firstName = FirstName("Solo"),
-                    lastName = LastName("Author"),
-                    phone = PhoneNumber("+46123456"),
-                    secretToken = SecretPasscode(42),
-                ),
+    private suspend fun createAuthor(klerk: Klerk<Ctx, Views>): ModelID<Author> = klerk.handle(
+        Command(
+            CreateAuthor,
+            CreateAuthorParams(
+                firstName = FirstName("Solo"),
+                lastName = LastName("Author"),
+                phone = PhoneNumber("+46123456"),
+                secretToken = SecretPasscode(42),
             ),
-            Ctx.system(),
-        ).getOrThrow().primaryModel!!
+        ),
+        Ctx.system(),
+    ).getOrThrow().primaryModel!!
 
     @Test
     fun `modelsCount counts models that exist, not models in memory`() = runBlocking {
@@ -149,7 +165,7 @@ class EvictionTest {
         generateSampleData(12, 2, klerk)
 
         val author = createAuthor(klerk)
-        klerk.read(Ctx.system()) { views.books.all.asSequence().toList().map { it.id } }   // evict it
+        klerk.read(Ctx.system()) { views.books.all.asSequence().toList().map { it.id } } // evict it
         val countBefore = klerk.meta.modelsCount
 
         klerk.handle(
@@ -195,6 +211,7 @@ class EvictionTest {
     private class BlockingStore(private val delegate: Persistence) : Persistence by delegate {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
+
         @Volatile
         var block = false
         private val reads = ConcurrentHashMap<Int, AtomicInteger>()

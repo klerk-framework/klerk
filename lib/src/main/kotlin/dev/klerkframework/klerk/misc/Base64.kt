@@ -1,7 +1,6 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
-import java.util.*
+import java.util.Base64
 
 // why does Ktor have its own implementation of these?
 internal fun String.encodeBase64(): String = Base64.getEncoder().encodeToString(this.toByteArray())

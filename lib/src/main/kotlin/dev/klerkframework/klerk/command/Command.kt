@@ -1,10 +1,20 @@
 package dev.klerkframework.klerk.command
 
+import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.InstanceEvent
+import dev.klerkframework.klerk.InstanceEventNoParameters
+import dev.klerkframework.klerk.InstanceEventWithParameters
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.VoidEvent
+import dev.klerkframework.klerk.VoidEventNoParameters
+import dev.klerkframework.klerk.VoidEventWithParameters
+import dev.klerkframework.klerk.decode64bitMicroseconds
+import dev.klerkframework.klerk.defaultDebugOptions
 import dev.klerkframework.klerk.log.LogLevel
-import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.misc.getCurrentInstant
+import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlin.time.Instant
 
 /**
@@ -50,8 +60,7 @@ public fun <T : Any, P : Any> Command(event: VoidEventWithParameters<T, P>, para
     Command.dynamic(event, null, params)
 
 /** A command running the parameterless void event [event]. */
-public fun <T : Any> Command(event: VoidEventNoParameters<T>): Command<T, Nothing?> =
-    Command.dynamic(event, null, null)
+public fun <T : Any> Command(event: VoidEventNoParameters<T>): Command<T, Nothing?> = Command.dynamic(event, null, null)
 
 /** A command running the instance event [event] on [model], with [params]. */
 public fun <T : Any, P : Any> Command(
@@ -102,16 +111,11 @@ public enum class DebugOption {
  * base64 encoding that can be sent to a client and round-tripped back through [parse] (e.g. to let a client hold a
  * token across a request/response cycle before submitting the actual command).
  */
-public class CommandToken private constructor(
-    internal val time: Instant,
-    internal val models: Set<ModelID<out Any>>,
-) {
+public class CommandToken private constructor(internal val time: Instant, internal val models: Set<ModelID<out Any>>) {
 
-    override fun toString(): String =
-        "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
+    override fun toString(): String = "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
 
-    override fun equals(other: Any?): Boolean =
-        other is CommandToken && other.time == time && other.models == models
+    override fun equals(other: Any?): Boolean = other is CommandToken && other.time == time && other.models == models
 
     override fun hashCode(): Int = 31 * time.hashCode() + models.hashCode()
 

@@ -174,6 +174,5 @@ public object AdmissionPolicy {
     /** Accepts everything. The hard queue cap still applies. */
     public fun <C : KlerkContext> allowAll(args: AdmissionArgs<C>): AdmissionDecision = AdmissionDecision.Allow
 
-    private fun JobPriority.oneClassLower(): JobPriority? =
-        JobPriority.entries.getOrNull(ordinal + 1)
+    private fun JobPriority.oneClassLower(): JobPriority? = JobPriority.entries.getOrNull(ordinal + 1)
 }

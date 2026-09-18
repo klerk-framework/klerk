@@ -1,9 +1,19 @@
 package dev.klerkframework.klerk.storage
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedDataID
+import dev.klerkframework.klerk.AttachedDataKind
+import dev.klerkframework.klerk.AttachedDataMetadata
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.job.JobID
+import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.migration.MigrationStep
+import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
+import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
+import dev.klerkframework.klerk.storage.spi.AttachedDataRow
+import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.storage.spi.JobRecord
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
@@ -179,17 +189,15 @@ public open class RamStorage : Persistence {
         )
     }
 
-    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
-        attachedRows[id]?.let {
-            AttachedDataRow(Unit, it.owner, it.metadata, it.expires, it.claimedByJob)
-        }
+    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? = attachedRows[id]?.let {
+        AttachedDataRow(Unit, it.owner, it.metadata, it.expires, it.claimedByJob)
+    }
 
     override fun getAttachedValue(id: Int): InputStream? = attachedRows[id]?.value?.inputStream()
 
-    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
-        attachedRows.mapValues {
-            AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires, it.value.claimedByJob)
-        }
+    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> = attachedRows.mapValues {
+        AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires, it.value.claimedByJob)
+    }
 
     override fun deleteExpiredAttachedData(now: Instant): Set<Int> {
         val expired = attachedRows.filterValues { row ->

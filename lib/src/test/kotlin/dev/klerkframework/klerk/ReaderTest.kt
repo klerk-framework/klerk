@@ -1,31 +1,26 @@
 package dev.klerkframework.klerk
 
-
-import dev.klerkframework.klerk.view.asSequence
-import dev.klerkframework.klerk.view.query
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.view.asSequence
+import dev.klerkframework.klerk.view.query
 import kotlinx.coroutines.runBlocking
 import kotlin.reflect.full.memberProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
-import kotlin.test.assertNull
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Clock
 
-
 class ReaderTest {
-
 
     @Test
     fun getTypedRelationsTest() {
-
         runBlocking {
-
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
             val klerk = createKlerk(collections)
@@ -70,7 +65,6 @@ class ReaderTest {
                     booksWhereLinusIsCoAuthor.first().props.title.value,
                 )
             }
-
         }
     }
 
@@ -110,7 +104,6 @@ class ReaderTest {
             } catch (e: Exception) {
                 fail()
             }
-
         }
     }
 
@@ -195,7 +188,6 @@ class ReaderTest {
                 collections.authors.all.asSequence().filter { it.props.firstName.value == "Bertil" }.toList()
             }
 
-
             // read something nullable
             val maybeBook = klerk.read(context) { getOrNull(harryPotter1) }
             maybeBook?.props?.title?.let { println(it.value) }
@@ -206,7 +198,6 @@ class ReaderTest {
 
             val q2 = klerk.readSuspend(context) { collections.authors.greatAuthors.query() }
             assertTrue(q2.items.isEmpty())
-
         }
     }
 
@@ -228,12 +219,9 @@ class ReaderTest {
             assertEquals(astrid, klerk.read(Ctx.system()) { getOrNull(astrid) }?.id)
         }
     }
-
-
 }
 
 data class AuthorAndBook(val author: Model<Author>, val book: Model<Book>)
-
 
 data class Test1(val author: ModelID<Author>)
 data class Test2(val author: ModelID<Author>)

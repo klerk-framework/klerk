@@ -1,8 +1,6 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
-import kotlinx.coroutines.runBlocking
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobManagerImpl
@@ -15,9 +13,10 @@ import dev.klerkframework.klerk.read.KlerkModelsImpl
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.validation.Validator
+import dev.klerkframework.klerk.view.ModelViews
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.measureTime
-
 
 /**
  * The implementation behind a [Klerk] handle, for the framework's own use — a job step is handed the interface, but
@@ -28,8 +27,7 @@ internal fun <C : KlerkContext, V> Klerk<C, V>.impl(): KlerkImpl<C, V> = this as
 internal class KlerkImpl<C : KlerkContext, V>(
     override val specification: Specification<C, V>,
     override val settings: KlerkSettings,
-) :
-    Klerk<C, V> {
+) : Klerk<C, V> {
 
     override val jobs = JobManagerImpl<C, V>(this)
 
@@ -54,15 +52,11 @@ internal class KlerkImpl<C : KlerkContext, V>(
             }
             managed.stateMachine.setView(managed.views)
         }
-
     }
-
 
     private fun modelViewProvider(modelType: String): ModelViews<*, C> =
         specification.managedModels.find { it.kClass.simpleName == modelType }?.views
             ?: error("Can't find model view for type '$modelType'")
-
-
 
     override val modelChanges = modelsManager
     override val unsafe = modelsManager
@@ -95,15 +89,12 @@ internal class KlerkImpl<C : KlerkContext, V>(
     override suspend fun <T> read(context: C, readFunction: Reader<C, V>.() -> T): T =
         modelsManager.read(context, readFunction)
 
-
     override suspend fun <T> readSuspend(context: C, readFunction: suspend Reader<C, V>.() -> T): T =
         modelsManager.readSuspend(context, readFunction)
-
-
 }
 
 internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C, V>) : KlerkMeta {
-    private val state = AtomicInteger(0)    // 0 = not started, 1 = started, 2 = stopped
+    private val state = AtomicInteger(0) // 0 = not started, 1 = started, 2 = stopped
 
     override suspend fun start(installShutdownHook: Boolean) {
         if (state.compareAndSet(0, 1)) {
@@ -146,7 +137,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
             throw IllegalStateException("Klerk has not been started")
         }
         if (previousState == 2) {
-            return  // already stopped
+            return // already stopped
         }
         for (plugin in klerk.specification.plugins.asReversed()) {
             try {
@@ -156,11 +147,10 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
             }
         }
         klerk.eventsManager.stop()
-        klerk.jobs.stop()    // stopping jobs after events in case a job is created that must execute on this instance.
+        klerk.jobs.stop() // stopping jobs after events in case a job is created that must execute on this instance.
         klerk.activityLog.add(LogKlerkStopped())
     }
 
     override val modelsCount: Int
         get() = ModelCache.count
-
 }

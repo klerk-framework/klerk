@@ -3,11 +3,8 @@ package dev.klerkframework.klerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.view.*
-
 
 class StateMachineTest {
-
 
     @Test
     fun testar() {
@@ -35,8 +32,6 @@ class StateMachineTest {
             println(p.referencedModel)
             println(p.defaultContainer)
             assertTrue(parameters.kClass == CreateBookParams::class)
-
         }
-
     }
 }

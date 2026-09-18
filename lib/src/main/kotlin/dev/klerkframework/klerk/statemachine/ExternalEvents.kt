@@ -1,11 +1,15 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity
-import dev.klerkframework.klerk.validation.ContextValidity
-import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.SpecificationMarker
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.misc.PropertyKey
+import dev.klerkframework.klerk.validation.ContextValidity
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.view.ModelView
 import kotlin.reflect.KProperty1
 
 /**

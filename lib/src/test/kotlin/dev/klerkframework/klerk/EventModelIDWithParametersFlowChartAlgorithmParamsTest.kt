@@ -5,7 +5,6 @@ import dev.klerkframework.klerk.misc.ObjectSchema
 import kotlin.test.Test
 import kotlin.test.fail
 
-
 class EventModelIDWithParametersFlowChartAlgorithmParamsTest {
 
     @Test
@@ -22,7 +21,6 @@ class EventModelIDWithParametersFlowChartAlgorithmParamsTest {
             //
         }
     }
-
 }
 
 class MyValidEventParams(

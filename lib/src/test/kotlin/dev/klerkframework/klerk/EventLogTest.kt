@@ -1,12 +1,8 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.Persistence
-import dev.klerkframework.klerk.storage.SqlPersistence
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -77,15 +73,14 @@ class EventLogTest {
         author: ModelID<Author>,
         to: String,
         context: Ctx = Ctx.system(),
-    ) =
-        klerk.handle(
-            Command(
-                ChangeName,
-                author,
-                ChangeNameParams(FirstName(to), LastName("Author")),
-            ),
-            context,
-        ).getOrThrow()
+    ) = klerk.handle(
+        Command(
+            ChangeName,
+            author,
+            ChangeNameParams(FirstName(to), LastName("Author")),
+        ),
+        context,
+    ).getOrThrow()
 
     @Test
     fun `an event is not in the log until its command is visible`() = runBlocking {

@@ -30,11 +30,7 @@ public data class AttachedDataRow<T>(
  *
  * @property contentType what the bytes were recognised as, or null when they match no known format.
  */
-public data class AttachedDataDigest(
-    val size: Long,
-    val hash: String,
-    val contentType: String?,
-)
+public data class AttachedDataDigest(val size: Long, val hash: String, val contentType: String?)
 
 /**
  * The changes to attached data that a command implies (see [dev.klerkframework.klerk.KlerkAttachedData]). Applied in
@@ -59,7 +55,4 @@ public data class AttachedDataDelta(
  * @property visibility declared by the property the value was attached to. Written once, here, and never changed
  * afterwards — which is what makes [AttachedDataVisibility.Public] safe to cache.
  */
-public data class AttachedDataClaim(
-    val owner: Int,
-    val visibility: AttachedDataVisibility,
-)
+public data class AttachedDataClaim(val owner: Int, val visibility: AttachedDataVisibility)

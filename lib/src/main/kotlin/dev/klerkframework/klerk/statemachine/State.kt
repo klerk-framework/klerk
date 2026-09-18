@@ -1,8 +1,23 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.statemachine.Block.*
-import dev.klerkframework.klerk.statemachine.BlockType.*
+import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.InstanceEvent
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.LifecycleArgs
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.SpecificationMarker
+import dev.klerkframework.klerk.StateID
+import dev.klerkframework.klerk.VoidEvent
+import dev.klerkframework.klerk.statemachine.Block.InstanceEventBlock
+import dev.klerkframework.klerk.statemachine.Block.InstanceLifecycleBlock
+import dev.klerkframework.klerk.statemachine.Block.VoidEventBlock
+import dev.klerkframework.klerk.statemachine.Block.VoidLifecycleBlock
+import dev.klerkframework.klerk.statemachine.BlockType.Enter
+import dev.klerkframework.klerk.statemachine.BlockType.Exit
+import dev.klerkframework.klerk.statemachine.BlockType.Time
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -22,14 +37,12 @@ public sealed class State<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
     internal fun canHandle(eventReference: EventReference): Boolean = getEvents().any { it.id == eventReference }
 
     internal fun onKlerkStart(specification: Specification<C, V>) {
-
     }
 
     internal abstract fun getEvents(): Set<Event<T, *>>
     internal abstract fun <P> getBlock(event: Event<T, P>): Block<T, ModelStates, C, V>
 
     override fun toString(): String = id.toString()
-
 }
 
 /** The state a model is in before it exists. Only void events are handled here, typically by creating the model. */
@@ -60,7 +73,6 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
         _onEventBlocks.add(event to onEventBlock)
     }
 
-
     override fun getEvents(): Set<Event<T, *>> = onEventBlocks.map { it.first }.toSet()
 
     @Suppress("UNCHECKED_CAST")
@@ -69,7 +81,6 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
 
     internal fun getBlockByEventReference(id: EventReference): VoidEventBlock<T, *, ModelStates, C, V> =
         onEventBlocks.single { it.first.id == id }.second
-
 }
 
 /** A state an existing model can be in. */
@@ -135,7 +146,8 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
     public fun <P> onEvent(event: InstanceEvent<T, P>, init: InstanceEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
         require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
         val onEventBlock = InstanceEventBlock<T, P, ModelStates, C, V>(
-            "Event block (${event.name}) for state '$name'", BlockType.Event,
+            "Event block (${event.name}) for state '$name'",
+            BlockType.Event,
         )
         onEventBlock.init()
         _onEventBlocks.add(event to onEventBlock)
@@ -199,5 +211,4 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
 
     internal fun getBlockByEventReference(id: EventReference): InstanceEventBlock<T, *, ModelStates, C, V> =
         onEventBlocks.single { it.first.id == id }.second
-
 }

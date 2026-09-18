@@ -1,9 +1,15 @@
 package dev.klerkframework.klerk.statemachine.executables
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.EventProcessingOptions
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelArgs
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.UnfinalizedTransition
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.view.ModelViews
 import kotlin.time.Instant
 
 internal class TransitionWhen<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enum<*>, C : KlerkContext, V>(
@@ -30,7 +36,6 @@ internal class TransitionWhen<T : Any, A : ModelArgs<T, C, V>, ModelStates : Enu
     }
 
     override val onCondition: ((args: A) -> Boolean) = { true }
-
 }
 
 /**

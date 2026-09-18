@@ -1,19 +1,47 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedDataID
+import dev.klerkframework.klerk.AttachedDataKind
+import dev.klerkframework.klerk.AttachedDataMetadata
+import dev.klerkframework.klerk.AttachedDataReadRuleArgs
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.AttachedDataWriteRuleArgs
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.BlobRejectedException
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.JobManagerInternal
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkAttachedData
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkSettings
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.NegativeAuthorization
+import dev.klerkframework.klerk.PositiveAuthorization
+import dev.klerkframework.klerk.Problem
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
+import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.job.JobExecution
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.currentJobId
+import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.misc.AttachedDataIdAllocator
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
-import dev.klerkframework.klerk.storage.*
+import dev.klerkframework.klerk.storage.AttachedBlobStore
+import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.storage.spi.AttachedDataClaim
+import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
+import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import java.io.InputStream
@@ -91,8 +119,8 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             throw IllegalConfigurationException(
                 KlerkErrorCode.AttachedBlobStoreMissingData,
                 "The configured attachedBlobStore does not have the bytes for ${missing.size} blob(s) that this " +
-                        "database refers to (for example id ${missing.first()}). This happens when the store is " +
-                        "changed after the application already has data — Klerk does not move blobs between stores.",
+                    "database refers to (for example id ${missing.first()}). This happens when the store is " +
+                    "changed after the application already has data — Klerk does not move blobs between stores.",
             )
         }
 
@@ -133,7 +161,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         custom: Map<String, String>,
         lease: Duration?,
     ): AttachedBlobID =
-    // Private until a command attaches it: the property it lands in is what decides, and until then nothing can
+        // Private until a command attaches it: the property it lands in is what decides, and until then nothing can
         // read it anyway.
         AttachedBlobID(
             insert(
@@ -207,7 +235,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val entry = entries[id] ?: throw NoSuchElementException("No data found for id ${declaration.id}")
         check(entry.owner == null) {
             "The attached data ${declaration.id} is already claimed by model ${entry.owner}, and a claimed value " +
-                    "never changes"
+                "never changes"
         }
         var metadata = checkNotNull(entry.metadata) { "The data ${declaration.id} has not been written yet" }
 
@@ -345,7 +373,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val requested = lease ?: settings.defaultAttachedDataLease
         require(requested <= settings.maxAttachedDataLease) {
             "A lease of $requested was requested, but the maximum is ${settings.maxAttachedDataLease} " +
-                    "(KlerkSettings.maxAttachedDataLease)"
+                "(KlerkSettings.maxAttachedDataLease)"
         }
         authorizeWrite(context, kind, requested)
         validateCustomMetadata(metadata)
@@ -369,12 +397,14 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         try {
             // Adoption still reads the file — the size and hash have to be known — but it saves writing the bytes a
             // second time, which is the expensive half.
-            val adopted = adoptFrom != null && store != null && run {
-                // Read (and close) before moving the file: the digest has to be complete, and the stream is open on
-                // the very file that adoption renames.
-                hashing.use { it.copyTo(OutputStream.nullOutputStream()) }
-                store.adopt(id, adoptFrom)
-            }
+            val adopted = adoptFrom != null &&
+                store != null &&
+                run {
+                    // Read (and close) before moving the file: the digest has to be complete, and the stream is open on
+                    // the very file that adoption renames.
+                    hashing.use { it.copyTo(OutputStream.nullOutputStream()) }
+                    store.adopt(id, adoptFrom)
+                }
             if (!adopted) {
                 store?.put(id, hashing)
             }
@@ -431,8 +461,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     }
 
     /** The attached data [jobId] has claimed, so that its claims can be released when the job's row goes away. */
-    internal fun claimedBy(jobId: JobID): Set<Int> =
-        entries.filterValues { it.claimedByJob == jobId }.keys.toSet()
+    internal fun claimedBy(jobId: JobID): Set<Int> = entries.filterValues { it.claimedByJob == jobId }.keys.toSet()
 
     /**
      * Drops the job claims on [ids] in memory, after the same change has been persisted.
@@ -466,7 +495,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             context,
             "klerk.attachedData.get",
             "Reading large data under it would block the application. Read the id inside the read block and call " +
-                    "klerk.attachedData.get after it.",
+                "klerk.attachedData.get after it.",
         )
         requireKind(entry, expected, publicId)
         val row =
@@ -535,16 +564,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * Any entry that gets this far is claimed, and a claimed entry always has its metadata (it is written before the
      * command that could claim it can even see the id). Returns the metadata, now known to be non-null.
      */
-    private fun requireKind(
-        entry: AttachedDataEntry,
-        expected: AttachedDataKind?,
-        id: Any,
-    ): AttachedDataMetadata {
+    private fun requireKind(entry: AttachedDataEntry, expected: AttachedDataKind?, id: Any): AttachedDataMetadata {
         val metadata = checkNotNull(entry.metadata) { "The data with id $id has no metadata" }
         if (expected != null && metadata.kind != expected) {
             throw NoSuchElementException(
                 "The attached data with id $id is a ${metadata.kind}, not a $expected. Blobs and strings share one " +
-                        "id space, so an id may only be used through the type it was prepared as.",
+                    "id space, so an id may only be used through the type it was prepared as.",
             )
         }
         return metadata
@@ -562,7 +587,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val length = metadata.entries.sumOf { it.key.length + it.value.length + JSON_OVERHEAD_PER_ENTRY }
         require(length <= MAX_CUSTOM_METADATA_LENGTH) {
             "The metadata is too large ($length characters, at most $MAX_CUSTOM_METADATA_LENGTH are allowed). " +
-                    "It is kept in memory for as long as the data exists, so put large values in the data itself."
+                "It is kept in memory for as long as the data exists, so put large values in the data itself."
         }
     }
 
@@ -608,11 +633,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
 
     // ---------------------------------------------------------------- authorization
 
-    private suspend fun authorizeWrite(
-        context: C,
-        kind: AttachedDataKind,
-        lease: Duration,
-    ) {
+    private suspend fun authorizeWrite(context: C, kind: AttachedDataKind, lease: Duration) {
         if (context.actor == SystemIdentity) {
             return
         }
@@ -673,11 +694,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      * The rules themselves, with the read lock already held — so that they can also be evaluated from inside a read
      * block, where the lock is held for the whole block and is not reentrant.
      */
-    internal fun authorizeReadLocked(
-        entry: AttachedDataEntry?,
-        id: Any,
-        context: C,
-    ): AttachedDataEntry {
+    internal fun authorizeReadLocked(entry: AttachedDataEntry?, id: Any, context: C): AttachedDataEntry {
         val existing = existing(entry, id)
         if (context.actor == SystemIdentity || existing.metadata?.visibility == AttachedDataVisibility.Public) {
             return existing
@@ -729,8 +746,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         for (modelId in affected) {
             val before = ModelCache.getOrNull(ModelID<Any>(modelId.value))
                 ?.let { collectAttachedData(it.props) } ?: emptyMap()
-            val after = if (modelId in delta.deletedModels) emptyMap() else
+            val after = if (modelId in delta.deletedModels) {
+                emptyMap()
+            } else {
                 delta.aggregatedModelState[modelId]?.let { collectAttachedData(it.props) } ?: emptyMap()
+            }
 
             claim(after.minus(before.keys).values, modelId, claimed, now, problems)
             deleted.addAll(before.keys.minus(after.keys))
@@ -863,7 +883,6 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             waiters.remove(id)
         }
     }
-
 }
 
 /** Roughly what `{"key":"value",}` costs on top of the key and the value themselves. */

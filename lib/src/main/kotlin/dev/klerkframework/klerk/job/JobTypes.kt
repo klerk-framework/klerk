@@ -3,7 +3,6 @@ package dev.klerkframework.klerk.job
 import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkInstantSerializer
-import dev.klerkframework.klerk.ModelID
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
@@ -136,11 +135,7 @@ public enum class JobAgent {
  * progress is persisted: a translation callback cannot survive a restart. Format it in the language of the actor that
  * scheduled the job, or leave it out and let the UI derive text from [completed]/[total].
  */
-public data class JobProgress(
-    val completed: Int,
-    val total: Int? = null,
-    val message: String? = null,
-) {
+public data class JobProgress(val completed: Int, val total: Int? = null, val message: String? = null) {
     init {
         require(completed >= 0) { "JobProgress.completed cannot be negative" }
         require(total == null || total >= 0) { "JobProgress.total cannot be negative" }

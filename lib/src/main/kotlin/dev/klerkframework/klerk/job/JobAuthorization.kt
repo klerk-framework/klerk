@@ -26,5 +26,5 @@ internal fun <C : KlerkContext, V> isJobAuthorized(
     }
     val args = JobReadRuleArgs(job, context, reader)
     return specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
-            specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
+        specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
 }

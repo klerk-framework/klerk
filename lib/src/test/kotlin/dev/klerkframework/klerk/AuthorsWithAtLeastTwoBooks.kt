@@ -1,9 +1,8 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.asSequenceOrThrow
-import dev.klerkframework.klerk.view.ModelView
-import dev.klerkframework.klerk.view.QueryListCursor
 import dev.klerkframework.klerk.read.ModelReader
+import dev.klerkframework.klerk.view.ModelView
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 
 /**
  * A view whose membership depends on a *different* model type, which is what Klerk's own index cannot do for you.
@@ -27,5 +26,4 @@ class AuthorsWithAtLeastTwoBooks<V>(
 
     override fun <V> contains(value: ModelID<*>, reader: ModelReader<Ctx, V>): Boolean =
         memberIds(reader).any { it.value == value.value }
-
 }

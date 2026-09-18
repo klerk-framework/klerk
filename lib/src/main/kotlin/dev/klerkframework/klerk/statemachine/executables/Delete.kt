@@ -1,9 +1,15 @@
 package dev.klerkframework.klerk.statemachine.executables
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.EventProcessingOptions
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.ModelArgs
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.StateProblem
 import dev.klerkframework.klerk.statemachine.Executable
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.view.ModelViews
 
 internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>(
     override val onCondition: ((args: A) -> Boolean)?,
@@ -39,5 +45,4 @@ internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
             log = listOf("Deleting model ${model.id}"),
         )
     }
-
 }

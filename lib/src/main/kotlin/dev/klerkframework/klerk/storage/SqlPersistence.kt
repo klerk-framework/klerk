@@ -1,8 +1,24 @@
 package dev.klerkframework.klerk.storage
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.job.*
+import dev.klerkframework.klerk.ActorType
+import dev.klerkframework.klerk.AttachedDataID
+import dev.klerkframework.klerk.AttachedDataKind
+import dev.klerkframework.klerk.AttachedDataMetadata
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.PersistedModelMismatchException
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.decode64bitMicroseconds
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobHookKind
+import dev.klerkframework.klerk.job.JobID
+import dev.klerkframework.klerk.job.JobLogEntry
+import dev.klerkframework.klerk.job.JobName
+import dev.klerkframework.klerk.job.JobPriority
+import dev.klerkframework.klerk.job.JobStatus
+import dev.klerkframework.klerk.log
 import dev.klerkframework.klerk.migration.MigrationModelV1
 import dev.klerkframework.klerk.migration.MigrationStep
 import dev.klerkframework.klerk.migration.ModelMigrationStep
@@ -14,20 +30,36 @@ import dev.klerkframework.klerk.storage.EventLogTable.actorIdentityType
 import dev.klerkframework.klerk.storage.EventLogTable.event
 import dev.klerkframework.klerk.storage.EventLogTable.timestamp
 import dev.klerkframework.klerk.storage.ModelSchemaMigrationsTable.toVersion
+import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
+import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
+import dev.klerkframework.klerk.storage.spi.AttachedDataRow
+import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.storage.spi.JobRecord
+import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import mu.KotlinLogging
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.andWhere
+import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.statements.UpdateBuilder
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.io.InputStream
 import javax.sql.DataSource
 import kotlin.reflect.KClass
@@ -163,10 +195,9 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun readModel(id: Int): Model<out Any>? =
-        transaction(database) {
-            ModelsTable.selectAll().where { ModelsTable.id eq id }.singleOrNull()?.let { toModel(it) }
-        }
+    override fun readModel(id: Int): Model<out Any>? = transaction(database) {
+        ModelsTable.selectAll().where { ModelsTable.id eq id }.singleOrNull()?.let { toModel(it) }
+    }
 
     private fun toModel(row: ResultRow): Model<out Any> {
         val modelId = row[ModelsTable.id]
@@ -365,34 +396,33 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? =
-        transaction(database) {
-            AttachedDataTable.select(
-                AttachedDataTable.id,
-                AttachedDataTable.owner,
-                AttachedDataTable.kind,
-                AttachedDataTable.visibility,
-                AttachedDataTable.created,
-                AttachedDataTable.size,
-                AttachedDataTable.hash,
-                AttachedDataTable.metadata,
-                AttachedDataTable.contentType,
-                AttachedDataTable.completedSteps,
-                AttachedDataTable.preparedFor,
-                AttachedDataTable.expires,
-                AttachedDataTable.claimedByJob,
-            )
-                .where { AttachedDataTable.id eq id }
-                .map {
-                    AttachedDataRow(
-                        value = Unit,
-                        owner = it[AttachedDataTable.owner],
-                        metadata = it.toAttachedDataMetadata(),
-                        expires = it[AttachedDataTable.expires]?.let { e -> decode64bitMicroseconds(e) },
-                        claimedByJob = it[AttachedDataTable.claimedByJob]?.let { j -> JobID(j) },
-                    )
-                }.firstOrNull()
-        }
+    override fun getAttachedData(id: Int): AttachedDataRow<Unit>? = transaction(database) {
+        AttachedDataTable.select(
+            AttachedDataTable.id,
+            AttachedDataTable.owner,
+            AttachedDataTable.kind,
+            AttachedDataTable.visibility,
+            AttachedDataTable.created,
+            AttachedDataTable.size,
+            AttachedDataTable.hash,
+            AttachedDataTable.metadata,
+            AttachedDataTable.contentType,
+            AttachedDataTable.completedSteps,
+            AttachedDataTable.preparedFor,
+            AttachedDataTable.expires,
+            AttachedDataTable.claimedByJob,
+        )
+            .where { AttachedDataTable.id eq id }
+            .map {
+                AttachedDataRow(
+                    value = Unit,
+                    owner = it[AttachedDataTable.owner],
+                    metadata = it.toAttachedDataMetadata(),
+                    expires = it[AttachedDataTable.expires]?.let { e -> decode64bitMicroseconds(e) },
+                    claimedByJob = it[AttachedDataTable.claimedByJob]?.let { j -> JobID(j) },
+                )
+            }.firstOrNull()
+    }
 
     override fun updateAttachedData(
         id: Int,
@@ -416,39 +446,38 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun getAttachedValue(id: Int): InputStream? =
-        transaction(database) {
-            AttachedDataTable.select(AttachedDataTable.value)
-                .where { AttachedDataTable.id eq id }
-                .map { it[AttachedDataTable.value].inputStream }
-                .firstOrNull()
-        }
+    override fun getAttachedValue(id: Int): InputStream? = transaction(database) {
+        AttachedDataTable.select(AttachedDataTable.value)
+            .where { AttachedDataTable.id eq id }
+            .map { it[AttachedDataTable.value].inputStream }
+            .firstOrNull()
+    }
 
-    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> =
-        transaction(database) {
-            AttachedDataTable.select(
-                AttachedDataTable.id,
-                AttachedDataTable.owner,
-                AttachedDataTable.kind,
-                AttachedDataTable.visibility,
-                AttachedDataTable.created,
-                AttachedDataTable.size,
-                AttachedDataTable.hash,
-                AttachedDataTable.metadata,
-                AttachedDataTable.contentType,
-                AttachedDataTable.completedSteps,
-                AttachedDataTable.preparedFor,
-                AttachedDataTable.expires,
-                AttachedDataTable.claimedByJob,
-            ).associate {
-                it[AttachedDataTable.id] to AttachedDataRow(
-                    Unit,
-                    it[AttachedDataTable.owner],
-                    it.toAttachedDataMetadata(),
-                    it[AttachedDataTable.expires]?.let { e -> decode64bitMicroseconds(e) },
-                    it[AttachedDataTable.claimedByJob]?.let { j -> JobID(j) })
-            }
+    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> = transaction(database) {
+        AttachedDataTable.select(
+            AttachedDataTable.id,
+            AttachedDataTable.owner,
+            AttachedDataTable.kind,
+            AttachedDataTable.visibility,
+            AttachedDataTable.created,
+            AttachedDataTable.size,
+            AttachedDataTable.hash,
+            AttachedDataTable.metadata,
+            AttachedDataTable.contentType,
+            AttachedDataTable.completedSteps,
+            AttachedDataTable.preparedFor,
+            AttachedDataTable.expires,
+            AttachedDataTable.claimedByJob,
+        ).associate {
+            it[AttachedDataTable.id] to AttachedDataRow(
+                Unit,
+                it[AttachedDataTable.owner],
+                it.toAttachedDataMetadata(),
+                it[AttachedDataTable.expires]?.let { e -> decode64bitMicroseconds(e) },
+                it[AttachedDataTable.claimedByJob]?.let { j -> JobID(j) },
+            )
         }
+    }
 
     private fun ResultRow.toAttachedDataMetadata(): AttachedDataMetadata = AttachedDataMetadata(
         id = AttachedDataID(this[AttachedDataTable.id]),
@@ -556,51 +585,49 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         this[JobsTable.cronScheduleId] = record.cronScheduleId
     }
 
-    override fun allJobs(): List<JobRecord> =
-        transaction(database) {
-            JobsTable.selectAll().map { row ->
-                JobRecord(
-                    id = JobID(row[JobsTable.id]),
-                    name = JobName(row[JobsTable.name]),
-                    cursor = row[JobsTable.cursor],
-                    status = JobStatus.entries[row[JobsTable.status].toInt()],
-                    priority = JobPriority.entries[row[JobsTable.priority].toInt()],
-                    agent = JobAgent.entries[row[JobsTable.agent].toInt()],
-                    ownerActorType = ActorType.fromStoredValue(row[JobsTable.ownerActorType]),
-                    ownerActorId = row[JobsTable.ownerActorId],
-                    ownerActorExternalId = row[JobsTable.ownerActorExternalId],
-                    step = row[JobsTable.step],
-                    attempt = row[JobsTable.attempt],
-                    createdAt = decode64bitMicroseconds(row[JobsTable.created]),
-                    readyAt = row[JobsTable.readyAt]?.let { decode64bitMicroseconds(it) },
-                    firstAttemptStarted = row[JobsTable.firstAttemptStarted]?.let { decode64bitMicroseconds(it) },
-                    lastAttemptStarted = row[JobsTable.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
-                    lastAttemptFinished = row[JobsTable.lastAttemptFinished]?.let { decode64bitMicroseconds(it) },
-                    progressCompleted = row[JobsTable.progressCompleted],
-                    progressTotal = row[JobsTable.progressTotal],
-                    progressMessage = row[JobsTable.progressMessage],
-                    log = jobJson.decodeFromString(logSerializer, row[JobsTable.log]),
-                    parent = row[JobsTable.parent]?.let { JobID(it) },
-                    root = JobID(row[JobsTable.root]),
-                    depth = row[JobsTable.depth],
-                    result = row[JobsTable.result],
-                    failedAtCursor = row[JobsTable.failedAtCursor],
-                    hookCursor = row[JobsTable.hookCursor],
-                    hookKind = row[JobsTable.hookKind]?.let { JobHookKind.entries[it.toInt()] },
-                    cancellationRequested = row[JobsTable.cancellationRequested],
-                    reason = row[JobsTable.reason],
-                    noProgressStreak = row[JobsTable.noProgressStreak],
-                    cronScheduleId = row[JobsTable.cronScheduleId],
-                )
-            }
+    override fun allJobs(): List<JobRecord> = transaction(database) {
+        JobsTable.selectAll().map { row ->
+            JobRecord(
+                id = JobID(row[JobsTable.id]),
+                name = JobName(row[JobsTable.name]),
+                cursor = row[JobsTable.cursor],
+                status = JobStatus.entries[row[JobsTable.status].toInt()],
+                priority = JobPriority.entries[row[JobsTable.priority].toInt()],
+                agent = JobAgent.entries[row[JobsTable.agent].toInt()],
+                ownerActorType = ActorType.fromStoredValue(row[JobsTable.ownerActorType]),
+                ownerActorId = row[JobsTable.ownerActorId],
+                ownerActorExternalId = row[JobsTable.ownerActorExternalId],
+                step = row[JobsTable.step],
+                attempt = row[JobsTable.attempt],
+                createdAt = decode64bitMicroseconds(row[JobsTable.created]),
+                readyAt = row[JobsTable.readyAt]?.let { decode64bitMicroseconds(it) },
+                firstAttemptStarted = row[JobsTable.firstAttemptStarted]?.let { decode64bitMicroseconds(it) },
+                lastAttemptStarted = row[JobsTable.lastAttemptStarted]?.let { decode64bitMicroseconds(it) },
+                lastAttemptFinished = row[JobsTable.lastAttemptFinished]?.let { decode64bitMicroseconds(it) },
+                progressCompleted = row[JobsTable.progressCompleted],
+                progressTotal = row[JobsTable.progressTotal],
+                progressMessage = row[JobsTable.progressMessage],
+                log = jobJson.decodeFromString(logSerializer, row[JobsTable.log]),
+                parent = row[JobsTable.parent]?.let { JobID(it) },
+                root = JobID(row[JobsTable.root]),
+                depth = row[JobsTable.depth],
+                result = row[JobsTable.result],
+                failedAtCursor = row[JobsTable.failedAtCursor],
+                hookCursor = row[JobsTable.hookCursor],
+                hookKind = row[JobsTable.hookKind]?.let { JobHookKind.entries[it.toInt()] },
+                cancellationRequested = row[JobsTable.cancellationRequested],
+                reason = row[JobsTable.reason],
+                noProgressStreak = row[JobsTable.noProgressStreak],
+                cronScheduleId = row[JobsTable.cronScheduleId],
+            )
         }
+    }
 
-    override fun cronState(): Map<String, Instant> =
-        transaction(database) {
-            CronStateTable.selectAll().associate {
-                it[CronStateTable.scheduleId] to decode64bitMicroseconds(it[CronStateTable.lastFiredAt])
-            }
+    override fun cronState(): Map<String, Instant> = transaction(database) {
+        CronStateTable.selectAll().associate {
+            it[CronStateTable.scheduleId] to decode64bitMicroseconds(it[CronStateTable.lastFiredAt])
         }
+    }
 
     override fun setCronFired(scheduleId: String, firedAt: Instant) {
         transaction(database) {
@@ -648,5 +675,4 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
     }
 
     override fun toString(): String = "SqlPersistence($dataSource)"
-
 }

@@ -1,26 +1,45 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.testing.runUntilIdle
-import dev.klerkframework.klerk.testing.step
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.ChangeName
+import dev.klerkframework.klerk.ChangeNameParams
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.JobRejectedException
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createAuthorJKRowling
+import dev.klerkframework.klerk.createBookHarryPotter1
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-import dev.klerkframework.klerk.view.*
 
 /**
  * The job suite runs entirely on manual execution and a [MutableClock], so there is no sleeping anywhere and repeat
@@ -41,9 +60,7 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
         ): JobResult<CountCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) {
                 return JobResult.Success(result = args.cursor.done.toString())
@@ -93,9 +110,7 @@ class JobManagerImplTest {
         var deadLetterHookRan = 0
 
         override suspend fun step(
-
             args: JobStepArgs.Local<FlakyCursor, Ctx, Views>,
-
         ): JobResult<FlakyCursor, Ctx, Views> {
             attempts++
             return JobResult.Fail("nope")
@@ -116,11 +131,8 @@ class JobManagerImplTest {
         var hookRan = 0
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Abort("this will never work")
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Abort("this will never work")
 
         override suspend fun onDeadLettered(
             args: JobEndArgs.Local<CountCursor, Ctx, Views>,
@@ -138,11 +150,8 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Yield(cursor = args.cursor)
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Yield(cursor = args.cursor)
     }
 
     @Serializable
@@ -153,11 +162,8 @@ class JobManagerImplTest {
         override val agent: JobAgent = JobAgent.System
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Success(result = "child-${args.cursor.remaining}")
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Success(result = "child-${args.cursor.remaining}")
     }
 
     object Parent : JobType.Local<FanOutCursor, Ctx, Views>() {
@@ -167,9 +173,7 @@ class JobManagerImplTest {
         var seenChildren: List<ChildOutcome> = emptyList()
 
         override suspend fun step(
-
             args: JobStepArgs.Local<FanOutCursor, Ctx, Views>,
-
         ): JobResult<FanOutCursor, Ctx, Views> {
             if (!args.cursor.awaiting) {
                 return JobResult.Yield(
@@ -229,9 +233,7 @@ class JobManagerImplTest {
         var runs = 0
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
         ): JobResult<CountCursor, Ctx, Views> {
             runs++
             return JobResult.Success()
@@ -240,11 +242,7 @@ class JobManagerImplTest {
 
     // ---------------------------------------------------------------- harness
 
-    private class Fixture(
-        val klerk: Klerk<Ctx, Views>,
-        val clock: MutableClock,
-        val storage: RamStorage,
-    )
+    private class Fixture(val klerk: Klerk<Ctx, Views>, val clock: MutableClock, val storage: RamStorage)
 
     private fun deadLetterUnloadable() =
         JobSettings(execution = JobExecution.Manual, onUnloadableJob = UnloadableJobPolicy.DeadLetter)
@@ -326,10 +324,13 @@ class JobManagerImplTest {
         val remaining = second.klerk.jobs.runUntilIdle()
         assertEquals(301, remaining)
         assertEquals(JobStatus.Succeeded, second.job(id).status)
-        assertEquals("500", second.klerk.jobs.all(Ctx.system()).single { it.id == id }.let {
-            // the result the last Success reported
-            second.storageResult(id)
-        })
+        assertEquals(
+            "500",
+            second.klerk.jobs.all(Ctx.system()).single { it.id == id }.let {
+                // the result the last Success reported
+                second.storageResult(id)
+            },
+        )
     }
 
     private fun Fixture.storageResult(id: JobID): String? = storage.allJobs().single { it.id == id }.result
@@ -546,13 +547,13 @@ class JobManagerImplTest {
 
         assertEquals(0, f.klerk.jobs.runUntilIdle())
 
-        clock += 2.minutes                 // past 03:00
+        clock += 2.minutes // past 03:00
         assertEquals(1, f.klerk.jobs.runUntilIdle())
         assertEquals(1, Nightly.runs)
 
-        clock += 3.days                    // three occurrences missed at once
+        clock += 3.days // three occurrences missed at once
         f.klerk.jobs.runUntilIdle()
-        assertEquals(2, Nightly.runs)      // CatchUp.RunOnce: one fire, not three
+        assertEquals(2, Nightly.runs) // CatchUp.RunOnce: one fire, not three
     }
 
     @Test
@@ -612,11 +613,8 @@ class JobManagerImplTest {
         }
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Success()
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Success()
     }
 
     @Test
@@ -645,11 +643,8 @@ class JobManagerImplTest {
         override val maxSteps = 4
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Yield(cursor = CountCursor(args.cursor.remaining + 1))
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Yield(cursor = CountCursor(args.cursor.remaining + 1))
     }
 
     /** Spawns one child per step, forever, which is what the descendant budget exists to stop. */
@@ -659,15 +654,12 @@ class JobManagerImplTest {
         override val maxDescendants = 3
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
-        ): JobResult<CountCursor, Ctx, Views> =
-            JobResult.Yield(
-                cursor = CountCursor(args.cursor.remaining + 1),
-                spawn = listOf(Child.declare(CountCursor(0))),
-                progress = JobProgress(completed = args.cursor.remaining + 1),
-            )
+        ): JobResult<CountCursor, Ctx, Views> = JobResult.Yield(
+            cursor = CountCursor(args.cursor.remaining + 1),
+            spawn = listOf(Child.declare(CountCursor(0))),
+            progress = JobProgress(completed = args.cursor.remaining + 1),
+        )
     }
 
     /**
@@ -676,7 +668,10 @@ class JobManagerImplTest {
      */
     @Test
     fun `a job that keeps spawning is dead lettered once it exhausts its descendant budget`() = runBlocking {
-        val f = fixture { register(Breeder); register(Child) }
+        val f = fixture {
+            register(Breeder)
+            register(Child)
+        }
         val id = f.klerk.jobs.schedule(Breeder.declare(CountCursor(0)), Ctx.system())
         f.klerk.jobs.runUntilIdle()
 
@@ -684,7 +679,7 @@ class JobManagerImplTest {
         assertEquals(JobStatus.DeadLettered, breeder.status)
         assertTrue(
             breeder.reason!!.contains("maxDescendants"),
-            "should say why it was stopped, was: ${breeder.reason}"
+            "should say why it was stopped, was: ${breeder.reason}",
         )
         // The budget is what it was configured to be, not one more because two spawns raced.
         val spawned = f.klerk.jobs.all(Ctx.system()).count { it.parent == id }
@@ -697,9 +692,7 @@ class JobManagerImplTest {
         override val maxConcurrent = 1
 
         override suspend fun step(
-
             args: JobStepArgs.Local<CountCursor, Ctx, Views>,
-
         ): JobResult<CountCursor, Ctx, Views> {
             if (args.cursor.remaining == 0) return JobResult.Success()
             return JobResult.Yield(cursor = CountCursor(args.cursor.remaining - 1))
@@ -716,7 +709,7 @@ class JobManagerImplTest {
     @Test
     fun `concurrent scheduling never hands out the same job id twice`() = runBlocking<Unit> {
         val f = fixture { register(Counter) }
-        val small = java.util.Random(20260826)   // java.util.Random is synchronized, so it is safe to share here
+        val small = java.util.Random(20260826) // java.util.Random is synchronized, so it is safe to share here
         (f.klerk.jobs as JobManagerImpl<Ctx, Views>).idCandidates = { small.nextInt(48).toLong() }
 
         val ids = java.util.Collections.synchronizedList(mutableListOf<JobID>())
@@ -733,7 +726,7 @@ class JobManagerImplTest {
         assertEquals(
             24,
             f.klerk.jobs.all(Ctx.system()).size,
-            "a job row was overwritten by another job that was given the same id"
+            "a job row was overwritten by another job that was given the same id",
         )
         f.klerk.meta.stop()
     }

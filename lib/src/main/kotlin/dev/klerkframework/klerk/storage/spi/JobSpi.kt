@@ -77,12 +77,15 @@ public data class JobRecord(
     public val progress: JobProgress?
         get() = progressCompleted?.let { JobProgress(it, progressTotal, progressMessage) }
 
-    internal fun withProgress(progress: JobProgress?): JobRecord =
-        if (progress == null) this else copy(
+    internal fun withProgress(progress: JobProgress?): JobRecord = if (progress == null) {
+        this
+    } else {
+        copy(
             progressCompleted = progress.completed,
             progressTotal = progress.total,
             progressMessage = progress.message,
         )
+    }
 
     /** Appends log entries, keeping only the most recent [JobLogEntry.MAX_ENTRIES]. */
     internal fun withLog(entries: List<JobLogEntry>): JobRecord =
@@ -118,8 +121,11 @@ public data class JobRecord(
         ActorType.System -> SystemIdentity
         ActorType.Unauthenticated -> Unauthenticated
         ActorType.Authentication -> AuthenticationIdentity
-        else -> if (ownerActorId != null) ModelReferenceIdentity(ModelID<Any>(ownerActorId))
-        else CustomIdentity(null, ownerActorExternalId)
+        else -> if (ownerActorId != null) {
+            ModelReferenceIdentity(ModelID<Any>(ownerActorId))
+        } else {
+            CustomIdentity(null, ownerActorExternalId)
+        }
     }
 
     internal fun toChildOutcome(): ChildOutcome =

@@ -4,13 +4,11 @@ import kotlin.random.Random
 import kotlin.reflect.KParameter
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import dev.klerkframework.klerk.view.*
 
 class ModelIDTest {
 
     @Test
     fun basicStuff() {
-
         fun testInt(l: Int) {
             val original = ModelID<Any>(l)
             assertEquals(original.value, ModelID<Any>(original.toString().toInt()).value)
@@ -40,7 +38,6 @@ class ModelIDTest {
         val instance = constructor.callBy(parameters)
         assertEquals(instance.id?.value, 123)
     }
-
 }
 
 data class MyClassWithModelID(val id: ModelID<Author>?)

@@ -15,4 +15,3 @@ internal class PendingJob<C : KlerkContext, V> internal constructor(
 
     override fun toString(): String = "PendingJob($id, ${name.value})"
 }
-

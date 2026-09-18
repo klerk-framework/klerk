@@ -1,24 +1,51 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorPicture
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.Book
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkSettings
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SQLiteInMemory
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.SpecificationBuilder
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.authorStateMachine
+import dev.klerkframework.klerk.bookStateMachine
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createConfig
+import dev.klerkframework.klerk.createKlerk
+import dev.klerkframework.klerk.generousAuthRules
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.FileBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The rules around choosing where blob bytes live: the choice is required, it cannot be changed once there is data,

@@ -1,16 +1,40 @@
 package dev.klerkframework.klerk.validation
 
-import dev.klerkframework.klerk.misc.functionName
-import dev.klerkframework.klerk.misc.requireNamedRule
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorizationProblem
+import dev.klerkframework.klerk.BadRequestProblem
+import dev.klerkframework.klerk.CommandRuleArgs
+import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.InstanceEventArgs
+import dev.klerkframework.klerk.InstanceEventNoParameters
+import dev.klerkframework.klerk.InstanceEventWithParameters
+import dev.klerkframework.klerk.InvalidPropertyProblem
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkImpl
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
+import dev.klerkframework.klerk.NotFoundProblem
 import dev.klerkframework.klerk.PositiveAuthorization.Allow
+import dev.klerkframework.klerk.PreventedByRuleProblem
+import dev.klerkframework.klerk.Problem
+import dev.klerkframework.klerk.RuleDescription
+import dev.klerkframework.klerk.RuleType
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.Translation
+import dev.klerkframework.klerk.Validatable
+import dev.klerkframework.klerk.VoidEventArgs
+import dev.klerkframework.klerk.VoidEventNoParameters
+import dev.klerkframework.klerk.VoidEventWithParameters
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
+import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.misc.ObjectSchema
-import dev.klerkframework.klerk.statemachine.DeclaredEventRules
+import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.misc.getStateMachine
+import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.storage.ModelCache
@@ -35,10 +59,7 @@ Using parameters, context and state:
 
 internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) {
 
-    fun isEventPossibleGivenModelState(
-        currentCommand: Command<out Any, *>,
-        reader: ModelReader<C, V>,
-    ): Problem? {
+    fun isEventPossibleGivenModelState(currentCommand: Command<out Any, *>, reader: ModelReader<C, V>): Problem? {
         val sm = klerk.specification.getStateMachineForEvent(currentCommand.event)
         if (currentCommand.model == null) {
             val smState = sm.voidState
@@ -75,7 +96,6 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val rules = klerk.specification.rulesOf(event.id)
         // The rule function is kept next to its result, so a failure can be named in the message and the problem.
         val results: List<Pair<Function<Any>, PropertyCollectionValidity>> = when (event) {
-
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
                 val args = VoidEventArgs(command, context, reader)
@@ -120,7 +140,6 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                     .map { it to it.invoke(argsWithParams) }
                 withoutParams.union(withParams).toList()
             }
-
         }
         return results.mapNotNull { (rule, result) ->
             (result as? PropertyCollectionValidity.Invalid)?.toProblem(rule, context.translation)
@@ -131,13 +150,17 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val translation = context.translation
         return klerk.specification.rulesOf(eventReference).forContext<C>().mapNotNull { rule ->
             val result = rule.invoke(context)
-            if (result is ContextValidity.Invalid) PreventedByRuleProblem(
-                endUserTranslatedMessage = translation.klerk.preventedByRule(
-                    functionName(rule) ?: translation.klerk.invalid,
-                    result.translationInfo,
-                ),
-                violatedRule = RuleDescription(rule, RuleType.ContextValidation),
-            ) else null
+            if (result is ContextValidity.Invalid) {
+                PreventedByRuleProblem(
+                    endUserTranslatedMessage = translation.klerk.preventedByRule(
+                        functionName(rule) ?: translation.klerk.invalid,
+                        result.translationInfo,
+                    ),
+                    violatedRule = RuleDescription(rule, RuleType.ContextValidation),
+                )
+            } else {
+                null
+            }
         }
     }
 
@@ -224,7 +247,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             }
         if (negativeAuthProblem != null) {
             return AuthorizationProblem(
-                context.translation.klerk.unauthorized, RuleDescription(negativeAuthProblem, RuleType.Authorization),
+                context.translation.klerk.unauthorized,
+                RuleDescription(negativeAuthProblem, RuleType.Authorization),
                 KlerkErrorCode.CommandNegativeAuthorizationExist,
             )
         }
@@ -236,7 +260,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                         reader,
                     ),
                 ) == Allow
-            }) {
+            }
+        ) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
             return AuthorizationProblem(
                 context.translation.klerk.unauthorized,
@@ -337,7 +362,6 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     ): List<PropertyCollectionValidity> {
         val rules = klerk.specification.rulesOf(event.id)
         return when (event) {
-
             is VoidEventNoParameters<T> -> {
                 val command = Command(event, null, null)
                 val args = VoidEventArgs(command, context, reader)
@@ -367,6 +391,4 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             }
         }
     }
-
 }
-

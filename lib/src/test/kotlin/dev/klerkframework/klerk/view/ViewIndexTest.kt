@@ -1,12 +1,31 @@
 package dev.klerkframework.klerk.view
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorStates
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.ChangeName
+import dev.klerkframework.klerk.ChangeNameParams
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.ImproveAuthor
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.storage.ModelCacheSettings
+import dev.klerkframework.klerk.createConfig
+import dev.klerkframework.klerk.generateSampleData
 import dev.klerkframework.klerk.read.ModelReader
+import dev.klerkframework.klerk.storage.ModelCacheSettings
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -17,7 +36,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.view.*
 
 class ViewIndexTest {
 
@@ -108,9 +126,8 @@ class ViewIndexTest {
         val great = createAuthor(klerk, "Linus", "1")
         createAuthor(klerk, "Kalle", "2")
 
-        fun members() =
-            runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() } }
-        assertEquals(listOf(great), members())   // builds the index
+        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.greatAuthors.ids().toList() } }
+        assertEquals(listOf(great), members()) // builds the index
 
         // A create after the index exists must land in it.
         val alsoGreat = createAuthor(klerk, "Bertil", "3")
@@ -178,8 +195,7 @@ class ViewIndexTest {
         val inRange = createAuthor(klerk, "Kalle", "20")
         createAuthor(klerk, "Kalle", "5")
 
-        fun members() =
-            runBlocking { klerk.read(Ctx.system()) { views.authors.midrangeAuthors.ids().toList() } }
+        fun members() = runBlocking { klerk.read(Ctx.system()) { views.authors.midrangeAuthors.ids().toList() } }
         assertEquals(listOf(inRange), members())
 
         val alsoInRange = createAuthor(klerk, "Kalle", "18")
@@ -214,10 +230,8 @@ class ViewIndexTest {
      * Klerk cannot index it (its membership is decided by whatever put ids in the set), but it can still answer every
      * membership question without reading a single model.
      */
-    private class HandMaintainedView(
-        private val authors: ModelView<Author, Ctx>,
-        val ids: MutableSet<Int>,
-    ) : ModelView<Author, Ctx>(authors) {
+    private class HandMaintainedView(private val authors: ModelView<Author, Ctx>, val ids: MutableSet<Int>) :
+        ModelView<Author, Ctx>(authors) {
         override fun <V> memberIds(reader: ModelReader<Ctx, V>): Sequence<ModelID<Author>> =
             authors.memberIds(reader).filter { ids.contains(it.value) }
 

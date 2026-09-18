@@ -1,9 +1,9 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedDataMetadata
+import dev.klerkframework.klerk.Problem
 import dev.klerkframework.klerk.job.JobID
-import dev.klerkframework.klerk.storage.*
+import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import kotlin.time.Instant
 
 /**

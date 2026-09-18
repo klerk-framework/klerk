@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
  */
 public data class StateID(val modelName: String, val stateName: String) {
     override fun toString(): String = "s.$modelName.$stateName"
+
     /** The id without its `s.` prefix, e.g. `Book.Published`. */
     public fun withoutPrefix(): String = toString().substring(2)
 }

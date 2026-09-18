@@ -37,7 +37,6 @@ public interface ActivityLog {
      * @see subscribe
      */
     public fun subscribeToReads(): SharedFlow<LogEntry>
-
 }
 
 internal class ActivityLogImpl : ActivityLog {
@@ -78,7 +77,6 @@ internal class ActivityLogImpl : ActivityLog {
             logEntryReadFlow.tryEmit(LogReadModel(model, context))
         }
     }
-
 }
 
 /** Which part of the system produced a [LogEntry]. */
@@ -146,8 +144,10 @@ public enum class FactVerb {
 public interface LogEntry {
     /** When it happened. */
     public val time: Instant
+
     /** Who did it, if anyone. */
     public val actor: dev.klerkframework.klerk.ActorIdentity?
+
     /** Which part of the system produced the entry. */
     public val source: LogSource
 
@@ -195,13 +195,12 @@ public interface LogEntry {
 
 private val logPlaceholder = Regex("""\{(\w+)}""")
 
-internal fun renderLogTemplate(template: String, entry: LogEntry): String =
-    logPlaceholder.replace(template) { match ->
-        val name = match.groupValues[1]
-        entry.facts.firstOrNull { it.name == name }?.value
-            ?: entry.actor?.takeIf { name == "actor" }?.toString()
-            ?: match.value
-    }
+internal fun renderLogTemplate(template: String, entry: LogEntry): String = logPlaceholder.replace(template) { match ->
+    val name = match.groupValues[1]
+    entry.facts.firstOrNull { it.name == name }?.value
+        ?: entry.actor?.takeIf { name == "actor" }?.toString()
+        ?: match.value
+}
 
 /** How serious a log line is. Klerk's own mapping to the underlying logging framework is an implementation detail. */
 public enum class LogLevel {

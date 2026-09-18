@@ -8,8 +8,10 @@ package dev.klerkframework.klerk
 public interface KlerkPlugin<C : KlerkContext, V> {
     /** A unique name of the plugin. Must not contain spaces. */
     public val name: String
+
     /** A human-readable description of what the plugin does. */
     public val description: String
+
     /** Returns [previous] augmented with the plugin's own models, events, rules and jobs. */
     public fun mergeSpecification(previous: Specification<C, V>): Specification<C, V>
 

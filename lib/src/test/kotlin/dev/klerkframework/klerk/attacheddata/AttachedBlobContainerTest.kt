@@ -1,25 +1,61 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.testing.runUntilIdle
-import dev.klerkframework.klerk.testing.step
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BlobRejectedException
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.CreateInventory
+import dev.klerkframework.klerk.CreateInventoryParams
+import dev.klerkframework.klerk.CreatePainting
+import dev.klerkframework.klerk.CreatePaintingParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.Doodle
+import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.Inventory
+import dev.klerkframework.klerk.InventoryCsv
+import dev.klerkframework.klerk.InventoryName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.Painting
+import dev.klerkframework.klerk.PaintingImage
+import dev.klerkframework.klerk.PaintingTitle
+import dev.klerkframework.klerk.Sketch
+import dev.klerkframework.klerk.SpecificationBuilder
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.createKlerk
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStep
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
+import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
+import dev.klerkframework.klerk.datatypes.noPreAttachProcessing
+import dev.klerkframework.klerk.doodleStateMachine
+import dev.klerkframework.klerk.generousAuthRules
 import dev.klerkframework.klerk.job.JobProgress
 import dev.klerkframework.klerk.job.JobStatus
 import dev.klerkframework.klerk.misc.MutableClock
+import dev.klerkframework.klerk.sketchStateMachine
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.FileBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testSettings
+import dev.klerkframework.klerk.testing.runUntilIdle
+import dev.klerkframework.klerk.testing.step
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
-import dev.klerkframework.klerk.view.*
 
 /**
  * What a blob property declares is enforced where it counts: in the command pipeline, against what Klerk found the
@@ -130,10 +166,7 @@ class AttachedBlobContainerTest {
         klerk.meta.stop()
     }
 
-    private suspend fun count(
-        klerk: Klerk<Ctx, Views>,
-        rows: AttachedBlobID,
-    ): CommandResult<Inventory> = klerk.handle(
+    private suspend fun count(klerk: Klerk<Ctx, Views>, rows: AttachedBlobID): CommandResult<Inventory> = klerk.handle(
         Command(
             CreateInventory,
             CreateInventoryParams(InventoryName("Warehouse"), InventoryCsv(rows)),
@@ -274,7 +307,7 @@ class AttachedBlobContainerTest {
         klerk.meta.start(installShutdownHook = false)
         val id = klerk.attachedData.prepare("anything".byteInputStream(), FlakyDocument::class, Ctx.system())
 
-        klerk.jobs.runUntilIdle()   // the first step passes, the second throws and goes into backoff
+        klerk.jobs.runUntilIdle() // the first step passes, the second throws and goes into backoff
         val job = klerk.jobs.all(Ctx.system()).single { it.name.value == PROCESS_ATTACHED_DATA }
         assertEquals(JobStatus.Backoff, job.status)
         clock.advance(1.minutes)

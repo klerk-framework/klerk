@@ -1,19 +1,14 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.asSequenceOrThrow
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
-import dev.klerkframework.klerk.storage.AttachedBlobStore
-import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.view.asSequenceOrThrow
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.minutes
 
 class ActionTest {
-
 
     @Test
     fun actionTest() {
@@ -69,42 +64,37 @@ class ActionTest {
                 Ctx.system(),
             ).getOrThrow()
             println(result)
-
         }
     }
 
-    private fun throwingStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> =
-        stateMachine {
-            event(CreateBook) {
-                validReferences(CreateBookParams::author, collections.authors.all)
-                validReferences(CreateBookParams::coAuthors, collections.authors.all)
-                validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
-            }
-
-            event(PublishBook) {}
-
-            voidState {
-                onEvent(CreateBook) {
-                    unmanagedJob(::throwSomething)
-                    createModel(BookStates.Draft, ::newBook)
-                }
-            }
-
-            state(BookStates.Draft) {
-                onEvent(PublishBook) {
-                    update(::updateModelFunction)
-                }
-            }
-
-            state(BookStates.Published) {}
-
+    private fun throwingStateMachine(collections: Views): StateMachine<Book, BookStates, Ctx, Views> = stateMachine {
+        event(CreateBook) {
+            validReferences(CreateBookParams::author, collections.authors.all)
+            validReferences(CreateBookParams::coAuthors, collections.authors.all)
+            validReferences(CreateBookParams::previousBooksInSameSeries, collections.books.all)
         }
 
+        event(PublishBook) {}
+
+        voidState {
+            onEvent(CreateBook) {
+                unmanagedJob(::throwSomething)
+                createModel(BookStates.Draft, ::newBook)
+            }
+        }
+
+        state(BookStates.Draft) {
+            onEvent(PublishBook) {
+                update(::updateModelFunction)
+            }
+        }
+
+        state(BookStates.Published) {}
+    }
 }
 
-fun throwSomething(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>) {
+fun throwSomething(args: VoidEventArgs<Book, CreateBookParams, Ctx, Views>): Unit =
     throw IllegalStateException("This didn't work")
-}
 
 fun generousAuthRules(): SpecificationBuilder<Ctx, Views>.() -> Unit = {
     authorization {

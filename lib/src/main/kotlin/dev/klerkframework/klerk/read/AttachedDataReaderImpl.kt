@@ -32,11 +32,9 @@ internal class AuthorizingAttachedDataReader<C : KlerkContext, V>(
         null
     }
 
-    override fun getMetadata(id: AttachedBlobID): AttachedDataMetadata =
-        read(id.untyped(), AttachedDataKind.Blob)
+    override fun getMetadata(id: AttachedBlobID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.Blob)
 
-    override fun getMetadata(id: AttachedStringID): AttachedDataMetadata =
-        read(id.untyped(), AttachedDataKind.String)
+    override fun getMetadata(id: AttachedStringID): AttachedDataMetadata = read(id.untyped(), AttachedDataKind.String)
 
     /** Mirrors `ReaderWithAuth.finishRead`: a reader smuggled out of its block must not keep reading. */
     fun finish() {
@@ -53,9 +51,8 @@ internal class AuthorizingAttachedDataReader<C : KlerkContext, V>(
  * The `attachedData` accessor of a [ReaderWithoutAuth]: no rules are evaluated, matching how that reader treats
  * models.
  */
-internal class UnauthorizedAttachedDataReader<C : KlerkContext, V>(
-    private val klerk: Klerk<C, V>,
-) : AttachedDataReader {
+internal class UnauthorizedAttachedDataReader<C : KlerkContext, V>(private val klerk: Klerk<C, V>) :
+    AttachedDataReader {
 
     override fun getMetadata(id: AttachedDataID): AttachedDataMetadata = read(id, expected = null)
 

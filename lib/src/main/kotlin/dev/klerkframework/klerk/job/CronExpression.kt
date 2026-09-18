@@ -103,7 +103,7 @@ internal class CronExpression private constructor(
             val fields = expression.trim().split(Regex("\\s+"))
             require(fields.size == 5) {
                 "A cron expression must have five fields (minute hour day-of-month month day-of-week), " +
-                        "but '$expression' has ${fields.size}"
+                    "but '$expression' has ${fields.size}"
             }
             val (minute, hour, dayOfMonth, month, dayOfWeek) = fields
             return CronExpression(
@@ -178,5 +178,4 @@ internal class CronExpression private constructor(
 private fun Instant.toUtcDateTime(): LocalDateTime =
     LocalDateTime.ofEpochSecond(epochSeconds, nanosecondsOfSecond, ZoneOffset.UTC)
 
-private fun LocalDateTime.toInstant(): Instant =
-    Instant.fromEpochSeconds(toEpochSecond(ZoneOffset.UTC), nano)
+private fun LocalDateTime.toInstant(): Instant = Instant.fromEpochSeconds(toEpochSecond(ZoneOffset.UTC), nano)

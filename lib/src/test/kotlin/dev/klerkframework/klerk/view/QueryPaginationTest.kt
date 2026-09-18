@@ -1,10 +1,26 @@
 package dev.klerkframework.klerk.view
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ModelReadRuleArgs
+import dev.klerkframework.klerk.NegativeAuthorization
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.Unauthenticated
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createConfig
 import dev.klerkframework.klerk.read.ModelReader
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +29,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import dev.klerkframework.klerk.view.*
 
 class QueryPaginationTest {
 
@@ -38,19 +53,18 @@ class QueryPaginationTest {
         firstName: String,
         lastName: String,
         context: Ctx = Ctx.system(),
-    ): ModelID<Author> =
-        klerk.handle(
-            Command(
-                CreateAuthor,
-                CreateAuthorParams(
-                    firstName = FirstName(firstName),
-                    lastName = LastName(lastName),
-                    phone = PhoneNumber("+46123456"),
-                    secretToken = SecretPasscode(1),
-                ),
+    ): ModelID<Author> = klerk.handle(
+        Command(
+            CreateAuthor,
+            CreateAuthorParams(
+                firstName = FirstName(firstName),
+                lastName = LastName(lastName),
+                phone = PhoneNumber("+46123456"),
+                secretToken = SecretPasscode(1),
             ),
-            context,
-        ).getOrThrow().primaryModel!!
+        ),
+        context,
+    ).getOrThrow().primaryModel!!
 
     private suspend fun deleteAuthor(klerk: Klerk<Ctx, Views>, id: ModelID<Author>) {
         klerk.handle(
@@ -290,7 +304,7 @@ class QueryPaginationTest {
         val first = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5)) }
         assertEquals(listOf("000", "001", "002", "003", "004"), first.items.map { it.props.lastName.value })
 
-        createAuthor(klerk, "Kalle", "000a")   // sorts into the first page, shifting everything after it
+        createAuthor(klerk, "Kalle", "000a") // sorts into the first page, shifting everything after it
 
         // Without the anchor the stored offset 5 would now point at "004", repeating it.
         val second = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems = 5, cursor = first.cursorNextPage)) }
@@ -392,9 +406,7 @@ class QueryPaginationTest {
 
     /** Hides the authors whose `lastName` is an even number from an unauthenticated actor. */
     @Suppress("unused")
-    private fun unauthenticatedCannotReadEvenAuthors(
-        args: ModelReadRuleArgs<Ctx, Views>,
-    ): NegativeAuthorization {
+    private fun unauthenticatedCannotReadEvenAuthors(args: ModelReadRuleArgs<Ctx, Views>): NegativeAuthorization {
         val props = args.model.props
         if (props !is Author || args.context.actor !is Unauthenticated) {
             return NegativeAuthorization.Pass

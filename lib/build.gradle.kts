@@ -8,6 +8,7 @@ plugins {
     `java-library`
     `maven-publish`
     id("org.jetbrains.dokka") version "2.2.0"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
 val coroutinesVersion = "1.10.2"
@@ -62,6 +63,13 @@ java {
     withSourcesJar()
 }
 
+// ktlint's parser cannot yet handle Kotlin context parameters (context(reader: ...)).
+ktlint {
+    filter {
+        exclude { it.file.name == "ViewOperations.kt" }
+    }
+}
+
 kotlin {
     jvmToolchain(17)
     explicitApi = ExplicitApiMode.Strict
@@ -87,7 +95,7 @@ abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") 
 
             // Sets up multi-project generation
             formatDependencies.dokkaPublicationPluginClasspathApiOnly.dependencies.addLater(
-                dokka("gfm-template-processing-plugin")
+                dokka("gfm-template-processing-plugin"),
             )
         }
     }

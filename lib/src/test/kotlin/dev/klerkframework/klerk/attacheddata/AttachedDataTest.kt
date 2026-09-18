@@ -1,18 +1,66 @@
 package dev.klerkframework.klerk.attacheddata
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedDataID
+import dev.klerkframework.klerk.AttachedDataKind
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorPicture
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.AverageScore
+import dev.klerkframework.klerk.Book
+import dev.klerkframework.klerk.BookChapter
+import dev.klerkframework.klerk.BookCover
+import dev.klerkframework.klerk.BookNotes
+import dev.klerkframework.klerk.BookThumbnail
+import dev.klerkframework.klerk.BookTitle
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.CommandResult
+import dev.klerkframework.klerk.CreateAuthor
+import dev.klerkframework.klerk.CreateAuthorParams
+import dev.klerkframework.klerk.CreateBook
+import dev.klerkframework.klerk.CreateBookParams
+import dev.klerkframework.klerk.CreatePainting
+import dev.klerkframework.klerk.CreatePaintingParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkSettings
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Painting
+import dev.klerkframework.klerk.PaintingImage
+import dev.klerkframework.klerk.PaintingTitle
+import dev.klerkframework.klerk.PhoneNumber
+import dev.klerkframework.klerk.ReadingTime
+import dev.klerkframework.klerk.SQLiteInMemory
+import dev.klerkframework.klerk.SecretPasscode
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.SystemIdentity
+import dev.klerkframework.klerk.UpdateAuthor
+import dev.klerkframework.klerk.UpdateBook
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createConfig
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.FileBlobStore
 import dev.klerkframework.klerk.storage.Persistence
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -72,7 +120,7 @@ open class AttachedDataTest {
                 UpdateAuthor,
                 authorID,
                 author.props.copy(picture = picture?.let { AuthorPicture(it) }),
-            
+
             ),
             context,
         )
@@ -309,7 +357,7 @@ open class AttachedDataTest {
                     lastName = LastName("Clavell"),
                     picture = newPicture?.let { AuthorPicture(it) },
                 ),
-            
+
             ),
             Ctx.system(),
         )
@@ -486,7 +534,7 @@ open class AttachedDataTest {
     @Test
     fun `The hash and the size cover a blob larger than one buffer`() = runBlocking {
         val klerk = start()
-        val content = "abcdefghij".repeat(10_000)   // 100 kB, i.e. many reads
+        val content = "abcdefghij".repeat(10_000) // 100 kB, i.e. many reads
         val id = klerk.attachedData.prepare(content.toByteArray().inputStream(), AuthorPicture::class, Ctx.system())
         createAuthorWithPicture(klerk, id)
 
@@ -672,7 +720,7 @@ open class AttachedDataTest {
                 UpdateBook,
                 bookID,
                 book.props.copy(chapters = listOf(BookChapter(second))),
-            
+
             ),
             Ctx.system(),
         ).getOrThrow()
@@ -749,13 +797,12 @@ open class AttachedDataTest {
     ) = createBook(klerk) {
         it.copy(
             cover = cover?.let { c -> BookCover(c) },
-            thumbnail = thumbnail?.let { t -> BookThumbnail(t) })
+            thumbnail = thumbnail?.let { t -> BookThumbnail(t) },
+        )
     }
 
-    private suspend fun createBookWithChapters(
-        klerk: Klerk<Ctx, Views>,
-        chapters: List<AttachedStringID>,
-    ) = createBook(klerk) { it.copy(chapters = chapters.map { c -> BookChapter(c) }) }
+    private suspend fun createBookWithChapters(klerk: Klerk<Ctx, Views>, chapters: List<AttachedStringID>) =
+        createBook(klerk) { it.copy(chapters = chapters.map { c -> BookChapter(c) }) }
 
     private suspend fun createAuthorWithPictureExpectingFailure(
         klerk: Klerk<Ctx, Views>,
@@ -778,7 +825,6 @@ open class AttachedDataTest {
         assertTrue(result is CommandResult.Failure, "Expected the command to fail but it was $result")
         return result
     }
-
 }
 
 /**

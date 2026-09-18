@@ -22,10 +22,13 @@ public interface JobLogging {
 
     /** Builds a debug log entry stamped with this step's time. */
     public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
+
     /** Builds an info log entry stamped with this step's time. */
     public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
+
     /** Builds a warning log entry stamped with this step's time. */
     public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
+
     /** Builds an error log entry stamped with this step's time. */
     public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
 }

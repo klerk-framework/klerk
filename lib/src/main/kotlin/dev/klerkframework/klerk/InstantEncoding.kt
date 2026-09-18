@@ -23,8 +23,7 @@ private val ONE_MILLION = BigInteger.valueOf(1000000)
 
 private val ONE_THOUSAND = BigInteger.valueOf(1000)
 
-internal fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant =
-    Instant.fromEpochSeconds(
-        Math.floorDiv(microsecondsSince1970, 1_000_000L),
-        Math.floorMod(microsecondsSince1970, 1_000_000L) * 1000,
-    )
+internal fun decode64bitMicroseconds(microsecondsSince1970: Long): Instant = Instant.fromEpochSeconds(
+    Math.floorDiv(microsecondsSince1970, 1_000_000L),
+    Math.floorMod(microsecondsSince1970, 1_000_000L) * 1000,
+)

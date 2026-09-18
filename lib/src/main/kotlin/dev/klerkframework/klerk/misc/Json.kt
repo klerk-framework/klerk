@@ -1,11 +1,28 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.datatypes.*
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.*
-import java.lang.reflect.InvocationTargetException
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.datatypes.AttachedDataContainer
+import dev.klerkframework.klerk.datatypes.DataContainer
+import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.EnumContainer
+import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.datatypes.GeoPositionContainer
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.decode64bitMicroseconds
+import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import java.lang.reflect.InvocationTargetException
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.microseconds
 
@@ -97,7 +114,7 @@ private fun decodeObject(schema: ObjectSchema<*>, json: JsonElement, path: Strin
     val missing = names.filterNot { it in obj }
     if (unknown.isNotEmpty() || missing.isNotEmpty()) {
         val problems = unknown.map { "'${join(path, it)}' is not a property of ${schema.kClass.simpleName}" } +
-                missing.map { "'${join(path, it)}' is missing" }
+            missing.map { "'${join(path, it)}' is missing" }
         throw JsonMismatchException(problems.joinToString(", "))
     }
     val arguments = schema.fields.map { decodeValue(it.schemaType, obj.getValue(it.name), join(path, it.name)) }
@@ -129,47 +146,45 @@ private fun decodeValue(type: SchemaType, json: JsonElement, path: String): Any?
 }
 
 /** What the container's constructor takes, decoded from the stored value. */
-private fun decodeContainerArgument(shape: Shape.Container, json: JsonElement, path: String): Any =
-    when (shape.kind) {
-        ContainerKind.AttachedBlob -> AttachedBlobID(json.int(path))
-        ContainerKind.AttachedString -> AttachedStringID(json.int(path))
-        ContainerKind.String -> json.string(path)
-        ContainerKind.Int -> json.int(path)
-        ContainerKind.Long -> json.long(path)
-        ContainerKind.Short -> json.short(path)
-        ContainerKind.Byte -> json.byte(path)
-        ContainerKind.ULong -> json.uLong(path)
-        ContainerKind.UInt -> json.uInt(path)
-        ContainerKind.UShort -> json.uShort(path)
-        ContainerKind.UByte -> json.uByte(path)
-        ContainerKind.Float -> json.float(path)
-        ContainerKind.Double -> json.double(path)
-        ContainerKind.Boolean -> json.boolean(path)
-        ContainerKind.Enum -> {
-            val name = json.string(path)
-            shape.enumConstants.firstOrNull { it.name == name }
-                ?: mismatch(path, "is '$name', which is not a constant of ${shape.enumClass?.simpleName}")
-        }
-
-        ContainerKind.Instant -> decode64bitMicroseconds(json.long(path))
-        ContainerKind.Date -> LocalDate.fromEpochDays(json.int(path))
-        ContainerKind.Duration -> json.long(path).microseconds
-        ContainerKind.Geo -> GeoPosition(json.long(path).toULong())
+private fun decodeContainerArgument(shape: Shape.Container, json: JsonElement, path: String): Any = when (shape.kind) {
+    ContainerKind.AttachedBlob -> AttachedBlobID(json.int(path))
+    ContainerKind.AttachedString -> AttachedStringID(json.int(path))
+    ContainerKind.String -> json.string(path)
+    ContainerKind.Int -> json.int(path)
+    ContainerKind.Long -> json.long(path)
+    ContainerKind.Short -> json.short(path)
+    ContainerKind.Byte -> json.byte(path)
+    ContainerKind.ULong -> json.uLong(path)
+    ContainerKind.UInt -> json.uInt(path)
+    ContainerKind.UShort -> json.uShort(path)
+    ContainerKind.UByte -> json.uByte(path)
+    ContainerKind.Float -> json.float(path)
+    ContainerKind.Double -> json.double(path)
+    ContainerKind.Boolean -> json.boolean(path)
+    ContainerKind.Enum -> {
+        val name = json.string(path)
+        shape.enumConstants.firstOrNull { it.name == name }
+            ?: mismatch(path, "is '$name', which is not a constant of ${shape.enumClass?.simpleName}")
     }
+
+    ContainerKind.Instant -> decode64bitMicroseconds(json.long(path))
+    ContainerKind.Date -> LocalDate.fromEpochDays(json.int(path))
+    ContainerKind.Duration -> json.long(path).microseconds
+    ContainerKind.Geo -> GeoPosition(json.long(path).toULong())
+}
 
 /**
  * Turns an exception thrown while creating a value (e.g. a failing `require` in `init`) into a mismatch. The
  * exception's message is left out of the reason, since it may contain the value; it is kept as the cause.
  */
-private fun construct(className: String?, path: String, create: () -> Any?): Any =
-    try {
-        requireNotNull(create())
-    } catch (e: JsonMismatchException) {
-        throw e
-    } catch (e: Exception) {
-        val cause = (e as? InvocationTargetException)?.targetException ?: e
-        mismatch(path, "could not be created as $className (${cause::class.simpleName})", cause)
-    }
+private fun construct(className: String?, path: String, create: () -> Any?): Any = try {
+    requireNotNull(create())
+} catch (e: JsonMismatchException) {
+    throw e
+} catch (e: Exception) {
+    val cause = (e as? InvocationTargetException)?.targetException ?: e
+    mismatch(path, "could not be created as $className (${cause::class.simpleName})", cause)
+}
 
 private fun describe(json: JsonElement): String = when (json) {
     is JsonNull -> "null"
@@ -250,6 +265,5 @@ private fun JsonElement.boolean(path: String): Boolean =
     (this as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
         ?: mismatch(path, "is ${describe(this)}, expected a boolean")
 
-private fun JsonElement.string(path: String): String =
-    (this as? JsonPrimitive)?.takeIf { it.isString }?.content
-        ?: mismatch(path, "is ${describe(this)}, expected a string")
+private fun JsonElement.string(path: String): String = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
+    ?: mismatch(path, "is ${describe(this)}, expected a string")

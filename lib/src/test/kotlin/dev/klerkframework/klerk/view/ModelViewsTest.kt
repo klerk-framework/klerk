@@ -1,9 +1,13 @@
 package dev.klerkframework.klerk.view
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.DeleteAuthor
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createAuthorAstrid
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -33,6 +37,5 @@ class ModelCollectionsTest {
                 assertFalse { collections.authors.all.contains(astrid) }
             }
         }
-
     }
 }

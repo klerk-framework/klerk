@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOption
 import dev.klerkframework.klerk.command.ProcessingOptions
@@ -9,9 +8,13 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
-import dev.klerkframework.klerk.statemachine.*
+import dev.klerkframework.klerk.statemachine.Block
 import dev.klerkframework.klerk.statemachine.BlockType.Exit
+import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.statemachine.InstanceState
+import dev.klerkframework.klerk.statemachine.VoidState
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.view.ModelViews
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.Timer
 import mu.KotlinLogging
@@ -69,7 +72,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             }
 
             ModelCache.storeFromPersistence(model)
-            allLists.getValue(model.props::class.simpleName!!).add(model.id.value)  // the 'all' list-source
+            allLists.getValue(model.props::class.simpleName!!).add(model.id.value) // the 'all' list-source
 
             val problems = klerk.validator.validateDataContainers(model.props, DefaultTranslation)
             if (problems.isNotEmpty()) {
@@ -316,7 +319,6 @@ internal class EventProcessor<C : KlerkContext, V>(
         @Suppress("UNCHECKED_CAST")
         val view = stateMachine.modelViews as ModelViews<T, C>
         val result = when (currentBlock) {
-
             is Block.VoidLifecycleBlock -> {
                 ProcessingData(currentBlock = currentBlock)
             }
@@ -362,8 +364,8 @@ internal class EventProcessor<C : KlerkContext, V>(
                     ?: ProcessingData(currentBlock = currentBlock)
             }
         }
-        val updatedDelta = processingData.copy(remainingBlocks = remaining)      // keep the old (except current)
-            .merge(result, currentBlock.type == Exit)                          // new block may be added here
+        val updatedDelta = processingData.copy(remainingBlocks = remaining) // keep the old (except current)
+            .merge(result, currentBlock.type == Exit) // new block may be added here
         val withTimeTriggers = withTimeTriggers<Primary, T>(updatedDelta, time, context, reader)
         return processBlocks<Primary, T, P>(withTimeTriggers, context, reader, options, time)
     }
@@ -389,12 +391,13 @@ internal class EventProcessor<C : KlerkContext, V>(
     }
 
     private fun <T : Any> findTimeTrigger(
-        newModel: Model<T>, transformedArgs: LifecycleArgs<T, C, V>, time: Instant,
+        newModel: Model<T>,
+        transformedArgs: LifecycleArgs<T, C, V>,
+        time: Instant,
     ): Instant? {
         val state = klerk.specification.getStateMachine(newModel).getStateByName(newModel.state)
         check(state is InstanceState)
         val instant = state.atTimeFunction?.invoke(transformedArgs) ?: state.afterDuration?.let { time.plus(it) }
         return instant?.let { makeExactSerializable(it) }
     }
-
 }

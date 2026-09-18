@@ -1,12 +1,25 @@
 package dev.klerkframework.klerk.statemachine.executables
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.validation.PropertyCollectionValidity
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.EventProcessingOptions
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.Problem
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.RuleDescription
+import dev.klerkframework.klerk.RuleType
+import dev.klerkframework.klerk.Specification
+import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.Translation
+import dev.klerkframework.klerk.UnfinalizedTransition
+import dev.klerkframework.klerk.Validatable
+import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.validation.PropertyCollectionValidity
+import dev.klerkframework.klerk.view.ModelViews
 import kotlin.time.Instant
 
 internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, V>(
@@ -55,7 +68,6 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
             log = listOf("Creating model using '${extractNameFromFunction(f)}'"),
         )
     }
-
 }
 
 internal fun validateModelProps(props: Any, translation: Translation): List<Problem> {

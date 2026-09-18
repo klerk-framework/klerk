@@ -12,7 +12,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.time.toKotlinInstant
 
-
 class SqliteStoreKtTest {
 
     @Test
@@ -42,5 +41,4 @@ class SqliteStoreKtTest {
         val instantMax = java.time.Instant.MAX.toKotlinInstant()
         assertEquals(instantMax.to64bitMicroseconds(), decode64bitMicroseconds(Long.MAX_VALUE).to64bitMicroseconds())
     }
-
 }

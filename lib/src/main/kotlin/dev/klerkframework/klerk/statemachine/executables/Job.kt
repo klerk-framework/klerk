@@ -1,11 +1,14 @@
 package dev.klerkframework.klerk.statemachine.executables
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.view.ModelViews
+import dev.klerkframework.klerk.EventProcessingOptions
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.view.ModelViews
 
 /**
  * Gives every declared job an id while the command is still being processed, so that the ids can be reported back in
@@ -31,7 +34,6 @@ internal class ScheduleJobs<T : Any, A, C : KlerkContext, V>(
         newJobs = f.invoke(args).withIds(processingOptions),
         log = listOf("Adding jobs using '${extractNameFromFunction(f)}'"),
     )
-
 }
 
 internal class ScheduleJob<T : Any, A, C : KlerkContext, V>(
@@ -49,5 +51,4 @@ internal class ScheduleJob<T : Any, A, C : KlerkContext, V>(
         newJobs = listOf(f.invoke(args)).withIds(processingOptions),
         log = listOf("Adding job using '${extractNameFromFunction(f)}'"),
     )
-
 }

@@ -29,7 +29,6 @@ class TranslationTest {
         if (validation?.endUserTranslatedMessage != null) {
             println(validation.endUserTranslatedMessage)
         }
-
     }
 }
 

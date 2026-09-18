@@ -44,7 +44,7 @@ internal object ReadBlockGuard {
     suspend fun checkNotInsideReadBlock(operation: String, advice: String) {
         check(!isInsideReadBlock()) {
             "$operation must not be called inside a read block, because the read lock is held for the whole block " +
-                    "and is not reentrant. $advice"
+                "and is not reentrant. $advice"
         }
     }
 }

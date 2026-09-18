@@ -1,10 +1,10 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.JobReader
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
-import dev.klerkframework.klerk.JobReader
 import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
@@ -52,8 +52,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
         return klerk.impl().jobs.allJobInfo()
     }
 
-    private fun authorized(job: JobInfo): Boolean =
-        isJobAuthorized(job, context, klerk.specification, withoutAuth)
+    private fun authorized(job: JobInfo): Boolean = isJobAuthorized(job, context, klerk.specification, withoutAuth)
 
     private fun checkUsable() {
         check(!finished) { "The reader cannot be used after its read has finished" }
@@ -65,8 +64,7 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
  */
 internal class UnauthorizedJobReader<C : KlerkContext, V>(private val klerk: Klerk<C, V>) : JobReader {
 
-    override fun get(id: JobID): JobInfo =
-        getOrNull(id) ?: throw NoSuchElementException("There is no job with id $id")
+    override fun get(id: JobID): JobInfo = getOrNull(id) ?: throw NoSuchElementException("There is no job with id $id")
 
     override fun getOrNull(id: JobID): JobInfo? = klerk.impl().jobs.jobInfoOrNull(id)
 

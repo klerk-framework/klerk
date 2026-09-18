@@ -2,17 +2,22 @@ package dev.klerkframework.klerk.storage
 
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.read.ReadResult
-import dev.klerkframework.klerk.read.ModelReader
-import dev.klerkframework.klerk.storage.ModelCache.persistence
+import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.NotFoundProblem
+import dev.klerkframework.klerk.ProcessingData
+import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyKey
 import dev.klerkframework.klerk.misc.envInt
+import dev.klerkframework.klerk.read.ModelReader
+import dev.klerkframework.klerk.read.ReadResult
+import dev.klerkframework.klerk.storage.ModelCache.persistence
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
-import dev.klerkframework.klerk.misc.ObjectSchema
-import dev.klerkframework.klerk.misc.PropertyKey
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
@@ -22,9 +27,7 @@ import kotlin.reflect.KProperty1
  * @property maxResidentModels the largest number of model bodies held in memory at once. Beyond this, the least
  * valuable are evicted and re-read from [Persistence] when they are next needed. The default is 10 million.
  */
-public data class ModelCacheSettings(
-    val maxResidentModels: Int = 10_000_000,
-) {
+public data class ModelCacheSettings(val maxResidentModels: Int = 10_000_000) {
     init {
         if (maxResidentModels < 1000) {
             logger.warn { "maxResidentModels should be at least 1000, was $maxResidentModels" }
@@ -114,10 +117,9 @@ internal object ModelCache {
         this.bodies = buildCache(settings)
     }
 
-    private fun buildCache(settings: ModelCacheSettings): Cache<Int, Model<out Any>> =
-        Caffeine.newBuilder()
-            .maximumSize(settings.maxResidentModels.toLong())
-            .build()
+    private fun buildCache(settings: ModelCacheSettings): Cache<Int, Model<out Any>> = Caffeine.newBuilder()
+        .maximumSize(settings.maxResidentModels.toLong())
+        .build()
 
     internal fun initMetrics(registry: MeterRegistry) {
         Gauge.builder("klerk.models.count") { count }
@@ -230,10 +232,7 @@ internal object ModelCache {
             if (model != null && model.props::class == clazz) model.copy() as Model<T> else null
         }.toSet()
 
-    internal fun <T : Any, U : Any> referencing(
-        property: KProperty1<T, ModelID<U>?>,
-        id: ModelID<*>,
-    ): Set<Model<T>> {
+    internal fun <T : Any, U : Any> referencing(property: KProperty1<T, ModelID<U>?>, id: ModelID<*>): Set<Model<T>> {
         if (id.value !in ids) throw NoSuchElementException("Could not find model with id $id")
         return relatedThrough(PropertyKey.of(property), id)
     }
@@ -310,5 +309,4 @@ internal object ModelCache {
      * concurrent modification.
      */
     internal fun allIds(reader: ModelReader<*, *>): Set<Int> = ids.toSet()
-
 }

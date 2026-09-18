@@ -1,8 +1,11 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.storage.spi.*
-import dev.klerkframework.klerk.job.*
-import dev.klerkframework.klerk.read.Reader
+import dev.klerkframework.klerk.job.DeclaredJob
+import dev.klerkframework.klerk.job.JobID
+import dev.klerkframework.klerk.job.JobInfo
+import dev.klerkframework.klerk.job.PendingJob
+import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.storage.spi.JobRecord
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -98,8 +101,6 @@ public interface JobManager<C : KlerkContext, V> {
      * @throws IllegalStateException if the job has not reached a terminal status.
      */
     public suspend fun delete(id: JobID, context: C)
-
-
 }
 
 internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {

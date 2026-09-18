@@ -1,9 +1,7 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
-import dev.klerkframework.klerk.job.*
 import java.io.InputStream
 import java.nio.file.Path
 import kotlin.reflect.KClass
@@ -135,10 +133,7 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * value is deleted, so this is the only place the reason can be read.
      * @throws kotlinx.coroutines.TimeoutCancellationException if [timeout] passes first.
      */
-    public suspend fun awaitProcessing(
-        id: AttachedBlobID,
-        timeout: Duration = 5.minutes,
-    )
+    public suspend fun awaitProcessing(id: AttachedBlobID, timeout: Duration = 5.minutes)
 
     /**
      * Inserts a string so that it can be attached to a model.
@@ -254,7 +249,6 @@ public interface KlerkAttachedData<C : KlerkContext> {
      * attached to a model
      */
     public suspend fun getMetadata(id: AttachedDataID, context: C): AttachedDataMetadata
-
 }
 
 /**

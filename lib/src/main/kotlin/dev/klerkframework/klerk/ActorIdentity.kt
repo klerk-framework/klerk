@@ -11,7 +11,8 @@ public enum class ActorType(public val storedValue: Int) {
     ModelReference(4),
     Unauthenticated(5),
     Custom(6),
-    Plugin(7);
+    Plugin(7),
+    ;
 
     public companion object {
         /** The type [storedValue] identifies, or [Custom] if no type has that value. */
@@ -36,8 +37,10 @@ public enum class ActorType(public val storedValue: Int) {
 public sealed interface ActorIdentity {
     /** The kind of identity, as stored. */
     public val type: ActorType
+
     /** The model that is the actor, if the identity refers to one. */
     public val id: ModelID<*>?
+
     /** An identifier of the actor outside Klerk, if the identity has one. */
     public val externalId: Long?
 
@@ -99,10 +102,7 @@ public class ModelReferenceIdentity<T : Any>(private val modelId: ModelID<T>) : 
 }
 
 /** Escape hatch for actor identities that don't fit the other built-in cases. */
-public class CustomIdentity(
-    override val id: ModelID<Any>?,
-    override val externalId: Long?,
-) : ActorIdentity {
+public class CustomIdentity(override val id: ModelID<Any>?, override val externalId: Long?) : ActorIdentity {
     override val type: ActorType = ActorType.Custom
     override fun toString(): String = "[custom] modelId: $id, externalId: $externalId"
     override fun equals(other: Any?): Boolean =

@@ -5,13 +5,23 @@ import dev.klerkframework.klerk.BookGenre
 import dev.klerkframework.klerk.BookGenreContainer
 import dev.klerkframework.klerk.IllegalConfigurationException
 import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.FloatContainer
+import dev.klerkframework.klerk.datatypes.GeoPosition
+import dev.klerkframework.klerk.datatypes.GeoPositionContainer
+import dev.klerkframework.klerk.datatypes.InstantContainer
+import dev.klerkframework.klerk.datatypes.IntContainer
+import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.datatypes.StringContainer
+import dev.klerkframework.klerk.datatypes.ULongContainer
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -137,7 +147,10 @@ class KlerkJsonTest {
 
     @Test
     fun `A renamed key reports both sides`() {
-        val reason = reasonFor { put("title", getValue("name")); remove("name") }
+        val reason = reasonFor {
+            put("title", getValue("name"))
+            remove("name")
+        }
         assertEquals("'title' is not a property of Everything, 'name' is missing", reason)
     }
 

@@ -4,7 +4,12 @@ import dev.klerkframework.klerk.AttachedBlobID
 import dev.klerkframework.klerk.BlobRejectedException
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.impl
-import dev.klerkframework.klerk.job.*
+import dev.klerkframework.klerk.job.JobAgent
+import dev.klerkframework.klerk.job.JobName
+import dev.klerkframework.klerk.job.JobProgress
+import dev.klerkframework.klerk.job.JobResult
+import dev.klerkframework.klerk.job.JobStepArgs
+import dev.klerkframework.klerk.job.JobType
 import kotlinx.serialization.Serializable
 
 /** The name of the built-in job, registered in every configuration. An application cannot use it for its own type. */

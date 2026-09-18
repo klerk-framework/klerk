@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.storage.RamStorage
+import dev.klerkframework.klerk.view.asSequence
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import kotlin.test.Test
@@ -12,8 +13,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.days
-import dev.klerkframework.klerk.view.*
-
 
 class LibraryTest {
 
@@ -21,7 +20,6 @@ class LibraryTest {
 
     @Test
     fun read() {
-
         runBlocking {
             val ramStorage = RamStorage()
             val bc = BookViews()
@@ -45,7 +43,6 @@ class LibraryTest {
             }
             assertNotNull(somethingNotNull)
 
-
             generateSampleData(100, 3, klerk)
             val modelsInCache = ModelCache.count
 
@@ -60,7 +57,6 @@ class LibraryTest {
             assertNotNull(somethingNotNullAgain)
 
             assertEquals(modelsInCache, ModelCache.count)
-
         }
     }
 
@@ -84,7 +80,6 @@ class LibraryTest {
 }
 
 suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk: Klerk<Ctx, Views>) {
-
     val startTime = kotlin.time.Clock.System.now()
     val firstNames = setOf("Anna", "Bertil", "Janne", "Filip")
     val lastNames = setOf("Andersson", "Svensson", "Törnkrantz")
@@ -99,7 +94,7 @@ suspend fun generateSampleData(numberOfAuthors: Int, booksPerAuthor: Int, klerk:
                     lastName = LastName(i.toString()),
                     phone = PhoneNumber("+46123456"),
                     secretToken = SecretPasscode(23290409),
-                    //address = Address(Street("Lugna gatan"))
+                    // address = Address(Street("Lugna gatan"))
                 ),
             ),
             Ctx.system(),

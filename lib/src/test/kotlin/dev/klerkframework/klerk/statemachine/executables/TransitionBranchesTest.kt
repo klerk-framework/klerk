@@ -1,11 +1,15 @@
 package dev.klerkframework.klerk.statemachine.executables
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.createAuthorJKRowling
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 
-class transitionWhenTest {
+class TransitionWhenTest {
 
     @Test
     fun branches() {

@@ -1,17 +1,16 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
-import kotlin.reflect.KClass
+import dev.klerkframework.klerk.view.ModelViews
 import kotlinx.coroutines.runBlocking
+import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
-
 
 class SpecificationTest {
 
@@ -97,10 +96,9 @@ data class IllegalModelSetString(val tags: Set<String>)
 
 private val illegalStateMachineSetString = stateMachine<IllegalModelSetString, States, Ctx, Views> { }
 
-private enum class States {}
+private enum class States
 
 private val illegalStateMachine = stateMachine<IllegalModel, States, Ctx, ViewWithIllegal> { }
-
 
 private class TestPlugin(override val name: String) : KlerkPlugin<Ctx, Views> {
     override val description: String = "for tests"

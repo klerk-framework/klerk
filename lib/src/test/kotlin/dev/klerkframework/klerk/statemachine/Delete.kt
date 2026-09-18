@@ -1,6 +1,9 @@
 package dev.klerkframework.klerk.statemachine
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.Views
+import dev.klerkframework.klerk.createKlerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 

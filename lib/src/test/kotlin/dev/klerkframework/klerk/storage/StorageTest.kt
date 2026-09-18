@@ -1,14 +1,29 @@
 package dev.klerkframework.klerk.storage
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.Address
+import dev.klerkframework.klerk.Author
+import dev.klerkframework.klerk.AuthorStates
+import dev.klerkframework.klerk.AverageScore
+import dev.klerkframework.klerk.Book
+import dev.klerkframework.klerk.BookGenre
+import dev.klerkframework.klerk.BookGenreContainer
+import dev.klerkframework.klerk.BookStates
+import dev.klerkframework.klerk.BookTitle
+import dev.klerkframework.klerk.BookWrittenAt
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.Quantity
+import dev.klerkframework.klerk.ReadingTime
+import dev.klerkframework.klerk.ReleasePartyPosition
+import dev.klerkframework.klerk.Street
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
-
 
 class StorageTest {
 
@@ -73,5 +88,4 @@ class StorageTest {
         storage.store(CommitBatch(deletedModels = listOf(book.id)))
         assertNull(storage.readModel(book.id.value), "readModel must not return a deleted model")
     }
-
 }

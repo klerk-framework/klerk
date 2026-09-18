@@ -1,18 +1,21 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.job.JobsBlock
+import dev.klerkframework.klerk.job.JobsSpecification
+import dev.klerkframework.klerk.job.PluginJobsBlock
+import dev.klerkframework.klerk.migration.MigrationStep
+import dev.klerkframework.klerk.misc.ObjectSchema
+import dev.klerkframework.klerk.misc.PropertyKey
+import dev.klerkframework.klerk.misc.SchemaField
+import dev.klerkframework.klerk.statemachine.DeclaredEventRules
+import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.validation.ContextValidity
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.ModelViews
-import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
-import dev.klerkframework.klerk.job.*
-import dev.klerkframework.klerk.migration.MigrationStep
-import dev.klerkframework.klerk.misc.*
-import dev.klerkframework.klerk.statemachine.DeclaredEventRules
-import dev.klerkframework.klerk.statemachine.StateMachine
 import mu.KotlinLogging
-import java.util.*
-import kotlin.reflect.*
-import kotlin.reflect.full.*
+import java.util.SortedSet
+import kotlin.reflect.KClass
 import kotlin.time.Duration
 
 internal val logger = KotlinLogging.logger {}
@@ -100,19 +103,15 @@ public data class Specification<C : KlerkContext, V>(
      *
      * @throws NoSuchElementException if no view matches [id]
      */
-    public fun view(id: ViewID): ModelView<out Any, C> =
-        registeredViews.firstOrNull { it.view.id == id }?.view
-            ?: throw NoSuchElementException("Cannot find view '$id'")
+    public fun view(id: ViewID): ModelView<out Any, C> = registeredViews.firstOrNull { it.view.id == id }?.view
+        ?: throw NoSuchElementException("Cannot find view '$id'")
 
     /**
      * The [ModelView] the ids in [field] must be found in, as declared with `validReferences(...)` for the event
      * [eventReference]. Null if the event has no parameters, or if [field] is not a [ModelID] — every [ModelID]
      * has a view, since Klerk rejects the specification at startup otherwise.
      */
-    public fun validReferencesFor(
-        eventReference: EventReference,
-        field: SchemaField,
-    ): ModelView<out Any, C>? {
+    public fun validReferencesFor(eventReference: EventReference, field: SchemaField): ModelView<out Any, C>? {
         val parametersClass = parametersClassOf(eventReference) ?: return null
         return validReferencesOf(eventReference)[PropertyKey(parametersClass, field.name)]
     }
@@ -148,10 +147,7 @@ public data class Specification<C : KlerkContext, V>(
      * The set of allowed values declared with `validEnums(...)` for the parameter [field] of the event
      * [eventReference], or null if none was declared (in which case all enum values are allowed).
      */
-    public fun validEnumsFor(
-        eventReference: EventReference,
-        field: SchemaField,
-    ): Set<Enum<*>>? {
+    public fun validEnumsFor(eventReference: EventReference, field: SchemaField): Set<Enum<*>>? {
         val parametersClass = parametersClassOf(eventReference) ?: return null
         return validEnumsOf(eventReference)[PropertyKey(parametersClass, field.name)]
     }
@@ -225,7 +221,6 @@ public data class Specification<C : KlerkContext, V>(
         updatedPlugins.add(plugin)
         return plugin.mergeSpecification(this).copy(plugins = updatedPlugins)
     }
-
 }
 
 /**

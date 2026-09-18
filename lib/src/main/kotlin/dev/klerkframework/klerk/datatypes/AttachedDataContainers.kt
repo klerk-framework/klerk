@@ -1,8 +1,13 @@
 package dev.klerkframework.klerk.datatypes
 
-import dev.klerkframework.klerk.*
-import java.io.InputStream
+import dev.klerkframework.klerk.AttachedBlobID
+import dev.klerkframework.klerk.AttachedDataMetadata
+import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.AttachedStringID
+import dev.klerkframework.klerk.InvalidPropertyProblem
+import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.misc.functionName
+import java.io.InputStream
 
 /**
  * A reference to an attached blob or attached string, together with what that value is allowed to be.
@@ -140,23 +145,23 @@ public abstract class AttachedBlobContainer(id: AttachedBlobID) : AttachedDataCo
             val name = functionName(step)
                 ?: throw IllegalArgumentException(
                     "Every step of ${this::class.simpleName} must be a named function reference (::myStep), since " +
-                            "the name is what records that it has run. A lambda has no name to record.",
+                        "the name is what records that it has run. A lambda has no name to record.",
                 )
             name to step
         }
         if (named.isEmpty()) {
             throw IllegalArgumentException(
                 "${this::class.simpleName} must declare at least one preAttachStep: an uploaded file is not to be " +
-                        "trusted until something has looked at it (a virus scan, an EXIF strip, a re-encode). If " +
-                        "this property really wants the bytes exactly as they arrived, say so explicitly with " +
-                        "'override val preAttachSteps = listOf(::noPreAttachProcessing)'.",
+                    "trusted until something has looked at it (a virus scan, an EXIF strip, a re-encode). If " +
+                    "this property really wants the bytes exactly as they arrived, say so explicitly with " +
+                    "'override val preAttachSteps = listOf(::noPreAttachProcessing)'.",
             )
         }
         val doNothing = named.filter { it.second == NO_PRE_ATTACH_PROCESSING }
         if (doNothing.isNotEmpty() && named.size > 1) {
             throw IllegalArgumentException(
                 "${this::class.simpleName} declares noPreAttachProcessing together with other steps. It says that " +
-                        "there is nothing to do, so it can only be the only step.",
+                    "there is nothing to do, so it can only be the only step.",
             )
         }
         named.filterNot { it.second == NO_PRE_ATTACH_PROCESSING }

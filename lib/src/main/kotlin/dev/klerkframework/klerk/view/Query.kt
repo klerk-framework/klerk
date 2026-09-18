@@ -1,6 +1,6 @@
 package dev.klerkframework.klerk.view
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.misc.decodeBase64UrlSafeString
 import dev.klerkframework.klerk.misc.encodeBase64UrlSafe
 
@@ -38,7 +38,6 @@ public data class QueryOptions(
     init {
         require(maxItems > 0) { "maxItems must be positive but was $maxItems" }
     }
-
 }
 
 /**
@@ -64,6 +63,7 @@ public data class QueryResponse<T : Any>(
 
     /** True if there is a page before this one. */
     public val hasPreviousPage: Boolean get() = cursorPreviousPage != null
+
     /** True if there is a page after this one. */
     public val hasNextPage: Boolean get() = cursorNextPage != null
 
@@ -79,7 +79,6 @@ public data class QueryResponse<T : Any>(
         }
         return QueryListCursor(offset + index, items[index].id.value)
     }
-
 }
 
 /**
@@ -90,17 +89,13 @@ public data class QueryResponse<T : Any>(
  * view, so models created or deleted meanwhile neither skip nor repeat a row. If that item is gone, the raw position
  * is used and a row may shift.
  */
-public class QueryListCursor internal constructor(
-    internal val offset: Int,
-    internal val anchor: Int?,
-) {
+public class QueryListCursor internal constructor(internal val offset: Int, internal val anchor: Int?) {
 
     init {
         require(offset >= 0)
     }
 
-    override fun toString(): String =
-        (if (anchor == null) "o:$offset" else "o:$offset,a:$anchor").encodeBase64UrlSafe()
+    override fun toString(): String = (if (anchor == null) "o:$offset" else "o:$offset,a:$anchor").encodeBase64UrlSafe()
 
     override fun equals(other: Any?): Boolean =
         other is QueryListCursor && other.offset == offset && other.anchor == anchor

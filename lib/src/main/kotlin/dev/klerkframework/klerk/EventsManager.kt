@@ -1,6 +1,5 @@
 package dev.klerkframework.klerk
 
-import dev.klerkframework.klerk.storage.spi.*
 import dev.klerkframework.klerk.CommandResult.Failure
 import dev.klerkframework.klerk.CommandResult.Success
 import dev.klerkframework.klerk.attacheddata.AttachedDataImpl
@@ -8,23 +7,27 @@ import dev.klerkframework.klerk.attacheddata.AttachedDataPlan
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.DebugOption
-import dev.klerkframework.klerk.command.DebugOption.*
+import dev.klerkframework.klerk.command.DebugOption.Misc
+import dev.klerkframework.klerk.command.DebugOption.Result
+import dev.klerkframework.klerk.command.DebugOption.Sequence
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.log.LogLevel
+import dev.klerkframework.klerk.misc.KlerkJson
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.withoutReadRestrictions
-import dev.klerkframework.klerk.misc.KlerkJson
+import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.EventLogEntry
-import dev.klerkframework.klerk.statemachine.UnmanagedJob
-import dev.klerkframework.klerk.log.LogLevel
 import dev.klerkframework.klerk.storage.ModelCache
-import java.util.concurrent.atomic.AtomicLong
+import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
+import dev.klerkframework.klerk.storage.spi.JobCommit
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import org.slf4j.event.Level
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Instant
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
@@ -85,7 +88,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
         // Actions run outside the lock, so they are collected here and invoked after it is released.
         var actions: List<UnmanagedJob> = emptyList()
-        val result = mutex.withLock {    // never process more than one event simultaneously, but we still allow reading
+        val result = mutex.withLock {
+            // never process more than one event simultaneously, but we still allow reading
             logger.log(Misc, options) { "Processing event ${command.event}" }
 
             // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
@@ -122,7 +126,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                 is NewJobPlan.Rejected -> {
                                     logger.log(Result, options) {
                                         "Command ${command.event} failed: " +
-                                                jobPlan.problems.joinToString(", ") { it.toString() }
+                                            jobPlan.problems.joinToString(", ") { it.toString() }
                                     }
                                     Failure(jobPlan.problems)
                                 }
@@ -140,7 +144,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     }
                 }
             }
-        }       // release the lock. Next command can now start processing
+        } // release the lock. Next command can now start processing
 
         try {
             for (action in actions) {
@@ -149,7 +153,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         } catch (e: Exception) {
             logger.warn(e) {
                 "The command was successful but an exception was thrown when calling an action function. It is " +
-                        "considered bad practice to throw in any function provided to Klerk."
+                    "considered bad practice to throw in any function provided to Klerk."
             }
         }
         return result
@@ -244,7 +248,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
     ) {
-
         // Persisting to the database can take several milliseconds, and reads keep running throughout: the write lock
         // is taken only for the in-memory flip at the end.
         //
@@ -306,17 +309,21 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             updatedModels = delta.updatedModels.union(delta.transitions).minus(delta.createdModels.toSet())
                 .map(::model),
             deletedModels = delta.deletedModels,
-            eventLogEntry = if (command == null || context == null) null else EventLogEntry(
-                sequenceNumber = sequenceNumber,
-                time = context.time,
-                eventReference = command.event.id,
-                model = command.model ?: delta.primaryModel ?: delta.createdModels.firstOrNull() ?: ModelID(0),
-                actorType = context.actor.type,
-                actorReference = context.actor.id?.value,
-                actorExternalId = context.actor.externalId,
-                params = KlerkJson.encode(command.params),
-                extra = context.eventLogExtra,
-            ),
+            eventLogEntry = if (command == null || context == null) {
+                null
+            } else {
+                EventLogEntry(
+                    sequenceNumber = sequenceNumber,
+                    time = context.time,
+                    eventReference = command.event.id,
+                    model = command.model ?: delta.primaryModel ?: delta.createdModels.firstOrNull() ?: ModelID(0),
+                    actorType = context.actor.type,
+                    actorReference = context.actor.id?.value,
+                    actorExternalId = context.actor.externalId,
+                    params = KlerkJson.encode(command.params),
+                    extra = context.eventLogExtra,
+                )
+            },
             attachedData = attachedDataDelta,
             jobs = jobCommit,
         )
@@ -372,9 +379,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         return delta.createdModels
             .filter { it !in deleted }
             .mapNotNull { id -> classOf(id)?.let { ModelModification.Created(id, it) } } +
-                delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
-                delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
-                delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
+            delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
+            delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
+            delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
     }
 
     private fun maybeEraseEventLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
@@ -412,7 +419,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             is AttachedDataPlan.Rejected -> {
                 logger.error {
                     "The time-trigger for model ${model.id} could not be committed because of its attached data: " +
-                            plan.problems.joinToString(", ") { it.toString() }
+                        plan.problems.joinToString(", ") { it.toString() }
                 }
                 return
             }
@@ -426,7 +433,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             is NewJobPlan.Rejected -> {
                 logger.warn {
                     "The jobs scheduled by the time-trigger for model ${model.id} were refused: " +
-                            planned.problems.joinToString(", ") { it.toString() }
+                        planned.problems.joinToString(", ") { it.toString() }
                 }
                 NewJobPlan.Ok(emptyList())
             }
@@ -442,14 +449,13 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         } catch (e: Exception) {
             logger.warn(e) {
                 "The processing of the time-triggered model was successful but an exception was thrown " +
-                        "when calling an action function. It is considered bad practice to throw in any function " +
-                        "provided to Klerk."
+                    "when calling an action function. It is considered bad practice to throw in any function " +
+                    "provided to Klerk."
             }
         }
 
         timeTriggerManager.handle(delta)
     }
-
 }
 
 internal fun KLogger.log(debugCategory: DebugOption, options: ProcessingOptions, function: () -> String) {

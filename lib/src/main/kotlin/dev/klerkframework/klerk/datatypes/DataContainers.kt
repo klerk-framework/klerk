@@ -1,17 +1,21 @@
 package dev.klerkframework.klerk.datatypes
 
-import dev.klerkframework.klerk.*
-import dev.klerkframework.klerk.validation.Valid
+import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.InvalidPropertyProblem
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.job.JobID
+import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.validation.PropertyValidity
 import dev.klerkframework.klerk.validation.PropertyValidity.Invalid
+import dev.klerkframework.klerk.validation.Valid
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.LocalDate
 import java.util.concurrent.ConcurrentHashMap
-import dev.klerkframework.klerk.misc.requireNamedRule
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -78,7 +82,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
                 throw AuthorizationException(
                     KlerkErrorCode.BypassAuthReadNotAllowed,
                     "valueWithoutAuthorization is not allowed on ${this::class.simpleName}. Use value or " +
-                            "valueOrNullIfNotAuthorized, or enable KlerkSettings.allowBypassAuthRead.",
+                        "valueOrNullIfNotAuthorized, or enable KlerkSettings.allowBypassAuthRead.",
                 )
             }
             return rawValue
@@ -196,7 +200,6 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     }
 
     override fun hashCode(): Int = rawValue.hashCode()
-
 }
 
 /**
@@ -206,8 +209,10 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
 public abstract class StringContainer(value: String) : DataContainer<String>(value) {
     /** The shortest allowed length. */
     public abstract val minLength: Int
+
     /** The longest allowed length. */
     public abstract val maxLength: Int
+
     /** The most lines the value may have. */
     public abstract val maxLines: Int
 
@@ -228,9 +233,14 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
         check(maxLength >= minLength) { "minLength > maxLength" }
         if (rawValue.length < minLength) {
             return InvalidPropertyProblem(
-                if (rawValue.isEmpty()) translation.klerk.mustBeProvided else translation.klerk.tooShort(
-                    minLength,
-                ), propertyName,
+                if (rawValue.isEmpty()) {
+                    translation.klerk.mustBeProvided
+                } else {
+                    translation.klerk.tooShort(
+                        minLength,
+                    )
+                },
+                propertyName,
             )
         }
 
@@ -241,13 +251,14 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
             return InvalidPropertyProblem(translation.klerk.tooManyLines(maxLines), propertyName)
         }
         val regex = regexPattern
-        if (regex != null && !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
-                .matches(rawValue)) {
+        if (regex != null &&
+            !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
+                .matches(rawValue)
+        ) {
             return InvalidPropertyProblem(translation.klerk.invalid, propertyName)
         }
         return firstInvalidValidator(propertyName, translation)
     }
-
 }
 
 // So we don't have to build a Regex every time we validate
@@ -343,14 +354,22 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
      * Serializes this position to an ISO 6709 string, e.g. "+48.8577+002.2950/". Altitude is omitted.
      */
     public fun toISO6709(): String {
-        val lat = if (latitude >= 0) "+%09.6f".format(
-            java.util.Locale.US,
-            latitude,
-        ) else "%010.6f".format(java.util.Locale.US, latitude)
-        val lon = if (longitude >= 0) "+%010.6f".format(
-            java.util.Locale.US,
-            longitude,
-        ) else "%011.6f".format(java.util.Locale.US, longitude)
+        val lat = if (latitude >= 0) {
+            "+%09.6f".format(
+                java.util.Locale.US,
+                latitude,
+            )
+        } else {
+            "%010.6f".format(java.util.Locale.US, latitude)
+        }
+        val lon = if (longitude >= 0) {
+            "+%010.6f".format(
+                java.util.Locale.US,
+                longitude,
+            )
+        } else {
+            "%011.6f".format(java.util.Locale.US, longitude)
+        }
         return "$lat$lon/"
     }
 

@@ -1,9 +1,17 @@
 package dev.klerkframework.klerk.job
 
-import dev.klerkframework.klerk.*
+import dev.klerkframework.klerk.AuthorViews
+import dev.klerkframework.klerk.BookViews
+import dev.klerkframework.klerk.ChangeName
+import dev.klerkframework.klerk.ChangeNameParams
+import dev.klerkframework.klerk.Ctx
+import dev.klerkframework.klerk.FirstName
+import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.command.CommandToken
-import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.createAuthorJKRowling
+import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.storage.RamStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
@@ -71,7 +79,7 @@ class JobSnapshotTest {
             repeat(25) {
                 klerk.read(Ctx.system()) {
                     val before = jobs.all()
-                    spin(2_000_000)      // 2ms with a live dispatcher racing us
+                    spin(2_000_000) // 2ms with a live dispatcher racing us
                     val after = jobs.all()
                     assertEquals(before, after, "job state changed during a read block")
                     seenAcrossBlocks.add(before)

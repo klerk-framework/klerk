@@ -50,7 +50,6 @@ public abstract class FlowChartAlgorithm<P, R>(public val name: String) {
                 execution.terminationResult to newLogs
             }
         }
-
 }
 
 /** DSL receiver for [FlowChartAlgorithm.configure]. */
@@ -92,7 +91,6 @@ public class AlgorithmBuilder<P, R>(private val name: String) {
         val startNode = nodes.single { it.id == start.toString() }
         return nodes to startNode
     }
-
 }
 
 /** A single node in a [FlowChartAlgorithm]'s graph. */
@@ -103,10 +101,13 @@ public sealed class Node<P, R> {
 
     /** Identifies the node in a rendered diagram. */
     public abstract val id: String
+
     /** The node's label in a rendered diagram. */
     public abstract val humanReadable: String
+
     /** The next node for each decision outcome that continues. */
     public abstract val goTos: Map<*, Decision<out Any, P>>
+
     /** The result for each decision outcome that ends the algorithm. */
     public abstract val terminations: Map<*, R>
 
@@ -155,7 +156,6 @@ public sealed class Node<P, R> {
         override val goTos: Map<Any, Decision<out Any, P>> = emptyMap()
 
         override val terminations: Map<Any, R> = emptyMap()
-
     }
 }
 
@@ -191,7 +191,6 @@ public class BooleanNodeBuilder<D : Decision<Boolean, P>, P, R> {
     }
 
     internal fun build(decision: D): Node<P, R> = Node.BooleanNode(decision, goTos, terminations)
-
 }
 
 /** DSL receiver for [AlgorithmBuilder.enumNode]. */
@@ -214,7 +213,6 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
     }
 
     internal fun build(decision: D): Node<P, R> = Node.EnumNode(decision, goTos, terminations)
-
 }
 
 /**
@@ -224,6 +222,7 @@ public class EnumNodeBuilder<E : Enum<*>, D : Decision<E, P>, P, R> {
 public interface Decision<T, P> {
     /** The decision's name, as shown in a rendered diagram. */
     public val name: String
+
     /** Computes the value to branch on. */
     public val function: (P) -> T
 }
