@@ -35,6 +35,9 @@ public data class EventLogRuleArgs<C : KlerkContext, V>(
 
 /**
  * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
+ *
+ * When the rules are evaluated by `Reader.possibleEvents` or `Reader.possibleVoidEvents`, the parameters are not known
+ * yet, so `command.params` is null even for an event that takes parameters.
  */
 public data class CommandRuleArgs<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,

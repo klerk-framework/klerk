@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.job
 
 import dev.klerkframework.klerk.JobReadRuleArgs
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.NegativeAuthorization
 import dev.klerkframework.klerk.PositiveAuthorization
 import dev.klerkframework.klerk.Specification
@@ -20,11 +21,24 @@ internal fun <C : KlerkContext, V> isJobAuthorized(
     context: C,
     specification: Specification<C, V>,
     reader: ReaderWithoutAuth<C, V>,
-): Boolean {
+): Boolean = jobAuthorizationFailure(job, context, specification, reader) == null
+
+/** Like [isJobAuthorized], but tells why the actor may not see [job], or null if it may. */
+internal fun <C : KlerkContext, V> jobAuthorizationFailure(
+    job: JobInfo,
+    context: C,
+    specification: Specification<C, V>,
+    reader: ReaderWithoutAuth<C, V>,
+): KlerkErrorCode? {
     if (context.actor == SystemIdentity) {
-        return true
+        return null
     }
     val args = JobReadRuleArgs(job, context, reader)
-    return specification.authorization.jobPositiveRules.any { it.invoke(args) == PositiveAuthorization.Allow } &&
-        specification.authorization.jobNegativeRules.none { it.invoke(args) == NegativeAuthorization.Deny }
+    if (specification.authorization.jobNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+        return KlerkErrorCode.JobReadNegativeAuthorizationExist
+    }
+    if (specification.authorization.jobPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+        return KlerkErrorCode.JobReadPositiveAuthorizationMissing
+    }
+    return null
 }

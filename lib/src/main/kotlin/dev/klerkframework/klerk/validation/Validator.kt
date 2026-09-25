@@ -22,6 +22,7 @@ import dev.klerkframework.klerk.Problem
 import dev.klerkframework.klerk.RuleDescription
 import dev.klerkframework.klerk.RuleType
 import dev.klerkframework.klerk.StateProblem
+import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventArgs
@@ -235,6 +236,9 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         reader: ModelReader<C, V>,
         context: C,
     ): Problem? {
+        if (context.actor == SystemIdentity) {
+            return null
+        }
         val negativeAuthProblem =
             klerk.specification.authorization.eventNegativeRules.firstOrNull {
                 it(
@@ -333,7 +337,11 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             .map { (it.value as PropertyCollectionValidity.Invalid).toProblem(it.key, translation) }
     }
 
-    fun <T : Any> validateWithoutParameters(
+    /**
+     * True if the actor could submit [eventRef] right now, as far as can be told without parameters: the validation
+     * rules that take no parameters, and the command authorization rules with `params` set to null.
+     */
+    fun <T : Any> isPossibleWithoutParameters(
         eventRef: EventReference,
         context: C,
         model: Model<T>?,
@@ -344,14 +352,11 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
 
         @Suppress("UNCHECKED_CAST")
-        return validateEventRulesWithoutParams(
-            klerk.specification.event(eventRef) as Event<T, Any?>,
-            context,
-            model,
-            readerWithoutAuth,
-        )
+        val event = klerk.specification.event(eventRef) as Event<T, Any?>
+        val valid = validateEventRulesWithoutParams(event, context, model, readerWithoutAuth)
             .filterIsInstance<PropertyCollectionValidity.Invalid>()
             .isEmpty()
+        return valid && checkAuthorization(Command(event, model?.id, null), readerWithoutAuth, context) == null
     }
 
     private fun <T : Any> validateEventRulesWithoutParams(

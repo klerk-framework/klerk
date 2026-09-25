@@ -83,9 +83,11 @@ public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.query(
 ): QueryResponse<T> = reader.viewReader().query(this, options, filter)
 
 /**
- * Like [query], but throws instead of skipping a model the actor may not read.
+ * Like [query], but throws instead of skipping a model the actor may not read. Like [query], [filter] only sees
+ * models the actor may read.
  *
- * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a matching model
+ * @throws dev.klerkframework.klerk.AuthorizationException if the actor may not read a model the query comes across,
+ * whether or not [filter] would have matched it
  */
 context(reader: ModelReader<C, V>)
 public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.queryOrThrow(

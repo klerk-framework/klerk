@@ -129,6 +129,14 @@ fun everybodyCanDoEverything(args: CommandRuleArgs<*, Ctx, Views>): PositiveAuth
 This runs as the last step of command validation — after all rules described in [validation](validation.md) have already
 passed — so a command that's both invalid and unauthorized is reported as invalid, not unauthorized.
 
+The rules also decide what `possibleEvents` and `possibleVoidEvents` return (see [reading](reading.md)). There the
+parameters are not known yet, so `args.command.params` is null even for an event that takes parameters — a rule that
+needs them must handle that:
+
+```kotlin
+val params = args.command.params as? PublishParams ?: return Pass
+```
+
 ### eventLog
 
 Gates whether an actor can read entries from the event log (`eventLog(...)` inside a read block, see
@@ -195,4 +203,4 @@ All of the above key off `context.actor`. See [context](context.md) for the full
 implementations (`Unauthenticated`, `SystemIdentity`, `ModelIdentity`, ...) and how to check the concrete type of the
 actor inside a rule.
 
-`SystemIdentity` bypasses authorization entirely.
+`SystemIdentity` bypasses all authorization rules. Commands submitted by the system are still validated.

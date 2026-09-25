@@ -196,6 +196,10 @@ cursor needs.
 views.authors.all.query(options) { it.props.isAlive.value }
 ```
 
+The filter only sees models the actor may read, with the properties it may not read masked, so it cannot be used to
+probe hidden data. `queryOrThrow` throws as soon as it comes across a model the actor may not read, whether or not the
+filter would have matched it.
+
 A filter you reuse belongs on the view instead (`views.authors.all.filter { … }`, see [views.md](views.md)) — a
 registered view can be indexed, a lambda passed to `query` cannot.
 

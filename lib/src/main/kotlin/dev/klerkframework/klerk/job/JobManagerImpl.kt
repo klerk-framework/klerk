@@ -1248,25 +1248,22 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     // ------------------------------------------------------------------ authorization
 
     private suspend fun authorize(job: JobInfo, context: C) {
-        if (!isAuthorized(job, context)) {
-            throw AuthorizationException(
-                KlerkErrorCode.JobReadPositiveAuthorizationMissing,
-                "Not allowed to see job ${job.id}",
-            )
-        }
+        authorizationFailure(job, context)?.let { throw AuthorizationException(it, "Not allowed to see job ${job.id}") }
     }
+
+    private suspend fun isAuthorized(job: JobInfo, context: C): Boolean = authorizationFailure(job, context) == null
 
     /**
      * Takes the read lock for the decision, so it can be called from outside a read block. Inside one the lock is
-     * already held; use [isJobAuthorized] directly there.
+     * already held; use [jobAuthorizationFailure] directly there.
      */
-    private suspend fun isAuthorized(job: JobInfo, context: C): Boolean {
+    private suspend fun authorizationFailure(job: JobInfo, context: C): KlerkErrorCode? {
         if (context.actor == SystemIdentity) {
-            return true
+            return null
         }
         // The reader handed to a rule is only sound while the read lock is held, exactly as for the other rule sets.
         return klerk.readWriteLock.withRead {
-            isJobAuthorized(job, context, specification, ReaderWithoutAuth(klerk))
+            jobAuthorizationFailure(job, context, specification, ReaderWithoutAuth(klerk))
         }
     }
 

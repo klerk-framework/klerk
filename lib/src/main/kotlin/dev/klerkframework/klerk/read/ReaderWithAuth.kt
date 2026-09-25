@@ -105,8 +105,8 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
     ): QueryResponse<T> {
-        val result = withoutAuth.query(collection, options, filter)
-        return result.copy(items = result.items.map { checkAuth(it) })
+        // Like query, the authorization check comes before the filter, so `filter` never sees what the actor may not.
+        return withoutAuth.queryInternal(collection, options, filter) { checkAuth(it) }
     }
 
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
@@ -142,13 +142,13 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> possibleVoidEvents(clazz: KClass<T>, visibility: EventVisibility): Set<VoidEvent<T, *>> =
         (klerk.specification.getStateMachine(clazz) as StateMachine<T, *, C, V>).getEventsForVoidState(visibility)
-            .filter { klerk.validator.validateWithoutParameters<T>(it.id, context, null, withoutAuth) }
+            .filter { klerk.validator.isPossibleWithoutParameters<T>(it.id, context, null, withoutAuth) }
             .toSet()
 
     override fun <T : Any> possibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<InstanceEvent<T, *>> {
         val model = get(id)
         return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, visibility)
-            .filter { klerk.validator.validateWithoutParameters(it.id, context, model, withoutAuth) }
+            .filter { klerk.validator.isPossibleWithoutParameters(it.id, context, model, withoutAuth) }
             .toSet()
     }
 }

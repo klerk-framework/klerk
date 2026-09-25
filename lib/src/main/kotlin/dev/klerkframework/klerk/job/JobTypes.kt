@@ -113,7 +113,10 @@ public enum class JobHookKind {
  * Declared on the [JobType], i.e. in trusted configuration code — choosing [System] is a deliberate, privileged act.
  */
 public enum class JobAgent {
-    /** Full authority. Commands emitted by the job bypass no rules, but the actor is `SystemIdentity`. */
+    /**
+     * Full authority: the actor is `SystemIdentity`, so commands emitted by the job bypass the authorization rules.
+     * Validation rules still apply.
+     */
     System,
 
     /**

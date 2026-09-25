@@ -4,11 +4,11 @@ import dev.klerkframework.klerk.AuthorizationException
 import dev.klerkframework.klerk.JobReader
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
-import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.job.isJobAuthorized
+import dev.klerkframework.klerk.job.jobAuthorizationFailure
 
 /**
  * The `jobs` accessor of a [ReaderWithAuth]: the same rules `klerk.jobs.get` applies, but evaluated without
@@ -24,12 +24,8 @@ internal class AuthorizingJobReader<C : KlerkContext, V>(
 
     override fun get(id: JobID): JobInfo {
         val job = raw(id) ?: throw NoSuchElementException("There is no job with id $id")
-        if (!authorized(job)) {
-            throw AuthorizationException(
-                KlerkErrorCode.JobReadPositiveAuthorizationMissing,
-                "Not allowed to see job $id",
-            )
-        }
+        jobAuthorizationFailure(job, context, klerk.specification, withoutAuth)
+            ?.let { throw AuthorizationException(it, "Not allowed to see job $id") }
         return job
     }
 

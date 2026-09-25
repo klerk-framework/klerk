@@ -542,8 +542,8 @@ is deleted, which is what `deadLetterRetention` is for.
 
 A job runs as an **agent**, declared on the job type:
 
-- `JobAgent.System` — full authority, and the default. Specification is trusted code, so declaring this is a deliberate,
-  privileged act.
+- `JobAgent.System` — full authority, and the default: the job's commands bypass the authorization rules, but are still
+  validated. Specification is trusted code, so declaring this is a deliberate, privileged act.
 - `JobAgent.Scheduler` — the actor that scheduled the job. If that actor loses permission mid-job, subsequent commands
   simply fail; your step sees it in `previousResult` and decides whether to `Success`, `Abort`, or do something else.
 

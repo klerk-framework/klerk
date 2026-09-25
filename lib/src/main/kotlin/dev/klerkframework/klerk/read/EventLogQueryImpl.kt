@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.NegativeAuthorization
 import dev.klerkframework.klerk.PendingRead
 import dev.klerkframework.klerk.PositiveAuthorization
+import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.storage.EventLogEntry
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +95,9 @@ internal fun <C : KlerkContext, V> checkEventLogAuthorization(
     context: C,
     withoutAuth: ReaderWithoutAuth<C, V>,
 ) {
+    if (context.actor == SystemIdentity) {
+        return
+    }
     val args = EventLogRuleArgs(context, withoutAuth)
     val authorization = klerk.specification.authorization
     if (authorization.eventLogPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
