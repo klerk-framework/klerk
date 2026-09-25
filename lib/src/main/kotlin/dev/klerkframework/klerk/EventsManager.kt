@@ -30,6 +30,7 @@ import mu.KLogger
 import org.slf4j.event.Level
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
@@ -323,7 +324,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         for (modification in modifications) {
             klerk.modelsManager.modelWasModified(modification)
         }
-        maybeEraseEventLog(specification, delta.deletedModels)
+        if (delta.deletedModels.isNotEmpty()) {
+            klerk.eventLogRetention.afterDeletion()
+        }
     }
 
     /** Turns the pipeline's delta into the narrow shape storage sees. */
@@ -337,6 +340,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     ): CommitBatch {
         fun model(id: ModelID<out Any>) =
             requireNotNull(delta.aggregatedModelState[id]) { "Could not find $id among the modified models" }
+        val retention = specification.eventLogRetention
+        val keepsParamsAndExtra = retention.paramsAndExtra != Duration.ZERO
 
         return CommitBatch(
             createdModels = delta.createdModels.map(::model),
@@ -354,12 +359,17 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     actorType = context.actor.type,
                     actorReference = context.actor.id?.value,
                     actorExternalId = context.actor.externalId,
-                    params = KlerkJson.encode(command.params),
-                    extra = context.eventLogExtra,
+                    params = if (keepsParamsAndExtra) KlerkJson.encode(command.params) else null,
+                    extra = if (keepsParamsAndExtra) context.eventLogExtra else null,
                 )
             },
             attachedData = attachedDataDelta,
             jobs = jobCommit,
+            eventLogTombstones = if (retention.afterModelDeletion == null) {
+                emptyMap()
+            } else {
+                settings.now().let { now -> delta.deletedModels.associateWith { now } }
+            },
         )
     }
 
@@ -416,15 +426,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
             delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
             delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
-    }
-
-    private fun maybeEraseEventLog(specification: Specification<C, V>, deletedModels: List<ModelID<out Any>>) {
-        if (specification.eraseEventLogAfterModelDeletion != kotlin.time.Duration.ZERO) {
-            return
-        }
-        for (id in deletedModels) {
-            settings.persistence.modifyEventLog(id.value) { null }
-        }
     }
 
     suspend fun modelTriggeredByTime(model: Model<out Any>, now: Instant) {

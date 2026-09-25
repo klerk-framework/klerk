@@ -29,6 +29,7 @@ class SpecificationTest {
         val views = ViewWithIllegal(ModelViews())
         try {
             SpecificationBuilder<Ctx, ViewWithIllegal>(views).build {
+                eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
                 managedModels {
                     model(IllegalModel::class, illegalStateMachine, views.x)
                 }
@@ -65,6 +66,7 @@ private fun <T : Any> buildSpecWithExtraModel(kClass: KClass<T>, stateMachine: S
     val bc = BookViews()
     val collections = Views(bc, AuthorViews(bc.all))
     SpecificationBuilder<Ctx, Views>(collections).build {
+        eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
         systemContextProvider { Ctx(actor = SystemIdentity) }
         jobContextProvider(::myJobContextProvider)
         jobs { }
@@ -126,6 +128,7 @@ class PluginTest {
         val bc = BookViews()
         val views = Views(bc, AuthorViews(bc.all))
         return SpecificationBuilder<Ctx, Views>(views).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             plugins(*plugin)
             systemContextProvider(::myContextProvider)
             jobContextProvider(::myJobContextProvider)

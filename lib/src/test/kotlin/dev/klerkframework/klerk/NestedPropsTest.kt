@@ -120,6 +120,7 @@ class NestedPropsTest {
             state(BookStates.Published) {}
         }
         val specification = SpecificationBuilder<Ctx, Views>(views).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             systemContextProvider { Ctx(actor = SystemIdentity) }
             jobContextProvider(::myJobContextProvider)
             jobs { }

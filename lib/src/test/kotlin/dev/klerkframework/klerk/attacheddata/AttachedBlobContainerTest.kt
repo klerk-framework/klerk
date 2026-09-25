@@ -91,6 +91,7 @@ class AttachedBlobContainerTest {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             managedModels {
                 model(Sketch::class, sketchStateMachine(), collections.sketches)
             }
@@ -440,6 +441,7 @@ class AttachedBlobContainerTest {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             managedModels {
                 model(Doodle::class, doodleStateMachine(), collections.doodles)
             }

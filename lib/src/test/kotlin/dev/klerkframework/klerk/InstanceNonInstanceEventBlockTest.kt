@@ -18,6 +18,7 @@ class InstanceNonInstanceEventBlockTest {
             val collections = Views(bc, AuthorViews(bc.all))
             val persistence = RamStorage()
             val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+                eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
                 managedModels {
                     model(Book::class, createStateMachine(collections), collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)

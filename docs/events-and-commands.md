@@ -214,17 +214,41 @@ public data class EventLogEntry(
     val sequenceNumber: Long,   // identifies the entry and orders the log
     val time: Instant,          // the context.time of the command
     val eventReference: EventReference,
-    val reference: Int,         // the model the command acted on
-    val actorType: Byte,
+    val model: ModelID<out Any>, // the model the command acted on
+    val actorType: ActorType,
     val actorReference: Int?,
     val actorExternalId: Long?,
-    val params: String,
-    val extra: String?,         // context.eventLogExtra
+    val params: String?,        // JSON; null once erased
+    val extra: String?,         // context.eventLogExtra; null once erased
 )
 ```
 
 Entries come back ordered by `sequenceNumber`, oldest first. Use it, not `time`, to order or identify an entry —
 `time` comes from the command's context and is neither unique nor necessarily increasing.
+
+### Retention
+
+The event log often holds personal data, so every specification must declare how long it is kept:
+
+```kotlin
+SpecificationBuilder<Ctx, Views>(views).build {
+    eventLogRetention(afterModelDeletion = 30.days, paramsAndExtra = 365.days)
+    // ...
+}
+```
+
+- `afterModelDeletion` — how long the entries of a model are kept after the model is deleted. Only entries whose
+  `model` is the deleted model are erased.
+- `paramsAndExtra` — how long `params` and `extra` are kept, counted from `time`. After that they are `null`, while the
+  rest of the entry (who did what to which model, and when) remains. This also covers personal data in parameters of
+  commands on other models.
+
+`null` keeps the data forever and `Duration.ZERO` erases it immediately — for `paramsAndExtra` that means they are
+never stored. Any other value must be at least one hour, since Klerk erases what has expired once an hour. Leaving out
+`eventLogRetention` fails the build with `ERROR-SPEC-18`.
+
+An entry can disappear, or lose its `params`, between creating a query and calling `get()`. Erasure does not reach
+database backups.
 
 Reading is subject to its own authorization rules (`eventLog` in [authorization.md](authorization.md)) — `eventLog(...)`
 throws `AuthorizationException` if the context isn't allowed to see the event log.

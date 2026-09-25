@@ -22,7 +22,7 @@ internal annotation class SpecificationMarker
  *     authorization { ... }
  * }
  * ```
- * [systemContextProvider], [managedModels] and [authorization] are all required; [build] throws
+ * [systemContextProvider], [managedModels], [authorization] and [eventLogRetention] are all required; [build] throws
  * [IllegalConfigurationException] if any is missing. [migrations] and [jobs] are optional.
  *
  * Where the data is stored, what the clock is and how the job dispatcher is tuned are not part of the specification
@@ -57,6 +57,12 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
                 "'managedModels' is missing in the specification",
             )
         }
+        runCatching { eventLogRetentionValue }.onFailure {
+            throw IllegalConfigurationException(
+                KlerkErrorCode.MissingEventLogRetention,
+                "'eventLogRetention' is missing in the specification",
+            )
+        }
 
         return Specification(
             views = views,
@@ -81,7 +87,7 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             systemContextProvider = systemContextProviderValue,
             jobs = jobsValue,
             jobContextProvider = jobContextProviderValue,
-            eraseEventLogAfterModelDeletion = eraseEventLogValue,
+            eventLogRetention = eventLogRetentionValue,
         ).let { spec -> pluginsValue.fold(spec) { acc, plugin -> acc.withPlugin(plugin) } }
     }
 
@@ -89,17 +95,23 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     private var pluginsValue: List<KlerkPlugin<C, V>> = emptyList()
     private var jobsValue: JobsSpecification<C, V> = JobsSpecification.empty()
     private var jobContextProviderValue: ((JobContextRequest) -> C)? = null
-    private var eraseEventLogValue: Duration? = null
+    private lateinit var eventLogRetentionValue: EventLogRetention
     private lateinit var authorizationRulesBlock: AuthorizationRulesBlock<C, V>
     private lateinit var managedModelsValue: Set<ManagedModel<*, *, C, V>>
     private lateinit var systemContextProviderValue: (() -> C)
 
     /**
-     * Erases the event log of a model when the model is deleted. Only [Duration.ZERO] (erase immediately) is
-     * currently supported; the default is to never erase.
+     * How long the event log keeps what it records. Required. `null` keeps it forever, [Duration.ZERO] erases it
+     * immediately, and any other value must be at least one hour. See [EventLogRetention].
+     *
+     * ```kotlin
+     * eventLogRetention(afterModelDeletion = 30.days, paramsAndExtra = 365.days)
+     * ```
+     *
+     * @throws IllegalConfigurationException if a value is neither null, zero nor at least one hour
      */
-    public fun eraseEventLogAfterModelDeletion(after: Duration) {
-        eraseEventLogValue = after
+    public fun eventLogRetention(afterModelDeletion: Duration?, paramsAndExtra: Duration?) {
+        eventLogRetentionValue = EventLogRetention(afterModelDeletion, paramsAndExtra)
     }
 
     /**

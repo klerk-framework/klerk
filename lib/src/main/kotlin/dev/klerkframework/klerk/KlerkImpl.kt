@@ -34,6 +34,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val readWriteLock = ReadWriteLock()
     internal val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
+    internal val eventLogRetention = EventLogRetentionManager(specification.eventLogRetention, settings)
     internal val eventsManager =
         EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
@@ -118,6 +119,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
 
                 klerk.eventsManager.start()
                 klerk.attachedDataImpl.start()
+                klerk.eventLogRetention.start()
                 // Jobs start last: reloading them may need models and attached data to be in place already.
                 klerk.jobs.start()
                 for (plugin in klerk.specification.plugins) {
@@ -147,6 +149,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
             }
         }
         klerk.eventsManager.stop()
+        klerk.eventLogRetention.stop()
         klerk.jobs.stop() // stopping jobs after events in case a job is created that must execute on this instance.
         klerk.activityLog.add(LogKlerkStopped())
     }

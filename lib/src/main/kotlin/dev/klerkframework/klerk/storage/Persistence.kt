@@ -25,9 +25,10 @@ import kotlin.time.Instant
  * @property time the [KlerkContext.time] of the command, i.e. when the application considered it to happen.
  * @property model the id of the model the command acted on.
  * @property params the command's parameters as a JSON object keyed by parameter name, with each
- * [dev.klerkframework.klerk.datatypes.DataContainer] written as its value and each [ModelID] as a number. `null` for an
- * event without parameters.
- * @property extra the command's [KlerkContext.eventLogExtra].
+ * [dev.klerkframework.klerk.datatypes.DataContainer] written as its value and each [ModelID] as a number. The JSON
+ * `null` for an event without parameters. `null` once erased, see
+ * [dev.klerkframework.klerk.EventLogRetention.paramsAndExtra].
+ * @property extra the command's [KlerkContext.eventLogExtra]. `null` also once erased.
  */
 public data class EventLogEntry(
     val sequenceNumber: Long,
@@ -37,7 +38,7 @@ public data class EventLogEntry(
     val actorType: ActorType,
     val actorReference: Int?,
     val actorExternalId: Long?,
-    val params: String,
+    val params: String?,
     val extra: String?,
 )
 
@@ -49,6 +50,8 @@ public data class EventLogEntry(
  * @property updatedModels models that existed before, to be replaced. Never overlaps [createdModels].
  * @property deletedModels ids of the models to remove.
  * @property eventLogEntry the entry to append, or null when the commit came from no command (e.g. a job checkpoint).
+ * @property eventLogTombstones deleted models whose event log is to be erased later, with when they were deleted. To
+ * be stored until [Persistence.eraseEventLogsOfDeletedModels] erases them.
  */
 public data class CommitBatch(
     val createdModels: List<Model<out Any>> = emptyList(),
@@ -57,6 +60,7 @@ public data class CommitBatch(
     val eventLogEntry: EventLogEntry? = null,
     val attachedData: AttachedDataDelta = AttachedDataDelta(),
     val jobs: JobCommit = JobCommit(),
+    val eventLogTombstones: Map<ModelID<out Any>, Instant> = emptyMap(),
 )
 
 /**
@@ -134,11 +138,16 @@ public interface Persistence {
     public fun lastEventLogSequenceNumber(): Long
 
     /**
-     * Rewrites every event-log entry of [modelId] through [transformer], deleting the ones it maps to null.
-     *
-     * Used to honour `eraseEventLogAfterModelDeletion`.
+     * Deletes the event-log entries of every model tombstoned (see [CommitBatch.eventLogTombstones]) at or before
+     * [deletedAtOrBefore], together with those tombstones. Called periodically, concurrently with commits and reads.
      */
-    public fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?)
+    public fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant)
+
+    /**
+     * Sets [EventLogEntry.params] and [EventLogEntry.extra] to null on every entry whose [EventLogEntry.time] is before
+     * [before]. Called periodically, concurrently with commits and reads.
+     */
+    public fun eraseEventLogParamsAndExtra(before: Instant)
 
     /**
      * Hands the implementation the specification, at startup and before anything is read. An implementation that has

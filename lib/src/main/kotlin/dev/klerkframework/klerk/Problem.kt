@@ -270,6 +270,12 @@ public enum class KlerkErrorCode(public val code: String) {
     /** A view is not usable, e.g. it filters on a state belonging to another model. */
     InvalidView("ERROR-SPEC-17"),
 
+    /** The specification has no `eventLogRetention`. */
+    MissingEventLogRetention("ERROR-SPEC-18"),
+
+    /** An [EventLogRetention] value is neither null, zero nor at least one hour. */
+    InvalidEventLogRetention("ERROR-SPEC-19"),
+
     /** Blobs are used, but [dev.klerkframework.klerk.KlerkSettings] has no `attachedBlobStore`. */
     MissingAttachedBlobStore("ERROR-SETTINGS-1"),
 

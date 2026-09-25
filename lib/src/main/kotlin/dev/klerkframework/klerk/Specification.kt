@@ -16,7 +16,6 @@ import dev.klerkframework.klerk.view.ModelViews
 import mu.KotlinLogging
 import java.util.SortedSet
 import kotlin.reflect.KClass
-import kotlin.time.Duration
 
 internal val logger = KotlinLogging.logger {}
 
@@ -53,14 +52,8 @@ public data class Specification<C : KlerkContext, V>(
      * is what makes a job's own view of time controllable in tests.
      */
     val jobContextProvider: ((JobContextRequest) -> C)? = null,
-    /**
-     * Whether the event log of a model is erased when the model is deleted. A requirement about the application (a
-     * privacy promise, typically), which is why it lives here and not in [KlerkSettings].
-     *
-     * Only `null` (never erase, the default) and [Duration.ZERO] (erase immediately on model deletion) are
-     * currently supported; any other value is rejected on startup.
-     */
-    val eraseEventLogAfterModelDeletion: Duration? = null,
+    /** How long the event log keeps what it records. */
+    val eventLogRetention: EventLogRetention,
 ) {
     internal fun initialize(settings: KlerkSettings) {
         validate(settings)

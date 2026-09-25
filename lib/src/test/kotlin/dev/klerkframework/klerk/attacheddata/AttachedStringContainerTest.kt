@@ -64,6 +64,7 @@ class AttachedStringContainerTest {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             managedModels {
                 model(Scribble::class, scribbleStateMachine(), collections.scribbles)
             }

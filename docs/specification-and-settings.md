@@ -20,6 +20,7 @@ val specification = SpecificationBuilder<Ctx, Views>(views).build {
     managedModels { ... }
     authorization { ... }
     systemContextProvider { Ctx(SystemIdentity) }
+    eventLogRetention(afterModelDeletion = 30.days, paramsAndExtra = 365.days)
 }
 
 val settings = KlerkSettings(
@@ -27,6 +28,9 @@ val settings = KlerkSettings(
     attachedBlobStore = AttachedBlobStore.Database,
 )
 ```
+
+`managedModels`, `authorization`, `systemContextProvider` and
+[`eventLogRetention`](events-and-commands.md#retention) are required.
 
 `persistence` is the only `KlerkSettings` parameter without a default, so it cannot be forgotten. Everything else has a
 production-sane default.
@@ -44,6 +48,7 @@ val specification = SpecificationBuilder<Ctx, Views>(views).build {
     managedModels { ... }
     authorization { ... }
     systemContextProvider { Ctx(SystemIdentity) }
+    eventLogRetention(afterModelDeletion = 30.days, paramsAndExtra = 365.days)
 }
 ```
 

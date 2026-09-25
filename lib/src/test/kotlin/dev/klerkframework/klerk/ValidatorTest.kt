@@ -180,6 +180,7 @@ class ValidatorTest {
                 }
             }
             val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+                eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
                 managedModels {
                     model(Book::class, restrictedSm, collections.books)
                     model(Author::class, authorStateMachine(collections), collections.authors)

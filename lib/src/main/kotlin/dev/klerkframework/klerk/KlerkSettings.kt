@@ -22,8 +22,8 @@ import kotlin.time.Instant
  * hard the job dispatcher works. Passed to [Klerk.Companion.create] alongside the [Specification].
  *
  * Two deployments of the same application share a [Specification] and differ here. Nothing in this class changes what
- * the application does, only how it is operated — the one thing that does, whether the event log is erased on
- * deletion, is [Specification.eraseEventLogAfterModelDeletion].
+ * the application does, only how it is operated. How long the event log keeps what it records is therefore
+ * [Specification.eventLogRetention], not a setting.
  */
 public data class KlerkSettings(
 

@@ -4,15 +4,22 @@ import org.jetbrains.exposed.sql.Table
 
 internal object EventLogTable : Table("\"klerk_event_log\"") {
     val sequenceNumber = long("sequence_number")
-    val timestamp = long("timestamp") // microseconds since 1970
+    val timestamp = long("timestamp").index() // microseconds since 1970
     val event = varchar("event_id", length = 100)
     val modelId = integer("model_id").index()
-    val params = varchar("params", length = 100000)
+    val params = varchar("params", length = 100000).nullable() // null once erased
     val actorIdentityType = byte("actor_identity_type")
     val actorIdentityReference = integer("actor_identity_reference").nullable()
     val actorIdentityExternalId = long("actor_identity_externalId").nullable()
     val extra = varchar("extra", length = 1000).nullable()
     override val primaryKey = PrimaryKey(sequenceNumber)
+}
+
+/** Deleted models whose event log is still to be erased. */
+internal object EventLogTombstonesTable : Table("\"klerk_event_log_tombstones\"") {
+    val modelId = integer("model_id")
+    val deletedAt = long("deleted_at").index() // microseconds since 1970
+    override val primaryKey = PrimaryKey(modelId)
 }
 
 internal object ModelsTable : Table("\"klerk_models\"") {

@@ -54,6 +54,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.statements.UpdateBuilder
@@ -70,6 +71,9 @@ import kotlin.time.Instant
 /** Stands in for the value of a row whose bytes live in an [AttachedBlobStore.External]. */
 private val EMPTY_BLOB = ExposedBlob(ByteArray(0))
 
+/** Keeps the `IN` lists of an erasure within what every database accepts. */
+private const val ERASE_CHUNK_SIZE = 500
+
 /** The job log and the child outcomes are stored as JSON, since neither is ever queried by SQL. */
 private val jobJson = Json {
     encodeDefaults = true
@@ -82,7 +86,7 @@ private val stringListSerializer = ListSerializer(String.serializer())
 /**
  * [Persistence] backend for a SQL database, via a [DataSource] and [Exposed](https://github.com/JetBrains/Exposed).
  * On construction, connects and creates its tables if missing (event log, models, schema-migration tracking,
- * attached data, jobs), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
+ * attached data, jobs, cron state, event-log tombstones), then reads [currentModelSchemaVersion] from the `klerk_model_schema_migrations` table.
  * Model `props` and command `params` are stored as JSON.
  */
 public class SqlPersistence(private val dataSource: DataSource) : Persistence {
@@ -108,6 +112,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 SchemaUtils.create(AttachedDataTable)
                 SchemaUtils.create(JobsTable)
                 SchemaUtils.create(CronStateTable)
+                SchemaUtils.create(EventLogTombstonesTable)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
             } catch (e: Exception) {
@@ -184,6 +189,13 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
 
         for (modelId in batch.deletedModels) {
             ModelsTable.deleteWhere { id eq modelId.value }
+        }
+
+        for ((modelId, deletedAt) in batch.eventLogTombstones) {
+            EventLogTombstonesTable.insert {
+                it[this.modelId] = modelId.value
+                it[this.deletedAt] = deletedAt.to64bitMicroseconds()
+            }
         }
     }
 
@@ -276,34 +288,27 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         extra = row[EventLogTable.extra],
     )
 
-    override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?) {
-        val updatedEntries = mutableSetOf<EventLogEntry>()
-        val deletedEntries = mutableSetOf<Long>()
-        for (original in readEventLog(modelId)) {
-            val updated = transformer(original)
-            if (updated == null) {
-                deletedEntries.add(original.sequenceNumber)
-                continue
-            }
-            require(updated.model == original.model) { "Updating of ID is not supported" }
-            require(updated.sequenceNumber == original.sequenceNumber) { "Updating of sequenceNumber is not supported" }
-            updatedEntries.add(updated)
-        }
-
+    override fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant) {
+        val cutoff = deletedAtOrBefore.to64bitMicroseconds()
         transaction(database) {
-            for (seq in deletedEntries) {
-                EventLogTable.deleteWhere { EventLogTable.sequenceNumber eq seq }
+            val modelIds = EventLogTombstonesTable.select(EventLogTombstonesTable.modelId)
+                .where { EventLogTombstonesTable.deletedAt lessEq cutoff }
+                .map { it[EventLogTombstonesTable.modelId] }
+            for (chunk in modelIds.chunked(ERASE_CHUNK_SIZE)) {
+                EventLogTable.deleteWhere { EventLogTable.modelId inList chunk }
+                EventLogTombstonesTable.deleteWhere { EventLogTombstonesTable.modelId inList chunk }
             }
-            for (updated in updatedEntries) {
-                EventLogTable.update({ EventLogTable.sequenceNumber eq updated.sequenceNumber }) {
-                    it[timestamp] = updated.time.to64bitMicroseconds()
-                    it[event] = updated.eventReference.toString()
-                    it[params] = updated.params
-                    it[actorIdentityType] = updated.actorType.storedValue.toByte()
-                    it[actorIdentityReference] = updated.actorReference
-                    it[actorIdentityExternalId] = updated.actorExternalId
-                    it[extra] = updated.extra
-                }
+        }
+    }
+
+    override fun eraseEventLogParamsAndExtra(before: Instant) {
+        val cutoff = before.to64bitMicroseconds()
+        transaction(database) {
+            EventLogTable.update({
+                (timestamp less cutoff) and (EventLogTable.params.isNotNull() or EventLogTable.extra.isNotNull())
+            }) {
+                it[params] = null
+                it[extra] = null
             }
         }
     }

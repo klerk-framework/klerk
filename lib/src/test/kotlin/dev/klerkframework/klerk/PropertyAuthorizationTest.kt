@@ -233,6 +233,7 @@ internal var propertyRuleEvaluations: Int = 0
 
 fun createPropertyAuthConfig(collections: Views): Specification<Ctx, Views> =
     SpecificationBuilder<Ctx, Views>(collections).build {
+        eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
         managedModels {
             model(Book::class, bookStateMachine(collections), collections.books)
             model(Author::class, authorStateMachine(collections), collections.authors)

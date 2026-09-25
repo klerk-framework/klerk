@@ -38,6 +38,7 @@ public open class RamStorage : Persistence {
     private val attachedRows = mutableMapOf<Int, AttachedDataRow<ByteArray?>>()
     private val jobs = mutableMapOf<JobID, JobRecord>()
     private val cronState = mutableMapOf<String, Instant>()
+    private val tombstones = mutableMapOf<Int, Instant>()
 
     /**
      * Everything happens under one lock, which is what stands in for a transaction here. It is not a real one — a
@@ -68,6 +69,9 @@ public open class RamStorage : Persistence {
         }
         for (model in batch.deletedModels) {
             models.remove(model.value)
+        }
+        for ((modelId, deletedAt) in batch.eventLogTombstones) {
+            tombstones[modelId.value] = deletedAt
         }
     }
 
@@ -115,10 +119,19 @@ public open class RamStorage : Persistence {
         eventLog.maxOfOrNull { it.sequenceNumber } ?: 0L
     }
 
-    override fun modifyEventLog(modelId: Int, transformer: (EventLogEntry) -> EventLogEntry?) {
-        for (entry in readEventLog(modelId).toList()) {
-            eventLog.remove(entry)
-            transformer(entry)?.let { eventLog.add(it) }
+    override fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant) {
+        synchronized(lock) {
+            val due = tombstones.filterValues { it <= deletedAtOrBefore }.keys
+            eventLog.removeIf { it.model.value in due }
+            tombstones.keys.removeAll(due)
+        }
+    }
+
+    override fun eraseEventLogParamsAndExtra(before: Instant) {
+        synchronized(lock) {
+            val expired = eventLog.filter { it.time < before && (it.params != null || it.extra != null) }
+            eventLog.removeAll(expired.toSet())
+            eventLog.addAll(expired.map { it.copy(params = null, extra = null) })
         }
     }
 

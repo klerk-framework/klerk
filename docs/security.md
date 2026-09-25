@@ -49,6 +49,10 @@ Every successfully processed command is durably recorded and can be read back vi
 is what you reach for during an incident or a compliance review — "what happened, and who did it" is answered by the
 framework itself rather than by whatever ad hoc logging individual code paths happened to include.
 
+How long the log keeps its data must be declared in the specification with `eventLogRetention` (see
+[retention](events-and-commands.md#retention)): the entries of a deleted model can be erased after a set time, and the
+parameters of every entry after another, keeping who did what and when without keeping the personal data.
+
 ## Property-level access control
 
 Authorization isn't just "can this actor see this model" — `readProperties` rules gate individual properties on a model

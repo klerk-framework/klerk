@@ -12,6 +12,7 @@ class MutationTest {
             val bc = BookViews()
             val collections = Views(bc, AuthorViews(bc.all))
             val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+                eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
                 managedModels {
                     model(Author::class, authorStateMachine(collections), collections.authors)
                     model(Book::class, bookStateMachine(collections), collections.books)

@@ -85,6 +85,7 @@ class AttachedBlobStoreTest {
         val bookViews = BookViews()
         val collections = Views(bookViews, AuthorViews(bookViews.all))
         val specification = SpecificationBuilder<Ctx, Views>(collections).build {
+            eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
             managedModels {
                 model(Book::class, bookStateMachine(collections), collections.books)
                 model(Author::class, authorStateMachine(collections), collections.authors)

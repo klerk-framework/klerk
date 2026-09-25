@@ -15,7 +15,8 @@ KlerkSettings(persistence = SqlPersistence(myDataSource))
 Backed by a SQL database via a `javax.sql.DataSource`, using [Exposed](https://github.com/JetBrains/Exposed) as the SQL
 layer. On construction it connects and creates its tables if missing (event log, models, schema-migration tracking,
 attached data, jobs, cron state), then reads the current model schema version from the
-`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON.
+`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON. Rows in the event log are
+erased according to the specification's [event-log retention](events-and-commands.md#retention).
 
 For production, supply a
 `DataSource` for your actual database (e.g. a connection pool pointed at Postgres/MySQL/etc., anything Exposed can talk
@@ -46,8 +47,8 @@ default in the test suite (`testSettings(storage: Persistence = RamStorage())`).
 ## Implementing a backend
 
 `Persistence` is an SPI: implement it to store models, the event log, jobs and attached data somewhere else. Writes
-arrive as a `CommitBatch` — created, updated and deleted models, the event-log entry, the attached-data delta and the
-job rows — and must be applied in one transaction. A store that cannot do that must not be used for jobs.
+arrive as a `CommitBatch` — created, updated and deleted models, the event-log entry and tombstones, the attached-data
+delta and the job rows — and must be applied in one transaction. A store that cannot do that must not be used for jobs.
 
 ## Wiring persistence into settings
 

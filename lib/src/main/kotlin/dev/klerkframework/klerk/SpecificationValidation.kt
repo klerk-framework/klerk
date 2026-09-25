@@ -18,7 +18,6 @@ import dev.klerkframework.klerk.statemachine.executables.Transition
 import dev.klerkframework.klerk.statemachine.executables.TransitionWhen
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import kotlin.reflect.KClass
-import kotlin.time.Duration
 
 private fun <C : KlerkContext, V> Specification<C, V>.modelsAndParametersMustBeStorable() {
     for (managedModel in managedModels) {
@@ -87,9 +86,6 @@ internal fun <C : KlerkContext, V> Specification<C, V>.validate(settings: KlerkS
     checkContextProviderExistIfConfigContainsTimeTriggers()
     schedulerJobsMustHaveAJobContextProvider()
     attachedBlobStoreMustMatchDeclarations(settings.attachedBlobStore)
-    require(eraseEventLogAfterModelDeletion == null || eraseEventLogAfterModelDeletion == Duration.ZERO) {
-        "eraseEventLogAfterModelDeletion can only be null or zero"
-    }
     blobContainersMustDeclareAPreAttachStep()
     stringsMustBeDeclaredInAContainer()
     for (plugin in plugins) {
