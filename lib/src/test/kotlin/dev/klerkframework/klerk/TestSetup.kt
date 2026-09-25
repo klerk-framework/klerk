@@ -392,8 +392,8 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
         onEnter {
             unmanagedJob(::onEnterImprovingStateAction)
             transitionWhen {
-                on(::isAnImpostor, Amateur)
-                on(::hasTalent, Established)
+                ::isAnImpostor toState Amateur
+                ::hasTalent toState Established
             }
             jobs(::aJob)
         }
@@ -406,7 +406,7 @@ fun authorStateMachine(collections: Views): StateMachine<Author, AuthorStates, C
 
         onEvent(ImproveAuthor) {
             transitionWhen {
-                on(ShouldSendNotificationAlgorithm::execute, Improving)
+                ShouldSendNotificationAlgorithm::execute toState Improving
             }
         }
 

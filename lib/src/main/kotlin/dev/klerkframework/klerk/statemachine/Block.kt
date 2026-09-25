@@ -147,8 +147,8 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
          *
          * ```kotlin
          * transitionWhen {
-         *     on(::isAnImpostor, Amateur)
-         *     on(::hasTalent, Established)
+         *     ::isAnImpostor toState Amateur
+         *     ::hasTalent toState Established
          *     otherwise(Improving)
          * }
          * ```
@@ -227,11 +227,11 @@ public class TransitionBranches<Args, ModelStates : Enum<*>> internal constructo
     internal var otherwise: ModelStates? = null
 
     /**
-     * Transitions to [targetState] when [decision] returns true. Must be a named function reference, like every other
-     * rule in a specification.
+     * Transitions to [targetState] when this decision returns true. Must be a named function reference, like every
+     * other rule in a specification.
      */
-    public fun on(decision: (Args) -> Boolean, targetState: ModelStates) {
-        branches[decision] = targetState
+    public infix fun ((Args) -> Boolean).toState(targetState: ModelStates) {
+        branches[this] = targetState
     }
 
     /** Transitions to [targetState] when no [on] matched. Optional: without it, nothing happens when none match. */
