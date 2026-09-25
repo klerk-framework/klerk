@@ -110,9 +110,11 @@ CommandToken.requireUnmodifiedModel(bookId)                // fails if `bookId` 
 CommandToken.requireUnmodifiedModels(setOf(bookId, authorId))
 ```
 
-A token can only be used once — reusing one fails with `IdempotenceProblem`. If a `requireUnmodified...` token's model
-(s) were changed by another command in the meantime, handling fails with a `StateProblem`
-(`ModelModifiedSinceTokenCreation`). This is the mechanism for optimistic-concurrency-style "the record you're editing
+A token can only be used once — reusing one fails with `IdempotenceProblem` (`CommandTokenAlreadyUsed`), also after a
+restart. A token is valid for `KlerkSettings.commandTokenValidity` (24 hours by default) after it was created; an older
+token fails with `IdempotenceProblem` (`CommandTokenExpired`), so a form kept open longer than that has to be reloaded.
+If a `requireUnmodified...` token's model(s) were changed by another command in the meantime, handling fails with a
+`StateProblem` (`ModelModifiedSinceTokenCreation`). This is the mechanism for optimistic-concurrency-style "the record you're editing
 has since changed" checks. `CommandToken` also round-trips through a compact string via `.toString()` /
 `CommandToken.parse(string)`, so a client can hold on to one across a request/response cycle.
 
@@ -170,7 +172,7 @@ A `Failure` carries one or more `Problem`s. The concrete subclass tells you what
 | `StateProblem` | The event isn't valid for the model's current state, or a `CommandToken` precondition failed. |
 | `AuthorizationProblem` | An authorization rule rejected the command — see [authorization.md](authorization.md). |
 | `BadRequestProblem` | Malformed request, e.g. event visibility too low. |
-| `IdempotenceProblem` | The `CommandToken` was already used. |
+| `IdempotenceProblem` | The `CommandToken` was already used, or has expired. |
 | `InternalProblem` / `ServerStateProblem` | Framework-internal failure. |
 
 Every problem also carries a `code` (`KlerkErrorCode`), and `asException()` turns it into the matching exception. Every

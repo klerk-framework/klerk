@@ -39,7 +39,7 @@ public interface Klerk<C : KlerkContext, V> {
      * What has happened in the application recently: starts, stops, commands and plugin activity. Not to be confused
      * with the event log, which is persisted and read with [dev.klerkframework.klerk.read.Reader.eventLog].
      */
-    public val activityLog: ActivityLog
+    public val activityLog: ActivityLog<C>
 
     /**
      * Submits [command] for processing on behalf of the actor in [context], and returns a [CommandResult] describing

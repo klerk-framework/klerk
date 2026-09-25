@@ -40,7 +40,11 @@ introduce by racing two commands against each other.
 Every command carries a `CommandToken` (see [events-and-commands.md](events-and-commands.md#commandtoken)), which
 guarantees it is only ever applied once, and can optionally require that the model (s) it targets haven't changed since
 the token was created. This is what makes it safe to retry a submission (e.g. after a dropped connection)
-without risking a duplicate effect.
+without risking a duplicate effect. The guarantee holds across restarts, for as long as the token is valid
+(`KlerkSettings.commandTokenValidity`).
+
+A token is not signed, so it only protects the client that holds it: a client can always submit the same command again
+with a new token.
 
 ## Event log
 

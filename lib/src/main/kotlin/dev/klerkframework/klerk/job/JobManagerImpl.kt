@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.ActorType
 import dev.klerkframework.klerk.AuthorizationException
 import dev.klerkframework.klerk.CommandResult
 import dev.klerkframework.klerk.IllegalConfigurationException
+import dev.klerkframework.klerk.InternalProblem
 import dev.klerkframework.klerk.JobContextRequest
 import dev.klerkframework.klerk.JobManagerInternal
 import dev.klerkframework.klerk.JobReader
@@ -939,8 +940,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             val decision = try {
                 jobSpec.admission(AdmissionArgs(snapshot, candidate, context, now))
             } catch (e: Exception) {
-                logger.error(e) { "The admission policy threw; admitting the job unchanged" }
-                AdmissionDecision.Allow
+                // Refused rather than admitted, since the policy may exist to deny exactly this job.
+                logger.error(e) { "The admission policy threw; refusing the job" }
+                AdmissionDecision.Deny(InternalProblem("The job could not be admitted"))
             }
             when (decision) {
                 is AdmissionDecision.Allow -> accepted.add(newRecord(job.id, scheduled, basePriority, context, now))
@@ -1134,7 +1136,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun cancel(id: JobID, context: C, reason: String) {
         val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
-        authorize(record.toJobInfo(), context)
+        authorizeControl(record.toJobInfo(), JobOperation.Cancel, context)
         if (record.status.isTerminal) {
             return
         }
@@ -1165,7 +1167,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun resume(id: JobID, context: C) {
         val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
-        authorize(record.toJobInfo(), context)
+        authorizeControl(record.toJobInfo(), JobOperation.Resume, context)
         check(record.status == JobStatus.DeadLettered || record.status == JobStatus.CompensationFailed) {
             "Only a dead-lettered job can be resumed, but job $id is ${record.status}"
         }
@@ -1186,7 +1188,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun delete(id: JobID, context: C) {
         val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
-        authorize(record.toJobInfo(), context)
+        authorizeControl(record.toJobInfo(), JobOperation.Delete, context)
         check(record.status.isTerminal) { "Only a terminal job can be deleted, but job $id is ${record.status}" }
         commitControlChange(
             JobCommit(deleted = setOf(id), attachedDataReleased = klerk.attachedDataImpl.claimedBy(id)),
@@ -1252,8 +1254,24 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     // ------------------------------------------------------------------ authorization
 
-    private suspend fun authorize(job: JobInfo, context: C) {
-        authorizationFailure(job, context)?.let { throw AuthorizationException(it, "Not allowed to see job ${job.id}") }
+    override suspend fun isAllowed(id: JobID, operation: JobOperation, context: C): Boolean {
+        val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
+        return controlFailure(record.toJobInfo(), operation, context) == null
+    }
+
+    private suspend fun authorizeControl(job: JobInfo, operation: JobOperation, context: C) {
+        controlFailure(job, operation, context)?.let {
+            throw AuthorizationException(it, "Not allowed to ${operation.name.lowercase()} job ${job.id}")
+        }
+    }
+
+    private suspend fun controlFailure(job: JobInfo, operation: JobOperation, context: C): KlerkErrorCode? {
+        if (context.actor == SystemIdentity) {
+            return null
+        }
+        return klerk.readWriteLock.withRead {
+            jobControlFailure(job, operation, context, specification, ReaderWithoutAuth(klerk))
+        }
     }
 
     private suspend fun isAuthorized(job: JobInfo, context: C): Boolean = authorizationFailure(job, context) == null

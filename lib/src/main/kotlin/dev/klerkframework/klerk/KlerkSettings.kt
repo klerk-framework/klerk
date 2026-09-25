@@ -99,6 +99,13 @@ public data class KlerkSettings(
     val maxAttachedDataLease: Duration = 24.hours,
 
     /**
+     * How long a [dev.klerkframework.klerk.command.CommandToken] can be used after it was created. Klerk remembers
+     * every used token for this long, also across restarts, so a command resubmitted with the same token within it is
+     * rejected. An older token is rejected as expired, so a form kept open longer than this must be reloaded.
+     */
+    val commandTokenValidity: Duration = 24.hours,
+
+    /**
      * How Klerk recognises the content type of an attached value from its first bytes (see
      * [dev.klerkframework.klerk.attacheddata.ContentTypeDetector]). Defaults to
      * [dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector], a small dependency-free set of magic-byte
@@ -150,6 +157,7 @@ public data class KlerkSettings(
                 defaultAttachedDataLease = envDuration("KLERK_DEFAULT_ATTACHED_DATA_LEASE")
                     ?: defaults.defaultAttachedDataLease,
                 maxAttachedDataLease = envDuration("KLERK_MAX_ATTACHED_DATA_LEASE") ?: defaults.maxAttachedDataLease,
+                commandTokenValidity = envDuration("KLERK_COMMAND_TOKEN_VALIDITY") ?: defaults.commandTokenValidity,
                 contentTypeDetector = contentTypeDetector,
             )
         }

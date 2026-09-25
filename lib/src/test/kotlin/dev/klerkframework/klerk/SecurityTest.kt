@@ -10,6 +10,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobName
+import dev.klerkframework.klerk.job.JobOperation
 import dev.klerkframework.klerk.job.JobResult
 import dev.klerkframework.klerk.job.JobStatus
 import dev.klerkframework.klerk.job.JobStepArgs
@@ -67,6 +68,11 @@ class SecurityTest {
 
         assertCode(KlerkErrorCode.EventLogPositiveAuthorizationMissing) { klerk.read(user) { eventLog() } }
         assertCode(KlerkErrorCode.EventLogPositiveAuthorizationMissing) { klerk.read(user) { eventLogEntry(1) } }
+        assertCode(KlerkErrorCode.ActivityLogPositiveAuthorizationMissing) { klerk.activityLog.entries(user) }
+        assertCode(KlerkErrorCode.ActivityLogPositiveAuthorizationMissing) { klerk.activityLog.subscribe(user).first() }
+        assertCode(KlerkErrorCode.ActivityLogPositiveAuthorizationMissing) {
+            klerk.activityLog.subscribeToReads(user).first()
+        }
 
         assertCode(KlerkErrorCode.AttachedDataWritePositiveAuthorizationMissing) {
             klerk.attachedData.prepare(blob(), AuthorPicture::class, user)
@@ -81,6 +87,7 @@ class SecurityTest {
 
         val job = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), user)
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.get(job, user) }
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.cancel(job, user) }
         assertTrue(klerk.jobs.all(user).isEmpty())
 
         // the system is not subject to authorization
@@ -88,6 +95,7 @@ class SecurityTest {
         assertEquals("Rowling", klerk.read(system) { get(rowling) }.props.lastName.value)
         assertTrue(klerk.handle(Command(AnEventWithoutParameters), system) is CommandResult.Success)
         assertTrue(klerk.read(system) { eventLog() }.get().isNotEmpty())
+        assertTrue(klerk.activityLog.entries(system).isNotEmpty())
         assertEquals("picture", String(klerk.attachedData.get(picture, system).readAllBytes()))
         assertEquals(job, klerk.jobs.get(job, system).id)
     }
@@ -105,6 +113,19 @@ class SecurityTest {
     }
 
     @Test
+    fun `an actor that is a model is printed without its properties`() = runBlocking<Unit> {
+        val klerk = start { }
+        val rowlingId = createAuthorJKRowling(klerk)
+        val rowling = klerk.read(Ctx.system()) { get(rowlingId) }
+        val actor = ModelIdentity(rowling)
+
+        assertEquals("Author ${rowling.id}", actor.toString())
+        val heading = dev.klerkframework.klerk.log.LogReadModel(rowling, Ctx(actor)).heading
+        assertFalse(heading.contains("Rowling"), heading)
+        assertTrue(heading.contains(actor.toString()), heading)
+    }
+
+    @Test
     fun `allowEverythingInsecurely allows every category`() = runBlocking<Unit> {
         val klerk = start { allowEverythingInsecurely() }
         val rowling = createAuthorJKRowling(klerk)
@@ -113,10 +134,12 @@ class SecurityTest {
         assertEquals("Rowling", klerk.read(user) { get(rowling) }.props.lastName.value)
         assertTrue(klerk.handle(Command(AnEventWithoutParameters), user) is CommandResult.Success)
         assertTrue(klerk.read(user) { eventLog() }.get().isNotEmpty())
+        assertTrue(klerk.activityLog.entries(user).isNotEmpty())
         val picture = createAuthorWithPicture(klerk, preparedBy = user)
         assertEquals("picture", String(klerk.attachedData.get(picture, user).readAllBytes()))
         val job = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), Ctx.system())
         assertEquals(job, klerk.jobs.get(job, user).id)
+        klerk.jobs.cancel(job, user)
     }
 
     // ---------------------------------------------------------------- negative rules win
@@ -144,9 +167,17 @@ class SecurityTest {
                 positive(::everybodyCanWriteAttachedData)
                 negative(::nobodyCanWriteAttachedData)
             }
-            jobs {
+            readJobs {
                 positive(::everybodyCanSeeJobs)
                 negative(::nobodyCanSeeJobs)
+            }
+            controlJobs {
+                positive(::everybodyCanControlJobs)
+                negative(::nobodyCanControlJobs)
+            }
+            activityLog {
+                positive(::everybodyCanReadTheActivityLog)
+                negative(::nobodyCanReadTheActivityLog)
             }
         }
         val rowling = createAuthorJKRowling(klerk)
@@ -165,6 +196,7 @@ class SecurityTest {
         assertEquals(RuleDescription(::nobodyCanDoAnything, RuleType.Authorization), problem.violatedRule)
 
         assertCode(KlerkErrorCode.EventLogNegativeAuthorizationExist) { klerk.read(user) { eventLog() } }
+        assertCode(KlerkErrorCode.ActivityLogNegativeAuthorizationExist) { klerk.activityLog.entries(user) }
 
         assertCode(KlerkErrorCode.AttachedDataWriteNegativeAuthorizationExist) {
             klerk.attachedData.prepare(blob(), AuthorPicture::class, user)
@@ -174,7 +206,7 @@ class SecurityTest {
 
         val job = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), user)
         assertCode(KlerkErrorCode.JobReadNegativeAuthorizationExist) { klerk.jobs.get(job, user) }
-        assertCode(KlerkErrorCode.JobReadNegativeAuthorizationExist) { klerk.jobs.cancel(job, user) }
+        assertCode(KlerkErrorCode.JobControlNegativeAuthorizationExist) { klerk.jobs.cancel(job, user) }
         assertTrue(klerk.jobs.all(user).isEmpty())
     }
 
@@ -352,7 +384,7 @@ class SecurityTest {
     @Test
     fun `a job acting as its scheduler cannot do more than the scheduler`() = runBlocking<Unit> {
         val klerk = start(configureJobs = { register(ActAsScheduler) }) {
-            jobs { positive(::usersCanSeeTheirOwnJobs) }
+            readJobs { positive(::usersCanSeeTheirOwnJobs) }
         }
 
         val byUser = klerk.jobs.schedule(ActAsScheduler.declare(SchedulerCursor()), Ctx.authenticationIdentity())
@@ -379,21 +411,40 @@ class SecurityTest {
         assertNull(klerk.read(alice) { jobs.getOrNull(bobsJob) })
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.read(alice) { jobs.get(bobsJob) } }
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.get(bobsJob, alice) }
-        assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.cancel(bobsJob, alice) }
-        assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.resume(bobsJob, alice) }
-        assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.delete(bobsJob, alice) }
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.cancel(bobsJob, alice) }
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.resume(bobsJob, alice) }
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.delete(bobsJob, alice) }
 
         // Anonymous visitors cannot be told apart, so none of them owns a job.
         val anonymous = Ctx.unauthenticated()
         val anonymousJob = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi", stepsLeft = 10)), anonymous)
         assertTrue(klerk.jobs.all(Ctx.unauthenticated()).isEmpty())
-        assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) {
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) {
             klerk.jobs.cancel(anonymousJob, Ctx.unauthenticated())
         }
         assertEquals(JobStatus.Ready, klerk.jobs.get(bobsJob, bob).status, "Bob's job must be untouched")
 
         klerk.jobs.cancel(alicesJob, alice)
         assertEquals(JobStatus.Cancelling, klerk.jobs.get(alicesJob, alice).status)
+    }
+
+    @Test
+    fun `seeing a job does not allow controlling it`() = runBlocking<Unit> {
+        val klerk = start { standardRules() }
+        val alice = Ctx(ModelReferenceIdentity(ModelID<User>(1)))
+        val job = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi", stepsLeft = 10)), alice)
+
+        val info = klerk.jobs.get(job, alice)
+        assertEquals(JobAgent.System, info.agent)
+
+        // usersCanCancelTheirOwnJobs only allows Cancel
+        assertTrue(klerk.jobs.isAllowed(job, JobOperation.Cancel, alice))
+        assertFalse(klerk.jobs.isAllowed(job, JobOperation.Resume, alice))
+        assertFalse(klerk.jobs.isAllowed(job, JobOperation.Delete, alice))
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.resume(job, alice) }
+        assertCode(KlerkErrorCode.JobControlPositiveAuthorizationMissing) { klerk.jobs.delete(job, alice) }
+
+        assertTrue(klerk.jobs.isAllowed(job, JobOperation.Resume, Ctx.system()))
     }
 
     @Test
@@ -526,7 +577,8 @@ private fun SpecificationBuilder.AuthorizationRulesBlock<Ctx, Views>.standardRul
         negative(::nobodyCanDeleteAuthors, ::nobodyCanCreateAuthorsWithoutParameters)
     }
     eventLog { positive(::everybodyCanReadTheEventLog) }
-    jobs { positive(::usersCanSeeTheirOwnJobs) }
+    readJobs { positive(::usersCanSeeTheirOwnJobs) }
+    controlJobs { positive(::usersCanCancelTheirOwnJobs) }
 }
 
 private fun everybodyCanReadModels(args: ModelReadRuleArgs<Ctx, Views>) = Allow
@@ -550,6 +602,8 @@ private fun nobodyCanCreateAuthorsWithoutParameters(args: CommandRuleArgs<*, Ctx
 
 private fun everybodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Allow
 private fun nobodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Deny
+private fun everybodyCanReadTheActivityLog(args: ActivityLogRuleArgs<Ctx, Views>) = Allow
+private fun nobodyCanReadTheActivityLog(args: ActivityLogRuleArgs<Ctx, Views>) = Deny
 
 private fun everybodyCanReadAttachedData(args: AttachedDataReadRuleArgs<Ctx, Views>) = Allow
 private fun nobodyCanReadAttachedData(args: AttachedDataReadRuleArgs<Ctx, Views>) = Deny
@@ -559,6 +613,10 @@ private fun nobodyCanWriteAttachedData(args: AttachedDataWriteRuleArgs<Ctx, View
 private fun everybodyCanSeeJobs(args: JobReadRuleArgs<Ctx, Views>) = Allow
 private fun nobodyCanSeeJobs(args: JobReadRuleArgs<Ctx, Views>) = Deny
 private fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>) = if (args.isOwnedByActor()) Allow else NoOpinion
+private fun everybodyCanControlJobs(args: JobControlRuleArgs<Ctx, Views>) = Allow
+private fun nobodyCanControlJobs(args: JobControlRuleArgs<Ctx, Views>) = Deny
+private fun usersCanCancelTheirOwnJobs(args: JobControlRuleArgs<Ctx, Views>) =
+    if (args.operation == JobOperation.Cancel && args.isOwnedByActor()) Allow else NoOpinion
 
 @Serializable
 data class SchedulerCursor(val attempted: Boolean = false)

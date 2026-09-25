@@ -145,8 +145,8 @@ public class BadRequestProblem(endUserTranslatedMessage: String, code: KlerkErro
 }
 
 /**
- * The [dev.klerkframework.klerk.command.CommandToken] was reused, or referenced a model that was modified since the
- * token was created. See [dev.klerkframework.klerk.command.ProcessingOptions.token].
+ * The [dev.klerkframework.klerk.command.CommandToken] was reused or has expired, or referenced a model that was
+ * modified since the token was created. See [dev.klerkframework.klerk.command.ProcessingOptions.token].
  */
 public class IdempotenceProblem(endUserTranslatedMessage: String, code: KlerkErrorCode) :
     Problem(endUserTranslatedMessage, code) {
@@ -348,6 +348,18 @@ public enum class KlerkErrorCode(public val code: String) {
     /** A read bypassed authorization, but `KlerkSettings.allowBypassAuthRead` is off. */
     BypassAuthReadNotAllowed("ERROR-AUTH-14"),
 
+    /** No positive authorization rule allowed cancelling, resuming or deleting the job. */
+    JobControlPositiveAuthorizationMissing("ERROR-AUTH-15"),
+
+    /** A negative authorization rule refused cancelling, resuming or deleting the job. */
+    JobControlNegativeAuthorizationExist("ERROR-AUTH-16"),
+
+    /** No positive authorization rule allowed reading the activity log. */
+    ActivityLogPositiveAuthorizationMissing("ERROR-AUTH-17"),
+
+    /** A negative authorization rule refused reading the activity log. */
+    ActivityLogNegativeAuthorizationExist("ERROR-AUTH-18"),
+
     /** The event cannot create a model, i.e. it is not declared in the void state. */
     EventNotPossibleInVoidState("ERROR-COMMAND-1"),
 
@@ -362,6 +374,12 @@ public enum class KlerkErrorCode(public val code: String) {
 
     /** The [dev.klerkframework.klerk.command.CommandToken] has already been used. */
     CommandTokenAlreadyUsed("ERROR-COMMAND-5"),
+
+    /**
+     * The [dev.klerkframework.klerk.command.CommandToken] was created longer ago than
+     * [dev.klerkframework.klerk.KlerkSettings.commandTokenValidity], or claims to be created in the future.
+     */
+    CommandTokenExpired("ERROR-COMMAND-13"),
 
     /** The model changed after the [dev.klerkframework.klerk.command.CommandToken] was created. */
     ModelModifiedSinceTokenCreation("ERROR-COMMAND-6"),

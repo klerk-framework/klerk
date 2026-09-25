@@ -38,6 +38,7 @@ class JobOwnershipTest {
         attempt = 0,
         createdAt = Instant.DISTANT_PAST,
         priority = JobPriority.Interactive,
+        agent = JobAgent.System,
         parent = null,
         root = JobID(1),
         depth = 0,

@@ -52,6 +52,8 @@ public data class EventLogEntry(
  * @property eventLogEntry the entry to append, or null when the commit came from no command (e.g. a job checkpoint).
  * @property eventLogTombstones deleted models whose event log is to be erased later, with when they were deleted. To
  * be stored until [Persistence.eraseEventLogsOfDeletedModels] erases them.
+ * @property commandToken the token of the command, to be stored until [Persistence.deleteCommandTokens] deletes it, or
+ * null when the commit came from no command.
  */
 public data class CommitBatch(
     val createdModels: List<Model<out Any>> = emptyList(),
@@ -61,7 +63,14 @@ public data class CommitBatch(
     val attachedData: AttachedDataDelta = AttachedDataDelta(),
     val jobs: JobCommit = JobCommit(),
     val eventLogTombstones: Map<ModelID<out Any>, Instant> = emptyMap(),
+    val commandToken: UsedCommandToken? = null,
 )
+
+/**
+ * A [dev.klerkframework.klerk.command.CommandToken] that a committed command used. [nonce] is unique per token, and
+ * [createdAt] is when the token was created.
+ */
+public data class UsedCommandToken(val nonce: Long, val createdAt: Instant)
 
 /**
  * Storage backend SPI: implement this to durably store models, the event log, jobs and attached data. Klerk owns the
@@ -148,6 +157,15 @@ public interface Persistence {
      * [before]. Called periodically, concurrently with commits and reads.
      */
     public fun eraseEventLogParamsAndExtra(before: Instant)
+
+    /** Every stored [CommitBatch.commandToken] created at or after [createdAtOrAfter]. Read once at startup. */
+    public fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken>
+
+    /**
+     * Deletes every stored [CommitBatch.commandToken] created before [createdBefore]. Called periodically, concurrently
+     * with commits and reads.
+     */
+    public fun deleteCommandTokens(createdBefore: Instant)
 
     /**
      * Hands the implementation the specification, at startup and before anything is read. An implementation that has

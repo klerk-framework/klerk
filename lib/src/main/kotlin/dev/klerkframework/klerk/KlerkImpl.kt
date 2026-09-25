@@ -38,7 +38,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val eventsManager =
         EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
-    internal val activityLogImpl: ActivityLogImpl = ActivityLogImpl()
+    internal val activityLogImpl: ActivityLogImpl<C, V> = ActivityLogImpl(this)
     internal val validator = Validator(this)
 
     init {

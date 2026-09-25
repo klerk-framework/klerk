@@ -172,6 +172,9 @@ page.hasNextPage    // true if there is more after this page
 page.cursorNextPage // pass back in QueryOptions to get it
 ```
 
+`maxItems` is not capped. If the page size comes from a client, cap it before passing it on; klerk-graphql allows at
+most 100.
+
 `QueryResponse` carries the page and four cursors — `cursorFirstPage`, `cursorPreviousPage`, `cursorNextPage`,
 `cursorLastPage`. **Each is null when there is no such page**, so a pagination control renders a link for exactly the
 cursors it was given.

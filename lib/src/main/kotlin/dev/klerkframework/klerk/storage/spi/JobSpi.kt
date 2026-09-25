@@ -104,6 +104,7 @@ public data class JobRecord(
         attempt = attempt,
         createdAt = createdAt,
         priority = priority,
+        agent = agent,
         parent = parent,
         root = root,
         depth = depth,

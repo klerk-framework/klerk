@@ -238,6 +238,10 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val attachedDataReadNegativeRules: Set<(AttachedDataReadRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
     val attachedDataWritePositiveRules: Set<(AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
     val attachedDataWriteNegativeRules: Set<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
-    val jobPositiveRules: Set<(JobReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
-    val jobNegativeRules: Set<(JobReadRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
+    val jobReadPositiveRules: Set<(JobReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val jobReadNegativeRules: Set<(JobReadRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
+    val jobControlPositiveRules: Set<(JobControlRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val jobControlNegativeRules: Set<(JobControlRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
+    val activityLogPositiveRules: Set<(ActivityLogRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val activityLogNegativeRules: Set<(ActivityLogRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
 )

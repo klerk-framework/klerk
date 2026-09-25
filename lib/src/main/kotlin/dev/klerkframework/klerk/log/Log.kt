@@ -1,18 +1,31 @@
 package dev.klerkframework.klerk.log
 
+import dev.klerkframework.klerk.ActivityLogRuleArgs
+import dev.klerkframework.klerk.AuthorizationException
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkImpl
 import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.NegativeAuthorization
+import dev.klerkframework.klerk.PositiveAuthorization
+import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.read.ReadBlockGuard
+import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
 /**
  * What has happened in the application recently, as [dev.klerkframework.klerk.Klerk.activityLog]. Kept in memory only.
+ *
+ * Reading it is gated by the `activityLog` authorization rules.
  */
-public interface ActivityLog {
+public interface ActivityLog<C : KlerkContext> {
 
     /**
      * Adds an entry to the activity log. Subscribers will be informed about the entry.
@@ -21,25 +34,31 @@ public interface ActivityLog {
 
     /**
      * A snapshot of the buffered log entries (capped at ~1000 entries / 1 day, whichever is smaller). Does not include
-     * read events. The access itself is recorded in the log, which is what [context] is used for.
+     * read events. The access itself is recorded in the log.
+     *
+     * Must not be called inside a read block.
+     *
+     * @throws AuthorizationException if the `activityLog` rules do not allow the actor to read the log.
      */
-    public fun entries(context: KlerkContext): List<LogEntry>
+    public suspend fun entries(context: C): List<LogEntry>
 
     /**
-     * Subscribes to log events. Note that events related to reading of data are excluded. If you need those events,
-     * use [subscribeToReads].
+     * Log entries as they are added. Note that events related to reading of data are excluded. If you need those
+     * events, use [subscribeToReads].
+     *
+     * The `activityLog` rules are evaluated when collection starts, and collecting throws [AuthorizationException] if
+     * they do not allow the actor to read the log.
      */
-    public fun subscribe(): SharedFlow<LogEntry>
+    public fun subscribe(context: C): Flow<LogEntry>
 
     /**
-     * Subscribes to read events. Note that you must handle the events efficiently as there can be a huge amount of
-     * read events in a system.
-     * @see subscribe
+     * Read events as they happen. Note that you must handle the events efficiently as there can be a huge amount of
+     * read events in a system. Authorized like [subscribe].
      */
-    public fun subscribeToReads(): SharedFlow<LogEntry>
+    public fun subscribeToReads(context: C): Flow<LogEntry>
 }
 
-internal class ActivityLogImpl : ActivityLog {
+internal class ActivityLogImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>) : ActivityLog<C> {
 
     private val content: MutableList<LogEntry> = mutableListOf()
     private val maxItems = 1000
@@ -62,14 +81,42 @@ internal class ActivityLogImpl : ActivityLog {
         }
     }
 
-    override fun entries(context: KlerkContext): List<LogEntry> {
+    override suspend fun entries(context: C): List<LogEntry> {
+        authorize(context)
         add(LogAccessedActivityLog(context))
         return synchronized(content) { content.toList() }
     }
 
-    override fun subscribe(): SharedFlow<LogEntry> = logEntryFlow
+    override fun subscribe(context: C): Flow<LogEntry> = flow {
+        authorize(context)
+        emitAll(logEntryFlow)
+    }
 
-    override fun subscribeToReads(): SharedFlow<LogEntry> = logEntryReadFlow
+    override fun subscribeToReads(context: C): Flow<LogEntry> = flow {
+        authorize(context)
+        emitAll(logEntryReadFlow)
+    }
+
+    private suspend fun authorize(context: C) {
+        if (context.actor == SystemIdentity) {
+            return
+        }
+        ReadBlockGuard.checkNotInsideReadBlock("klerk.activityLog", "Read the activity log after the block.")
+        val failure = klerk.readWriteLock.withRead { authorizationFailure(context, ReaderWithoutAuth(klerk)) }
+        failure?.let { throw AuthorizationException(it, "Not allowed to read the activity log") }
+    }
+
+    private fun authorizationFailure(context: C, reader: ReaderWithoutAuth<C, V>): KlerkErrorCode? {
+        val args = ActivityLogRuleArgs(context, reader)
+        val authorization = klerk.specification.authorization
+        if (authorization.activityLogNegativeRules.any { it(args) == NegativeAuthorization.Deny }) {
+            return KlerkErrorCode.ActivityLogNegativeAuthorizationExist
+        }
+        if (authorization.activityLogPositiveRules.none { it(args) == PositiveAuthorization.Allow }) {
+            return KlerkErrorCode.ActivityLogPositiveAuthorizationMissing
+        }
+        return null
+    }
 
     /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
     internal fun addReads(models: List<Model<*>>, context: KlerkContext) {

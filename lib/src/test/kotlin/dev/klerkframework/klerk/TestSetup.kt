@@ -123,7 +123,7 @@ fun createConfig(
             positive(::everybodyCanPrepareAttachedData)
             negative(::unauthenticatedCannotPrepareStrings)
         }
-        jobs {
+        readJobs {
             positive(::authorsCanSeeTheirOwnJobs, ::systemCanSeeAllJobs)
         }
         configureAuthorization()
@@ -752,7 +752,7 @@ fun addStandardTestConfiguration(auth: Boolean = true): SpecificationBuilder<Ctx
             eventLog {
                 positive(::`Everybody can read event log`)
             }
-            jobs {
+            readJobs {
                 positive(::systemCanSeeAllJobs)
             }
         }

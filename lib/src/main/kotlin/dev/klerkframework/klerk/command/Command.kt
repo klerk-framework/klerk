@@ -15,6 +15,7 @@ import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.misc.getCurrentInstant
 import dev.klerkframework.klerk.to64bitMicroseconds
+import java.security.SecureRandom
 import kotlin.time.Instant
 
 /**
@@ -107,31 +108,42 @@ public enum class DebugOption {
 /**
  * An opaque, serializable idempotency/concurrency token for [ProcessingOptions.token].
  *
+ * Every token is unique. A command succeeds at most once per token, as long as the token is used within
+ * [dev.klerkframework.klerk.KlerkSettings.commandTokenValidity] of being created; after that it is rejected as expired.
+ *
  * Construct via the companion factory functions rather than directly. The [toString] output is a compact
  * base64 encoding that can be sent to a client and round-tripped back through [parse] (e.g. to let a client hold a
  * token across a request/response cycle before submitting the actual command).
  */
-public class CommandToken private constructor(internal val time: Instant, internal val models: Set<ModelID<out Any>>) {
+public class CommandToken private constructor(
+    internal val nonce: Long,
+    internal val time: Instant,
+    internal val models: Set<ModelID<out Any>>,
+) {
 
-    override fun toString(): String = "t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
+    override fun toString(): String =
+        "n=$nonce:t=${time.to64bitMicroseconds()}:m=${models.joinToString(",")}".encodeBase64()
 
-    override fun equals(other: Any?): Boolean = other is CommandToken && other.time == time && other.models == models
+    override fun equals(other: Any?): Boolean = other is CommandToken && other.nonce == nonce
 
-    override fun hashCode(): Int = 31 * time.hashCode() + models.hashCode()
+    override fun hashCode(): Int = nonce.hashCode()
 
     public companion object {
+        private val random = SecureRandom()
+
+        private fun create(models: Set<ModelID<out Any>>): CommandToken =
+            CommandToken(random.nextLong(), getCurrentInstant(), models)
+
         /** A token that only guards against being reused (no optimistic-concurrency check). */
-        public fun simple(): CommandToken = CommandToken(getCurrentInstant(), emptySet())
+        public fun simple(): CommandToken = create(emptySet())
 
         /** A token that additionally fails the command if [id] was modified after the token was created. */
-        public fun requireUnmodifiedModel(id: ModelID<out Any>): CommandToken =
-            CommandToken(getCurrentInstant(), setOf(id))
+        public fun requireUnmodifiedModel(id: ModelID<out Any>): CommandToken = create(setOf(id))
 
         /**
          * A token that additionally fails the command if any model in [ids] was modified after the token was created.
          */
-        public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken =
-            CommandToken(getCurrentInstant(), ids)
+        public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken = create(ids)
 
         /**
          * Parses a token previously produced by [CommandToken.toString].
@@ -143,11 +155,12 @@ public class CommandToken private constructor(internal val time: Instant, intern
                 require(keyValue.size == 2)
                 keyValue.first() to keyValue.last()
             }
+            val nonce = requireNotNull(fields["n"]).toLong()
             val time = decode64bitMicroseconds(requireNotNull(fields["t"]).toLong())
             val models = requireNotNull(fields["m"]).let { ids ->
                 if (ids.isEmpty()) emptySet() else ids.split(",").map { ModelID<Any>(it.toInt()) }.toSet()
             }
-            return CommandToken(time, models)
+            return CommandToken(nonce, time, models)
         }
 
         /** The token in [value], or null if it is not one. */

@@ -135,7 +135,7 @@ class NestedPropsTest {
                 eventLog { positive(::`Everybody can read event log`) }
                 readAttachedData { positive(::onlyTheAuthorsOwnerCanReadThePicture) }
                 writeAttachedData { positive(::everybodyCanPrepareAttachedData) }
-                jobs { positive(::authorsCanSeeTheirOwnJobs) }
+                readJobs { positive(::authorsCanSeeTheirOwnJobs) }
             }
         }
         val klerk = Klerk.create(specification, testSettings())

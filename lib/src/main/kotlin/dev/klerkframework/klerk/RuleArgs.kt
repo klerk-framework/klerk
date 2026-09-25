@@ -3,6 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.job.JobInfo
+import dev.klerkframework.klerk.job.JobOperation
 import dev.klerkframework.klerk.read.ModelReader
 import kotlin.time.Duration
 import kotlin.time.Instant
@@ -29,6 +30,12 @@ public interface ModelArgs<T : Any, C : KlerkContext, V> : RuleArgs<C, V> {
  * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
  */
 public data class EventLogRuleArgs<C : KlerkContext, V>(
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
+
+/** Arguments handed to the `activityLog` rules. There is no per-entry data, so these rules decide for the whole log. */
+public data class ActivityLogRuleArgs<C : KlerkContext, V>(
     override val context: C,
     override val reader: ModelReader<C, V>,
 ) : RuleArgs<C, V>
@@ -146,9 +153,27 @@ public data class AttachedDataWriteRuleArgs<C : KlerkContext, V>(
 public data class JobContextRequest(val actor: ActorIdentity, val time: Instant, val job: JobInfo)
 
 /**
- * The arguments given to the rules deciding who may see a job's metadata (see [JobManager.get]).
+ * The arguments given to the `controlJobs` rules, deciding who may cancel, resume or delete a job.
  *
- * The same rules gate cancellation, so allowing an actor to watch a job also lets them stop it.
+ * @property job everything Klerk knows about the job, including who scheduled it and its
+ * [dev.klerkframework.klerk.job.JobInfo.agent].
+ * @property operation what the actor wants to do to the job.
+ */
+public data class JobControlRuleArgs<C : KlerkContext, V>(
+    val job: JobInfo,
+    val operation: JobOperation,
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V> {
+    /** True if [actor] scheduled the job, compared with [ActorIdentity.isSameAs]. */
+    public fun isOwnedBy(actor: ActorIdentity): Boolean = job.owner.isSameAs(actor)
+
+    /** True if [context]'s own actor scheduled the job. */
+    public fun isOwnedByActor(): Boolean = isOwnedBy(context.actor)
+}
+
+/**
+ * The arguments given to the `readJobs` rules, deciding who may see a job's metadata (see [JobManager.get]).
  *
  * @property job everything Klerk knows about the job, including who scheduled it — see [isOwnedBy] for the common
  * case of "may an actor see their own jobs".

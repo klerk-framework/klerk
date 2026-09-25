@@ -3,6 +3,7 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
+import dev.klerkframework.klerk.job.JobOperation
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
@@ -37,7 +38,7 @@ public interface JobManager<C : KlerkContext, V> {
 
     /**
      * Schedules one job, built with [JobType.declare], and returns its id. The actor in [context] is recorded as the
-     * job's owner, and is what the job authorization rules see.
+     * job's owner, and is what the `readJobs` and `controlJobs` rules see.
      *
      * This is the way to schedule a job that no command is responsible for. A job that belongs to a command should be
      * returned from a state machine's `job(...)` executable instead, so that it is persisted in that command's own
@@ -75,10 +76,8 @@ public interface JobManager<C : KlerkContext, V> {
      * is terminal and `onCancelled` has finished. **Cancel latency is therefore the slowest step in the subtree**, so
      * a UI should render `Cancelling` as its own state rather than a button that appears to do nothing.
      *
-     * Requires the same authorization as [get].
-     *
      * @throws kotlin.NoSuchElementException if there is no job with this id.
-     * @throws AuthorizationException if the actor is not allowed to see the job.
+     * @throws AuthorizationException if the `controlJobs` rules do not allow the actor to cancel the job.
      */
     public suspend fun cancel(id: JobID, context: C, reason: String = "Cancelled")
 
@@ -87,7 +86,7 @@ public interface JobManager<C : KlerkContext, V> {
      * because the commands from steps 1..n have already been applied and Klerk cannot recognise re-emitted ones.
      *
      * @throws kotlin.NoSuchElementException if there is no job with this id.
-     * @throws AuthorizationException if the actor is not allowed to see the job.
+     * @throws AuthorizationException if the `controlJobs` rules do not allow the actor to resume the job.
      * @throws IllegalStateException if the job is not dead-lettered.
      */
     public suspend fun resume(id: JobID, context: C)
@@ -97,10 +96,18 @@ public interface JobManager<C : KlerkContext, V> {
      * a live model is never affected.
      *
      * @throws kotlin.NoSuchElementException if there is no job with this id.
-     * @throws AuthorizationException if the actor is not allowed to see the job.
+     * @throws AuthorizationException if the `controlJobs` rules do not allow the actor to delete the job.
      * @throws IllegalStateException if the job has not reached a terminal status.
      */
     public suspend fun delete(id: JobID, context: C)
+
+    /**
+     * True if the `controlJobs` rules allow the actor to perform [operation] on the job, e.g. to decide whether to show
+     * a button. Does not check whether the job's status allows it.
+     *
+     * @throws kotlin.NoSuchElementException if there is no job with this id.
+     */
+    public suspend fun isAllowed(id: JobID, operation: JobOperation, context: C): Boolean
 }
 
 internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {

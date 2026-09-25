@@ -82,7 +82,7 @@ private fun <T : Any> buildSpecWithExtraModel(kClass: KClass<T>, stateMachine: S
             eventLog { positive(::`Everybody can read event log`) }
             readAttachedData { positive(::onlyTheAuthorsOwnerCanReadThePicture) }
             writeAttachedData { positive(::everybodyCanPrepareAttachedData) }
-            jobs { positive(::authorsCanSeeTheirOwnJobs) }
+            readJobs { positive(::authorsCanSeeTheirOwnJobs) }
         }
     }
 }

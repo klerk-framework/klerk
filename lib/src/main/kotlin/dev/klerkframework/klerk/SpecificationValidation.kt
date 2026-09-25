@@ -43,7 +43,8 @@ private fun <C : KlerkContext, V> Specification<C, V>.rulesMustBeNamed() {
             readModelPositiveRules, readModelNegativeRules, readPropertyPositiveRules, readPropertyNegativeRules,
             eventPositiveRules, eventNegativeRules, eventLogPositiveRules, eventLogNegativeRules,
             attachedDataReadPositiveRules, attachedDataReadNegativeRules, attachedDataWritePositiveRules,
-            attachedDataWriteNegativeRules, jobPositiveRules, jobNegativeRules,
+            attachedDataWriteNegativeRules, jobReadPositiveRules, jobReadNegativeRules, jobControlPositiveRules,
+            jobControlNegativeRules, activityLogPositiveRules, activityLogNegativeRules,
         ).flatten().forEach { requireNamedRule(it, "An authorization rule") }
     }
 }

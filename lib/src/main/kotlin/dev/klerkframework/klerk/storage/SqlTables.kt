@@ -128,3 +128,10 @@ internal object CronStateTable : Table("\"klerk_cron_state\"") {
     val lastFiredAt = long("last_fired_at") // microseconds since 1970
     override val primaryKey = PrimaryKey(scheduleId)
 }
+
+/** The command tokens used within `KlerkSettings.commandTokenValidity`, so that a resubmission is rejected. */
+internal object CommandTokensTable : Table("\"klerk_command_tokens\"") {
+    val nonce = long("nonce")
+    val createdAt = long("created_at").index() // microseconds since 1970
+    override val primaryKey = PrimaryKey(nonce)
+}

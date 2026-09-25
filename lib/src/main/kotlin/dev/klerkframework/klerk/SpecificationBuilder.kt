@@ -79,8 +79,12 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
                 attachedDataReadNegativeRules = authorizationRulesBlock.attachedDataReadNegativeRules,
                 attachedDataWritePositiveRules = authorizationRulesBlock.attachedDataWritePositiveRules,
                 attachedDataWriteNegativeRules = authorizationRulesBlock.attachedDataWriteNegativeRules,
-                jobPositiveRules = authorizationRulesBlock.jobPositiveRules,
-                jobNegativeRules = authorizationRulesBlock.jobNegativeRules,
+                jobReadPositiveRules = authorizationRulesBlock.jobReadPositiveRules,
+                jobReadNegativeRules = authorizationRulesBlock.jobReadNegativeRules,
+                jobControlPositiveRules = authorizationRulesBlock.jobControlPositiveRules,
+                jobControlNegativeRules = authorizationRulesBlock.jobControlNegativeRules,
+                activityLogPositiveRules = authorizationRulesBlock.activityLogPositiveRules,
+                activityLogNegativeRules = authorizationRulesBlock.activityLogNegativeRules,
             ),
             managedModels = managedModelsValue,
             migrationSteps = migrationStepsValue,
@@ -240,10 +244,10 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     /**
-     * The seven independent authorization categories — [readModels], [readProperties], [commands], [eventLog],
-     * [readAttachedData], [writeAttachedData] and [jobs] — each taking an [AuthorizationRules] block. A category with
-     * no rules denies everything in it. See the "Authorization" doc for how positive/negative rules combine, or
-     * [allowEverythingInsecurely] to disable authorization for development.
+     * The nine independent authorization categories — [readModels], [readProperties], [commands], [eventLog],
+     * [activityLog], [readAttachedData], [writeAttachedData], [readJobs] and [controlJobs] — each taking an
+     * [AuthorizationRules] block. A category with no rules denies everything in it. See the "Authorization" doc for how
+     * positive/negative rules combine, or [allowEverythingInsecurely] to disable authorization for development.
      *
      * Every rule must be a named function reference, e.g. `positive(::myRule)`. A lambda is rejected when Klerk starts.
      */
@@ -274,8 +278,12 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> PositiveAuthorization>()
         internal val attachedDataWriteNegativeRules =
             mutableSetOf<(AttachedDataWriteRuleArgs<C, V>) -> NegativeAuthorization>()
-        internal val jobPositiveRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> PositiveAuthorization>()
-        internal val jobNegativeRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> NegativeAuthorization>()
+        internal val jobReadPositiveRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> PositiveAuthorization>()
+        internal val jobReadNegativeRules = mutableSetOf<(JobReadRuleArgs<C, V>) -> NegativeAuthorization>()
+        internal val jobControlPositiveRules = mutableSetOf<(JobControlRuleArgs<C, V>) -> PositiveAuthorization>()
+        internal val jobControlNegativeRules = mutableSetOf<(JobControlRuleArgs<C, V>) -> NegativeAuthorization>()
+        internal val activityLogPositiveRules = mutableSetOf<(ActivityLogRuleArgs<C, V>) -> PositiveAuthorization>()
+        internal val activityLogNegativeRules = mutableSetOf<(ActivityLogRuleArgs<C, V>) -> NegativeAuthorization>()
 
         /**
          * Rules deciding who may read a model as a whole (returned by `get`/`list`/views).
@@ -320,6 +328,19 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
         }
 
         /**
+         * Rules deciding who may read the activity log, i.e. [dev.klerkframework.klerk.log.ActivityLog.entries],
+         * [dev.klerkframework.klerk.log.ActivityLog.subscribe] and
+         * [dev.klerkframework.klerk.log.ActivityLog.subscribeToReads]. All or nothing: an actor either sees every entry
+         * or none.
+         */
+        public fun activityLog(init: AuthorizationRules<ActivityLogRuleArgs<C, V>>.() -> Unit) {
+            val block = AuthorizationRules<ActivityLogRuleArgs<C, V>>()
+            block.init()
+            activityLogPositiveRules.addAll(block.positiveRules)
+            activityLogNegativeRules.addAll(block.negativeRules)
+        }
+
+        /**
          * Rules deciding who may read attached data, i.e. `klerk.attachedData.get(...)` and
          * `klerk.attachedData.getMetadata(...)`.
          *
@@ -352,21 +373,35 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
 
         /**
          * Rules deciding who may see a job's metadata — its status, progress and log — via
-         * [JobManager.get]/[JobManager.all]/[JobManager.subscribe].
+         * [JobManager.get]/[JobManager.all]/[JobManager.subscribe]. [JobReadRuleArgs.isOwnedBy] answers "did this
+         * actor schedule it?".
          *
-         * The same rules gate [JobManager.cancel], so a user who can watch their own progress bar can also cancel
-         * their own job. [JobReadRuleArgs.isOwnedBy] answers "did this actor schedule it?".
+         * Seeing a job does not allow controlling it; see [controlJobs].
          */
-        public fun jobs(init: AuthorizationRules<JobReadRuleArgs<C, V>>.() -> Unit) {
+        public fun readJobs(init: AuthorizationRules<JobReadRuleArgs<C, V>>.() -> Unit) {
             val block = AuthorizationRules<JobReadRuleArgs<C, V>>()
             block.init()
-            jobPositiveRules.addAll(block.positiveRules)
-            jobNegativeRules.addAll(block.negativeRules)
+            jobReadPositiveRules.addAll(block.positiveRules)
+            jobReadNegativeRules.addAll(block.negativeRules)
         }
 
         /**
-         * Allows every actor to do everything: read all models/properties/event log/attached data and trigger all
-         * commands. Logs a warning when applied.
+         * Rules deciding who may cancel, resume or delete a job via
+         * [JobManager.cancel]/[JobManager.resume]/[JobManager.delete]. [JobControlRuleArgs.operation] tells which.
+         *
+         * Resuming a [dev.klerkframework.klerk.job.JobAgent.System] job runs its remaining steps with full authority,
+         * so consider [JobControlRuleArgs.job]'s `agent` before allowing it.
+         */
+        public fun controlJobs(init: AuthorizationRules<JobControlRuleArgs<C, V>>.() -> Unit) {
+            val block = AuthorizationRules<JobControlRuleArgs<C, V>>()
+            block.init()
+            jobControlPositiveRules.addAll(block.positiveRules)
+            jobControlNegativeRules.addAll(block.negativeRules)
+        }
+
+        /**
+         * Allows every actor to do everything: read all models/properties/event log/activity log/attached data/jobs,
+         * trigger all commands and control all jobs. Logs a warning when applied.
          *
          * ```kotlin
          * authorization { allowEverythingInsecurely() }
@@ -382,10 +417,18 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             eventLog { positive(this@AuthorizationRulesBlock::everybodyCanReadEventLog) }
             readAttachedData { positive(this@AuthorizationRulesBlock::everybodyCanReadAllAttachedData) }
             writeAttachedData { positive(this@AuthorizationRulesBlock::everybodyCanWriteAttachedData) }
-            jobs { positive(this@AuthorizationRulesBlock::everybodyCanSeeAllJobs) }
+            readJobs { positive(this@AuthorizationRulesBlock::everybodyCanSeeAllJobs) }
+            controlJobs { positive(this@AuthorizationRulesBlock::everybodyCanControlAllJobs) }
+            activityLog { positive(this@AuthorizationRulesBlock::everybodyCanReadActivityLog) }
         }
 
         private fun everybodyCanSeeAllJobs(args: JobReadRuleArgs<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanReadActivityLog(args: ActivityLogRuleArgs<C, V>): PositiveAuthorization =
+            PositiveAuthorization.Allow
+
+        private fun everybodyCanControlAllJobs(args: JobControlRuleArgs<C, V>): PositiveAuthorization =
             PositiveAuthorization.Allow
 
         private fun everybodyCanReadModels(args: ModelReadRuleArgs<C, V>): PositiveAuthorization =

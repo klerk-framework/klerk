@@ -126,6 +126,18 @@ public enum class JobAgent {
     Scheduler,
 }
 
+/** What an actor wants to do to an existing job. Gated by the `controlJobs` authorization rules. */
+public enum class JobOperation {
+    /** [dev.klerkframework.klerk.JobManager.cancel] */
+    Cancel,
+
+    /** [dev.klerkframework.klerk.JobManager.resume] */
+    Resume,
+
+    /** [dev.klerkframework.klerk.JobManager.delete] */
+    Delete,
+}
+
 /**
  * How far a job has got, structured so that a UI can render a progress bar without parsing strings.
  *
@@ -199,6 +211,7 @@ public data class ChildOutcome(
  * committed, so it survives restarts exactly.
  * @property attempt how many times *this* step has been attempted, starting at 0. Non-zero means the previous
  * attempt returned `Fail` or threw.
+ * @property agent whose authority the job's commands are applied with.
  * @property depth 0 for a job scheduled by a command or by `klerk.jobs.schedule`, one more than the parent's depth
  * for a spawned child.
  */
@@ -209,6 +222,7 @@ public data class JobInfo(
     val attempt: Int,
     val createdAt: Instant,
     val priority: JobPriority,
+    val agent: JobAgent,
     val parent: JobID?,
     val root: JobID,
     val depth: Int,

@@ -113,6 +113,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 SchemaUtils.create(JobsTable)
                 SchemaUtils.create(CronStateTable)
                 SchemaUtils.create(EventLogTombstonesTable)
+                SchemaUtils.create(CommandTokensTable)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
             } catch (e: Exception) {
@@ -195,6 +196,13 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
             EventLogTombstonesTable.insert {
                 it[this.modelId] = modelId.value
                 it[this.deletedAt] = deletedAt.to64bitMicroseconds()
+            }
+        }
+
+        batch.commandToken?.let { token ->
+            CommandTokensTable.insert {
+                it[nonce] = token.nonce
+                it[createdAt] = token.createdAt.to64bitMicroseconds()
             }
         }
     }
@@ -310,6 +318,22 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 it[params] = null
                 it[extra] = null
             }
+        }
+    }
+
+    override fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken> = transaction(database) {
+        CommandTokensTable.selectAll()
+            .where { CommandTokensTable.createdAt greaterEq createdAtOrAfter.to64bitMicroseconds() }
+            .map { row ->
+                val createdAt = decode64bitMicroseconds(row[CommandTokensTable.createdAt])
+                UsedCommandToken(row[CommandTokensTable.nonce], createdAt)
+            }
+    }
+
+    override fun deleteCommandTokens(createdBefore: Instant) {
+        val cutoff = createdBefore.to64bitMicroseconds()
+        transaction(database) {
+            CommandTokensTable.deleteWhere { createdAt less cutoff }
         }
     }
 

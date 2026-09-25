@@ -142,9 +142,9 @@ Or directly, for work no command is responsible for:
 val id = klerk.jobs.schedule(ImportBooks.declare(ImportCursor(...), scheduleAt = tomorrow), context)
 ```
 
-The context is what decides the job's **owner** — the actor the [authorization rules](#who-can-see-a-job) see — and what
-the [admission policy](#priority-backpressure-and-overload) is given, so scheduling this way can be refused when the
-queue is not draining — `schedule` then throws `JobRejectedException`, whose `code` and `problem` say why.
+The context is what decides the job's **owner** — the actor the [authorization rules](#who-can-see-and-control-a-job)
+see — and what the [admission policy](#priority-backpressure-and-overload) is given, so scheduling this way can be
+refused when the queue is not draining — `schedule` then throws `JobRejectedException`, whose `code` and `problem` say why.
 
 Jobs scheduled by a command are persisted in that command's transaction. If the command fails, no job is scheduled.
 `CommandResult.Success.jobs` lists the ids of what was scheduled.
@@ -275,7 +275,7 @@ JobProgress(
 ```
 
 Progress is stored with the cursor, in the same transaction, and is visible through `klerk.jobs.get(id, context)`
-subject to [authorization](#who-can-see-a-job).
+subject to [authorization](#who-can-see-and-control-a-job).
 
 ### Reading jobs inside a read block
 
@@ -381,8 +381,8 @@ Rules:
   own state ("Cancelling…") rather than showing a button that appears to do nothing.
 - **Cancelling a parent cascades to its children.** Children are cancelled first; the parent's `onCancelled` runs once
   they are all terminal.
-- **Cancelling requires the same authorization as reading the job** — so a user watching their own progress bar can
-  cancel their own job.
+- **Cancelling, resuming and deleting are gated by the `controlJobs` rules**, not by the rules that let an actor see the
+  job (see [Who can see and control a job](#who-can-see-and-control-a-job)).
 - **Hooks are not cancellable** and are not subject to admission control. Bound them with `maxSteps`/`maxDuration`.
 - **A hook that exhausts its retries lands the job in `CompensationFailed`** — a distinct terminal status meaning "dead
   *and* the unwind didn't work." That is the queue a human must actually look at.
@@ -458,7 +458,7 @@ is the scheduling actor's context.
 Four rules:
 
 - **The policy runs inside command processing, on the single writer. Do no IO in it.** A database lookup here makes
-  every command in the system slower.
+  every command in the system slower. If the policy throws, the job is refused with `KlerkErrorCode.Internal`.
 - **Only new work goes through admission.** Yields, retries, spawned children and end-of-life hooks never do. A backlog
   of retrying jobs — because a payment provider is down — must not start failing unrelated user writes.
 - **`dryRun` does not run the policy.** Otherwise pre-validation in a UI would show an error that appears and vanishes
@@ -538,7 +538,7 @@ A long-running job's working set is therefore safe from the reaper for as long a
 dead-lettered and awaiting a human. The flip side is that a job that ended without succeeding holds its claim until it
 is deleted, which is what `deadLetterRetention` is for.
 
-### Who can see a job
+### Who can see and control a job
 
 A job runs as an **agent**, declared on the job type:
 
@@ -576,19 +576,32 @@ A rule that reads `context.user` instead rejects every command the job emits, an
 a rejected command is data, not a job failure (see [What a step returns](#what-a-step-returns)). Nothing looks broken
 except that the model never moves.
 
-Job metadata (status, progress, log) is authorization-checked. The same rules gate `cancel`, so a user watching their
-own progress bar can stop their own job:
+Job metadata (status, progress, log) is gated by the `readJobs` rules. Cancelling, resuming and deleting a job is gated
+separately by the `controlJobs` rules, which also get the `operation`:
 
 ```kotlin
 authorization {
-    jobs {
+    readJobs {
         positive(::usersCanSeeTheirOwnJobs, ::adminsCanSeeAllJobs)
+    }
+    controlJobs {
+        positive(::usersCanCancelTheirOwnJobs, ::adminsCanControlAllJobs)
     }
 }
 
 fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthorization =
     if (args.isOwnedByActor()) PositiveAuthorization.Allow else PositiveAuthorization.NoOpinion
+
+fun usersCanCancelTheirOwnJobs(args: JobControlRuleArgs<Ctx, Views>): PositiveAuthorization =
+    if (args.operation == JobOperation.Cancel && args.isOwnedByActor()) {
+        PositiveAuthorization.Allow
+    } else {
+        PositiveAuthorization.NoOpinion
+    }
 ```
+
+Resuming a `JobAgent.System` job runs its remaining steps with full authority, so allow `Resume` only for trusted
+actors; `args.job.agent` tells which agent a job has.
 
 The owner is the actor whose context scheduled the job, recorded at scheduling time and available as `args.job.owner`.
 Only the id survives storage, so an actor that was a `ModelIdentity` comes back as a `ModelReferenceIdentity`;

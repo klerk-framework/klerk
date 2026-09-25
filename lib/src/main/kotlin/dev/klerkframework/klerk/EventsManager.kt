@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.log.LogLevel
 import dev.klerkframework.klerk.misc.KlerkJson
 import dev.klerkframework.klerk.misc.ReadWriteLock
+import dev.klerkframework.klerk.misc.getCurrentInstant
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.withoutReadRestrictions
@@ -21,6 +22,7 @@ import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.storage.CommitBatch
 import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.storage.UsedCommandToken
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import io.micrometer.core.instrument.Counter
@@ -31,6 +33,7 @@ import org.slf4j.event.Level
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 internal class EventsManagerImpl<C : KlerkContext, V>(
@@ -55,7 +58,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     internal var visibleSequenceNumber: Long = 0
         private set
 
-    private val processedCommandTokens: MutableSet<CommandToken> = ConcurrentHashMap.newKeySet()
+    /** The nonce and creation time of every token used within [KlerkSettings.commandTokenValidity]. */
+    private val processedCommandTokens = ConcurrentHashMap<Long, Instant>()
+    private var lastTokenPrune: Instant = Instant.DISTANT_PAST
     private val timeTriggerManager = TriggerTimeManagerImpl(this, readWriteLock, klerk)
     private val eventProcessor = EventProcessor<C, V>(klerk, settings, readWriteLock, timeTriggerManager)
 
@@ -103,10 +108,13 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         if (options.dryRun) {
             logger.log(Misc, options) { "Aborting processing since dryRun" }
             validateToken(options.token, context)?.let { return Failure(listOf(it)) }
-            val withoutAuth = ReaderWithoutAuth(klerk)
-            val delta =
-                eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
-            return CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
+            // Not under the mutex, so the read lock is what keeps a commit from changing the cache and views meanwhile.
+            return readWriteLock.withRead {
+                val withoutAuth = ReaderWithoutAuth(klerk)
+                val unrestricted = withoutReadRestrictions(command)
+                val delta = eventProcessor.processPrimaryCommand(unrestricted, context, withoutAuth, options)
+                CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
+            }
         }
 
         // Actions run outside the lock, so they are collected here and invoked after it is released.
@@ -116,6 +124,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             logger.log(Misc, options) { "Processing event ${command.event}" }
 
             // Under the mutex, so that two commands with the same token cannot both pass.
+            pruneCommandTokens(getCurrentInstant())
             validateToken(options.token, context)?.let { return@withLock Failure(listOf(it)) }
 
             // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
@@ -158,8 +167,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                                 }
 
                                 is NewJobPlan.Ok -> {
-                                    processedCommandTokens.add(options.token)
-                                    commit(delta, command, context, plan.delta, jobPlan.commit)
+                                    commit(delta, command, context, plan.delta, jobPlan.commit, token = options.token)
                                     logger.log(Result, options) { "Command ${command.event} succeeded" }
                                     timeTriggerManager.handle(delta)
                                     actions = delta.unmanagedJobs
@@ -217,6 +225,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             return@withLock null
         }
 
+        pruneCommandTokens(getCurrentInstant())
         validateToken(options.token, context)?.let { problem ->
             checkpointOnly(jobCommit)
             return@withLock Failure<T>(listOf(problem))
@@ -248,9 +257,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     }
 
                     is NewJobPlan.Ok -> {
-                        processedCommandTokens.add(options.token)
                         val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
-                        commit(delta, command, context, plan.delta, merged, isJobStep = true)
+                        commit(delta, command, context, plan.delta, merged, isJobStep = true, token = options.token)
                         timeTriggerManager.handle(delta)
                         commandResult
                     }
@@ -282,6 +290,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         attachedDataDelta: AttachedDataDelta,
         jobCommit: JobCommit = JobCommit(),
         isJobStep: Boolean = false,
+        token: CommandToken? = null,
     ) {
         // Persisting to the database can take several milliseconds, and reads keep running throughout: the write lock
         // is taken only for the in-memory flip at the end.
@@ -301,6 +310,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         ModelCache.beginCommit(touchedIds)
         try {
             val batch = toCommitBatch(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
+                .copy(commandToken = token?.let { UsedCommandToken(it.nonce, it.time) })
             if (isJobStep) {
                 settings.persistence.commitJobStep(batch)
             } else {
@@ -311,6 +321,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             throw e
         }
 
+        token?.let { processedCommandTokens[it.nonce] = it.time }
         val modifications = modificationsOf(delta)
         readWriteLock.withWrite {
             ModelCache.handleDelta(delta)
@@ -382,7 +393,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     private suspend fun validateToken(token: CommandToken, context: C): Problem? {
-        if (token in processedCommandTokens) {
+        val now = getCurrentInstant()
+        if (token.time < now - settings.commandTokenValidity || token.time > now + ALLOWED_TOKEN_CLOCK_SKEW) {
+            return IdempotenceProblem("CommandToken has expired", KlerkErrorCode.CommandTokenExpired)
+        }
+        if (processedCommandTokens.containsKey(token.nonce)) {
             return IdempotenceProblem("CommandToken has already been used", KlerkErrorCode.CommandTokenAlreadyUsed)
         }
         val anyModified = klerk.modelsManager.read(context) {
@@ -400,7 +415,25 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         return null
     }
 
+    /**
+     * Forgets the tokens that are too old to be accepted anyway, in memory and in storage. Throttled, since it is called
+     * for every command.
+     */
+    internal fun pruneCommandTokens(now: Instant, force: Boolean = false) {
+        if (!force && now - lastTokenPrune < TOKEN_PRUNE_INTERVAL) {
+            return
+        }
+        lastTokenPrune = now
+        val cutoff = now - settings.commandTokenValidity
+        processedCommandTokens.values.removeIf { it < cutoff }
+        settings.persistence.deleteCommandTokens(createdBefore = cutoff)
+    }
+
     internal suspend fun start() {
+        val now = getCurrentInstant()
+        for (token in settings.persistence.readCommandTokens(now - settings.commandTokenValidity)) {
+            processedCommandTokens[token.nonce] = token.createdAt
+        }
         val lastPersisted = settings.persistence.lastEventLogSequenceNumber()
         assignedSequenceNumber.set(lastPersisted)
         visibleSequenceNumber = lastPersisted
@@ -429,7 +462,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     suspend fun modelTriggeredByTime(model: Model<out Any>, now: Instant) {
-        logger.info { "Time-block was triggered for $model" }
+        logger.info { "Time-block was triggered for ${model.props::class.simpleName} ${model.id}" }
         val options = ProcessingOptions()
         val delta = eventProcessor.processTimeTrigger(model, options, now)
         if (delta.problems.isNotEmpty()) {
@@ -511,3 +544,8 @@ private fun LogLevel.toSlf4j(): Level = when (this) {
     LogLevel.Warn -> Level.WARN
     LogLevel.Error -> Level.ERROR
 }
+
+/** How far in the future a token's creation time may be, to allow for clock differences between instances. */
+private val ALLOWED_TOKEN_CLOCK_SKEW = 1.minutes
+
+private val TOKEN_PRUNE_INTERVAL = 10.minutes

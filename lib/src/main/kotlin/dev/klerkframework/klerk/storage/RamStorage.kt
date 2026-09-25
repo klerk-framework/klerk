@@ -39,6 +39,7 @@ public open class RamStorage : Persistence {
     private val jobs = mutableMapOf<JobID, JobRecord>()
     private val cronState = mutableMapOf<String, Instant>()
     private val tombstones = mutableMapOf<Int, Instant>()
+    private val commandTokens = mutableMapOf<Long, Instant>()
 
     /**
      * Everything happens under one lock, which is what stands in for a transaction here. It is not a real one — a
@@ -72,6 +73,17 @@ public open class RamStorage : Persistence {
         }
         for ((modelId, deletedAt) in batch.eventLogTombstones) {
             tombstones[modelId.value] = deletedAt
+        }
+        batch.commandToken?.let { commandTokens[it.nonce] = it.createdAt }
+    }
+
+    override fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken> = synchronized(lock) {
+        commandTokens.filterValues { it >= createdAtOrAfter }.map { (nonce, time) -> UsedCommandToken(nonce, time) }
+    }
+
+    override fun deleteCommandTokens(createdBefore: Instant) {
+        synchronized(lock) {
+            commandTokens.values.removeIf { it < createdBefore }
         }
     }
 

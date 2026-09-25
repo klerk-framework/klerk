@@ -80,7 +80,7 @@ internal class LogCommandSucceeded<C : KlerkContext>(
 }
 
 internal class LogReadModel(model: Model<*>, context: KlerkContext) : CoreLogEntry(Read, context) {
-    override val headingTemplate = "Model ${model.id} was read by ${context.actor}"
+    override val headingTemplate = "Model ${model.id} was read by {actor}"
     override val facts: List<Fact> by lazy {
         listOf(Fact(FactType.ModelID, "model", model.id.toString()))
     }

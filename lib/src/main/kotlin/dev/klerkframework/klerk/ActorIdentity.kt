@@ -89,7 +89,7 @@ public class ModelIdentity<T : Any>(public val model: Model<T>) : ActorIdentity 
     override val type: ActorType = ActorType.Model
     override val id: ModelID<T> = model.id
     override val externalId: Long? = null
-    override fun toString(): String = "modelId: ${model.id} ($model)"
+    override fun toString(): String = "${model.props::class.simpleName} ${model.id}"
     override fun equals(other: Any?): Boolean = other is ModelIdentity<*> && other.id == id
     override fun hashCode(): Int = id.hashCode()
 }

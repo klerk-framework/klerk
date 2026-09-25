@@ -569,6 +569,19 @@ class JobManagerImplTest {
     }
 
     @Test
+    fun `a job is refused when the admission policy throws`() = runBlocking<Unit> {
+        val f = fixture {
+            register(Counter)
+            admission(::throwingPolicy)
+        }
+        val refusal = assertFailsWith<JobRejectedException> {
+            f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
+        }
+        assertEquals(KlerkErrorCode.Internal, refusal.code)
+        assertTrue(f.klerk.jobs.all(Ctx.system()).isEmpty())
+    }
+
+    @Test
     fun `the hard queue cap is not overridable by a policy`() = runBlocking<Unit> {
         val f = fixture(jobs = JobSettings(execution = JobExecution.Manual, hardQueueLimit = 2)) {
             register(Counter)
@@ -736,3 +749,5 @@ private fun denyEverything(args: AdmissionArgs<Ctx>): AdmissionDecision =
     AdmissionDecision.Deny.overloaded("the test says no")
 
 private fun allowEverything(args: AdmissionArgs<Ctx>): AdmissionDecision = AdmissionDecision.Allow
+
+private fun throwingPolicy(args: AdmissionArgs<Ctx>): AdmissionDecision = error("the policy has a bug")

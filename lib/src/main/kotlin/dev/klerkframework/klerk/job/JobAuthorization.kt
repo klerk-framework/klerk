@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.job
 
+import dev.klerkframework.klerk.JobControlRuleArgs
 import dev.klerkframework.klerk.JobReadRuleArgs
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
@@ -10,7 +11,7 @@ import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 
 /**
- * Whether [context]'s actor may see [job], by the `jobs` rules in [specification].
+ * Whether [context]'s actor may see [job], by the `readJobs` rules in [specification].
  *
  * Deliberately neither suspending nor lock-taking, mirroring the model-side `isAuthorized`: the caller is expected to
  * hold the read lock already, which is what lets this run inside a read block. A rule that reads a model through
@@ -34,11 +35,32 @@ internal fun <C : KlerkContext, V> jobAuthorizationFailure(
         return null
     }
     val args = JobReadRuleArgs(job, context, reader)
-    if (specification.authorization.jobNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+    if (specification.authorization.jobReadNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
         return KlerkErrorCode.JobReadNegativeAuthorizationExist
     }
-    if (specification.authorization.jobPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+    if (specification.authorization.jobReadPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
         return KlerkErrorCode.JobReadPositiveAuthorizationMissing
+    }
+    return null
+}
+
+/** Why [context]'s actor may not perform [operation] on [job] by the `controlJobs` rules, or null if it may. */
+internal fun <C : KlerkContext, V> jobControlFailure(
+    job: JobInfo,
+    operation: JobOperation,
+    context: C,
+    specification: Specification<C, V>,
+    reader: ReaderWithoutAuth<C, V>,
+): KlerkErrorCode? {
+    if (context.actor == SystemIdentity) {
+        return null
+    }
+    val args = JobControlRuleArgs(job, operation, context, reader)
+    if (specification.authorization.jobControlNegativeRules.any { it.invoke(args) == NegativeAuthorization.Deny }) {
+        return KlerkErrorCode.JobControlNegativeAuthorizationExist
+    }
+    if (specification.authorization.jobControlPositiveRules.none { it.invoke(args) == PositiveAuthorization.Allow }) {
+        return KlerkErrorCode.JobControlPositiveAuthorizationMissing
     }
     return null
 }

@@ -175,7 +175,8 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
 
     /**
      * Replaces the admission policy. Must be a named function reference, and should be a pure function — it runs
-     * inside command processing on the single writer.
+     * inside command processing on the single writer. If it throws, the job is refused with
+     * [dev.klerkframework.klerk.KlerkErrorCode.Internal].
      *
      * Defaults to [AdmissionPolicy.delayBudget].
      */

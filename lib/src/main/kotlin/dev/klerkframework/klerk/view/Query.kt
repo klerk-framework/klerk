@@ -22,7 +22,10 @@ public enum class PageDirection {
  * @throws IllegalArgumentException if [maxItems] is not positive
  */
 public data class QueryOptions(
-    /** The most items the page may hold. */
+    /**
+     * The most items the page may hold. Not capped, since a large page is legitimate for application code; a plugin that
+     * takes the page size from a client must cap it itself.
+     */
     val maxItems: Int = 50,
     /** Where the page sits; null means the start of the view. */
     val cursor: QueryListCursor? = null,

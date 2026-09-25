@@ -422,6 +422,45 @@ class QueryPaginationTest {
     }
 
     @Test
+    fun `the largest page size reads the whole view as one page`() = runBlocking<Unit> {
+        val (klerk, views) = start()
+        klerk.meta.start()
+        val authors = createAuthors(klerk, 5)
+
+        val page = klerk.read(Ctx.system()) {
+            views.authors.all.query(QueryOptions(maxItems = Int.MAX_VALUE, countTotal = true))
+        }
+        assertEquals(authors, page.items.map { it.id })
+        assertEquals(5, page.totalCount)
+        assertNull(page.cursorNextPage)
+        assertNull(page.cursorPreviousPage)
+        assertNull(page.cursorLastPage)
+    }
+
+    /** A cursor comes from the client, so any offset must give an answer rather than overflow. */
+    @Test
+    fun `a cursor at the largest offset gives an empty page that leads back into the view`() = runBlocking<Unit> {
+        val (klerk, views) = start()
+        klerk.meta.start()
+        val authors = createAuthors(klerk, 5)
+        val view = views.authors.all
+
+        for (direction in PageDirection.entries) {
+            for (anchor in listOf(null, authors.last().value)) {
+                for (maxItems in listOf(2, Int.MAX_VALUE)) {
+                    val options = QueryOptions(maxItems, QueryListCursor(Int.MAX_VALUE, anchor), direction, true)
+                    val case = "$direction, anchor $anchor, maxItems $maxItems"
+                    val page = klerk.read(Ctx.system()) { view.query(options) }
+                    assertTrue(authors.containsAll(page.items.map { it.id }), case)
+                    val previous = page.cursorPreviousPage ?: continue
+                    val back = klerk.read(Ctx.system()) { view.query(QueryOptions(maxItems, previous)) }
+                    assertTrue(back.items.isNotEmpty(), case)
+                }
+            }
+        }
+    }
+
+    @Test
     fun `a custom view pages without knowing anything about cursors`() = runBlocking<Unit> {
         val (klerk, views) = start()
         klerk.meta.start()

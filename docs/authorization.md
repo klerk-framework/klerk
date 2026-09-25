@@ -26,18 +26,22 @@ SpecificationBuilder<Ctx, Views>(views).build {
         writeAttachedData {
             positive(::anyLoggedInUserCanUpload)
         }
-        jobs {
+        readJobs {
             positive(::usersCanSeeTheirOwnJobs)
+        }
+        controlJobs {
+            positive(::usersCanCancelTheirOwnJobs)
         }
     }
     // other specification
 }
 ```
 
-There are seven independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
-`eventLog`, `readAttachedData`, `writeAttachedData` and `jobs` — each with its own `positive`/`negative` rule sets. A
-category with no rules at all denies everything in that category, since there is no rule to explicitly allow it. Both
-the categories and the `positive`/`negative` calls inside them are optional, so declare only the ones you need.
+There are nine independent rule categories — `readModels`, `readProperties`, `commands` (i.e. events/commands),
+`eventLog`, `activityLog`, `readAttachedData`, `writeAttachedData`, `readJobs` and `controlJobs` — each with its own
+`positive`/`negative` rule sets. A category with no rules at all denies everything in that category, since there is no
+rule to explicitly allow it. Both the categories and the `positive`/`negative` calls inside them are optional, so
+declare only the ones you need.
 
 `positive` and `negative` take one or more rules, so related rules can be listed together or given a call each —
 whichever reads better.
@@ -146,6 +150,13 @@ Gates whether an actor can read entries from the event log (`eventLog(...)` insi
 [events and commands](events-and-commands.md)). Rules receive an `EventLogRuleArgs<C, V>` (`context`, `reader`) —
 there's no per-entry model here, so this is an all-or-nothing gate rather than something you can narrow per entry.
 
+### activityLog
+
+Gates whether an actor can read the activity log, `klerk.activityLog`: an in-memory record of recent starts, stops,
+successful commands and model reads, including who read which model. Rules receive an `ActivityLogRuleArgs<C, V>`
+(`context`, `reader`) and decide for the whole log. `entries(context)` throws `AuthorizationException` when denied, and
+so does collecting `subscribe(context)` or `subscribeToReads(context)`.
+
 ### readAttachedData
 
 Gates whether an actor can read [attached data](attached-data.md), i.e. `klerk.attachedData.get(id, context)` and
@@ -182,7 +193,7 @@ property holds, blob or string alike — see
 What is left for these rules is the `kind` ("anyone may upload JSON, only editors may upload a blob") and the `lease`
 (who may keep unclaimed data around for hours rather than a minute).
 
-### jobs
+### readJobs
 
 Who may see a job's metadata — its status, progress and log — through `JobManager.get`, `JobManager.all` and
 `JobManager.subscribe`. The rules receive a `JobReadRuleArgs`, whose `isOwnedByActor()` answers "did this actor
@@ -190,7 +201,7 @@ schedule it?" (`isOwnedBy(actor)` asks about someone else). It uses `ActorIdenti
 or `externalId`, e.g. `Unauthenticated`, owns no jobs.
 
 ```kotlin
-jobs {
+readJobs {
     positive(::usersCanSeeTheirOwnJobs)
 }
 
@@ -198,8 +209,26 @@ fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthoriz
     if (args.isOwnedByActor()) Allow else NoOpinion
 ```
 
-The same rules gate `JobManager.cancel`, so an actor who can watch their own progress bar can also cancel their own
-job. Declaring no rule here denies every job read, which is what makes a progress bar silently empty.
+Declaring no rule here denies every job read, which is what makes a progress bar silently empty. Seeing a job does not
+allow controlling it.
+
+### controlJobs
+
+Who may cancel, resume or delete a job through `JobManager.cancel`, `JobManager.resume` and `JobManager.delete`. The
+rules receive a `JobControlRuleArgs`, which adds the `operation` (`JobOperation.Cancel`, `Resume` or `Delete`) to what
+`JobReadRuleArgs` has:
+
+```kotlin
+controlJobs {
+    positive(::usersCanCancelTheirOwnJobs, ::adminsCanDoAnything)
+}
+
+fun usersCanCancelTheirOwnJobs(args: JobControlRuleArgs<Ctx, Views>): PositiveAuthorization =
+    if (args.operation == JobOperation.Cancel && args.isOwnedByActor()) Allow else NoOpinion
+```
+
+Resuming a job whose `job.agent` is `JobAgent.System` runs its remaining steps with full authority, so allow that only
+for trusted actors. Use `JobManager.isAllowed(id, operation, context)` to decide whether to offer an operation in a UI.
 
 ## ActorIdentity
 
