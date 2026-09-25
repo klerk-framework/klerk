@@ -8,8 +8,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 /**
  * How long the event log keeps what it records. Declared with `eventLogRetention(...)` in the specification, where it
@@ -22,7 +24,8 @@ import kotlin.time.Duration.Companion.hours
  *
  * [afterModelDeletion] is how long the entries of a model are kept after the model has been deleted. Only entries whose
  * [EventLogEntry.model] is the deleted model are erased; parameters of commands on other models that mention it are
- * not, which is what [paramsAndExtra] is for.
+ * not, which is what [paramsAndExtra] is for. Until they are erased, the deleted model's id is not given to a new
+ * model.
  *
  * [paramsAndExtra] is how long [EventLogEntry.params] and [EventLogEntry.extra] are kept, counted from
  * [EventLogEntry.time]. After that, the entry still says who did what to which model, and when, but no longer with
@@ -60,10 +63,22 @@ internal class EventLogRetentionManager(
 ) {
     private var scope: CoroutineScope? = null
 
+    /**
+     * The deleted models whose event log has not been erased yet, with when they were deleted. Their ids must not be
+     * given to new models, which would otherwise inherit the log. Kept in memory so that allocating an id needs no
+     * storage lookup.
+     */
+    private val tombstones = ConcurrentHashMap<Int, Instant>()
+
     private val needsSweeping: Boolean =
         retention.afterModelDeletion != null || (retention.paramsAndExtra ?: Duration.ZERO) > Duration.ZERO
 
+    /** True if [id] belonged to a deleted model whose event log still exists. */
+    fun isRetired(id: Int): Boolean = tombstones.containsKey(id)
+
     fun start() {
+        tombstones.clear()
+        tombstones.putAll(settings.persistence.readEventLogTombstones())
         if (!needsSweeping) {
             return
         }
@@ -89,18 +104,27 @@ internal class EventLogRetentionManager(
 
     fun sweep() {
         val now = settings.now()
-        retention.afterModelDeletion?.let {
-            settings.persistence.eraseEventLogsOfDeletedModels(deletedAtOrBefore = now - it)
-        }
+        retention.afterModelDeletion?.let { eraseDeletedModels(deletedAtOrBefore = now - it) }
         retention.paramsAndExtra?.takeIf { it > Duration.ZERO }?.let {
             settings.persistence.eraseEventLogParamsAndExtra(before = now - it)
         }
     }
 
-    /** Called after a commit that deleted models, so that [Duration.ZERO] erases immediately. */
-    fun afterDeletion() {
-        if (retention.afterModelDeletion == Duration.ZERO) {
-            settings.persistence.eraseEventLogsOfDeletedModels(deletedAtOrBefore = settings.now())
+    /**
+     * Called after a commit that deleted models, with their tombstones. Under the command mutex, so no id can be
+     * allocated before the tombstones are known. [Duration.ZERO] erases immediately.
+     */
+    fun afterDeletion(deleted: Map<ModelID<out Any>, Instant>) {
+        for ((id, deletedAt) in deleted) {
+            tombstones[id.value] = deletedAt
         }
+        if (retention.afterModelDeletion == Duration.ZERO) {
+            eraseDeletedModels(deletedAtOrBefore = settings.now())
+        }
+    }
+
+    private fun eraseDeletedModels(deletedAtOrBefore: Instant) {
+        settings.persistence.eraseEventLogsOfDeletedModels(deletedAtOrBefore)
+        tombstones.values.removeIf { it <= deletedAtOrBefore }
     }
 }

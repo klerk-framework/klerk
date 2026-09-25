@@ -16,7 +16,6 @@ import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
-import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.statemachine.Executable
 import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.view.ModelViews
@@ -51,10 +50,6 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
             timeTrigger = null,
             props = props,
         )
-        val referenceProblem = verifyReferencesExist(created, args.reader)
-        if (referenceProblem != null) {
-            throw referenceProblem.asException()
-        }
         val sm = specification.getStateMachine(created)
         val voidExitBlock = sm.voidState.exitBlock
         val enterBlock = sm.states.single { it.name == initialState.name }.enterBlock

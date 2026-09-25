@@ -2,13 +2,7 @@ package dev.klerkframework.klerk.storage.spi
 
 import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.ActorType
-import dev.klerkframework.klerk.AuthenticationIdentity
-import dev.klerkframework.klerk.CustomIdentity
-import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelReferenceIdentity
-import dev.klerkframework.klerk.PluginIdentity
-import dev.klerkframework.klerk.SystemIdentity
-import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.job.ChildOutcome
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobHookKind
@@ -121,17 +115,8 @@ public data class JobRecord(
      * The scheduling actor, as far as storage remembers it. Only the id survives, so an actor that was a loaded model
      * comes back as a [ModelReferenceIdentity].
      */
-    internal fun rebuildOwner(): ActorIdentity = when (ownerActorType) {
-        ActorType.System -> SystemIdentity
-        ActorType.Unauthenticated -> Unauthenticated
-        ActorType.Authentication -> AuthenticationIdentity
-        ActorType.Plugin -> PluginIdentity(requireNotNull(ownerActorName) { "Job $id has a plugin owner without name" })
-        else -> if (ownerActorId != null) {
-            ModelReferenceIdentity(ModelID<Any>(ownerActorId))
-        } else {
-            CustomIdentity(null, ownerActorExternalId)
-        }
-    }
+    internal fun rebuildOwner(): ActorIdentity =
+        StoredActor(ownerActorType, ownerActorId, ownerActorExternalId, ownerActorName).toIdentity()
 
     internal fun toChildOutcome(): ChildOutcome =
         ChildOutcome(id = id, name = name, status = status, result = result, reason = reason)

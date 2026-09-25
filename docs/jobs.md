@@ -158,7 +158,8 @@ Jobs scheduled by a command are persisted in that command's transaction. If the 
 | `Fail(reason)`                                              | This attempt failed. Retried with exponential backoff until `maxRetries`, then dead-lettered.                                                                   |
 | `Abort(reason, runHook = true)`                             | This will never work. Straight to dead letter, no retries. Set `runHook = false` when there is deliberately nothing to compensate.                              |
 
-An uncaught exception is treated as `Fail`.
+An uncaught exception is treated as `Fail`. Its reason names only the exception type, since the reason is shown to
+everyone who may see the job; the exception itself is logged. The reason passed to `Fail` or `Abort` is shown as it is.
 
 `Fail` and `Abort` are the important distinction: `Fail` means "the API timed out, try again"; `Abort` means "this
 account no longer exists, stop." Without `Abort` the only way to give up is to fail `maxRetries` times, which wastes

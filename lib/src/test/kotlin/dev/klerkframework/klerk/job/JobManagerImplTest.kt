@@ -33,6 +33,7 @@ import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.days
@@ -142,6 +143,17 @@ class JobManagerImplTest {
             assertEquals(7, args.failedAtCursor.remaining)
             return JobResult.Success()
         }
+    }
+
+    /** Throws with a message that must not reach the job's reason. */
+    object Thrower : JobType.Local<CountCursor, Ctx, Views>() {
+        override val name = JobName("thrower")
+        override val agent: JobAgent = JobAgent.System
+        override val maxRetries = 0
+
+        override suspend fun step(
+            args: JobStepArgs.Local<CountCursor, Ctx, Views>,
+        ): JobResult<CountCursor, Ctx, Views> = error("the secret is 1234")
     }
 
     /** Never changes its cursor or its progress, which is what the livelock guard is for. */
@@ -566,6 +578,17 @@ class JobManagerImplTest {
             f.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
         }
         assertEquals(KlerkErrorCode.JobQueueOverloaded, refusal.code)
+    }
+
+    @Test
+    fun `the reason of a job that threw does not contain the exception message`() = runBlocking<Unit> {
+        val f = fixture { register(Thrower) }
+        val id = f.klerk.jobs.schedule(Thrower.declare(CountCursor(1)), Ctx.system())
+        f.klerk.jobs.runUntilIdle()
+
+        val reason = assertNotNull(f.job(id).reason)
+        assertTrue("IllegalStateException" in reason, reason)
+        assertFalse("secret" in reason, reason)
     }
 
     @Test

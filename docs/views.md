@@ -213,3 +213,8 @@ event(CreateBook) {
 This ensures a `CreateBook` command can't reference an `Author` id that doesn't exist (or, if you point it at a narrower
 view than `all`, one that doesn't satisfy that view's criteria). See [validation.md](validation.md) for the full
 validation pipeline.
+
+Independently of `validReferences`, Klerk refuses to commit a model that refers to a model that would not exist
+afterwards, and refuses to delete a model that another model still refers to. Both fail the command with
+`KlerkErrorCode.BrokenReference`. This covers every `ModelID` in the models' properties, however it got there, and takes
+everything the command and the commands it leads to create, change and delete into account.

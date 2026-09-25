@@ -60,7 +60,6 @@ internal class KlerkImpl<C : KlerkContext, V>(
             ?: error("Can't find model view for type '$modelType'")
 
     override val modelChanges = modelsManager
-    override val unsafe = modelsManager
 
     override val meta = klerkMeta
 

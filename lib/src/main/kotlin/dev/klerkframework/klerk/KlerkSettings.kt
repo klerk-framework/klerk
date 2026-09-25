@@ -72,13 +72,6 @@ public data class KlerkSettings(
     val modelCache: ModelCacheSettings = ModelCacheSettings(),
 
     /**
-     * Gates the "escape hatch" functions on [Klerk.unsafe] ([KlerkUnsafe.create], [KlerkUnsafe.update],
-     * [KlerkUnsafe.delete]), which bypass the state machine, validation and authorization entirely. Off by
-     * default; enable only if you understand the risk.
-     */
-    val allowUnsafeOperations: Boolean = false,
-
-    /**
      * Whether [dev.klerkframework.klerk.datatypes.DataContainer.valueWithoutAuthorization] may be used on the models
      * returned by a read or a command result. When false (the default) it throws there, so that application code
      * cannot bypass the `readProperties` rules. Reads made by the system, and containers you create yourself, are not
@@ -152,7 +145,6 @@ public data class KlerkSettings(
                 meterRegistry = meterRegistry,
                 jobs = jobs,
                 modelCache = modelCache,
-                allowUnsafeOperations = envBoolean("KLERK_ALLOW_UNSAFE_OPERATIONS") ?: defaults.allowUnsafeOperations,
                 allowBypassAuthRead = envBoolean("KLERK_ALLOW_BYPASS_AUTH_READ") ?: defaults.allowBypassAuthRead,
                 defaultAttachedDataLease = envDuration("KLERK_DEFAULT_ATTACHED_DATA_LEASE")
                     ?: defaults.defaultAttachedDataLease,

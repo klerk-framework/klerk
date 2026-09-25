@@ -2,12 +2,7 @@ package dev.klerkframework.klerk.misc
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.ManagedModel
-import dev.klerkframework.klerk.Model
-import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.NotFoundProblem
-import dev.klerkframework.klerk.Problem
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.statemachine.StateMachine
 
 internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
@@ -19,18 +14,4 @@ internal fun <T : Any, P, C : KlerkContext, V> getStateMachine(
             ?: error("Can't find state machine for event '${command.event}'")
     @Suppress("UNCHECKED_CAST")
     return stateMachine as StateMachine<T, *, C, V>
-}
-
-/** Checks that every [ModelID] in the model's props, also in collections and nested objects, refers to a model. */
-internal fun <C : KlerkContext, V> verifyReferencesExist(model: Model<*>, reader: ModelReader<C, V>): Problem? {
-    for (leaf in ObjectSchema.of(model.props::class).leaves(model.props)) {
-        val id = leaf.value as? ModelID<*> ?: continue
-        try {
-            @Suppress("UNCHECKED_CAST")
-            reader.get(id as ModelID<Any>)
-        } catch (e: NoSuchElementException) {
-            return NotFoundProblem(e.message ?: "Could not find the model with id $id")
-        }
-    }
-    return null
 }

@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.DebugOption
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.misc.IdFactory
+import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.read.ModelReader
@@ -165,7 +166,43 @@ internal class EventProcessor<C : KlerkContext, V>(
     ): ProcessingData<T, C, V> {
         val processingData = ProcessingData<T, C, V>(remainingCommands = listOf(command), primaryModel = command.model)
         val result = process(processingData, context, reader, isPrimary = true, options, context.time)
-        return result
+        return withReferenceCheck(result)
+    }
+
+    /**
+     * Refuses a result in which a model would refer to a model that does not exist once the result is committed.
+     *
+     * The checks along the way (`validReferences`, the delete check) only see what is committed, not what the same run
+     * created, changed or deleted, and a model's references need not come from the event parameters at all.
+     */
+    private fun <T : Any> withReferenceCheck(data: ProcessingData<T, C, V>): ProcessingData<T, C, V> {
+        if (data.problems.isNotEmpty()) {
+            return data
+        }
+        val deleted = data.deletedModels.mapTo(HashSet()) { it.value }
+        val inRun = data.aggregatedModelState.keys.mapTo(HashSet()) { it.value }
+        fun exists(id: Int) = id !in deleted && (id in inRun || !ModelCache.isIdAvailable(id))
+
+        for ((id, model) in data.aggregatedModelState) {
+            if (id.value in deleted) {
+                continue
+            }
+            for (leaf in ObjectSchema.of(model.props::class).leaves(model.props)) {
+                val reference = leaf.value as? ModelID<*> ?: continue
+                if (!exists(reference.value)) {
+                    return ProcessingData(
+                        problems = listOf(
+                            StateProblem(
+                                "The change refers to something that does not exist.",
+                                "Model $id would refer to model $reference in ${leaf.path}, which would not exist",
+                                KlerkErrorCode.BrokenReference,
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+        return data
     }
 
     internal suspend fun <T : Any> processTimeTrigger(
@@ -177,7 +214,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         return readWriteLock.withRead {
             val reader = ReaderWithoutAuth(klerk)
             val context = klerk.specification.systemContextProvider.invoke()
-            process(processingData, context, reader, isPrimary = true, options, time)
+            withReferenceCheck(process(processingData, context, reader, isPrimary = true, options, time))
         }
     }
 
@@ -294,7 +331,7 @@ internal class EventProcessor<C : KlerkContext, V>(
 
         val processingOptions = EventProcessingOptions(
             disregardPreventingRules = false,
-            idProvider = IdFactory(klerk.jobs::isJobIdAvailable),
+            idProvider = IdFactory(klerk.jobs::isJobIdAvailable, klerk.eventLogRetention::isRetired),
             performActions = false,
             preventModelUpdates = false,
         )

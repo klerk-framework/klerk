@@ -240,7 +240,7 @@ SpecificationBuilder<Ctx, Views>(views).build {
 ```
 
 - `afterModelDeletion` — how long the entries of a model are kept after the model is deleted. Only entries whose
-  `model` is the deleted model are erased.
+  `model` is the deleted model are erased. Until they are, the deleted model's id is not given to a new model.
 - `paramsAndExtra` — how long `params` and `extra` are kept, counted from `time`. After that they are `null`, while the
   rest of the entry (who did what to which model, and when) remains. This also covers personal data in parameters of
   commands on other models.

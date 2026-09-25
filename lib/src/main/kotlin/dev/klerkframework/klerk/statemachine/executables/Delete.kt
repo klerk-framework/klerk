@@ -25,7 +25,11 @@ internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
         val model = args.model
         val other = ModelCache.referencingIds(model.id)
         if (other.isNotEmpty()) {
-            val currentReferencesToModel = other.filter { it !in processingDataSoFar.deletedModels }
+            // A referrer changed in this run is judged by its final state, which the reference check before commit
+            // looks at; its committed state may no longer refer to the model at all.
+            val currentReferencesToModel = other.filter {
+                it !in processingDataSoFar.deletedModels && it !in processingDataSoFar.aggregatedModelState.keys
+            }
             if (currentReferencesToModel.isNotEmpty()) {
                 return ProcessingData(
                     problems = listOf(

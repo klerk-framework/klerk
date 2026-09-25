@@ -146,7 +146,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 is Success -> {
                     // Attached data is claimed and deleted as part of the command, so a rejected claim (the data is
                     // gone, or another model already owns it) must fail the command before anything is written.
-                    when (val plan = attachedData.planFor(delta)) {
+                    when (val plan = attachedData.planFor(delta, context)) {
                         is AttachedDataPlan.Rejected -> {
                             logger.log(Result, options) {
                                 "Command ${command.event} failed: ${plan.problems.joinToString(", ") { it.toString() }}"
@@ -242,7 +242,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 commandResult
             }
 
-            is Success -> when (val plan = attachedData.planFor(delta)) {
+            is Success -> when (val plan = attachedData.planFor(delta, context)) {
                 is AttachedDataPlan.Rejected -> {
                     checkpointOnly(jobCommit)
                     Failure(plan.problems)
@@ -308,9 +308,11 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         val touchedIds = delta.updatedModels + delta.transitions + delta.deletedModels
         val sequenceNumber = assignedSequenceNumber.incrementAndGet()
         ModelCache.beginCommit(touchedIds)
+        val tombstones: Map<ModelID<out Any>, Instant>
         try {
             val batch = toCommitBatch(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
                 .copy(commandToken = token?.let { UsedCommandToken(it.nonce, it.time) })
+            tombstones = batch.eventLogTombstones
             if (isJobStep) {
                 settings.persistence.commitJobStep(batch)
             } else {
@@ -336,7 +338,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             klerk.modelsManager.modelWasModified(modification)
         }
         if (delta.deletedModels.isNotEmpty()) {
-            klerk.eventLogRetention.afterDeletion()
+            klerk.eventLogRetention.afterDeletion(tombstones)
         }
     }
 
@@ -376,11 +378,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             },
             attachedData = attachedDataDelta,
             jobs = jobCommit,
-            eventLogTombstones = if (retention.afterModelDeletion == null) {
-                emptyMap()
-            } else {
-                settings.now().let { now -> delta.deletedModels.associateWith { now } }
-            },
+            // Always written, also when the log is kept forever: a tombstone is what keeps the id from being reused.
+            eventLogTombstones = settings.now().let { now -> delta.deletedModels.associateWith { now } },
         )
     }
 
@@ -483,7 +482,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
         // A time-trigger can change props too, so its attached data must be diffed just like a command's. There is no
         // caller to return a Problem to, so a rejected plan can only be logged and the trigger abandoned.
-        val attachedDataDelta = when (val plan = attachedData.planFor(delta)) {
+        val systemContext = specification.systemContextProvider()
+        val attachedDataDelta = when (val plan = attachedData.planFor(delta, systemContext)) {
             is AttachedDataPlan.Rejected -> {
                 logger.error {
                     "The time-trigger for model ${model.id} could not be committed because of its attached data: " +
@@ -496,7 +496,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }
         // A time-trigger can schedule jobs too. There is no caller to fail, so a refusal by admission control can only
         // be logged and the jobs dropped — the trigger's own model changes still commit.
-        val systemContext = specification.systemContextProvider.invoke()
         val jobPlan = when (val planned = jobs.planNewJobs(delta.newJobs, systemContext)) {
             is NewJobPlan.Rejected -> {
                 logger.warn {

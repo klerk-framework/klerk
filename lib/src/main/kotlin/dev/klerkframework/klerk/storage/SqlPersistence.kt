@@ -35,6 +35,7 @@ import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
 import dev.klerkframework.klerk.storage.spi.AttachedDataRow
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
+import dev.klerkframework.klerk.storage.spi.StoredActor
 import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -321,6 +322,12 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
+    override fun readEventLogTombstones(): Map<Int, Instant> = transaction(database) {
+        EventLogTombstonesTable.selectAll().associate {
+            it[EventLogTombstonesTable.modelId] to decode64bitMicroseconds(it[EventLogTombstonesTable.deletedAt])
+        }
+    }
+
     override fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken> = transaction(database) {
         CommandTokensTable.selectAll()
             .where { CommandTokensTable.createdAt greaterEq createdAtOrAfter.to64bitMicroseconds() }
@@ -392,6 +399,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         custom: Map<String, String>,
         preparedFor: String?,
         expires: Instant,
+        preparedBy: StoredActor,
         claimedByJob: JobID?,
         digestAfterWrite: () -> AttachedDataDigest,
     ) {
@@ -413,6 +421,10 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 it[this.preparedFor] = preparedFor
                 it[this.expires] = expires.to64bitMicroseconds()
                 it[this.claimedByJob] = claimedByJob?.value
+                it[this.preparedByType] = preparedBy.type.storedValue
+                it[this.preparedById] = preparedBy.id
+                it[this.preparedByExternalId] = preparedBy.externalId
+                it[this.preparedByPluginName] = preparedBy.pluginName
             }
             // the stream has been consumed by the insert above, so the digest is complete. Updating in the same
             // transaction means no row is ever committed without its size, hash and content type.
@@ -497,6 +509,10 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
             AttachedDataTable.preparedFor,
             AttachedDataTable.expires,
             AttachedDataTable.claimedByJob,
+            AttachedDataTable.preparedByType,
+            AttachedDataTable.preparedById,
+            AttachedDataTable.preparedByExternalId,
+            AttachedDataTable.preparedByPluginName,
         ).associate {
             it[AttachedDataTable.id] to AttachedDataRow(
                 Unit,
@@ -504,8 +520,18 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 it.toAttachedDataMetadata(),
                 it[AttachedDataTable.expires]?.let { e -> decode64bitMicroseconds(e) },
                 it[AttachedDataTable.claimedByJob]?.let { j -> JobID(j) },
+                it.toPreparedBy(),
             )
         }
+    }
+
+    private fun ResultRow.toPreparedBy(): StoredActor? = this[AttachedDataTable.preparedByType]?.let { type ->
+        StoredActor(
+            type = ActorType.fromStoredValue(type),
+            id = this[AttachedDataTable.preparedById],
+            externalId = this[AttachedDataTable.preparedByExternalId],
+            pluginName = this[AttachedDataTable.preparedByPluginName],
+        )
     }
 
     private fun ResultRow.toAttachedDataMetadata(): AttachedDataMetadata = AttachedDataMetadata(

@@ -55,8 +55,8 @@ model, the second when you only have its id. Identities compare by value, but `=
 use `actor.isSameAs(other)` when deciding whether two identities are the same actor. An actor with neither `id` nor
 `externalId` (e.g. `Unauthenticated`) is never the same as anyone, since Klerk cannot tell two of them apart. The
 exceptions are `SystemIdentity`, `AuthenticationIdentity`, and `PluginIdentity`, which is identified by the plugin's
-name. To let anonymous visitors own something, e.g. a job, give
-each of them a `CustomIdentity(null, externalId)` derived from their session. `actor.type` is an `ActorType`
+name. To let anonymous visitors own something, e.g. a job or an uploaded file waiting to be attached, give each of
+them a `CustomIdentity(null, externalId)` derived from their session. `actor.type` is an `ActorType`
 enum, and only exists to record who did what in the event log and the job table.
 
 Business and authorization rules narrow on the concrete type, e.g.:

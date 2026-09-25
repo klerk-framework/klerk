@@ -8,6 +8,12 @@ import kotlinx.coroutines.sync.withLock
 import mu.KotlinLogging
 import java.security.SecureRandom
 
+/**
+ * Shared by every allocator. Non-blocking and thread-safe; the strong (blocking) instance could stall command processing
+ * on a machine short of entropy.
+ */
+private val idRandom = SecureRandom()
+
 internal interface IdProvider {
     fun <T : Any> getNextModelID(): ModelID<T>
     fun getNextJobID(): JobID
@@ -25,7 +31,7 @@ internal interface IdProvider {
  */
 internal class AttachedDataIdAllocator {
 
-    private val random = SecureRandom.getInstanceStrong()
+    private val random = idRandom
     private val mutex = Mutex()
 
     /**
@@ -44,10 +50,18 @@ internal class AttachedDataIdAllocator {
     }
 }
 
-internal class IdFactory(val isJobIdAvailable: (Long) -> Boolean) : IdProvider {
+/**
+ * [isModelIdRetired] tells whether an id belonged to a deleted model whose event log still exists, so that a new model
+ * does not inherit it. [modelIdCandidates] is overridable only so that a test can make collisions likely.
+ */
+internal class IdFactory(
+    val isJobIdAvailable: (Long) -> Boolean,
+    val isModelIdRetired: (Int) -> Boolean,
+    private val modelIdCandidates: () -> Int = { idRandom.nextInt(0, Int.MAX_VALUE) },
+) : IdProvider {
 
     private val log = KotlinLogging.logger {}
-    private val random = SecureRandom.getInstanceStrong()
+    private val random = idRandom
 
     override fun <T : Any> getNextModelID(): ModelID<T> {
         // We should switch to UInt so we can use the full range. However, there is a problem: KT-69674 (I haven't tried
@@ -57,8 +71,8 @@ internal class IdFactory(val isJobIdAvailable: (Long) -> Boolean) : IdProvider {
         // * Perhaps use Long.MAX_VALUE since ULong.MAX_VALUE can't be stored in sqlite. (fixed now according to exposed
         // changelog) * We may want to switch to Long in the future if we need @JvmInline (see KT-69674).
         while (true) {
-            val randomInt = random.nextInt(0, Int.MAX_VALUE)
-            if (ModelCache.isIdAvailable(randomInt)) {
+            val randomInt = modelIdCandidates()
+            if (ModelCache.isIdAvailable(randomInt) && !isModelIdRetired(randomInt)) {
                 return ModelID(randomInt)
             }
         }

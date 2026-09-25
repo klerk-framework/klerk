@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.misc.IdFactory
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.Persistence
@@ -9,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -185,5 +187,54 @@ class EventLogRetentionTest {
             }
         }
         assertEquals(KlerkErrorCode.MissingEventLogRetention, e.code)
+    }
+
+    private fun Klerk<Ctx, Views>.isRetired(id: ModelID<*>) = impl().eventLogRetention.isRetired(id.value)
+
+    @Test
+    fun `the id of a deleted model is not reused while its log exists`() = runBlocking {
+        for (storage in storages) {
+            val klerk = start(storage(), EventLogRetention(afterModelDeletion = 30.days, paramsAndExtra = null))
+            val deleted = createAuthor(klerk, "Deleted")
+            delete(klerk, deleted)
+            assertTrue(klerk.isRetired(deleted))
+
+            // Offered only the deleted id at first, the factory must move on to another.
+            val factory =
+                IdFactory({ true }, klerk.impl().eventLogRetention::isRetired, candidates(deleted.value, 4711))
+            assertEquals(ModelID<Author>(4711), factory.getNextModelID())
+
+            clock.advance(30.days)
+            klerk.sweep()
+            assertFalse(klerk.isRetired(deleted), "free again once the log is erased")
+            klerk.meta.stop()
+        }
+    }
+
+    @Test
+    fun `a log kept forever keeps the id retired, also after a restart`() = runBlocking {
+        val storage = SQLiteInMemory.create()
+        val klerk = start(storage, EventLogRetention(afterModelDeletion = null, paramsAndExtra = null))
+        val deleted = createAuthor(klerk, "Deleted")
+        delete(klerk, deleted)
+        klerk.meta.stop()
+
+        val restarted = start(storage, EventLogRetention(afterModelDeletion = null, paramsAndExtra = null))
+        assertTrue(restarted.isRetired(deleted))
+        restarted.meta.stop()
+    }
+
+    @Test
+    fun `with zero the id is free as soon as the model is deleted`() = runBlocking {
+        val klerk = start(RamStorage(), EventLogRetention(afterModelDeletion = Duration.ZERO, paramsAndExtra = null))
+        val deleted = createAuthor(klerk, "Deleted")
+        delete(klerk, deleted)
+        assertFalse(klerk.isRetired(deleted))
+        klerk.meta.stop()
+    }
+
+    private fun candidates(vararg ids: Int): () -> Int {
+        val remaining = ids.iterator()
+        return { remaining.next() }
     }
 }

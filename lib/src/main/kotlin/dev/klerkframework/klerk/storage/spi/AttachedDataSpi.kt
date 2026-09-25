@@ -15,6 +15,8 @@ import kotlin.time.Instant
  * @property expires when an unclaimed row is reaped. Null once the data has been claimed by a model.
  * @property claimedByJob the job that prepared this data and has not finished with it yet, or null. A row with a job
  * claim is never reaped, even though it has no owning model — see [Persistence.deleteExpiredAttachedData].
+ * @property preparedBy the actor that prepared the data, the only one besides the system that may claim it. Null when
+ * not known, e.g. when a row is read for its value only.
  */
 public data class AttachedDataRow<T>(
     val value: T,
@@ -22,6 +24,7 @@ public data class AttachedDataRow<T>(
     val metadata: AttachedDataMetadata,
     val expires: Instant?,
     val claimedByJob: JobID? = null,
+    val preparedBy: StoredActor? = null,
 )
 
 /**

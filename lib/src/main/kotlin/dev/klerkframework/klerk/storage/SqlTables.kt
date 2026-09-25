@@ -76,6 +76,12 @@ internal object AttachedDataTable : Table("\"klerk_attached_data\"") {
     // The second, independent claim: a job that prepared this data and is still alive. A row is reaped only when
     // neither claim holds.
     val claimedByJob = long("claimed_by_job").nullable()
+
+    // The actor that prepared the data, the only one besides the system that may claim it.
+    val preparedByType = integer("prepared_by_type").nullable()
+    val preparedById = integer("prepared_by_id").nullable()
+    val preparedByExternalId = long("prepared_by_external_id").nullable()
+    val preparedByPluginName = varchar("prepared_by_plugin_name", length = 100).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

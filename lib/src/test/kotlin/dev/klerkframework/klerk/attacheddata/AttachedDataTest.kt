@@ -32,6 +32,7 @@ import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.KlerkSettings
 import dev.klerkframework.klerk.LastName
 import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.ModelReferenceIdentity
 import dev.klerkframework.klerk.Painting
 import dev.klerkframework.klerk.PaintingImage
 import dev.klerkframework.klerk.PaintingTitle
@@ -43,6 +44,7 @@ import dev.klerkframework.klerk.StateProblem
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.UpdateAuthor
 import dev.klerkframework.klerk.UpdateBook
+import dev.klerkframework.klerk.User
 import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.createConfig
@@ -58,6 +60,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -271,9 +274,9 @@ open class AttachedDataTest {
         val result = createAuthorWithPictureExpectingFailure(klerk, id)
         val problem = result.problems.single()
         assertEquals(KlerkErrorCode.AttachedDataAlreadyOwned, problem.code)
-        assertTrue(
+        assertFalse(
             (problem as StateProblem).internalDescription.contains(firstOwner.value.toString()),
-            "The problem should name the current owner but was: ${problem.internalDescription}",
+            "The problem must not name the current owner but was: ${problem.internalDescription}",
         )
         // the first owner still has its data
         assertEquals(id, klerk.read(Ctx.system()) { get(firstOwner).props.picture?.id })
@@ -594,6 +597,48 @@ open class AttachedDataTest {
         }
         klerk.meta.stop()
     }
+
+    @Test
+    fun `Only the actor that prepared the data can claim it`() = runBlocking<Unit> {
+        val klerk = start()
+        val alicesPicture = klerk.attachedData.prepare(blob("alice"), AuthorPicture::class, alice)
+
+        val stolen = createAuthorWithPictureExpectingFailure(klerk, alicesPicture, bob).problems.single()
+        val missingId = AttachedBlobID(alicesPicture.value + 1)
+        val missing = createAuthorWithPictureExpectingFailure(klerk, missingId, bob).problems.single()
+        assertEquals(KlerkErrorCode.AttachedDataNotFound, stolen.code)
+        assertEquals(
+            missing.endUserTranslatedMessage.replace("${missingId.value}", "X"),
+            stolen.endUserTranslatedMessage.replace("${alicesPicture.value}", "X"),
+            "someone else's data must look exactly like data that does not exist",
+        )
+
+        createAuthorWithPicture(klerk, alicesPicture, context = alice)
+    }
+
+    @Test
+    fun `The system can claim data that anyone prepared`() = runBlocking<Unit> {
+        val klerk = start()
+        val alicesPicture = klerk.attachedData.prepare(blob("alice"), AuthorPicture::class, alice)
+        createAuthorWithPicture(klerk, alicesPicture, context = Ctx.system())
+    }
+
+    @Test
+    fun `Who prepared the data survives a restart`() = runBlocking {
+        val storage = SQLiteInMemory.create()
+        val klerk = start(storage)
+        val alicesPicture = klerk.attachedData.prepare(blob("alice"), AuthorPicture::class, alice, lease = 1.hours)
+        klerk.meta.stop()
+
+        val restarted = start(storage)
+        val stolen = createAuthorWithPictureExpectingFailure(restarted, alicesPicture, bob).problems.single()
+        assertEquals(KlerkErrorCode.AttachedDataNotFound, stolen.code)
+        createAuthorWithPicture(restarted, alicesPicture, context = alice)
+        restarted.meta.stop()
+    }
+
+    private val alice = Ctx(ModelReferenceIdentity(ModelID<User>(1)))
+    private val bob = Ctx(ModelReferenceIdentity(ModelID<User>(2)))
 
     @Test
     fun `The metadata survives a restart`() = runBlocking {

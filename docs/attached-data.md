@@ -351,6 +351,10 @@ Deletion happens in the same transaction as the command, so a command that fails
 An `AttachedBlobID` or `AttachedStringID` belongs to the first model that references it in a committed command. A
 command that tries to attach data already owned by *another* model is rejected.
 
+Until then, only the actor that prepared the data (compared with `ActorIdentity.isSameAs`) or the system can attach it.
+For anyone else the command fails with `AttachedDataNotFound`, exactly as for an ID that does not exist. An anonymous
+visitor therefore needs an identity of their own to upload something, see [context](context.md).
+
 This means data cannot be shared or moved between models. To give a second model the same content, upload it again with
 a second `prepare`.
 

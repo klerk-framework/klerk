@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
 import dev.klerkframework.klerk.storage.spi.AttachedDataRow
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
+import dev.klerkframework.klerk.storage.spi.StoredActor
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Instant
@@ -76,6 +77,8 @@ public open class RamStorage : Persistence {
         }
         batch.commandToken?.let { commandTokens[it.nonce] = it.createdAt }
     }
+
+    override fun readEventLogTombstones(): Map<Int, Instant> = synchronized(lock) { tombstones.toMap() }
 
     override fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken> = synchronized(lock) {
         commandTokens.filterValues { it >= createdAtOrAfter }.map { (nonce, time) -> UsedCommandToken(nonce, time) }
@@ -176,6 +179,7 @@ public open class RamStorage : Persistence {
         custom: Map<String, String>,
         preparedFor: String?,
         expires: Instant,
+        preparedBy: StoredActor,
         claimedByJob: JobID?,
         digestAfterWrite: () -> AttachedDataDigest,
     ) {
@@ -191,6 +195,7 @@ public open class RamStorage : Persistence {
             ),
             expires = expires,
             claimedByJob = claimedByJob,
+            preparedBy = preparedBy,
         )
     }
 
@@ -220,8 +225,8 @@ public open class RamStorage : Persistence {
 
     override fun getAttachedValue(id: Int): InputStream? = attachedRows[id]?.value?.inputStream()
 
-    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> = attachedRows.mapValues {
-        AttachedDataRow(Unit, it.value.owner, it.value.metadata, it.value.expires, it.value.claimedByJob)
+    override fun readAllAttachedDataMetadata(): Map<Int, AttachedDataRow<Unit>> = attachedRows.mapValues { (_, row) ->
+        AttachedDataRow(Unit, row.owner, row.metadata, row.expires, row.claimedByJob, row.preparedBy)
     }
 
     override fun deleteExpiredAttachedData(now: Instant): Set<Int> {

@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.attacheddata
 
+import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.AttachedDataMetadata
 import dev.klerkframework.klerk.Problem
 import dev.klerkframework.klerk.job.JobID
@@ -22,12 +23,15 @@ import kotlin.time.Instant
  * independent claim: the reaper deletes only when there is neither a model reference nor a job claim, so a
  * long-running job's working set is safe for as long as the job lives — including while it is dead-lettered and
  * awaiting a human.
+ * @property preparedBy the actor that prepared the value, the only one besides the system that may claim it. Null for
+ * a placeholder, and for a row whose preparer storage does not know.
  */
 internal data class AttachedDataEntry(
     val owner: Int?,
     val metadata: AttachedDataMetadata?,
     val expires: Instant?,
     val claimedByJob: JobID? = null,
+    val preparedBy: ActorIdentity? = null,
 )
 
 /**

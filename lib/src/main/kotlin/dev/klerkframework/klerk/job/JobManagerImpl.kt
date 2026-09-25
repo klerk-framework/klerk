@@ -198,7 +198,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             record.failedAtCursor?.let { type.decodeCursor(it) }
             null
         } catch (e: Exception) {
-            "its cursor could not be decoded (${e.message})"
+            logger.warn(e) { "The cursor of job ${record.id} (${record.name}) could not be decoded" }
+            // Not the message: it may quote the stored cursor.
+            "its cursor could not be decoded (${e::class.simpleName})"
         }
     }
 
@@ -538,7 +540,8 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         throw e
     } catch (e: Throwable) {
         logger.warn(e) { "Job ${record.id} (${record.name}) threw" }
-        JobResult.Fail("The step threw ${e::class.simpleName}: ${e.message}")
+        // Only the type: the message may contain anything, and the reason is shown to everyone who may see the job.
+        JobResult.Fail("The step threw ${e::class.simpleName}")
     }
 
     private fun buildContext(record: JobRecord, info: JobInfo, now: Instant): C {

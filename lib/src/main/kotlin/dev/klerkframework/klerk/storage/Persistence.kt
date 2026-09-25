@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
 import dev.klerkframework.klerk.storage.spi.AttachedDataRow
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
+import dev.klerkframework.klerk.storage.spi.StoredActor
 import java.io.InputStream
 import kotlin.time.Instant
 
@@ -152,6 +153,9 @@ public interface Persistence {
      */
     public fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant)
 
+    /** Every stored tombstone (see [CommitBatch.eventLogTombstones]): the deleted model id and when it was deleted. */
+    public fun readEventLogTombstones(): Map<Int, Instant>
+
     /**
      * Sets [EventLogEntry.params] and [EventLogEntry.extra] to null on every entry whose [EventLogEntry.time] is before
      * [before]. Called periodically, concurrently with commits and reads.
@@ -197,7 +201,8 @@ public interface Persistence {
      *
      * [claimedByJob] is the job that prepared this value, if it was prepared inside a job step. Such a row is not
      * reaped for as long as the job lives — see [deleteExpiredAttachedData]. [preparedFor] is returned as
-     * [AttachedDataMetadata.preparedFor].
+     * [AttachedDataMetadata.preparedFor]. [preparedBy] is returned as [AttachedDataRow.preparedBy] by
+     * [readAllAttachedDataMetadata].
      */
     public fun insertAttachedData(
         id: Int,
@@ -208,6 +213,7 @@ public interface Persistence {
         custom: Map<String, String>,
         preparedFor: String?,
         expires: Instant,
+        preparedBy: StoredActor,
         claimedByJob: JobID? = null,
         digestAfterWrite: () -> AttachedDataDigest,
     )

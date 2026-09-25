@@ -7,7 +7,6 @@ import dev.klerkframework.klerk.ProcessingData
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
-import dev.klerkframework.klerk.misc.verifyReferencesExist
 import dev.klerkframework.klerk.statemachine.Executable
 import dev.klerkframework.klerk.view.ModelViews
 
@@ -34,10 +33,6 @@ internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
             props = newProperties,
             lastPropsUpdatedAt = makeExactSerializable(args.context.time),
         )
-        val referenceProblem = verifyReferencesExist(updatedModel, args.reader)
-        if (referenceProblem != null) {
-            throw referenceProblem.asException()
-        }
         return ProcessingData(
             updatedModels = listOf(updatedModel.id),
             aggregatedModelState = mapOf(updatedModel.id to updatedModel),

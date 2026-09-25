@@ -462,21 +462,7 @@ class SecurityTest {
         assertEquals(alicesJob, withTimeout(10.seconds) { firstSeenByAlice.await() }.id)
     }
 
-    // ---------------------------------------------------------------- escape hatches
-
-    @Test
-    fun `unsafe operations are refused unless explicitly enabled`() = runBlocking<Unit> {
-        val klerk = start { standardRules() }
-        val rowling = createAuthorJKRowling(klerk)
-        val model = klerk.read(Ctx.system()) { get(rowling) }
-        val copy = model.copy(id = ModelID(4711))
-
-        assertFailsWith<IllegalStateException> { klerk.unsafe.create(copy, Ctx.system()) }
-        assertFailsWith<IllegalStateException> { klerk.unsafe.update(model, Ctx.system()) }
-        assertFailsWith<IllegalStateException> { klerk.unsafe.delete(rowling, Ctx.system()) }
-        assertNull(klerk.read(Ctx.system()) { getOrNull(copy.id) })
-        assertNotNull(klerk.read(Ctx.system()) { getOrNull(rowling) })
-    }
+    // ---------------------------------------------------------------- read blocks
 
     @Test
     fun `a reader cannot be used after its read block`() = runBlocking<Unit> {

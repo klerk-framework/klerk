@@ -387,7 +387,7 @@ public enum class KlerkErrorCode(public val code: String) {
     /** The resulting model failed validation. */
     CommandModelValidation("ERROR-COMMAND-7"),
 
-    /** A model cannot be deleted, because other models still reference it. */
+    /** A model would refer to a model that does not exist, or a model that others still refer to would be deleted. */
     BrokenReference("ERROR-COMMAND-8"),
 
     /** The attached data the command refers to does not exist. */

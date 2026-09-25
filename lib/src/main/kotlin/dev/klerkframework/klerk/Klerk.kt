@@ -23,12 +23,6 @@ public interface Klerk<C : KlerkContext, V> {
     /** Subscriptions to model changes. */
     public val modelChanges: KlerkModelChanges<C, V>
 
-    /**
-     * Escape hatches that bypass the state machine, validation and authorization. Requires
-     * [KlerkSettings.allowUnsafeOperations].
-     */
-    public val unsafe: KlerkUnsafe<C>
-
     /** Large immutable data (blobs and strings) attached to models. */
     public val attachedData: KlerkAttachedData<C>
 
@@ -117,26 +111,6 @@ public interface KlerkModelChanges<C : KlerkContext, V> {
      * the change is delivered. Deletions are always sent.
      */
     public fun subscribe(id: ModelID<out Any>?, context: C): Flow<ModelModification>
-}
-
-/**
- * Writes models without using a state machine, as [Klerk.unsafe].
- *
- * This is an 'escape hatch', and should be used only as a last resort: no validation and no authorization rules are
- * applied, nothing is written to the event log and no subscriber is notified.
- *
- * [KlerkSettings.allowUnsafeOperations] must be enabled in order to use this.
- */
-public interface KlerkUnsafe<C : KlerkContext> {
-
-    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model already exists. */
-    public suspend fun <T : Any> create(model: Model<T>, context: C)
-
-    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model does not exist. */
-    public suspend fun <T : Any> update(model: Model<T>, context: C)
-
-    /** @throws IllegalStateException if unsafe operations are not allowed, or if the model does not exist. */
-    public suspend fun <T : Any> delete(id: ModelID<T>, context: C)
 }
 
 /** Lifecycle and information about a running Klerk instance, as [Klerk.meta]. */

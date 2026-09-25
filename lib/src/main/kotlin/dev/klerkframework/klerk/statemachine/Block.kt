@@ -183,8 +183,7 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
 
         /**
          * Builds the new model's properties by calling [function] and puts it directly into [initialState]. This is
-         * the only way to create a model — there is no `createModel` outside a state machine's `voidState` block
-         * (aside from the `klerk.unsafe.create` escape hatch).
+         * the only way to create a model — there is no `createModel` outside a state machine's `voidState` block.
          */
         public fun createModel(
             initialState: ModelStates,

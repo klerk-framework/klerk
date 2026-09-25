@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.attacheddata
 
+import dev.klerkframework.klerk.ActorIdentity
 import dev.klerkframework.klerk.AttachedBlobID
 import dev.klerkframework.klerk.AttachedDataID
 import dev.klerkframework.klerk.AttachedDataKind
@@ -42,6 +43,7 @@ import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.storage.spi.AttachedDataClaim
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.AttachedDataDigest
+import dev.klerkframework.klerk.storage.spi.toStored
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import java.io.InputStream
@@ -94,7 +96,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         val rows = settings.persistence.readAllAttachedDataMetadata()
         entries.clear()
         for ((id, row) in rows) {
-            entries[id] = AttachedDataEntry(row.owner, row.metadata, row.expires, row.claimedByJob)
+            entries[id] = AttachedDataEntry(
+                row.owner,
+                row.metadata,
+                row.expires,
+                row.claimedByJob,
+                row.preparedBy?.toIdentity(),
+            )
         }
         lastReap.set(now)
         reconcileExternalBlobs()
@@ -410,7 +418,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
             }
             settings.persistence.insertAttachedData(
                 id, if (store == null) hashing else null, kind, visibility, createdAt, metadata,
-                declaration?.qualifiedName, expires, claimedByJob,
+                declaration?.qualifiedName, expires, context.actor.toStored(), claimedByJob,
             ) {
                 hashing.digest()
             }
@@ -423,6 +431,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 ),
                 expires = expires,
                 claimedByJob = claimedByJob,
+                preparedBy = context.actor,
             )
         } catch (e: Exception) {
             entries.remove(id)
@@ -732,7 +741,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
      *
      * Returns the changes to apply, or the problems that should fail the command.
      */
-    internal fun <T : Any> planFor(delta: ProcessingData<T, C, V>): AttachedDataPlan {
+    internal fun <T : Any> planFor(delta: ProcessingData<T, C, V>, context: C): AttachedDataPlan {
         val affected = delta.aggregatedModelState.keys.plus(delta.deletedModels)
         if (affected.isEmpty()) {
             return AttachedDataPlan.Ok(AttachedDataDelta())
@@ -752,7 +761,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 delta.aggregatedModelState[modelId]?.let { collectAttachedData(it.props) } ?: emptyMap()
             }
 
-            claim(after.minus(before.keys).values, modelId, claimed, now, problems)
+            claim(after.minus(before.keys).values, modelId, context.actor, claimed, now, problems)
             deleted.addAll(before.keys.minus(after.keys))
         }
 
@@ -765,6 +774,7 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     private fun claim(
         references: Collection<AttachedDataReference>,
         modelId: ModelID<out Any>,
+        actor: ActorIdentity,
         claims: MutableMap<Int, AttachedDataClaim>,
         now: Instant,
         problems: MutableList<Problem>,
@@ -772,7 +782,12 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         for (reference in references) {
             val id = reference.id
             val entry = entries[id]
-            if (entry == null || entry.isExpired(now)) {
+            val currentOwner = entry?.owner ?: claims[id]?.owner
+            // Anyone but the preparer is told exactly what they would be told about an id that does not exist.
+            val mayClaim = actor == SystemIdentity ||
+                currentOwner == modelId.value ||
+                entry?.preparedBy?.isSameAs(actor) == true
+            if (entry == null || entry.isExpired(now) || !mayClaim) {
                 problems.add(
                     StateProblem(
                         "There is no attached data with id $id (it may have expired)",
@@ -782,12 +797,11 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
                 )
                 continue
             }
-            val currentOwner = entry.owner ?: claims[id]?.owner
             if (currentOwner != null && currentOwner != modelId.value) {
                 problems.add(
                     StateProblem(
                         "The attached data with id $id is already owned by another model",
-                        "The attached data with id $id is owned by model $currentOwner, so $modelId cannot claim it",
+                        "The attached data with id $id is owned by another model, so $modelId cannot claim it",
                         KlerkErrorCode.AttachedDataAlreadyOwned,
                     ),
                 )
