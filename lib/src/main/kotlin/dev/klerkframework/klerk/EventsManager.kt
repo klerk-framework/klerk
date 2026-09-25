@@ -23,10 +23,12 @@ import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.JobCommit
+import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import mu.KLogger
 import org.slf4j.event.Level
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Instant
 
@@ -56,7 +58,30 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     private val timeTriggerManager = TriggerTimeManagerImpl(this, readWriteLock, klerk)
     private val eventProcessor = EventProcessor<C, V>(klerk, settings, readWriteLock, timeTriggerManager)
 
+    private val commandCounters = ConcurrentHashMap<Pair<EventReference, Boolean>, Counter>()
+
+    private fun countCommand(command: Command<*, *>, result: CommandResult<*>) {
+        val success = result is Success<*>
+        commandCounters.getOrPut(command.event.id to success) {
+            Counter.builder("klerk.commands")
+                .description("Commands handled, excluding dry runs")
+                .baseUnit("commands")
+                .tag("model", command.event.id.modelName)
+                .tag("event", command.event.id.eventName)
+                .tag("outcome", if (success) "success" else "failure")
+                .register(settings.meterRegistry)
+        }.increment()
+    }
+
     internal suspend fun <T : Any, P> handle(
+        command: Command<T, P>,
+        context: C,
+        options: ProcessingOptions,
+    ): CommandResult<T> = handleUncounted(command, context, options).also {
+        if (!options.dryRun) countCommand(command, it)
+    }
+
+    private suspend fun <T : Any, P> handleUncounted(
         command: Command<T, P>,
         context: C,
         options: ProcessingOptions,
@@ -172,6 +197,15 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      * Returns the outcome of [command], or null if the step emitted none.
      */
     internal suspend fun <T : Any, P> commitJobStep(
+        command: Command<T, P>?,
+        context: C?,
+        options: ProcessingOptions,
+        jobCommit: JobCommit,
+    ): CommandResult<T>? = commitJobStepUncounted(command, context, options, jobCommit)?.also {
+        countCommand(requireNotNull(command), it)
+    }
+
+    private suspend fun <T : Any, P> commitJobStepUncounted(
         command: Command<T, P>?,
         context: C?,
         options: ProcessingOptions,

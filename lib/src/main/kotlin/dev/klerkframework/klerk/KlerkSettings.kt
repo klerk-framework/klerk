@@ -57,8 +57,9 @@ public data class KlerkSettings(
     val clock: Clock = Clock.System,
 
     /**
-     * The [MeterRegistry] Klerk publishes metrics to. Defaults to a private [SimpleMeterRegistry] that isn't exported
-     * anywhere, so set this to integrate with your application's metrics backend.
+     * The [MeterRegistry] Klerk and its plugins publish metrics to. Defaults to a private [SimpleMeterRegistry] that
+     * isn't exported anywhere, so set this to integrate with your application's metrics backend. The metrics are
+     * listed in the Metrics documentation page.
      */
     val meterRegistry: MeterRegistry = SimpleMeterRegistry(),
 

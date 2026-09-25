@@ -15,7 +15,6 @@ import dev.klerkframework.klerk.statemachine.InstanceState
 import dev.klerkframework.klerk.statemachine.VoidState
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.view.ModelViews
-import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.Timer
 import mu.KotlinLogging
 import java.util.concurrent.TimeUnit
@@ -39,18 +38,9 @@ internal class EventProcessor<C : KlerkContext, V>(
 //    private val migrations: IMigrations<EventType>?,
 ) {
     private val logger = KotlinLogging.logger {}
-    val counterPrimaryEventsTotal: Counter
-    val timerStartup: Timer
-
-    init {
-        counterPrimaryEventsTotal = Counter.builder("klerk.events.primary.total")
-            .description("The total number of events processed since startup").baseUnit("events")
-            .register(klerk.settings.meterRegistry)
-
-        timerStartup =
-            Timer.builder("klerk.events.startupTime").description("The time of reading all stored events at startup")
-                .register(klerk.settings.meterRegistry)
-    }
+    private val timerModelsLoad: Timer = Timer.builder("klerk.models.load")
+        .description("How long reading all persisted models took at startup")
+        .register(settings.meterRegistry)
 
     internal suspend fun readAllModelsFromDisk() {
         logger.debug { "Reading all persisted models into ModelCache" }
@@ -108,7 +98,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             managedModel.views.freeze()
         }
 
-        timerStartup.record(readModelsMilliS, TimeUnit.MILLISECONDS)
+        timerModelsLoad.record(readModelsMilliS, TimeUnit.MILLISECONDS)
     }
 
     /**
@@ -173,7 +163,6 @@ internal class EventProcessor<C : KlerkContext, V>(
         reader: ModelReader<C, V>,
         options: ProcessingOptions,
     ): ProcessingData<T, C, V> {
-        counterPrimaryEventsTotal.increment()
         val processingData = ProcessingData<T, C, V>(remainingCommands = listOf(command), primaryModel = command.model)
         val result = process(processingData, context, reader, isPrimary = true, options, context.time)
         return result

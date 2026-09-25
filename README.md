@@ -77,6 +77,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Concurrency](docs/concurrency.md) — how commands and reads are serialized, and what that means for your code
 * [Security](docs/security.md) — how authorization, concurrency, and the event log combine into Klerk's security model
 * [Performance](docs/performance.md) — what's fast by default, and what to do if it isn't enough
+* [Metrics](docs/metrics.md) — exporting Klerk's Micrometer metrics, and what they are
 
 ### Experimental API
 
