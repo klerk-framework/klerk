@@ -5,6 +5,8 @@ import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.PositiveAuthorization.Allow
 import dev.klerkframework.klerk.PositiveAuthorization.NoOpinion
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.command.CommandToken
+import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.job.JobAgent
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobName
@@ -15,10 +17,17 @@ import dev.klerkframework.klerk.job.JobType
 import dev.klerkframework.klerk.testing.runUntilIdle
 import dev.klerkframework.klerk.view.asSequence
 import dev.klerkframework.klerk.view.asSequenceOrThrow
+import dev.klerkframework.klerk.view.contains
+import dev.klerkframework.klerk.view.count
+import dev.klerkframework.klerk.view.ids
+import dev.klerkframework.klerk.view.isEmpty
+import dev.klerkframework.klerk.view.isNotEmpty
 import dev.klerkframework.klerk.view.query
 import dev.klerkframework.klerk.view.queryOrThrow
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -188,6 +197,19 @@ class SecurityTest {
             assertEquals(setOf(book), referencingIds(astrid), "only ids, which are not authorized")
             assertNull(getOrNull(rowling))
             assertCode(KlerkErrorCode.ReadNegativeAuthorizationExist) { get(rowling) }
+
+            val all = views.authors.all
+            assertEquals(1, all.count())
+            assertEquals(listOf(astrid), all.ids().toList())
+            assertTrue(astrid in all)
+            assertFalse(rowling in all)
+            assertTrue(views.books.all.isEmpty())
+            assertFalse(views.books.all.isNotEmpty())
+        }
+        klerk.read(Ctx.system()) {
+            assertEquals(2, views.authors.all.count())
+            assertTrue(rowling in views.authors.all)
+            assertTrue(views.books.all.isNotEmpty())
         }
     }
 
@@ -285,14 +307,46 @@ class SecurityTest {
     @Test
     fun `a rejected command changes nothing`() = runBlocking<Unit> {
         val klerk = start { standardRules() }
-        val rowling = createAuthorJKRowling(klerk)
-        val before = klerk.read(Ctx.system()) { get(rowling) }
+        val astrid = createAuthorAstrid(klerk)
+        val before = klerk.read(Ctx.system()) { get(astrid) }
 
-        val problems = klerk.handle(Command(DeleteAuthor, rowling), Ctx.authenticationIdentity()).problems()
+        val problems = klerk.handle(Command(DeleteAuthor, astrid), Ctx.authenticationIdentity()).problems()
         assertIs<AuthorizationProblem>(problems.single())
 
-        assertEquals(before, klerk.read(Ctx.system()) { get(rowling) })
-        assertTrue(klerk.read(Ctx.system()) { eventLog(rowling) }.get().none { it.eventReference == DeleteAuthor.id })
+        assertEquals(before, klerk.read(Ctx.system()) { get(astrid) })
+        assertTrue(klerk.read(Ctx.system()) { eventLog(astrid) }.get().none { it.eventReference == DeleteAuthor.id })
+    }
+
+    @Test
+    fun `a failed command on a model the actor may not read looks like the model does not exist`() = runBlocking<Unit> {
+        val klerk = start { standardRules() }
+        val rowling = createAuthorJKRowling(klerk)
+        val user = Ctx.authenticationIdentity()
+
+        val missing = klerk.handle(Command(DeleteAuthor, ModelID<Author>(rowling.value + 1)), user).problems()
+        val unauthorized = klerk.handle(Command(DeleteAuthor, rowling), user).problems()
+        val wrongState = klerk.handle(Command(DeleteAuthorAndBooks, rowling), user).problems()
+
+        for (problems in listOf(missing, unauthorized, wrongState)) {
+            val problem = assertIs<NotFoundProblem>(problems.single())
+            assertFalse(problem.toString().contains("Established"), "got $problem")
+        }
+
+        // acting on it is still possible when the rules allow it
+        assertIs<CommandResult.Success<*>>(klerk.handle(Command(ImproveAuthor, rowling), user))
+    }
+
+    @Test
+    fun `a command token is only applied once, also when used concurrently`() = runBlocking<Unit> {
+        val klerk = start { standardRules() }
+        val astrid = createAuthorAstrid(klerk)
+        repeat(20) {
+            val options = ProcessingOptions(CommandToken.simple())
+            val results = (1..4).map {
+                async(Dispatchers.Default) { klerk.handle(Command(ImproveAuthor, astrid), Ctx.system(), options) }
+            }.awaitAll()
+            assertEquals(1, results.count { it is CommandResult.Success }, "got $results")
+        }
     }
 
     @Test
@@ -328,6 +382,14 @@ class SecurityTest {
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.cancel(bobsJob, alice) }
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.resume(bobsJob, alice) }
         assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) { klerk.jobs.delete(bobsJob, alice) }
+
+        // Anonymous visitors cannot be told apart, so none of them owns a job.
+        val anonymous = Ctx.unauthenticated()
+        val anonymousJob = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi", stepsLeft = 10)), anonymous)
+        assertTrue(klerk.jobs.all(Ctx.unauthenticated()).isEmpty())
+        assertCode(KlerkErrorCode.JobReadPositiveAuthorizationMissing) {
+            klerk.jobs.cancel(anonymousJob, Ctx.unauthenticated())
+        }
         assertEquals(JobStatus.Ready, klerk.jobs.get(bobsJob, bob).status, "Bob's job must be untouched")
 
         klerk.jobs.cancel(alicesJob, alice)

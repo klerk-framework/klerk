@@ -136,13 +136,16 @@ that has been evicted is read back from storage. So the difference between askin
 
 | you want                              | call                                                 | cost                              |
 |---------------------------------------|------------------------------------------------------|-----------------------------------|
-| how many, is it empty, is it in there | `count()`, `isEmpty()`, `isNotEmpty()`, `id in view` | ids only, no model read           |
-| the ids                               | `ids()`                                              | ids only, lazy                    |
+| how many, is it empty, is it in there | `count()`, `isEmpty()`, `isNotEmpty()`, `id in view` | ids only, no model read *         |
+| the ids                               | `ids()`                                              | ids only, lazy *                  |
 | some of them, or the first match      | `asSequence()`                                       | lazy: reads only what you consume |
 | one page                              | `query(QueryOptions(...))`                           | bounded                           |
 | all of them                           | `asSequence().toList()`                              | unbounded                         |
 
-`asSequence()` and `query()` skip models the actor may not read; see [Authorization](#authorization) below.
+\* For the system. For any other actor these only count the models the actor may read, so each model in the view is
+read to evaluate the `readModels` rules.
+
+All of these skip models the actor may not read; see [Authorization](#authorization) below.
 
 ```kotlin
 klerk.read(context) {
@@ -251,6 +254,7 @@ two requests gives no such guarantee.
 | `attachedData.getMetadata(id)`                               | throws `AuthorizationException`           |
 | `attachedData.getMetadataOrNull(id)`                         | returns `null` (also for missing data)    |
 | `view.asSequence()` / `view.query(options)`               | silently skips it                         |
+| `view.count()` / `isEmpty()` / `ids()` / `id in view`     | silently skips it                         |
 | `view.asSequenceOrThrow()` / `view.queryOrThrow(options)` | throws `AuthorizationException`           |
 | `modelChanges.subscribe(id, context)`                     | silently skips it; deletions are always sent |
 

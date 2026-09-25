@@ -55,7 +55,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     internal var visibleSequenceNumber: Long = 0
         private set
 
-    private val processedCommandTokens = mutableSetOf<CommandToken>()
+    private val processedCommandTokens: MutableSet<CommandToken> = ConcurrentHashMap.newKeySet()
     private val timeTriggerManager = TriggerTimeManagerImpl(this, readWriteLock, klerk)
     private val eventProcessor = EventProcessor<C, V>(klerk, settings, readWriteLock, timeTriggerManager)
 
@@ -89,10 +89,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     ): CommandResult<T> {
         logger.log(Sequence, options) { "Executing command ${command.event}" }
 
-        validateToken(options.token, context)?.let {
-            return Failure(listOf(it))
-        }
-
         if (command.event.visibility.level < EventVisibility.Application.level) {
             return Failure(
                 listOf(
@@ -106,6 +102,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
 
         if (options.dryRun) {
             logger.log(Misc, options) { "Aborting processing since dryRun" }
+            validateToken(options.token, context)?.let { return Failure(listOf(it)) }
             val withoutAuth = ReaderWithoutAuth(klerk)
             val delta =
                 eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, withoutAuth, options)
@@ -117,6 +114,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         val result = mutex.withLock {
             // never process more than one event simultaneously, but we still allow reading
             logger.log(Misc, options) { "Processing event ${command.event}" }
+
+            // Under the mutex, so that two commands with the same token cannot both pass.
+            validateToken(options.token, context)?.let { return@withLock Failure(listOf(it)) }
 
             // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
             // is a slightly higher level description of the delta. We don't want to return the delta since it may

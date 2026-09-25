@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.AuthenticationIdentity
 import dev.klerkframework.klerk.CustomIdentity
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelReferenceIdentity
+import dev.klerkframework.klerk.PluginIdentity
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.job.ChildOutcome
@@ -24,6 +25,7 @@ import kotlin.time.Instant
  * Everything Klerk persists about one job instance. This is the shape a [dev.klerkframework.klerk.storage.Persistence]
  * implementation has to store and hand back; the job module owns all of the logic that decides what goes in it.
  *
+ * @property ownerActorName the plugin name of an owner that is a [dev.klerkframework.klerk.PluginIdentity], else null.
  * @property cursor the job's state, encoded by its [dev.klerkframework.klerk.job.JobType]. Opaque to storage.
  * @property step how many steps have committed. Also the number of the step about to run.
  * @property attempt how many times the current step has already been attempted.
@@ -49,6 +51,7 @@ public data class JobRecord(
     val ownerActorType: ActorType,
     val ownerActorId: Int?,
     val ownerActorExternalId: Long?,
+    val ownerActorName: String?,
     val step: Int,
     val attempt: Int,
     val createdAt: Instant,
@@ -121,6 +124,7 @@ public data class JobRecord(
         ActorType.System -> SystemIdentity
         ActorType.Unauthenticated -> Unauthenticated
         ActorType.Authentication -> AuthenticationIdentity
+        ActorType.Plugin -> PluginIdentity(requireNotNull(ownerActorName) { "Job $id has a plugin owner without name" })
         else -> if (ownerActorId != null) {
             ModelReferenceIdentity(ModelID<Any>(ownerActorId))
         } else {

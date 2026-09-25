@@ -179,6 +179,15 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
     }
 
     // Nothing to skip: this reader does not enforce authorization, so every model in the view is visible.
+    override fun <T : Any> ids(collection: ModelView<T, C>): Sequence<ModelID<T>> = collection.memberIds(this)
+
+    override fun <T : Any> count(collection: ModelView<T, C>): Int = collection.internalCount(this)
+
+    override fun <T : Any> isEmpty(collection: ModelView<T, C>): Boolean = collection.internalIsEmpty(this)
+
+    override fun <T : Any> contains(collection: ModelView<T, C>, id: ModelID<T>): Boolean =
+        collection.internalContains(id, this)
+
     override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> = collection.withReader(this)
 
     override fun <T : Any> queryOrThrow(

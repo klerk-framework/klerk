@@ -566,6 +566,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         this[JobsTable.ownerActorType] = record.ownerActorType.storedValue
         this[JobsTable.ownerActorId] = record.ownerActorId
         this[JobsTable.ownerActorExternalId] = record.ownerActorExternalId
+        this[JobsTable.ownerActorName] = record.ownerActorName
         this[JobsTable.step] = record.step
         this[JobsTable.attempt] = record.attempt
         this[JobsTable.created] = record.createdAt.to64bitMicroseconds()
@@ -602,6 +603,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 ownerActorType = ActorType.fromStoredValue(row[JobsTable.ownerActorType]),
                 ownerActorId = row[JobsTable.ownerActorId],
                 ownerActorExternalId = row[JobsTable.ownerActorExternalId],
+                ownerActorName = row[JobsTable.ownerActorName],
                 step = row[JobsTable.step],
                 attempt = row[JobsTable.attempt],
                 createdAt = decode64bitMicroseconds(row[JobsTable.created]),

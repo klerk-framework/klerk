@@ -23,7 +23,7 @@ public enum class ActorType(public val storedValue: Int) {
 /**
  * Who is performing an operation (a read, a command, or a rule evaluation) — see [KlerkContext.actor]. Authorization
  * and business rules narrow on the concrete type (e.g. `is Unauthenticated`, `is ModelIdentity`) rather than on
- * [type], which exists for serialization/storage and for telling two id-less actors apart.
+ * [type], which exists for serialization and storage.
  *
  * The built-in identities: [SystemIdentity] (Klerk itself, e.g. a fired time-trigger), [AuthenticationIdentity]
  * (trusted identity for code that performs authentication itself), [ModelIdentity] (a specific actor model, already
@@ -46,7 +46,9 @@ public sealed interface ActorIdentity {
 
     /**
      * True if [other] is the same actor: the same [id] if either has one, otherwise the same [externalId] if either has
-     * one, otherwise the same [type].
+     * one. Of the identities with neither, a [PluginIdentity] is the same as one with the same plugin name, and
+     * [SystemIdentity] and [AuthenticationIdentity] are the same as themselves. Any other actor without [id] or
+     * [externalId], e.g. [Unauthenticated], is never the same as anyone.
      */
     public fun isSameAs(other: ActorIdentity): Boolean {
         if (id != null || other.id != null) {
@@ -55,7 +57,10 @@ public sealed interface ActorIdentity {
         if (externalId != null || other.externalId != null) {
             return externalId == other.externalId
         }
-        return type == other.type
+        if (this is PluginIdentity) {
+            return other is PluginIdentity && pluginName == other.pluginName
+        }
+        return (this === SystemIdentity || this === AuthenticationIdentity) && this === other
     }
 }
 
@@ -118,12 +123,17 @@ public object Unauthenticated : ActorIdentity {
     override fun toString(): String = "[unauthenticated]"
 }
 
-/** Used by a [KlerkPlugin] acting on its own behalf, e.g. when its background work issues commands. */
-public class PluginIdentity(public val plugin: KlerkPlugin<*, *>) : ActorIdentity {
+/**
+ * Used by a [KlerkPlugin] acting on its own behalf, e.g. when its background work issues commands. Identified by
+ * [pluginName], which is what is stored, e.g. as a job's owner.
+ */
+public class PluginIdentity internal constructor(public val pluginName: String) : ActorIdentity {
+    public constructor(plugin: KlerkPlugin<*, *>) : this(plugin.name)
+
     override val type: ActorType = ActorType.Plugin
     override val id: ModelID<*>? = null
     override val externalId: Long? = null
-    override fun toString(): String = "Plugin: ${plugin.name}"
-    override fun equals(other: Any?): Boolean = other is PluginIdentity && other.plugin == plugin
-    override fun hashCode(): Int = plugin.hashCode()
+    override fun toString(): String = "Plugin: $pluginName"
+    override fun equals(other: Any?): Boolean = other is PluginIdentity && other.pluginName == pluginName
+    override fun hashCode(): Int = pluginName.hashCode()
 }

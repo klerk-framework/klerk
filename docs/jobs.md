@@ -592,7 +592,8 @@ fun usersCanSeeTheirOwnJobs(args: JobReadRuleArgs<Ctx, Views>): PositiveAuthoriz
 
 The owner is the actor whose context scheduled the job, recorded at scheduling time and available as `args.job.owner`.
 Only the id survives storage, so an actor that was a `ModelIdentity` comes back as a `ModelReferenceIdentity`;
-`isOwnedByActor()` uses `ActorIdentity.isSameAs`, so the same user is recognised either way.
+`isOwnedByActor()` uses `ActorIdentity.isSameAs`, so the same user is recognised either way. An `Unauthenticated` actor
+never owns a job (see [context.md](context.md)).
 
 ### Restarts and deploys
 

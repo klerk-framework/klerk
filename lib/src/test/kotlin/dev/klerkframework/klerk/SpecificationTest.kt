@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -148,6 +149,11 @@ class PluginTest {
         assertEquals(listOf("first", "second"), spec.plugins.map { it.name })
         assertEquals(emptyList(), first.mergedAfter)
         assertEquals(listOf("first"), second.mergedAfter)
+    }
+
+    @Test
+    fun `two plugins cannot have the same name`() {
+        assertFailsWith<IllegalArgumentException> { specWith(TestPlugin("same"), TestPlugin("same")) }
     }
 
     @Test

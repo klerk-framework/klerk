@@ -6,7 +6,10 @@ package dev.klerkframework.klerk
  * after [KlerkMeta.start], and [stop] once during [KlerkMeta.stop].
  */
 public interface KlerkPlugin<C : KlerkContext, V> {
-    /** A unique name of the plugin. Must not contain spaces. */
+    /**
+     * A unique name of the plugin. Must not contain spaces. It identifies the plugin's [PluginIdentity], which is stored
+     * e.g. as the owner of jobs the plugin schedules, so it should not change between releases.
+     */
     public val name: String
 
     /** A human-readable description of what the plugin does. */

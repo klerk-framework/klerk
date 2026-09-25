@@ -208,8 +208,13 @@ public data class Specification<C : KlerkContext, V>(
         return copy(jobs = jobs.with(block.types(), block.crons()))
     }
 
-    /** Returns this specification with [plugin] registered and its specification merged in. */
+    /**
+     * Returns this specification with [plugin] registered and its specification merged in.
+     *
+     * @throws IllegalArgumentException if a plugin with the same [KlerkPlugin.name] is already registered
+     */
     public fun withPlugin(plugin: KlerkPlugin<C, V>): Specification<C, V> {
+        require(plugins.none { it.name == plugin.name }) { "There is already a plugin named '${plugin.name}'" }
         val updatedPlugins = plugins.toMutableList()
         updatedPlugins.add(plugin)
         return plugin.mergeSpecification(this).copy(plugins = updatedPlugins)

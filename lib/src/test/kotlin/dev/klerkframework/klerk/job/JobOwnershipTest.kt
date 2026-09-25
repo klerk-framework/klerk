@@ -9,6 +9,10 @@ import dev.klerkframework.klerk.JobReadRuleArgs
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelIdentity
 import dev.klerkframework.klerk.ModelReferenceIdentity
+import dev.klerkframework.klerk.MyJob
+import dev.klerkframework.klerk.MyJobCursor
+import dev.klerkframework.klerk.PluginIdentity
+import dev.klerkframework.klerk.SQLiteInMemory
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Unauthenticated
 import dev.klerkframework.klerk.Views
@@ -16,6 +20,7 @@ import dev.klerkframework.klerk.createAuthorJKRowling
 import dev.klerkframework.klerk.createKlerk
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -63,7 +68,26 @@ class JobOwnershipTest {
     }
 
     @Test
-    fun `id-less actors are told apart by their type`() {
+    fun `a job scheduled by a plugin is still owned by it after being stored`() {
+        runBlocking {
+            val bookViews = BookViews()
+            val storage = SQLiteInMemory.create()
+            val klerk = createKlerk(Views(bookViews, AuthorViews(bookViews.all)), storage)
+            klerk.meta.start(installShutdownHook = false)
+
+            val plugin = PluginIdentity("images")
+            val id = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), Ctx(plugin))
+
+            val owner = storage.allJobs().single { it.id == id }.toJobInfo().owner
+            assertEquals<ActorIdentity>(plugin, owner)
+            assertTrue(owner.isSameAs(PluginIdentity("images")))
+            assertFalse(owner.isSameAs(PluginIdentity("assets")))
+            klerk.meta.stop()
+        }
+    }
+
+    @Test
+    fun `only the system owns a job scheduled by the system`() {
         runBlocking {
             val bookViews = BookViews()
             val views = Views(bookViews, AuthorViews(bookViews.all))

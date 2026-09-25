@@ -129,6 +129,9 @@ fun everybodyCanDoEverything(args: CommandRuleArgs<*, Ctx, Views>): PositiveAuth
 This runs as the last step of command validation — after all rules described in [validation](validation.md) have already
 passed — so a command that's both invalid and unauthorized is reported as invalid, not unauthorized.
 
+A command on a model the actor may not read (see [readModels](#readmodels)) is processed like any other if it passes. If
+it fails for any reason, the only problem returned is a `NotFoundProblem`, exactly as if the model did not exist.
+
 The rules also decide what `possibleEvents` and `possibleVoidEvents` return (see [reading](reading.md)). There the
 parameters are not known yet, so `args.command.params` is null even for an event that takes parameters — a rule that
 needs them must handle that:
@@ -183,7 +186,8 @@ What is left for these rules is the `kind` ("anyone may upload JSON, only editor
 
 Who may see a job's metadata — its status, progress and log — through `JobManager.get`, `JobManager.all` and
 `JobManager.subscribe`. The rules receive a `JobReadRuleArgs`, whose `isOwnedByActor()` answers "did this actor
-schedule it?" (`isOwnedBy(actor)` asks about someone else).
+schedule it?" (`isOwnedBy(actor)` asks about someone else). It uses `ActorIdentity.isSameAs`, so an actor without `id`
+or `externalId`, e.g. `Unauthenticated`, owns no jobs.
 
 ```kotlin
 jobs {

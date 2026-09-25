@@ -52,8 +52,12 @@ off of. `ActorIdentity` is a sealed interface, so these are all of them:
 
 `ModelIdentity` and `ModelReferenceIdentity` are the same actor in two forms — the first when you already hold the
 model, the second when you only have its id. Identities compare by value, but `==` is only true for the same form, so
-use `actor.isSameAs(other)` when deciding whether two identities are the same actor. `actor.type` is an `ActorType`
-enum, and only exists to tell id-less actors apart and to record who did what in the event log.
+use `actor.isSameAs(other)` when deciding whether two identities are the same actor. An actor with neither `id` nor
+`externalId` (e.g. `Unauthenticated`) is never the same as anyone, since Klerk cannot tell two of them apart. The
+exceptions are `SystemIdentity`, `AuthenticationIdentity`, and `PluginIdentity`, which is identified by the plugin's
+name. To let anonymous visitors own something, e.g. a job, give
+each of them a `CustomIdentity(null, externalId)` derived from their session. `actor.type` is an `ActorType`
+enum, and only exists to record who did what in the event log and the job table.
 
 Business and authorization rules narrow on the concrete type, e.g.:
 

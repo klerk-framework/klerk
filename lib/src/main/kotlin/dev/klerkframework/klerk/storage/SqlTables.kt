@@ -93,6 +93,7 @@ internal object JobsTable : Table("\"klerk_jobs\"") {
     val ownerActorType = integer("owner_actor_type")
     val ownerActorId = integer("owner_actor_id").nullable()
     val ownerActorExternalId = long("owner_actor_external_id").nullable()
+    val ownerActorName = varchar("owner_actor_name", length = 100).nullable() // the plugin name of a PluginIdentity
     val step = integer("step_number")
     val attempt = integer("attempt")
     val created = long("created") // microseconds since 1970

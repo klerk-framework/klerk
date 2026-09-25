@@ -80,6 +80,27 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
 
     override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
 
+    // Only the system gets the cheap answer from the index. Anyone else only sees the models they may read, so that
+    // membership and cardinality do not reveal the others.
+    override fun <T : Any> ids(collection: ModelView<T, C>): Sequence<ModelID<T>> =
+        if (context.actor == SystemIdentity) {
+            withoutAuth.ids(collection)
+        } else {
+            collection.memberIds(withoutAuth).filter { isReadable(it) }
+        }
+
+    override fun <T : Any> count(collection: ModelView<T, C>): Int =
+        if (context.actor == SystemIdentity) withoutAuth.count(collection) else ids(collection).count()
+
+    override fun <T : Any> isEmpty(collection: ModelView<T, C>): Boolean =
+        if (context.actor == SystemIdentity) withoutAuth.isEmpty(collection) else ids(collection).none()
+
+    override fun <T : Any> contains(collection: ModelView<T, C>, id: ModelID<T>): Boolean =
+        withoutAuth.contains(collection, id) && (context.actor == SystemIdentity || isReadable(id))
+
+    private fun <T : Any> isReadable(id: ModelID<T>): Boolean =
+        isAuthorized(withoutAuth.get(id), context, klerk.specification, withoutAuth)
+
     // Reads through the unauthorized reader so that an unreadable model can be dropped instead of throwing, which is
     // the point of the plain (non-OrThrow) view reads. Lazy: only what the caller consumes is read.
     override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> =

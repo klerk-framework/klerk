@@ -18,31 +18,35 @@ import dev.klerkframework.klerk.read.viewReader
  */
 
 /**
- * How many models are in the view. Answered from ids for an indexed view, without reading a single model.
+ * How many models in the view the actor may read.
+ *
+ * For the system, an indexed view answers from ids without reading a single model. For any other actor every model in
+ * the view is read to check the `readModels` rules.
  */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.count(): Int = internalCount(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.count(): Int = reader.viewReader().count(this)
 
-/** True if the view holds nothing. Stops at the first id rather than counting them all. */
+/** True if the view holds nothing the actor may read. Stops at the first readable model. */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isEmpty(): Boolean = internalIsEmpty(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isEmpty(): Boolean = reader.viewReader().isEmpty(this)
 
-/** True if the view holds anything. */
+/** True if the view holds anything the actor may read. */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isNotEmpty(): Boolean = !internalIsEmpty(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.isNotEmpty(): Boolean = !reader.viewReader().isEmpty(this)
 
-/** `id in view` -- an index lookup for an indexed view. */
+/** `id in view` -- true if the view holds [id] and the actor may read it. */
 context(reader: ModelReader<C, V>)
 public operator fun <T : Any, C : KlerkContext, V> ModelView<T, C>.contains(id: ModelID<T>): Boolean =
-    internalContains(id, reader)
+    reader.viewReader().contains(this, id)
 
 /**
- * The ids in the view, in its own order, lazily. Reads no models at all.
+ * The ids of the models in the view that the actor may read, in the view's own order, lazily. For the system no model
+ * is read; for any other actor each model is read to check the `readModels` rules.
  *
  * Do not use the sequence after the read block has ended — the view may have changed underneath it.
  */
 context(reader: ModelReader<C, V>)
-public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.ids(): Sequence<ModelID<T>> = memberIds(reader)
+public fun <T : Any, C : KlerkContext, V> ModelView<T, C>.ids(): Sequence<ModelID<T>> = reader.viewReader().ids(this)
 
 /**
  * The models in the view, in its own order, lazily: only the ones actually consumed are read. Take what you need —

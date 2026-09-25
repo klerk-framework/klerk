@@ -38,6 +38,7 @@ import dev.klerkframework.klerk.misc.getStateMachine
 import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.storage.ModelCache
 
 /*
@@ -220,11 +221,27 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         reader: ModelReader<C, V>,
         context: C,
     ): List<Problem> {
-        currentCommand.model?.let {
-            if (reader.getOrNull(it) == null) {
-                return listOf(NotFoundProblem("The model with id=$it could not be found"))
-            }
+        val id = currentCommand.model
+        val model = id?.let { reader.getOrNull(it) ?: return listOf(modelNotFound(it)) }
+        val problems = validateAndAuthorize(currentCommand, reader, context)
+        // An actor may be allowed to act on a model it may not read, but a failure must then not tell it anything
+        // about the model, not even that it exists.
+        if (problems.isEmpty() || model == null) {
+            return problems
         }
+        if (!isAuthorized(model, context, klerk.specification, ReaderWithoutAuth(klerk))) {
+            return listOf(modelNotFound(model.id))
+        }
+        return problems
+    }
+
+    private fun modelNotFound(id: ModelID<*>) = NotFoundProblem("The model with id=$id could not be found")
+
+    private fun <P> validateAndAuthorize(
+        currentCommand: Command<out Any, P>,
+        reader: ModelReader<C, V>,
+        context: C,
+    ): List<Problem> {
         isEventPossibleGivenModelState(currentCommand, reader)?.let { return listOf(it) }
         val eventValidationProblems = validateEvent(currentCommand, context, reader)
         if (eventValidationProblems.isNotEmpty()) return eventValidationProblems

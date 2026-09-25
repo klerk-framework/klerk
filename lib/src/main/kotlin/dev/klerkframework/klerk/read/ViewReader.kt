@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
+import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
@@ -13,6 +14,15 @@ import dev.klerkframework.klerk.view.QueryResponse
  * an authorizing reader than for the internal one, so the polymorphism has to live somewhere.
  */
 internal interface ViewReader<C : KlerkContext, V> {
+
+    /** The ids of the models the actor may read, in the view's order. */
+    fun <T : Any> ids(collection: ModelView<T, C>): Sequence<ModelID<T>>
+
+    fun <T : Any> count(collection: ModelView<T, C>): Int
+
+    fun <T : Any> isEmpty(collection: ModelView<T, C>): Boolean
+
+    fun <T : Any> contains(collection: ModelView<T, C>, id: ModelID<T>): Boolean
 
     /** Lazily, skipping the models the actor may not read rather than throwing. */
     fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>>

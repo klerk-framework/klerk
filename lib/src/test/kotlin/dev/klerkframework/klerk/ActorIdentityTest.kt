@@ -31,4 +31,22 @@ class ActorIdentityTest {
         assertTrue(SystemIdentity.isSameAs(SystemIdentity))
         assertFalse(SystemIdentity.isSameAs(Unauthenticated))
     }
+
+    @Test
+    fun `an actor without id or externalId is never the same as anyone`() {
+        assertFalse(Unauthenticated.isSameAs(Unauthenticated))
+        assertFalse(CustomIdentity(null, null).isSameAs(CustomIdentity(null, null)))
+        assertTrue(AuthenticationIdentity.isSameAs(AuthenticationIdentity))
+        assertFalse(AuthenticationIdentity.isSameAs(SystemIdentity))
+        assertTrue(CustomIdentity(null, 5).isSameAs(CustomIdentity(null, 5)))
+        assertFalse(CustomIdentity(null, 5).isSameAs(CustomIdentity(null, 6)))
+    }
+
+    @Test
+    fun `plugins are the same actor when they have the same name`() {
+        assertTrue(PluginIdentity("images").isSameAs(PluginIdentity("images")))
+        assertFalse(PluginIdentity("images").isSameAs(PluginIdentity("assets")))
+        assertFalse(PluginIdentity("images").isSameAs(SystemIdentity))
+        assertFalse(SystemIdentity.isSameAs(PluginIdentity("images")))
+    }
 }

@@ -12,6 +12,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.KlerkImpl
 import dev.klerkframework.klerk.NewJobPlan
+import dev.klerkframework.klerk.PluginIdentity
 import dev.klerkframework.klerk.Problem
 import dev.klerkframework.klerk.StateProblem
 import dev.klerkframework.klerk.SystemIdentity
@@ -861,6 +862,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         ownerActorType = parent.ownerActorType,
         ownerActorId = parent.ownerActorId,
         ownerActorExternalId = parent.ownerActorExternalId,
+        ownerActorName = parent.ownerActorName,
         now = now,
         parent = parent.id,
         root = parent.root,
@@ -1007,6 +1009,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         ownerActorType = context.actor.type,
         ownerActorId = context.actor.id?.value,
         ownerActorExternalId = context.actor.externalId,
+        ownerActorName = (context.actor as? PluginIdentity)?.pluginName,
         now = now,
         scheduleAt = scheduleAt,
         cronScheduleId = cronScheduleId,
@@ -1019,6 +1022,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         ownerActorType: ActorType,
         ownerActorId: Int?,
         ownerActorExternalId: Long?,
+        ownerActorName: String?,
         now: Instant,
         scheduleAt: Instant? = null,
         parent: JobID? = null,
@@ -1037,6 +1041,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             ownerActorType = ownerActorType,
             ownerActorId = ownerActorId,
             ownerActorExternalId = ownerActorExternalId,
+            ownerActorName = ownerActorName,
             step = 0,
             attempt = 0,
             createdAt = now,
