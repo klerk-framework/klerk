@@ -248,7 +248,7 @@ val summaries = args.children.mapNotNull { it.resultAs<ImportSummary>() }
 
 Two base classes, differing only in whether the step gets a `Reader`:
 
-- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.reader` and `args.klerk` are available. Runs on
+- **`JobType.Local`** — the step takes a `JobStepArgs.Local`, so `args.read { }` and `args.klerk` are available. Runs on
   the master node. Use this by default.
 - **`JobType.Portable`** — the step takes a `JobStepArgs.Portable`, which has no `Reader`. Everything the job needs is
   in its cursor. These will be eligible to run on remote worker nodes (a later milestone); today they run on the master
@@ -256,9 +256,20 @@ Two base classes, differing only in whether the step gets a `Reader`:
 
 The split is in the types rather than in a runtime check, so a `Portable` job cannot read by accident.
 
+A `Local` step reads models in `args.read { }`. Commands wait while the block runs, so keep it short and do slow work
+outside it:
+
+```kotlin
+override suspend fun step(args: JobStepArgs.Local<SyncCursor, Ctx, Views>): JobResult<SyncCursor, Ctx, Views> {
+    val book = args.read { get(args.cursor.book) }
+    val price = priceService.lookUp(book.props.isbn.value)    // no lock held
+    return JobResult.Success(command = Command(SetPrice, book.id, SetPriceParams(Price(price))))
+}
+```
+
 `args.klerk` is the framework itself, for the subsystems a step may need — `attachedData` above all. It is **not** for
 issuing commands: return the command from the step instead, so that it commits together with the checkpoint. Read
-through `args.reader`, not `klerk.read`.
+through `args.read { }`, not `klerk.read`.
 
 Writing a job as `Portable` is a promise about *where it may run*, not only about the `Reader` — a job that needs a
 machine-local file, a JVM type from your app, or a node-local secret is `Local` even if it never reads.
@@ -654,7 +665,6 @@ fun `import emits one CreateBook per file`() = runTest {
                     previousResult = null,
                     job = someJobInfo,
                     context = ctx,
-                    reader = reader,
                     klerk = klerk
                 )
             when (val result = ImportBooks.step(args)) {

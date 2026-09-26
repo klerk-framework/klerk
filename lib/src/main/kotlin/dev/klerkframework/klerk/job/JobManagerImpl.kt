@@ -467,7 +467,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         when (type) {
             is JobType.Local<*, C, V> -> {
                 val local = type as JobType.Local<Any, C, V>
-                val reader = ReaderWithoutAuth<C, V>(klerk)
                 when (record.hookKind) {
                     null -> local.step(
                         JobStepArgs.Local(
@@ -475,7 +474,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             previousResult = previous,
                             job = info,
                             context = context,
-                            reader = reader,
                             klerk = klerk,
                             children = outcomes,
                             cancellationRequested = record.cancellationRequested,
@@ -490,7 +488,6 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             previousResult = previous,
                             job = info,
                             context = context,
-                            reader = reader,
                             klerk = klerk,
                             children = outcomes,
                         )

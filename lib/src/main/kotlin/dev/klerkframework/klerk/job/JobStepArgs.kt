@@ -3,7 +3,10 @@ package dev.klerkframework.klerk.job
 import dev.klerkframework.klerk.CommandResult
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.KlerkContext
+import dev.klerkframework.klerk.impl
 import dev.klerkframework.klerk.read.ModelReader
+import dev.klerkframework.klerk.read.ReadBlockGuard
+import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import kotlin.time.Instant
 
 /**
@@ -99,17 +102,26 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
         override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
-        /** Reads the models as they are committed right now; valid only for the duration of the step. */
-        public val reader: ModelReader<C, V>,
         /**
          * The framework itself, for the subsystems a step may need — `attachedData` above all. **Not** for issuing
          * commands: return the command from the step instead, so that it commits atomically with the checkpoint.
-         * Reading goes through [reader], which is already inside the step's read block.
+         * Read models with [read], not `klerk.read`.
          */
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
         cancellationRequested: Boolean = false,
-    ) : JobStepArgs<Cursor, C, V>(cancellationRequested)
+    ) : JobStepArgs<Cursor, C, V>(cancellationRequested) {
+
+        /**
+         * Runs [block] with a reader of the models as they are committed right now, and returns its result.
+         *
+         * Commands wait while [block] runs, so keep it short and do slow work, such as calling other systems or
+         * processing files, outside it. Don't let the reader, or a lazy `Sequence` from it, escape the block.
+         *
+         * @throws IllegalStateException if called inside another read block
+         */
+        public suspend fun <T> read(block: ModelReader<C, V>.() -> T): T = readModels(klerk, block)
+    }
 
     /** The arguments of a [JobType.Portable] step. No [ModelReader] — everything the step needs is in the cursor. */
     public class Portable<Cursor : Any, C : KlerkContext, V>(
@@ -172,12 +184,14 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
         override val previousResult: CommandResult<*>?,
         override val job: JobInfo,
         override val context: C,
-        /** Reads the models as they are committed right now; valid only for the duration of the step. */
-        public val reader: ModelReader<C, V>,
         /** As on [JobStepArgs.Local.klerk]. */
         public val klerk: Klerk<C, V>,
         override val children: List<ChildOutcome> = emptyList(),
-    ) : JobEndArgs<Cursor, C, V>()
+    ) : JobEndArgs<Cursor, C, V>() {
+
+        /** As [JobStepArgs.Local.read]. */
+        public suspend fun <T> read(block: ModelReader<C, V>.() -> T): T = readModels(klerk, block)
+    }
 
     /** The arguments of a [JobType.Portable] hook step. */
     public class Portable<Cursor : Any, C : KlerkContext, V>(
@@ -189,4 +203,10 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
         override val context: C,
         override val children: List<ChildOutcome> = emptyList(),
     ) : JobEndArgs<Cursor, C, V>()
+}
+
+private suspend fun <T, C : KlerkContext, V> readModels(klerk: Klerk<C, V>, block: ModelReader<C, V>.() -> T): T {
+    ReadBlockGuard.checkNotInsideReadBlock("args.read", "Read the models in one block.")
+    val reader = ReaderWithoutAuth(klerk)
+    return klerk.impl().readWriteLock.withRead { ReadBlockGuard.withThreadMarker { reader.block() } }
 }

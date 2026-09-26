@@ -122,13 +122,27 @@ masked placeholder. See [models](models.md) for details on `DataContainer`'s aut
 
 ### commands
 
-Gates whether an actor can submit a given `Command` (see [events and commands](events-and-commands.md)). Rules receive
-an `CommandRuleArgs<*, C, V>` (`command`, `context`, `reader`):
+Gates whether an actor can submit a given `Command` (see [events and commands](events-and-commands.md)). A rule takes
+either `CommandRuleArgs<*, C, V>` (`command`, `event`, `context`, `reader`) or `EventRuleArgs<C, V>` (`event`,
+`context`, `reader`), and both kinds can be mixed in the same block:
 
 ```kotlin
-fun everybodyCanDoEverything(args: CommandRuleArgs<*, Ctx, Views>): PositiveAuthorization =
-    PositiveAuthorization.Allow
+fun onlyAdminsMayDeactivateUsers(args: EventRuleArgs<Ctx, Views>): NegativeAuthorization =
+    if (args.event == DeactivateUser && !args.context.isAdmin()) Deny else Pass
+
+fun commentCanOnlyBeEditedByAuthor(args: CommandRuleArgs<*, Ctx, Views>): NegativeAuthorization =
+    if (args.command.event == EditComment && commentAuthor(args) != args.context.user?.id) Deny else Pass
+
+commands {
+    positive(::loggedInUsersCanDoEverything)
+    negative(::onlyAdminsMayDeactivateUsers, ::commentCanOnlyBeEditedByAuthor)
+}
 ```
+
+Prefer `EventRuleArgs` when the rule doesn't need the model or the parameters. Such rules also answer
+`Reader.isGenerallyPossible(eventRef)`, i.e. "could the actor ever submit this event", with no model at all. It is
+false if an `EventRuleArgs` rule denies the event, or if no `EventRuleArgs` rule allows it and there is no positive
+`CommandRuleArgs` rule that could. Tooling such as klerk-mcp uses it to decide which actions to expose to an actor.
 
 This runs as the last step of command validation — after all rules described in [validation](validation.md) have already
 passed — so a command that's both invalid and unauthorized is reported as invalid, not unauthorized.
@@ -143,27 +157,6 @@ needs them must handle that:
 ```kotlin
 val params = args.command.params as? PublishParams ?: return Pass
 ```
-
-#### generalCommands
-
-A restricted variant of `commands`, for rules that never need a model or parameters — only the event and the actor.
-Rules receive an `EventRuleArgs<C, V>` (`event`, `context`, `reader`), which has no `model` at all:
-
-```kotlin
-fun onlyAdminsMayManageUsers(args: EventRuleArgs<Ctx, Views>): NegativeAuthorization =
-    if (args.event == DeactivateUser && !args.context.isAdmin()) Deny else Pass
-```
-
-Every rule declared here is automatically included when authorizing real commands too, so write a check like this
-once instead of duplicating it in `commands`. Positive rules work too, e.g. a whitelist of the events a role may
-run. The payoff is `Reader.isGenerallyPossible(eventRef)`: since these rules can't depend on which instance is
-targeted, they can answer "could the actor ever submit this event" with no model at all — false if a negative rule
-denies it, or if no `generalCommands` positive rule allows it and there are no `commands` positive rules. That lets
-tooling built on Klerk (e.g. klerk-mcp) decide which actions to expose to an actor without a concrete instance.
-
-Use `commands` instead as soon as a rule needs to look at the model or the event's parameters, e.g.
-`apiTokenCanOnlyBeRevokedByOwner` checking `args.command.model` against the token's owner — that can't be expressed
-as a `generalCommands` rule, and rules that need it stay ordinary `commands` rules.
 
 ### eventLog
 

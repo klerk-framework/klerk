@@ -41,7 +41,16 @@ public data class ActivityLogRuleArgs<C : KlerkContext, V>(
 ) : RuleArgs<C, V>
 
 /**
- * Arguments handed to rules that need to inspect the [command] being processed (e.g. event authorization rules).
+ * What a `commands` rule that only depends on the [event] and the actor is given. Such a rule cannot depend on the
+ * model or the parameters, so it also answers [dev.klerkframework.klerk.read.Reader.isGenerallyPossible].
+ */
+public interface EventRuleArgs<C : KlerkContext, V> : RuleArgs<C, V> {
+    /** The event the actor wants to trigger. */
+    public val event: Event<*, *>
+}
+
+/**
+ * What a `commands` rule that inspects the [command] being processed is given.
  *
  * When the rules are evaluated by `Reader.possibleEvents` or `Reader.possibleVoidEvents`, the parameters are not known
  * yet, so `command.params` is null even for an event that takes parameters.
@@ -50,19 +59,15 @@ public data class CommandRuleArgs<P, C : KlerkContext, V>(
     val command: Command<out Any, P>,
     override val context: C,
     override val reader: ModelReader<C, V>,
-) : RuleArgs<C, V>
+) : EventRuleArgs<C, V> {
+    override val event: Event<*, *> get() = command.event
+}
 
-/**
- * Arguments handed to rules that decide whether [event] could be triggered by the actor at all, independent of
- * any specific instance or parameters. Unlike [CommandRuleArgs], there is no `model` here — a rule written
- * against this type can never depend on which instance is targeted, which is what lets these rules also answer
- * [dev.klerkframework.klerk.read.Reader.isGenerallyPossible].
- */
-public data class EventRuleArgs<C : KlerkContext, V>(
-    val event: Event<*, *>,
+internal data class EventOnlyRuleArgs<C : KlerkContext, V>(
+    override val event: Event<*, *>,
     override val context: C,
     override val reader: ModelReader<C, V>,
-) : RuleArgs<C, V>
+) : EventRuleArgs<C, V>
 
 /**
  * Arguments handed to rules that evaluate against an existing [model], e.g. read/authorization rules for instance

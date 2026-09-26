@@ -16,6 +16,8 @@ import dev.klerkframework.klerk.view.ModelViews
 import mu.KotlinLogging
 import java.util.SortedSet
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
+import kotlin.reflect.full.valueParameters
 
 internal val logger = KotlinLogging.logger {}
 
@@ -232,8 +234,6 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val readPropertyNegativeRules: Set<(PropertyReadRuleArgs<C, V>) -> NegativeAuthorization>,
     val eventPositiveRules: Set<(CommandRuleArgs<*, C, V>) -> PositiveAuthorization>,
     val eventNegativeRules: Set<(CommandRuleArgs<*, C, V>) -> NegativeAuthorization>,
-    val eventGeneralPositiveRules: Set<(EventRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
-    val eventGeneralNegativeRules: Set<(EventRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
     val eventLogPositiveRules: Set<(args: EventLogRuleArgs<C, V>) -> PositiveAuthorization>,
     val eventLogNegativeRules: Set<(args: EventLogRuleArgs<C, V>) -> NegativeAuthorization>,
     val attachedDataReadPositiveRules: Set<(AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
@@ -246,4 +246,18 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val jobControlNegativeRules: Set<(JobControlRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
     val activityLogPositiveRules: Set<(ActivityLogRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
     val activityLogNegativeRules: Set<(ActivityLogRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
-)
+) {
+    @Suppress("UNCHECKED_CAST")
+    internal val eventOnlyPositiveRules: List<(EventRuleArgs<C, V>) -> PositiveAuthorization> =
+        eventPositiveRules.filter { takesOnlyEventRuleArgs(it) } as List<(EventRuleArgs<C, V>) -> PositiveAuthorization>
+
+    @Suppress("UNCHECKED_CAST")
+    internal val eventOnlyNegativeRules: List<(EventRuleArgs<C, V>) -> NegativeAuthorization> =
+        eventNegativeRules.filter { takesOnlyEventRuleArgs(it) } as List<(EventRuleArgs<C, V>) -> NegativeAuthorization>
+
+    /** True if some positive `commands` rule may allow depending on the model or parameters. */
+    internal val hasCommandPositiveRules: Boolean = eventPositiveRules.size > eventOnlyPositiveRules.size
+}
+
+private fun takesOnlyEventRuleArgs(rule: Function<*>): Boolean =
+    (rule as? KFunction<*>)?.valueParameters?.singleOrNull()?.type?.classifier == EventRuleArgs::class

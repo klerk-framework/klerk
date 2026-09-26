@@ -41,8 +41,7 @@ private fun <C : KlerkContext, V> Specification<C, V>.rulesMustBeNamed() {
     with(authorization) {
         listOf(
             readModelPositiveRules, readModelNegativeRules, readPropertyPositiveRules, readPropertyNegativeRules,
-            eventPositiveRules, eventNegativeRules, eventGeneralPositiveRules, eventGeneralNegativeRules,
-            eventLogPositiveRules, eventLogNegativeRules,
+            eventPositiveRules, eventNegativeRules, eventLogPositiveRules, eventLogNegativeRules,
             attachedDataReadPositiveRules, attachedDataReadNegativeRules, attachedDataWritePositiveRules,
             attachedDataWriteNegativeRules, jobReadPositiveRules, jobReadNegativeRules, jobControlPositiveRules,
             jobControlNegativeRules, activityLogPositiveRules, activityLogNegativeRules,

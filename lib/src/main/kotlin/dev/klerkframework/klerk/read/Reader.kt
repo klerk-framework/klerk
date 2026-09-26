@@ -163,10 +163,10 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
     ): Set<InstanceEvent<T, *>>
 
     /**
-     * False if the `generalCommands` rules alone make [eventRef] impossible for the actor: one of them denies it, or
-     * none of them allows it and there are no `commands` positive rules that could. The event is then impossible no
-     * matter which instance or parameters are involved. `true` only means it isn't provably impossible — `commands`
-     * rules can still deny it once a real command is attempted.
+     * False if the `commands` rules taking [dev.klerkframework.klerk.EventRuleArgs] make [eventRef] impossible for the
+     * actor, no matter which model or parameters are involved: one of them denies it, or none of them allows it and
+     * there is no positive rule taking [dev.klerkframework.klerk.CommandRuleArgs] that could. `true` only means it
+     * isn't provably impossible; the rules taking `CommandRuleArgs` can still deny a real command.
      */
     public fun isGenerallyPossible(eventRef: EventReference): Boolean
 }

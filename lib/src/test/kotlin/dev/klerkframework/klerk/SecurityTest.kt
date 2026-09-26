@@ -311,27 +311,55 @@ class SecurityTest {
     }
 
     @Test
-    fun `generalCommands rules are folded into command authorization and answer isGenerallyPossible`() =
+    fun `EventRuleArgs and CommandRuleArgs rules can be mixed in commands`() = runBlocking<Unit> {
+        val klerk = start {
+            readModels { positive(::everybodyCanReadModels) }
+            commands {
+                positive(::everybodyCanDoEverything)
+                negative(::nobodyMayDeleteAuthorsGenerally, ::nobodyCanCreateAuthorsWithoutParameters)
+            }
+        }
+        val astrid = createAuthorAstrid(klerk)
+        val user = Ctx.authenticationIdentity()
+
+        val problem = klerk.handle(Command(DeleteAuthor, astrid), user).problems().single()
+        assertEquals(KlerkErrorCode.CommandNegativeAuthorizationExist, problem.code)
+        assertFalse(DeleteAuthor in klerk.read(user) { possibleEvents(astrid) })
+
+        assertFalse(klerk.read(user) { isGenerallyPossible(DeleteAuthor.id) })
+        assertTrue(klerk.read(user) { isGenerallyPossible(ImproveAuthor.id) })
+    }
+
+    @Test
+    fun `a positive EventRuleArgs rule authorizes commands`() = runBlocking<Unit> {
+        val klerk = start {
+            readModels { positive(::everybodyCanReadModels) }
+            commands { positive(::everybodyMayImproveAuthors) }
+        }
+        val astrid = createAuthorAstrid(klerk)
+        val user = Ctx.authenticationIdentity()
+
+        klerk.handle(Command(ImproveAuthor, astrid), user).getOrThrow()
+
+        val problem = klerk.handle(Command(DeleteAuthor, astrid), user).problems().single()
+        assertEquals(KlerkErrorCode.CommandPositiveAuthorizationMissing, problem.code)
+
+        val events = klerk.read(user) { possibleEvents(astrid) }
+        assertTrue(ImproveAuthor in events)
+        assertFalse(DeleteAuthor in events)
+    }
+
+    @Test
+    fun `isGenerallyPossible uses positive EventRuleArgs rules when there are no CommandRuleArgs positive rules`() =
         runBlocking<Unit> {
             val klerk = start {
                 readModels { positive(::everybodyCanReadModels) }
-                commands { positive(::everybodyCanDoEverything) }
-                generalCommands { negative(::nobodyMayDeleteAuthorsGenerally) }
+                commands { positive(::everybodyMayImproveAuthors) }
             }
-            val astrid = createAuthorAstrid(klerk)
             val user = Ctx.authenticationIdentity()
 
-            // Enforced for real commands, even though no commands{} rule mentions DeleteAuthor at all.
-            val problem = klerk.handle(Command(DeleteAuthor, astrid), user).problems().single()
-            assertEquals(KlerkErrorCode.CommandNegativeAuthorizationExist, problem.code)
-
-            // Answerable with no model instance at all.
-            assertFalse(klerk.read(user) { isGenerallyPossible(DeleteAuthor.id) })
             assertTrue(klerk.read(user) { isGenerallyPossible(ImproveAuthor.id) })
-
-            // possibleEvents (which needs an instance) reflects it too, since generalCommands rules are folded
-            // into the same eventNegativeRules the full authorization check uses.
-            assertFalse(DeleteAuthor in klerk.read(user) { possibleEvents(astrid) })
+            assertFalse(klerk.read(user) { isGenerallyPossible(DeleteAuthor.id) })
         }
 
     // ---------------------------------------------------------------- commands
@@ -611,6 +639,8 @@ private fun nobodyCanCreateAuthorsWithoutParameters(args: CommandRuleArgs<*, Ctx
     if (args.command.event == AnEventWithoutParameters) Deny else Pass
 private fun nobodyMayDeleteAuthorsGenerally(args: EventRuleArgs<Ctx, Views>) =
     if (args.event == DeleteAuthor) Deny else Pass
+private fun everybodyMayImproveAuthors(args: EventRuleArgs<Ctx, Views>) =
+    if (args.event == ImproveAuthor) Allow else NoOpinion
 
 private fun everybodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Allow
 private fun nobodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Deny
