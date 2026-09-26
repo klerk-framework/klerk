@@ -2,6 +2,8 @@ package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.AttachedDataReader
 import dev.klerkframework.klerk.AuthorizationProblem
+import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.EventRuleArgs
 import dev.klerkframework.klerk.EventVisibility
 import dev.klerkframework.klerk.InstanceEvent
 import dev.klerkframework.klerk.JobReader
@@ -171,6 +173,15 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
         return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, visibility)
             .filter { klerk.validator.isPossibleWithoutParameters(it.id, context, model, withoutAuth) }
             .toSet()
+    }
+
+    override fun isGenerallyPossible(eventRef: EventReference): Boolean {
+        if (context.actor == SystemIdentity) return true
+        val args = EventRuleArgs(klerk.specification.event(eventRef), context, withoutAuth)
+        val authorization = klerk.specification.authorization
+        if (authorization.eventGeneralNegativeRules.any { it(args) == NegativeAuthorization.Deny }) return false
+        return authorization.eventPositiveRules.isNotEmpty() ||
+            authorization.eventGeneralPositiveRules.any { it(args) == PositiveAuthorization.Allow }
     }
 }
 

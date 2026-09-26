@@ -144,6 +144,27 @@ needs them must handle that:
 val params = args.command.params as? PublishParams ?: return Pass
 ```
 
+#### generalCommands
+
+A restricted variant of `commands`, for rules that never need a model or parameters — only the event and the actor.
+Rules receive an `EventRuleArgs<C, V>` (`event`, `context`, `reader`), which has no `model` at all:
+
+```kotlin
+fun onlyAdminsMayManageUsers(args: EventRuleArgs<Ctx, Views>): NegativeAuthorization =
+    if (args.event == DeactivateUser && !args.context.isAdmin()) Deny else Pass
+```
+
+Every rule declared here is automatically included when authorizing real commands too, so write a check like this
+once instead of duplicating it in `commands`. Positive rules work too, e.g. a whitelist of the events a role may
+run. The payoff is `Reader.isGenerallyPossible(eventRef)`: since these rules can't depend on which instance is
+targeted, they can answer "could the actor ever submit this event" with no model at all — false if a negative rule
+denies it, or if no `generalCommands` positive rule allows it and there are no `commands` positive rules. That lets
+tooling built on Klerk (e.g. klerk-mcp) decide which actions to expose to an actor without a concrete instance.
+
+Use `commands` instead as soon as a rule needs to look at the model or the event's parameters, e.g.
+`apiTokenCanOnlyBeRevokedByOwner` checking `args.command.model` against the token's owner — that can't be expressed
+as a `generalCommands` rule, and rules that need it stay ordinary `commands` rules.
+
 ### eventLog
 
 Gates whether an actor can read entries from the event log (`eventLog(...)` inside a read block, see

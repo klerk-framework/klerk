@@ -23,7 +23,9 @@ If there is no reader in the argument when you need it, you are probably not usi
 
 The reader in `args` is a `ModelReader`: models, relations, views, jobs, attached-data metadata and the event log. A
 `klerk.read { }` block gets the larger `Reader`, which adds `possibleEvents(id)` and `possibleVoidEvents(clazz)`
-— those need an actor to answer for, so they only exist where authorization is enforced.
+— those need an actor to answer for, so they only exist where authorization is enforced. `isGenerallyPossible(eventRef)`
+answers a narrower question with no model at all: whether a `generalCommands` rule (see
+[authorization](authorization.md)) denies the event outright, independent of any instance.
 
 ### When Klerk has started
 

@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.AttachedDataReader
+import dev.klerkframework.klerk.EventReference
 import dev.klerkframework.klerk.EventVisibility
 import dev.klerkframework.klerk.InstanceEvent
 import dev.klerkframework.klerk.JobReader
@@ -160,6 +161,14 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
         id: ModelID<T>,
         visibility: EventVisibility = EventVisibility.Application,
     ): Set<InstanceEvent<T, *>>
+
+    /**
+     * False if the `generalCommands` rules alone make [eventRef] impossible for the actor: one of them denies it, or
+     * none of them allows it and there are no `commands` positive rules that could. The event is then impossible no
+     * matter which instance or parameters are involved. `true` only means it isn't provably impossible — `commands`
+     * rules can still deny it once a real command is attempted.
+     */
+    public fun isGenerallyPossible(eventRef: EventReference): Boolean
 }
 
 internal sealed class ReadResult<T : Any> {

@@ -73,6 +73,8 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
                 readPropertyNegativeRules = authorizationRulesBlock.readPropertyNegativeRules,
                 eventPositiveRules = authorizationRulesBlock.eventPositiveRules,
                 eventNegativeRules = authorizationRulesBlock.eventNegativeRules,
+                eventGeneralPositiveRules = authorizationRulesBlock.eventGeneralPositiveRules,
+                eventGeneralNegativeRules = authorizationRulesBlock.eventGeneralNegativeRules,
                 eventLogPositiveRules = authorizationRulesBlock.eventLogPositiveRules,
                 eventLogNegativeRules = authorizationRulesBlock.eventLogNegativeRules,
                 attachedDataReadPositiveRules = authorizationRulesBlock.attachedDataReadPositiveRules,
@@ -249,6 +251,9 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
      * [AuthorizationRules] block. A category with no rules denies everything in it. See the "Authorization" doc for how
      * positive/negative rules combine, or [allowEverythingInsecurely] to disable authorization for development.
      *
+     * [generalCommands] is not a category of its own — it is a restricted variant of [commands] whose rules are
+     * folded into it, so an empty [generalCommands] changes nothing.
+     *
      * Every rule must be a named function reference, e.g. `positive(::myRule)`. A lambda is rejected when Klerk starts.
      */
     @SpecificationMarker
@@ -266,6 +271,10 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             mutableSetOf<(CommandRuleArgs<*, C, V>) -> PositiveAuthorization>()
         internal val eventNegativeRules =
             mutableSetOf<(CommandRuleArgs<*, C, V>) -> NegativeAuthorization>()
+        internal val eventGeneralPositiveRules =
+            mutableSetOf<(EventRuleArgs<C, V>) -> PositiveAuthorization>()
+        internal val eventGeneralNegativeRules =
+            mutableSetOf<(EventRuleArgs<C, V>) -> NegativeAuthorization>()
         internal val eventLogPositiveRules =
             mutableSetOf<(args: EventLogRuleArgs<C, V>) -> dev.klerkframework.klerk.PositiveAuthorization>()
         internal val eventLogNegativeRules =
@@ -315,6 +324,20 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
             block.init()
             eventPositiveRules.addAll(block.positiveRules)
             eventNegativeRules.addAll(block.negativeRules)
+        }
+
+        /**
+         * Rules like [commands], but evaluated without a model or parameters — only [EventRuleArgs.event] and the
+         * actor are available. Because these rules can never depend on a specific instance, they are also used to
+         * answer [dev.klerkframework.klerk.read.Reader.isGenerallyPossible]. Every rule declared here is
+         * automatically included when authorizing real commands too, so write a check like "only admins may
+         * deactivate users" here once, instead of duplicating it in [commands].
+         */
+        public fun generalCommands(init: AuthorizationRules<EventRuleArgs<C, V>>.() -> Unit) {
+            val block = AuthorizationRules<EventRuleArgs<C, V>>()
+            block.init()
+            eventGeneralPositiveRules.addAll(block.positiveRules)
+            eventGeneralNegativeRules.addAll(block.negativeRules)
         }
 
         /**

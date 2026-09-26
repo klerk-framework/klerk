@@ -69,4 +69,6 @@ object DummyReader : Reader<Ctx, Views> {
 
     override fun <T : Any> possibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<InstanceEvent<T, *>> =
         throw exception
+
+    override fun isGenerallyPossible(eventRef: EventReference): Boolean = throw exception
 }

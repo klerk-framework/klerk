@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.BadRequestProblem
 import dev.klerkframework.klerk.CommandRuleArgs
 import dev.klerkframework.klerk.Event
 import dev.klerkframework.klerk.EventReference
+import dev.klerkframework.klerk.EventRuleArgs
 import dev.klerkframework.klerk.InstanceEventArgs
 import dev.klerkframework.klerk.InstanceEventNoParameters
 import dev.klerkframework.klerk.InstanceEventWithParameters
@@ -256,7 +257,8 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (context.actor == SystemIdentity) {
             return null
         }
-        val negativeAuthProblem =
+        val eventArgs = EventRuleArgs(command.event, context, reader)
+        val negativeAuthProblem: Function<Any>? =
             klerk.specification.authorization.eventNegativeRules.firstOrNull {
                 it(
                     CommandRuleArgs(
@@ -265,7 +267,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                         reader,
                     ),
                 ) == Deny
-            }
+            } ?: klerk.specification.authorization.eventGeneralNegativeRules.firstOrNull { it(eventArgs) == Deny }
         if (negativeAuthProblem != null) {
             return AuthorizationProblem(
                 context.translation.klerk.unauthorized,
@@ -273,16 +275,16 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
                 KlerkErrorCode.CommandNegativeAuthorizationExist,
             )
         }
-        if (klerk.specification.authorization.eventPositiveRules.none {
-                it(
-                    CommandRuleArgs(
-                        command,
-                        context,
-                        reader,
-                    ),
-                ) == Allow
-            }
-        ) {
+        val positiveRuleExists = klerk.specification.authorization.eventPositiveRules.any {
+            it(
+                CommandRuleArgs(
+                    command,
+                    context,
+                    reader,
+                ),
+            ) == Allow
+        } || klerk.specification.authorization.eventGeneralPositiveRules.any { it(eventArgs) == Allow }
+        if (!positiveRuleExists) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
             return AuthorizationProblem(
                 context.translation.klerk.unauthorized,

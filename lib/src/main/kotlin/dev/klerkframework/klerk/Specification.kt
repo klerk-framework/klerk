@@ -232,6 +232,8 @@ public data class AuthorizationConfig<C : KlerkContext, V>(
     val readPropertyNegativeRules: Set<(PropertyReadRuleArgs<C, V>) -> NegativeAuthorization>,
     val eventPositiveRules: Set<(CommandRuleArgs<*, C, V>) -> PositiveAuthorization>,
     val eventNegativeRules: Set<(CommandRuleArgs<*, C, V>) -> NegativeAuthorization>,
+    val eventGeneralPositiveRules: Set<(EventRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),
+    val eventGeneralNegativeRules: Set<(EventRuleArgs<C, V>) -> NegativeAuthorization> = emptySet(),
     val eventLogPositiveRules: Set<(args: EventLogRuleArgs<C, V>) -> PositiveAuthorization>,
     val eventLogNegativeRules: Set<(args: EventLogRuleArgs<C, V>) -> NegativeAuthorization>,
     val attachedDataReadPositiveRules: Set<(AttachedDataReadRuleArgs<C, V>) -> PositiveAuthorization> = emptySet(),

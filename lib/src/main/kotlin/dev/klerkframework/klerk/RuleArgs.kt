@@ -53,6 +53,18 @@ public data class CommandRuleArgs<P, C : KlerkContext, V>(
 ) : RuleArgs<C, V>
 
 /**
+ * Arguments handed to rules that decide whether [event] could be triggered by the actor at all, independent of
+ * any specific instance or parameters. Unlike [CommandRuleArgs], there is no `model` here — a rule written
+ * against this type can never depend on which instance is targeted, which is what lets these rules also answer
+ * [dev.klerkframework.klerk.read.Reader.isGenerallyPossible].
+ */
+public data class EventRuleArgs<C : KlerkContext, V>(
+    val event: Event<*, *>,
+    override val context: C,
+    override val reader: ModelReader<C, V>,
+) : RuleArgs<C, V>
+
+/**
  * Arguments handed to rules that evaluate against an existing [model], e.g. read/authorization rules for instance
  * events.
  */

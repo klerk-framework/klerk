@@ -310,6 +310,30 @@ class SecurityTest {
         }
     }
 
+    @Test
+    fun `generalCommands rules are folded into command authorization and answer isGenerallyPossible`() =
+        runBlocking<Unit> {
+            val klerk = start {
+                readModels { positive(::everybodyCanReadModels) }
+                commands { positive(::everybodyCanDoEverything) }
+                generalCommands { negative(::nobodyMayDeleteAuthorsGenerally) }
+            }
+            val astrid = createAuthorAstrid(klerk)
+            val user = Ctx.authenticationIdentity()
+
+            // Enforced for real commands, even though no commands{} rule mentions DeleteAuthor at all.
+            val problem = klerk.handle(Command(DeleteAuthor, astrid), user).problems().single()
+            assertEquals(KlerkErrorCode.CommandNegativeAuthorizationExist, problem.code)
+
+            // Answerable with no model instance at all.
+            assertFalse(klerk.read(user) { isGenerallyPossible(DeleteAuthor.id) })
+            assertTrue(klerk.read(user) { isGenerallyPossible(ImproveAuthor.id) })
+
+            // possibleEvents (which needs an instance) reflects it too, since generalCommands rules are folded
+            // into the same eventNegativeRules the full authorization check uses.
+            assertFalse(DeleteAuthor in klerk.read(user) { possibleEvents(astrid) })
+        }
+
     // ---------------------------------------------------------------- commands
 
     @Test
@@ -585,6 +609,8 @@ private fun nobodyCanDeleteAuthors(args: CommandRuleArgs<*, Ctx, Views>) =
     if (args.command.event == DeleteAuthor) Deny else Pass
 private fun nobodyCanCreateAuthorsWithoutParameters(args: CommandRuleArgs<*, Ctx, Views>) =
     if (args.command.event == AnEventWithoutParameters) Deny else Pass
+private fun nobodyMayDeleteAuthorsGenerally(args: EventRuleArgs<Ctx, Views>) =
+    if (args.event == DeleteAuthor) Deny else Pass
 
 private fun everybodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Allow
 private fun nobodyCanReadTheEventLog(args: EventLogRuleArgs<Ctx, Views>) = Deny
