@@ -41,6 +41,24 @@ class StateFilterTest {
     }
 
     @Test
+    fun `a model created after a state view was first read is added to it`() = runBlocking {
+        val books = BookViews()
+        val views = Views(books, AuthorViews(books.all))
+        val drafts = books.all.filterStates(included = setOf(BookStates.Draft))
+        val klerk = createKlerk(views, RamStorage())
+        klerk.meta.start()
+        val author = createAuthorAstrid(klerk)
+        klerk.read(Ctx.system()) { assertEquals(0, drafts.count()) }
+
+        val book = createBookHarryPotter1(klerk, author)
+
+        klerk.read(Ctx.system()) {
+            assertEquals(1, drafts.count())
+            assertTrue { drafts.contains(book) }
+        }
+    }
+
+    @Test
     fun `a view filtering on another model's states is refused at startup`() {
         val books = BookViews()
         val authors = AuthorViews<Views>(books.all)

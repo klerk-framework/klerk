@@ -59,7 +59,9 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
             aggregatedModelState = mapOf(created.id to created),
             currentModel = created.id,
             remainingBlocks = listOf(voidExitBlock, enterBlock),
-            functionsToUpdateViews = listOf { view.internalDidCreate(created) },
+            functionsToUpdateViews = listOf {
+                view.internalDidCreate(created.copy(state = initialState.name, lastStateTransitionAt = time))
+            },
             log = listOf("Creating model using '${extractNameFromFunction(f)}'"),
         )
     }

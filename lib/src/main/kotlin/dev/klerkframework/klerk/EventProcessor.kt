@@ -52,6 +52,7 @@ internal class EventProcessor<C : KlerkContext, V>(
             managedModel.views.prepareForLoad()
             allLists[managedModel.kClass.simpleName!!] = managedModel.views._all
         }
+        val viewsByModel = klerk.specification.managedModels.associate { it.kClass.simpleName!! to it.views }
 
         val clock = Clock.System
         val start = clock.now()
@@ -64,6 +65,9 @@ internal class EventProcessor<C : KlerkContext, V>(
 
             ModelCache.storeFromPersistence(model)
             allLists.getValue(model.props::class.simpleName!!).add(model.id.value) // the 'all' list-source
+
+            @Suppress("UNCHECKED_CAST")
+            (viewsByModel.getValue(model.props::class.simpleName!!) as ModelViews<Any, *>).internalDidLoad(model as Model<Any>)
 
             val problems = klerk.validator.validateDataContainers(model.props, DefaultTranslation)
             if (problems.isNotEmpty()) {

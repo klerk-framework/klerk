@@ -637,6 +637,27 @@ open class AttachedDataTest {
         restarted.meta.stop()
     }
 
+    /** What a socket gives: bytes come, but `available()` says nothing about how many. */
+    private fun streamWithoutAvailable(content: String): java.io.InputStream {
+        val bytes = content.toByteArray().inputStream()
+        return object : java.io.InputStream() {
+            override fun read(): Int = bytes.read()
+            override fun read(b: ByteArray, off: Int, len: Int): Int = bytes.read(b, off, len)
+        }
+    }
+
+    @Test
+    fun `A stream that does not know how much is left is stored completely in a database`() = runBlocking<Unit> {
+        val klerk = start(SQLiteInMemory.create())
+        val content = "x".repeat(30_000)
+        val id = klerk.attachedData.prepare(streamWithoutAvailable(content), AuthorPicture::class, Ctx.system())
+        createAuthorWithPicture(klerk, id)
+
+        assertEquals(30_000L, klerk.attachedData.getMetadata(id, Ctx.system()).size)
+        assertEquals(content, String(klerk.attachedData.get(id, Ctx.system()).readAllBytes()))
+        klerk.meta.stop()
+    }
+
     private val alice = Ctx(ModelReferenceIdentity(ModelID<User>(1)))
     private val bob = Ctx(ModelReferenceIdentity(ModelID<User>(2)))
 

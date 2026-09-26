@@ -11,7 +11,8 @@ import dev.klerkframework.klerk.logger
  */
 public open class ModelViews<T : Any, C : KlerkContext> {
     /**
-     * Called after a model of type `T` was created. Override to react to it; default is a no-op.
+     * Called after a model of type `T` was created, and once for each persisted model when Klerk starts. Override to
+     * react to it; default is a no-op.
      *
      * Runs under the write lock, after the command is already durable, so it must not throw or do IO — see
      * docs/concurrency.md. Put anything that can fail in a validation rule instead.
@@ -74,6 +75,11 @@ public open class ModelViews<T : Any, C : KlerkContext> {
         _all.add(created.id.value)
         all.onModelCreated(created)
         didCreate(created)
+    }
+
+    /** Tells the hooks about a model read from storage at startup, exactly as if it had just been created. */
+    internal fun internalDidLoad(loaded: Model<T>) {
+        didCreate(loaded)
     }
 
     internal fun internalDidUpdate(before: Model<T>, after: Model<T>) {

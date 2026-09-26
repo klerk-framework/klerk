@@ -410,7 +410,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 it[this.id] = id
                 // An empty blob rather than null when the bytes live in an external store: the column is NOT NULL in
                 // databases created by earlier versions, and SchemaUtils.create never alters an existing table.
-                it[this.value] = if (value == null) EMPTY_BLOB else ExposedBlob(value)
+                it[this.value] = if (value == null) EMPTY_BLOB else ExposedBlob(value.readAllBytes())
                 it[this.kind] = kind.ordinal.toByte()
                 it[this.owner] = null
                 it[this.visibility] = visibility.ordinal.toByte()
@@ -473,7 +473,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
     ) {
         transaction(database) {
             if (value != null) {
-                AttachedDataTable.update(where = { AttachedDataTable.id eq id }) { it[this.value] = ExposedBlob(value) }
+                AttachedDataTable.update(where = { AttachedDataTable.id eq id }) { it[this.value] = ExposedBlob(value.readAllBytes()) }
             }
             // As on insert: the stream has been consumed above, so the digest is complete, and it is written in the
             // same transaction as the bytes it describes.

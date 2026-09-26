@@ -230,7 +230,7 @@ fun pelleCannotReadOnMornings(args: ModelReadRuleArgs<Ctx, Views>): dev.klerkfra
     return Pass
 }
 
-class BookViews : ModelViews<Book, Ctx>() {
+open class BookViews : ModelViews<Book, Ctx>() {
 
     fun childrensBooks(): List<ModelID<Book>> = emptyList()
 }
