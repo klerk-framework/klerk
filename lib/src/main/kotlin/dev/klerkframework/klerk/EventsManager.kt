@@ -26,8 +26,10 @@ import dev.klerkframework.klerk.storage.UsedCommandToken
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import io.micrometer.core.instrument.Counter
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import mu.KLogger
 import org.slf4j.event.Level
 import java.util.concurrent.ConcurrentHashMap
@@ -323,22 +325,25 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             throw e
         }
 
-        token?.let { processedCommandTokens[it.nonce] = it.time }
-        val modifications = modificationsOf(delta)
-        readWriteLock.withWrite {
-            ModelCache.handleDelta(delta)
-            attachedData.applyToMemory(attachedDataDelta)
-            jobs.applyToMemory(jobCommit)
-            updateViews(delta)
-            visibleSequenceNumber = sequenceNumber
-            ModelCache.endCommit()
-        }
-        jobs.notifyCommitted(jobCommit)
-        for (modification in modifications) {
-            klerk.modelsManager.modelWasModified(modification)
-        }
-        if (delta.deletedModels.isNotEmpty()) {
-            klerk.eventLogRetention.afterDeletion(tombstones)
+        // Persisted, so memory must follow even if the caller is cancelled meanwhile.
+        withContext(NonCancellable) {
+            token?.let { processedCommandTokens[it.nonce] = it.time }
+            val modifications = modificationsOf(delta)
+            readWriteLock.withWrite {
+                ModelCache.handleDelta(delta)
+                attachedData.applyToMemory(attachedDataDelta)
+                jobs.applyToMemory(jobCommit)
+                updateViews(delta)
+                visibleSequenceNumber = sequenceNumber
+                ModelCache.endCommit()
+            }
+            jobs.notifyCommitted(jobCommit)
+            for (modification in modifications) {
+                klerk.modelsManager.modelWasModified(modification)
+            }
+            if (delta.deletedModels.isNotEmpty()) {
+                klerk.eventLogRetention.afterDeletion(tombstones)
+            }
         }
     }
 
@@ -460,7 +465,36 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
     }
 
-    suspend fun modelTriggeredByTime(model: Model<out Any>, now: Instant) {
+    /**
+     * Runs the time trigger of the model [id] if it is still due at [now]. Under the same mutex as [handle], so that a
+     * trigger and a command never work from the same base.
+     */
+    suspend fun modelTriggeredByTime(id: ModelID<out Any>, now: Instant) {
+        var actions: List<UnmanagedJob> = emptyList()
+        mutex.withLock {
+            // Read under the mutex: a command may have changed, transitioned or deleted the model since it was queued.
+            val model = readWriteLock.withRead { ReaderWithoutAuth<C, V>(klerk).getOrNull(id) }
+            if (model == null || model.timeTrigger == null || model.timeTrigger > now) {
+                logger.debug { "The time trigger for model $id is no longer due" }
+                return
+            }
+            actions = processTimeTrigger(model, now) ?: return
+        }
+        try {
+            for (action in actions) {
+                action.f.invoke()
+            }
+        } catch (e: Exception) {
+            logger.warn(e) {
+                "The processing of the time-triggered model was successful but an exception was thrown " +
+                    "when calling an action function. It is considered bad practice to throw in any function " +
+                    "provided to Klerk."
+            }
+        }
+    }
+
+    /** Processes and commits the trigger. Returns the actions to run once the mutex is released, or null if none. */
+    private suspend fun processTimeTrigger(model: Model<out Any>, now: Instant): List<UnmanagedJob>? {
         logger.info { "Time-block was triggered for ${model.props::class.simpleName} ${model.id}" }
         val options = ProcessingOptions()
         val delta = eventProcessor.processTimeTrigger(model, options, now)
@@ -478,7 +512,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 null,
                 AttachedDataDelta(),
             )
-            return
+            return null
         }
         // A time-trigger can change props too, so its attached data must be diffed just like a command's. There is no
         // caller to return a Problem to, so a rejected plan can only be logged and the trigger abandoned.
@@ -489,7 +523,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     "The time-trigger for model ${model.id} could not be committed because of its attached data: " +
                         plan.problems.joinToString(", ") { it.toString() }
                 }
-                return
+                return null
             }
 
             is AttachedDataPlan.Ok -> plan.delta
@@ -508,20 +542,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             is NewJobPlan.Ok -> planned
         }
         commit<Any, Nothing>(delta, null, null, attachedDataDelta, jobPlan.commit)
-
-        try {
-            for (unmanagedJob in delta.unmanagedJobs) {
-                unmanagedJob.f.invoke()
-            }
-        } catch (e: Exception) {
-            logger.warn(e) {
-                "The processing of the time-triggered model was successful but an exception was thrown " +
-                    "when calling an action function. It is considered bad practice to throw in any function " +
-                    "provided to Klerk."
-            }
-        }
-
         timeTriggerManager.handle(delta)
+        return delta.unmanagedJobs
     }
 }
 

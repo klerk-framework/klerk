@@ -8,22 +8,31 @@ import dev.klerkframework.klerk.Ctx
 import dev.klerkframework.klerk.DeleteAuthor
 import dev.klerkframework.klerk.FirstName
 import dev.klerkframework.klerk.Klerk
+import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.PhoneNumber
 import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.createAstridParameters
 import dev.klerkframework.klerk.createConfig
 import dev.klerkframework.klerk.testSettings
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 
 class ModelModificationTest {
 
@@ -94,6 +103,47 @@ class ModelModificationTest {
             ),
             withTimeoutOrNull(10.seconds) { received.await() } ?: got,
         )
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a subscriber may issue a command when it is told about a change`() = runBlocking {
+        val klerk = startedKlerk()
+        val reacted = CompletableDeferred<Unit>()
+        val subscriber = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+            klerk.modelChanges.subscribe(null, Ctx.system())
+                .filterIsInstance<ModelModification.Created>()
+                .collect {
+                    @Suppress("UNCHECKED_CAST")
+                    klerk.handle(Command(DeleteAuthor, it.id as ModelID<Author>), Ctx.system()).getOrThrow()
+                    reacted.complete(Unit)
+                }
+        }
+
+        klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system()).getOrThrow()
+
+        assertNotNull(withTimeoutOrNull(10.seconds) { reacted.await() }, "the subscriber's command never completed")
+        subscriber.cancel()
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a slow subscriber does not hold up commands`() = runBlocking {
+        val klerk = startedKlerk()
+        val subscriber = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+            klerk.modelChanges.subscribe(null, Ctx.system()).collect { delay(10.seconds) }
+        }
+
+        val took = measureTime {
+            repeat(3) {
+                val id = klerk.handle(Command(CreateAuthor, createAstridParameters), Ctx.system())
+                    .getOrThrow().primaryModel!!
+                klerk.handle(Command(DeleteAuthor, id), Ctx.system()).getOrThrow()
+            }
+        }
+
+        assertTrue(took < 5.seconds, "commands took $took")
+        subscriber.cancel()
         klerk.meta.stop()
     }
 

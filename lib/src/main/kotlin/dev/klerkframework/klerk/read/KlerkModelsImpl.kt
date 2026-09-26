@@ -7,6 +7,7 @@ import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.storage.ModelCache
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filter
@@ -17,7 +18,12 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
     private val readWriteLock: ReadWriteLock,
 ) : KlerkModelChanges<C, V> {
 
-    private val modelsFlow: MutableSharedFlow<ModelModification> = MutableSharedFlow()
+    // Buffered and never suspending: changes are published while the command mutex is held, so waiting for a
+    // subscriber would stall every command, and deadlock one that issues a command itself.
+    private val modelsFlow = MutableSharedFlow<ModelModification>(
+        extraBufferCapacity = CHANGE_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
     // A deleted model can no longer be authorized against, and a Deleted carries nothing but the id and class.
     override fun subscribe(id: ModelID<out Any>?, context: C): Flow<ModelModification> = modelsFlow
@@ -54,7 +60,10 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         }
     }
 
-    suspend fun modelWasModified(modification: ModelModification) {
-        modelsFlow.emit(modification)
+    fun modelWasModified(modification: ModelModification) {
+        modelsFlow.tryEmit(modification)
     }
 }
+
+/** How many changes a subscriber may fall behind before it misses the oldest. */
+internal const val CHANGE_BUFFER = 1024

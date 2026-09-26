@@ -29,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
@@ -581,6 +582,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         type: JobType<*, C, V>,
         result: JobResult<Any, C, V>,
         context: C?,
+        isCommitFailure: Boolean = false,
     ) {
         val now = klerk.settings.now()
         val transition = try {
@@ -599,12 +601,17 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 jobCommit = transition.commit,
             )
         } catch (e: Exception) {
-            // The transaction failed, so nothing was written. Put the job back and let the retry machinery see it as a
-            // failed attempt, rather than losing the step silently.
             logger.error(e) { "Could not commit the step of job ${record.id}" }
             // Any child this step planned to spawn was never written, so its id goes back in the pool.
             releaseReservations(transition.commit.upserted.map { it.id })
-            releaseWithoutCommit(record.id)
+            if (isCommitFailure) {
+                // Not even the failed attempt could be written, e.g. because storage is down.
+                releaseWithoutCommit(record.id)
+            } else {
+                // Nothing was written. Record a failed attempt instead, so that backoff and dead-lettering apply.
+                val failed = JobResult.Fail("Could not commit the step: ${e::class.simpleName}")
+                commitOutcome(record, type, failed, context, isCommitFailure = true)
+            }
             return
         }
 
@@ -1081,8 +1088,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 is NewJobPlan.Ok -> {
                     val commit = plan.commit.copy(attachedDataClaimed = claim.associateWith { id })
                     klerk.settings.persistence.commitJobStep(CommitBatch(jobs = commit))
-                    lock.withLock { klerk.readWriteLock.withWrite { applyToMemory(plan.commit) } }
-                    notifyCommitted(plan.commit)
+                    withContext(NonCancellable) {
+                        lock.withLock { klerk.readWriteLock.withWrite { applyToMemory(plan.commit) } }
+                        notifyCommitted(plan.commit)
+                    }
                 }
             }
         } finally {
@@ -1202,14 +1211,16 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
      */
     private suspend fun commitControlChange(commit: JobCommit, expected: Map<JobID, JobRecord> = emptyMap()) {
         klerk.settings.persistence.commitJobStep(CommitBatch(jobs = commit))
-        lock.withLock {
-            klerk.readWriteLock.withWrite { applyToMemory(commit, expected) }
-            for (id in commit.deleted) {
-                previousResults.remove(id)
+        withContext(NonCancellable) {
+            lock.withLock {
+                klerk.readWriteLock.withWrite { applyToMemory(commit, expected) }
+                for (id in commit.deleted) {
+                    previousResults.remove(id)
+                }
             }
+            klerk.attachedDataImpl.releaseJobClaims(commit.attachedDataReleased)
+            notifyCommitted(commit)
         }
-        klerk.attachedDataImpl.releaseJobClaims(commit.attachedDataReleased)
-        notifyCommitted(commit)
     }
 
     private fun descendantsOf(id: JobID): List<JobRecord> {
@@ -1397,8 +1408,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                     is NewJobPlan.Ok -> {
                         val admitted = plan.records.map { it.copy(cronScheduleId = schedule.id) }
                         klerk.settings.persistence.commitJobStep(CommitBatch(jobs = JobCommit(upserted = admitted)))
-                        lock.withLock {
-                            klerk.readWriteLock.withWrite { applyToMemory(JobCommit(upserted = admitted)) }
+                        withContext(NonCancellable) {
+                            lock.withLock {
+                                klerk.readWriteLock.withWrite { applyToMemory(JobCommit(upserted = admitted)) }
+                            }
                         }
                         for (record in admitted) {
                             changes.tryEmit(record)

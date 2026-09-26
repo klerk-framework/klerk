@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.validation.Validator
 import dev.klerkframework.klerk.view.ModelViews
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.measureTime
@@ -74,6 +75,8 @@ internal class KlerkImpl<C : KlerkContext, V>(
     ): CommandResult<T> {
         val result = try {
             eventsManager.handle(command, context, options)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error(e) { "Bug in Klerk: Could not process command (${command.event})" }
             return CommandResult.Failure(listOf(InternalProblem(DefaultKlerkTranslation.internalError)))

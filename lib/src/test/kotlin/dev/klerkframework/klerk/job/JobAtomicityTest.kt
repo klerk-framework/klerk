@@ -24,6 +24,7 @@ import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -153,13 +154,15 @@ class JobAtomicityTest {
                 var klerk = klerkOver(storage, clock)
                 val id = klerk.jobs.schedule(Writer.declare(WriteCursor(steps - 1)), Ctx.system())
                 storage.crashAt(crashAt)
-                // Run until the crash. The manager treats a failed commit as "nothing was written" and stops there.
+                // Run until the crash. The failed commit writes nothing, and the job waits out a backoff for it: the
+                // clock is moved past that, but not as far as the authors' 30-second time trigger.
                 repeat(steps + 2) { runCatching { klerk.jobs.step() } }
                 klerk.meta.stop()
 
                 // Restart over exactly what survived, with a store that no longer crashes.
                 val survivor = storage.recovered()
                 klerk = klerkOver(survivor, clock)
+                clock.advance(10.seconds)
                 klerk.jobs.runUntilIdle()
 
                 val authors = klerk.read(Ctx.system()) { klerk.specification.views.authors.all.asSequence().toList() }
@@ -191,6 +194,7 @@ class JobAtomicityTest {
             klerk.meta.stop()
 
             klerk = klerkOver(storage.recovered(), clock)
+            clock.advance(10.seconds)
             klerk.jobs.runUntilIdle()
 
             val all = klerk.jobs.all(Ctx.system())

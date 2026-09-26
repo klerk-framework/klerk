@@ -1,7 +1,6 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.misc.ReadWriteLock
-import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -80,21 +79,7 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
             return false
         }
         val current = requireNotNull(timeTriggers.poll())
-        val model = readWriteLock.withRead {
-            ReaderWithoutAuth<C, V>(klerk).getOrNull(ModelID(current.id))
-        }
-        if (model == null) {
-            logger.error { "Could not find model ${current.id}" }
-            return true
-        }
-        if (model.timeTrigger == null || model.timeTrigger > now) {
-            logger.error {
-                "I thought that model ${model.id} should be time-triggered but on a closer look it is not the case. " +
-                    "Times: ${model.timeTrigger?.toEpochMilliseconds()} - ${now.toEpochMilliseconds()}"
-            }
-            return true
-        }
-        eventsManager.modelTriggeredByTime(model, now)
+        eventsManager.modelTriggeredByTime(ModelID(current.id), now)
         return true
     }
 }

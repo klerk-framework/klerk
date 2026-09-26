@@ -3,7 +3,8 @@
 Klerk values consistency and predictability over performance. Commands are therefore processed one at a time. If two
 callers call `klerk.handle(...)` concurrently, the second call waits until the first has fully committed (or failed)
 before it starts — there is no interleaving. This gives you the same guarantees as serializable isolation without having
-to reason about it: business logic can assume nothing else changes the data mid-command.
+to reason about it: business logic can assume nothing else changes the data mid-command. Time triggers and job steps
+take their turn in the same queue.
 
 Reads (`klerk.read`/`klerk.readSuspend`, see [reading.md](reading.md)) use a readers-writer lock:
 

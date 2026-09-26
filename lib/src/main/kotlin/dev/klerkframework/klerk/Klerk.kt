@@ -109,6 +109,9 @@ public interface KlerkModelChanges<C : KlerkContext, V> {
      *
      * Changes of models the actor may not read are left out, and so are changes of a model that no longer exists when
      * the change is delivered. Deletions are always sent.
+     *
+     * Commands never wait for a subscriber, so a subscriber may issue commands itself. One that falls more than 1024
+     * changes behind misses the oldest of them.
      */
     public fun subscribe(id: ModelID<out Any>?, context: C): Flow<ModelModification>
 }
