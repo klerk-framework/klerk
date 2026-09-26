@@ -37,30 +37,39 @@ public class SchemaField internal constructor(
     /** False if the constructor parameter has a default value. */
     public val isRequired: Boolean = !parameter.isOptional
 
-    /** True if the field is a `List` or a `Set`. [valueClass], [type] etc. then describe its elements. */
+    /**
+     * True if the field is a `List` or a `Set`. [valueClass], [elementType], [referencedModel] and [enumConstants]
+     * then describe its elements.
+     */
     public val isCollection: Boolean = schemaType.shape is Shape.Many
 
-    private val elementType: SchemaType = (schemaType.shape as? Shape.Many)?.element ?: schemaType
+    /** True if the field is a `Set`, which a value for it must then be. */
+    public val isSet: Boolean = (schemaType.shape as? Shape.Many)?.isSet ?: false
+
+    private val element: SchemaType = (schemaType.shape as? Shape.Many)?.element ?: schemaType
 
     /**
      * The class of the value, e.g. a [DataContainer] subclass or [ModelID]. For a collection, the class of its
      * elements.
      */
-    public val valueClass: KClass<*> = elementType.kClass
+    public val valueClass: KClass<*> = element.kClass
 
     /** The kind of value, or null for a collection, a nested object or a container kind that has none. */
-    public val type: PropertyType? = if (isCollection) null else elementType.shape.propertyType()
+    public val type: PropertyType? = if (isCollection) null else element.shape.propertyType()
+
+    /** Like [type], but for a collection the kind of its elements. */
+    public val elementType: PropertyType? = element.shape.propertyType()
 
     /** The model class a [ModelID] (or a collection of them) refers to, or null if it is not a reference. */
-    public val referencedModel: KClass<*>? = elementType.referencedModel
+    public val referencedModel: KClass<*>? = element.referencedModel
 
     /** The constants of the enum an [EnumContainer] (or a collection of them) holds; empty for other fields. */
-    public val enumConstants: List<Enum<*>> = (elementType.shape as? Shape.Container)?.enumConstants ?: emptyList()
+    public val enumConstants: List<Enum<*>> = (element.shape as? Shape.Container)?.enumConstants ?: emptyList()
 
     /** The [AttachedBlobContainer] class of the field (or of its elements), or null if it is not one. */
     @Suppress("UNCHECKED_CAST")
     public val blobDeclaration: KClass<out AttachedBlobContainer>? =
-        (elementType.shape as? Shape.Container)?.takeIf { it.kind == ContainerKind.AttachedBlob }?.kClass
+        (element.shape as? Shape.Container)?.takeIf { it.kind == ContainerKind.AttachedBlob }?.kClass
             as KClass<out AttachedBlobContainer>?
 
     internal val owner: KClass<*> get() = schema.kClass
@@ -71,15 +80,17 @@ public class SchemaField internal constructor(
     public fun get(instance: Any): Any? = kProperty.get(instance)
 
     /**
-     * Creates the field's [DataContainer] around [value], which is what the container's constructor takes, e.g. an
-     * `Instant` for an [InstantContainer] or an enum constant for an [EnumContainer].
+     * Creates the field's [DataContainer] (for a collection, one element's) around [value], which is what the
+     * container's constructor takes, e.g. an `Instant` for an [InstantContainer] or an enum constant for an
+     * [EnumContainer].
      *
      * @throws IllegalArgumentException if the field is not a [DataContainer] or [value] has the wrong type
      */
     public fun createContainer(value: Any): DataContainer<*> = containerShape().create(value)
 
     /**
-     * A placeholder instance of the field's [DataContainer], e.g. to read its validation rules. Never use it as data.
+     * A placeholder instance of the field's (or its elements') [DataContainer], e.g. to read its validation rules.
+     * Never use it as data.
      *
      * @throws IllegalArgumentException if the field is not a [DataContainer]
      */
@@ -87,7 +98,7 @@ public class SchemaField internal constructor(
 
     /** The container's validation rules, described for humans, e.g. `min length` to `1`. Empty if not a container. */
     public val validationRulesDescriptions: Map<String, String> by lazy {
-        (elementType.shape as? Shape.Container)?.dummy()?.let { describeRules(it) } ?: emptyMap()
+        (element.shape as? Shape.Container)?.dummy()?.let { describeRules(it) } ?: emptyMap()
     }
 
     /**
@@ -114,12 +125,12 @@ public class SchemaField internal constructor(
     }
 
     private fun recommendedDefault(): DataContainer<*>? {
-        val container = elementType.shape as? Shape.Container ?: return null
+        val container = element.shape as? Shape.Container ?: return null
         return container.dummy().recommendedDefault?.let { container.create(it) }
     }
 
     private fun containerShape(): Shape.Container =
-        schemaType.shape as? Shape.Container ?: throw IllegalArgumentException("'$name' is not a DataContainer")
+        element.shape as? Shape.Container ?: throw IllegalArgumentException("'$name' is not a DataContainer")
 
     override fun toString(): String = key.toString()
 }

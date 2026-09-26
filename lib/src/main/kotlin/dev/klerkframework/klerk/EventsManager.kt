@@ -17,6 +17,7 @@ import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.getCurrentInstant
 import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
+import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.read.withoutReadRestrictions
 import dev.klerkframework.klerk.statemachine.UnmanagedJob
 import dev.klerkframework.klerk.storage.CommitBatch
@@ -25,6 +26,7 @@ import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.storage.UsedCommandToken
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.validation.modelNotFound
 import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -81,6 +83,23 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         }.increment()
     }
 
+    /**
+     * Masks a failure of [command] as described on [Failure]. Must be called holding the mutex or the read lock, and
+     * only for a primary command; sub-commands are masked by the validator.
+     */
+    private fun <T : Any> masked(result: CommandResult<T>, command: Command<T, *>, context: C): CommandResult<T> {
+        if (result !is Failure || context.actor == SystemIdentity) return result
+        val id = command.model ?: return result
+        val reader = ReaderWithoutAuth(klerk)
+        val model = reader.getOrNull(id)
+        if (model != null && isAuthorized(model, context, specification, reader)) return result
+        logger.debug { "Masked the failure of ${command.event} on $id: ${result.unmaskedProblems.joinToString(", ")}" }
+        return Failure(listOf(modelNotFound(id)), result.unmaskedProblems)
+    }
+
+    /** Runs [block] holding the command mutex, so that it cannot interleave with a command or a job step's commit. */
+    internal suspend fun <R> withCommandMutex(block: suspend () -> R): R = mutex.withLock { block() }
+
     internal suspend fun <T : Any, P> handle(
         command: Command<T, P>,
         context: C,
@@ -115,73 +134,19 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 val withoutAuth = ReaderWithoutAuth(klerk)
                 val unrestricted = withoutReadRestrictions(command)
                 val delta = eventProcessor.processPrimaryCommand(unrestricted, context, withoutAuth, options)
-                CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead)
+                masked(
+                    CommandResult.from(delta, withoutAuth, context, specification, settings.allowBypassAuthRead),
+                    command,
+                    context,
+                )
             }
         }
 
         // Actions run outside the lock, so they are collected here and invoked after it is released.
         var actions: List<UnmanagedJob> = emptyList()
         val result = mutex.withLock {
-            // never process more than one event simultaneously, but we still allow reading
-            logger.log(Misc, options) { "Processing event ${command.event}" }
-
-            // Under the mutex, so that two commands with the same token cannot both pass.
-            pruneCommandTokens(getCurrentInstant())
-            validateToken(options.token, context)?.let { return@withLock Failure(listOf(it)) }
-
-            // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
-            // is a slightly higher level description of the delta. We don't want to return the delta since it may
-            // contain data that the user is not authorized to access.
-            val readerWithoutAuth = ReaderWithoutAuth(klerk)
-            val unrestricted = withoutReadRestrictions(command)
-            val delta = eventProcessor.processPrimaryCommand(unrestricted, context, readerWithoutAuth, options)
-            val commandResult =
-                CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)
-            when (commandResult) {
-                is Failure -> {
-                    logger.log(Result, options) {
-                        "Command ${command.event} failed: ${commandResult.problems.joinToString(", ")}"
-                    }
-                    commandResult
-                }
-
-                is Success -> {
-                    // Attached data is claimed and deleted as part of the command, so a rejected claim (the data is
-                    // gone, or another model already owns it) must fail the command before anything is written.
-                    when (val plan = attachedData.planFor(delta, context)) {
-                        is AttachedDataPlan.Rejected -> {
-                            logger.log(Result, options) {
-                                "Command ${command.event} failed: ${plan.problems.joinToString(", ") { it.toString() }}"
-                            }
-                            Failure(plan.problems)
-                        }
-
-                        is AttachedDataPlan.Ok -> {
-                            // Jobs this command schedules are new work, so they go through admission control here —
-                            // while a refusal can still fail the command, and before anything has been written.
-                            when (val jobPlan = jobs.planNewJobs(delta.newJobs, context)) {
-                                is NewJobPlan.Rejected -> {
-                                    logger.log(Result, options) {
-                                        "Command ${command.event} failed: " +
-                                            jobPlan.problems.joinToString(", ") { it.toString() }
-                                    }
-                                    Failure(jobPlan.problems)
-                                }
-
-                                is NewJobPlan.Ok -> {
-                                    commit(delta, command, context, plan.delta, jobPlan.commit, token = options.token)
-                                    logger.log(Result, options) { "Command ${command.event} succeeded" }
-                                    timeTriggerManager.handle(delta)
-                                    actions = delta.unmanagedJobs
-                                    commandResult
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } // release the lock. Next command can now start processing
-
+            masked(processUnderMutex(command, context, options) { actions = it }, command, context)
+        }
         try {
             for (action in actions) {
                 action.f.invoke()
@@ -193,6 +158,64 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             }
         }
         return result
+    }
+
+    /** Processes and commits [command]; the caller holds the mutex. [onActions] receives the actions to run after. */
+    private suspend fun <T : Any, P> processUnderMutex(
+        command: Command<T, P>,
+        context: C,
+        options: ProcessingOptions,
+        onActions: (List<UnmanagedJob>) -> Unit,
+    ): CommandResult<T> {
+        // never process more than one event simultaneously, but we still allow reading
+        logger.log(Misc, options) { "Processing event ${command.event}" }
+
+        // Under the mutex, so that two commands with the same token cannot both pass.
+        pruneCommandTokens(getCurrentInstant())
+        validateToken(options.token, context)?.let { return Failure(listOf(it)) }
+
+        // delta and commandResult is almost the same thing. Delta contains all the details whereas commandResult
+        // is a slightly higher level description of the delta. We don't want to return the delta since it may
+        // contain data that the user is not authorized to access.
+        val readerWithoutAuth = ReaderWithoutAuth(klerk)
+        val unrestricted = withoutReadRestrictions(command)
+        val delta = eventProcessor.processPrimaryCommand(unrestricted, context, readerWithoutAuth, options)
+        val commandResult =
+            CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)
+        if (commandResult is Failure) {
+            logger.log(Result, options) {
+                "Command ${command.event} failed: ${commandResult.problems.joinToString(", ")}"
+            }
+            return commandResult
+        }
+
+        // Attached data is claimed and deleted as part of the command, so a rejected claim (the data is gone, or
+        // another model already owns it) must fail the command before anything is written.
+        val plan = attachedData.planFor(delta, context)
+        if (plan is AttachedDataPlan.Rejected) {
+            logger.log(Result, options) {
+                "Command ${command.event} failed: ${plan.problems.joinToString(", ") { it.toString() }}"
+            }
+            return Failure(plan.problems)
+        }
+        plan as AttachedDataPlan.Ok
+
+        // Jobs this command schedules are new work, so they go through admission control here — while a refusal can
+        // still fail the command, and before anything has been written.
+        val jobPlan = jobs.planNewJobs(delta.newJobs, context)
+        if (jobPlan is NewJobPlan.Rejected) {
+            logger.log(Result, options) {
+                "Command ${command.event} failed: " + jobPlan.problems.joinToString(", ") { it.toString() }
+            }
+            return Failure(jobPlan.problems)
+        }
+        jobPlan as NewJobPlan.Ok
+
+        commit(delta, command, context, plan.delta, jobPlan.commit, token = options.token)
+        logger.log(Result, options) { "Command ${command.event} succeeded" }
+        timeTriggerManager.handle(delta)
+        onActions(delta.unmanagedJobs)
+        return commandResult
     }
 
     /**
@@ -222,15 +245,25 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         options: ProcessingOptions,
         jobCommit: JobCommit,
     ): CommandResult<T>? = mutex.withLock {
+        commitJobStepLocked(command, context, options, jobs.withCurrentControlFlags(jobCommit))
+            ?.let { masked(it, requireNotNull(command), requireNotNull(context)) }
+    }
+
+    private suspend fun <T : Any, P> commitJobStepLocked(
+        command: Command<T, P>?,
+        context: C?,
+        options: ProcessingOptions,
+        jobCommit: JobCommit,
+    ): CommandResult<T>? = run {
         if (command == null || context == null) {
             commitJobsOnly(jobCommit)
-            return@withLock null
+            return@run null
         }
 
         pruneCommandTokens(getCurrentInstant())
         validateToken(options.token, context)?.let { problem ->
             checkpointOnly(jobCommit)
-            return@withLock Failure<T>(listOf(problem))
+            return@run Failure<T>(listOf(problem))
         }
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)

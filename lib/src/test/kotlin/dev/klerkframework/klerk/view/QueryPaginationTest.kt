@@ -294,6 +294,31 @@ class QueryPaginationTest {
     }
 
     @Test
+    fun `a page taken backwards near the start ends at the cursor`() = runBlocking<Unit> {
+        val (klerk, views) = start()
+        klerk.meta.start()
+        createAuthors(klerk, 10)
+        val all = order(klerk, views.authors.all)
+
+        val (atTwo, atZero) = klerk.read(Ctx.system()) {
+            val cursorAtTwo = views.authors.all.query(QueryOptions(maxItems = 3)).cursorAt(2)
+            val before = QueryOptions(maxItems = 5, cursor = cursorAtTwo, direction = PageDirection.Before)
+            val cursorAtZero = views.authors.all.query(QueryOptions(maxItems = 3)).cursorAt(0)
+            views.authors.all.query(before) to
+                views.authors.all.query(before.copy(cursor = cursorAtZero))
+        }
+        assertEquals(all.subList(0, 2), atTwo.items.map { it.id })
+        assertFalse(atTwo.hasPreviousPage)
+        val next = klerk.read(Ctx.system()) {
+            views.authors.all.query(QueryOptions(maxItems = 5, cursor = atTwo.cursorNextPage))
+        }
+        assertEquals(all.subList(2, 7), next.items.map { it.id })
+
+        assertEquals(emptyList(), atZero.items)
+        assertTrue(atZero.hasNextPage)
+    }
+
+    @Test
     fun `a model created before the page neither skips nor repeats a row`() = runBlocking<Unit> {
         val (klerk, views) = start()
         klerk.meta.start()

@@ -237,11 +237,11 @@ Do not construct one yourself, and do not read anything into its contents — th
 
 |                  |                                                                               |
 |------------------|-------------------------------------------------------------------------------|
-| `FROM` (default) | the page starts at the cursor — what the cursors in a `QueryResponse` are for |
-| `AFTER`          | the page starts immediately after the cursor                                  |
-| `BEFORE`         | the page ends immediately before the cursor                                   |
+| `From` (default) | the page starts at the cursor — what the cursors in a `QueryResponse` are for |
+| `After`          | the page starts immediately after the cursor                                  |
+| `Before`         | the page ends immediately before the cursor                                   |
 
-`AFTER` and `BEFORE` are there for APIs whose cursors point at an item rather than at a page, such as GraphQL's `after`/
+`After` and `Before` are there for APIs whose cursors point at an item rather than at a page, such as GraphQL's `after`/
 `before` arguments.
 
 A cursor is a *position*, not a snapshot. If models are created or deleted between two page reads, the cursor still

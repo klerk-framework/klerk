@@ -143,15 +143,18 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
         }
         val resolved = anchorIndex ?: cursorOffset
         val pageStart = maxOf(0L, resolved + delta)
+        // A page before the cursor ends at it, also when the start of the view cuts the page short.
+        val pageEnd = if (opts.direction == PageDirection.Before) resolved else pageStart + maxItems
 
         val pageFrom = pageStart - windowFrom
+        val pageTo = pageEnd - windowFrom
         val items = if (pageFrom >= window.size) {
             emptyList()
         } else {
-            window.subList(pageFrom.toInt(), minOf(pageFrom + maxItems, window.size.toLong()).toInt()).toList()
+            window.subList(pageFrom.toInt(), minOf(pageTo, window.size.toLong()).toInt()).toList()
         }
 
-        val hasNextPage = pageFrom + maxItems < window.size
+        val hasNextPage = pageTo < window.size
         val hasPreviousPage = pageStart > 0
         // A cursor kept from before a lot of models were deleted can sit past the end of the view. The page is then
         // empty, which is the honest answer, but stepping back should land on content rather than on more empty pages.
@@ -166,7 +169,7 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
                 null
             },
             cursorNextPage = if (hasNextPage) {
-                QueryListCursor((pageStart + maxItems).toInt(), windowAt(pageStart + maxItems)?.id?.value)
+                QueryListCursor(pageEnd.toInt(), windowAt(pageEnd)?.id?.value)
             } else {
                 null
             },

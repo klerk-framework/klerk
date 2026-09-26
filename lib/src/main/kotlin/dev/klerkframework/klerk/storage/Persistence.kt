@@ -144,7 +144,10 @@ public interface Persistence {
     /** The event-log entry with [sequenceNumber], or null if there is none. */
     public fun readEventLogEntry(sequenceNumber: Long): EventLogEntry?
 
-    /** The highest [EventLogEntry.sequenceNumber] in storage, or 0 if the log is empty. Read once at startup. */
+    /**
+     * The highest [EventLogEntry.sequenceNumber] ever stored, also if that entry has since been erased, or 0 if none
+     * has been. Read once at startup; Klerk continues numbering after it, so a number is never handed out twice.
+     */
     public fun lastEventLogSequenceNumber(): Long
 
     /**

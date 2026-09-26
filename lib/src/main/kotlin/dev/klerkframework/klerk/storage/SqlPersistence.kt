@@ -62,6 +62,7 @@ import org.jetbrains.exposed.sql.statements.UpdateBuilder
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.upsert
 import java.io.InputStream
 import javax.sql.DataSource
 import kotlin.reflect.KClass
@@ -114,6 +115,7 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 SchemaUtils.create(JobsTable)
                 SchemaUtils.create(CronStateTable)
                 SchemaUtils.create(EventLogTombstonesTable)
+                SchemaUtils.create(EventLogHighWaterMarkTable)
                 SchemaUtils.create(CommandTokensTable)
                 currentModelSchemaVersion = readCurrentModelSchemaVersion()
                 logger.info { "Database ready (version: $currentModelSchemaVersion)" }
@@ -163,6 +165,10 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
                 it[actorIdentityReference] = entry.actorReference
                 it[actorIdentityExternalId] = entry.actorExternalId
                 it[extra] = entry.extra
+            }
+            EventLogHighWaterMarkTable.upsert {
+                it[id] = 0.toByte()
+                it[sequenceNumber] = entry.sequenceNumber
             }
         }
 
@@ -278,11 +284,15 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
     }
 
     override fun lastEventLogSequenceNumber(): Long = transaction(database) {
-        EventLogTable.select(EventLogTable.sequenceNumber)
+        val highWaterMark =
+            EventLogHighWaterMarkTable.selectAll().firstOrNull()?.get(EventLogHighWaterMarkTable.sequenceNumber) ?: 0L
+        // The log itself too, for a database written before the high-water mark was kept.
+        val highestInLog = EventLogTable.select(EventLogTable.sequenceNumber)
             .orderBy(EventLogTable.sequenceNumber, SortOrder.DESC)
             .limit(1)
             .firstOrNull()
             ?.get(EventLogTable.sequenceNumber) ?: 0L
+        maxOf(highWaterMark, highestInLog)
     }
 
     private fun toEventLogEntry(row: ResultRow): EventLogEntry = EventLogEntry(

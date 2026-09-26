@@ -15,6 +15,13 @@ internal object EventLogTable : Table("\"klerk_event_log\"") {
     override val primaryKey = PrimaryKey(sequenceNumber)
 }
 
+/** The highest event-log sequence number ever stored, so that erased entries' numbers are never handed out again. */
+internal object EventLogHighWaterMarkTable : Table("\"klerk_event_log_high_water_mark\"") {
+    val id = byte("id") // always 0: the table has a single row
+    val sequenceNumber = long("sequence_number")
+    override val primaryKey = PrimaryKey(id)
+}
+
 /** Deleted models whose event log is still to be erased. */
 internal object EventLogTombstonesTable : Table("\"klerk_event_log_tombstones\"") {
     val modelId = integer("model_id")

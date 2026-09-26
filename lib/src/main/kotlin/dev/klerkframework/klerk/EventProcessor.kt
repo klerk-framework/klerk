@@ -292,7 +292,9 @@ internal class EventProcessor<C : KlerkContext, V>(
         val remaining = processingData.remainingCommands.drop(1)
         logger.log(DebugOption.Sequence, options) { "Processing command ${currentCommand.event}" }
 
-        val commandValidationProblems = klerk.validator.validateCommand(currentCommand, reader, context)
+        val isPrimary = processingData.processedCommands.isEmpty()
+        val commandValidationProblems =
+            klerk.validator.validateCommand(currentCommand, reader, context, maskUnreadable = !isPrimary)
         if (commandValidationProblems.isNotEmpty()) {
             return ProcessingData(problems = commandValidationProblems)
         }

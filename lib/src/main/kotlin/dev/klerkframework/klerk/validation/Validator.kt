@@ -216,17 +216,23 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             .mapNotNull { leaf -> (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation) }
             .toSet()
 
+    /**
+     * Validates and authorizes [currentCommand]. With [maskUnreadable], problems on a model the actor may not read are
+     * replaced by a [NotFoundProblem]; the primary command is masked by `EventsManager` instead, which also covers
+     * failures found while executing it.
+     */
     fun <P> validateCommand(
         currentCommand: Command<out Any, P>,
         reader: ModelReader<C, V>,
         context: C,
+        maskUnreadable: Boolean,
     ): List<Problem> {
         val id = currentCommand.model
         val model = id?.let { reader.getOrNull(it) ?: return listOf(modelNotFound(it)) }
         val problems = validateAndAuthorize(currentCommand, reader, context)
         // An actor may be allowed to act on a model it may not read, but a failure must then not tell it anything
         // about the model, not even that it exists.
-        if (problems.isEmpty() || model == null) {
+        if (problems.isEmpty() || model == null || !maskUnreadable) {
             return problems
         }
         if (!isAuthorized(model, context, klerk.specification, ReaderWithoutAuth(klerk))) {
@@ -234,8 +240,6 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
         return problems
     }
-
-    private fun modelNotFound(id: ModelID<*>) = NotFoundProblem("The model with id=$id could not be found")
 
     private fun <P> validateAndAuthorize(
         currentCommand: Command<out Any, P>,
@@ -398,3 +402,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
     }
 }
+
+/** The problem an actor gets for a model that does not exist, or that it may not read. */
+internal fun modelNotFound(id: ModelID<*>): NotFoundProblem =
+    NotFoundProblem("The model with id=$id could not be found")

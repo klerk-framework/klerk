@@ -148,7 +148,8 @@ This runs as the last step of command validation — after all rules described i
 passed — so a command that's both invalid and unauthorized is reported as invalid, not unauthorized.
 
 A command on a model the actor may not read (see [readModels](#readmodels)) is processed like any other if it passes. If
-it fails for any reason, the only problem returned is a `NotFoundProblem`, exactly as if the model did not exist.
+it fails for any reason, `Failure.problems` holds only a `NotFoundProblem`, exactly as if the model did not exist. The
+actual problems are in `Failure.unmaskedProblems`, for logging and tests; never show them to the actor.
 
 The rules also decide what `possibleEvents` and `possibleVoidEvents` return (see [reading](reading.md)). There the
 parameters are not known yet, so `args.command.params` is null even for an event that takes parameters — a rule that

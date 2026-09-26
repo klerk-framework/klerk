@@ -61,13 +61,16 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
             subsequent,
             subsequentIsExitBlock,
         )
+        // A model deleted in this run is only deleted, whatever happened to it before.
+        val deleted = deletedModels.plus(subsequent.deletedModels)
         return copy(
             currentModel = currentModel ?: subsequent.currentModel,
             unmanagedJobs = unmanagedJobs.plus(subsequent.unmanagedJobs),
             createdModels = createdModels.plus(subsequent.createdModels),
-            updatedModels = updatedModels.plus(subsequent.updatedModels),
-            deletedModels = deletedModels.plus(subsequent.deletedModels),
-            transitions = updatedTransitions,
+            updatedModels = updatedModels.plus(subsequent.updatedModels) - deleted.toSet(),
+            deletedModels = deleted,
+            transitions = updatedTransitions - deleted.toSet(),
+            timeTriggers = timeTriggers - deleted.toSet(),
             unFinalizedTransition = toFinalize,
             aggregatedModelState = updatedModifiedModels,
             newJobs = newJobs.plus(subsequent.newJobs),

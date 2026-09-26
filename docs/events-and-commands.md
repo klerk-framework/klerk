@@ -134,7 +134,10 @@ public sealed class CommandResult<T : Any> {
         val log: List<String>,
     ) : CommandResult<T>()
 
-    public data class Failure<T : Any>(val problems: List<Problem>) : CommandResult<T>()
+    public data class Failure<T : Any>(
+        val problems: List<Problem>,
+        val unmaskedProblems: List<Problem> = problems,
+    ) : CommandResult<T>()
 }
 ```
 
@@ -163,7 +166,8 @@ val book: Model<Book>? = result.fold({ it.authorizedPrimaryModel }, { null })
 ### Problems
 
 A `Failure` carries one or more `Problem`s. The concrete subclass tells you what went wrong (klerk-web maps it to an HTTP status with
-`Problem.httpStatus`):
+`Problem.httpStatus`). `problems` is what the actor may see: if it may not read the command's model, it is a single
+`NotFoundProblem` (see [authorization.md](authorization.md)). `unmaskedProblems` always holds the actual problems:
 
 | Problem | Meaning |
 |---|---|

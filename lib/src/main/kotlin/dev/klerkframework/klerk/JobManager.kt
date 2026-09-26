@@ -128,6 +128,12 @@ internal interface JobManagerInternal<C : KlerkContext, V> : JobManager<C, V> {
     fun planNewJobs(pending: List<PendingJob<C, V>>, context: C): NewJobPlan
 
     /**
+     * [commit] with the cancellation requests made since it was planned. Called under the command mutex, which
+     * `cancel` also holds, so a request is either in memory already or made after [commit] is written.
+     */
+    fun withCurrentControlFlags(commit: JobCommit): JobCommit
+
+    /**
      * Applies a committed job commit to the in-memory queue.
      *
      * **Must be called while holding the write lock, and must never take the job manager's own mutex** — job state is

@@ -1144,8 +1144,19 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         .filter { isAuthorized(it, context) }
 
     override suspend fun cancel(id: JobID, context: C, reason: String) {
-        val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
-        authorizeControl(record.toJobInfo(), JobOperation.Cancel, context)
+        val found = records[id] ?: throw NoSuchElementException("There is no job with id $id")
+        authorizeControl(found.toJobInfo(), JobOperation.Cancel, context)
+        // Under the command mutex, so that a step's commit cannot overwrite the request (see withCurrentControlFlags),
+        // and the rows are read after any commit that was in flight.
+        klerk.eventsManager.withCommandMutex { requestCancellation(id, reason) }
+    }
+
+    override fun withCurrentControlFlags(commit: JobCommit): JobCommit = commit.copy(
+        upserted = commit.upserted.map { row -> if (row.cancellationRequested) row else refreshControlFlags(row) },
+    )
+
+    private suspend fun requestCancellation(id: JobID, reason: String) {
+        val record = records[id] ?: return
         if (record.status.isTerminal) {
             return
         }

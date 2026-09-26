@@ -80,8 +80,16 @@ public sealed class CommandResult<T : Any> {
         public val authorizedPrimaryModel: Model<T>? get() = primaryModel?.let { authorizedModel(it) }
     }
 
-    /** The command was rejected for the given [problems]; nothing was changed. */
-    public data class Failure<T : Any>(val problems: List<Problem>) : CommandResult<T>()
+    /**
+     * The command was rejected; nothing was changed.
+     *
+     * [problems] is what the actor may be told. If the actor may not read the command's model, it is a single
+     * [NotFoundProblem] whatever went wrong, so that a failure does not reveal that the model exists.
+     * [unmaskedProblems] always holds the actual problems, for logging, tests and admin tools. Never show them to the
+     * actor.
+     */
+    public data class Failure<T : Any>(val problems: List<Problem>, val unmaskedProblems: List<Problem> = problems) :
+        CommandResult<T>()
 
     internal companion object {
         fun <T : Any, V, C : KlerkContext> from(

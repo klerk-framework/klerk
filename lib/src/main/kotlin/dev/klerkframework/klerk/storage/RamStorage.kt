@@ -40,6 +40,7 @@ public open class RamStorage : Persistence {
     private val jobs = mutableMapOf<JobID, JobRecord>()
     private val cronState = mutableMapOf<String, Instant>()
     private val tombstones = mutableMapOf<Int, Instant>()
+    private var eventLogHighWaterMark = 0L
     private val commandTokens = mutableMapOf<Long, Instant>()
 
     /**
@@ -64,7 +65,10 @@ public open class RamStorage : Persistence {
     private fun writeAll(batch: CommitBatch) {
         applyAttachedDataDelta(batch.attachedData)
         applyJobCommit(batch.jobs)
-        batch.eventLogEntry?.let { eventLog.add(it) }
+        batch.eventLogEntry?.let {
+            eventLog.add(it)
+            eventLogHighWaterMark = it.sequenceNumber
+        }
         for (model in batch.createdModels.plus(batch.updatedModels)) {
             @Suppress("UNCHECKED_CAST")
             models[model.id.value] = model as Model<Any>
@@ -130,9 +134,7 @@ public open class RamStorage : Persistence {
         return eventLog.firstOrNull { it.sequenceNumber == sequenceNumber }
     }
 
-    override fun lastEventLogSequenceNumber(): Long = synchronized(lock) {
-        eventLog.maxOfOrNull { it.sequenceNumber } ?: 0L
-    }
+    override fun lastEventLogSequenceNumber(): Long = synchronized(lock) { eventLogHighWaterMark }
 
     override fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant) {
         synchronized(lock) {

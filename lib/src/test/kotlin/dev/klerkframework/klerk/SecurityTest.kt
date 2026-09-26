@@ -421,6 +421,31 @@ class SecurityTest {
     }
 
     @Test
+    fun `an execution-time failure on a model the actor may not read is masked too`() = runBlocking<Unit> {
+        val klerk = start {
+            readModels {
+                positive(::everybodyCanReadModels)
+                negative(::nobodyCanReadRowlingOrHarryPotter)
+            }
+            readProperties { positive(::everybodyCanReadProperties) }
+            commands { positive(::everybodyCanDoEverything) }
+        }
+        val rowling = createAuthorJKRowling(klerk)
+        createBookHarryPotter1(klerk, rowling)
+
+        val failure = assertIs<CommandResult.Failure<*>>(
+            klerk.handle(Command(DeleteAuthor, rowling), Ctx.authenticationIdentity()),
+        )
+        assertIs<NotFoundProblem>(failure.problems.single())
+        assertIs<StateProblem>(failure.unmaskedProblems.single())
+
+        // an actor that may read the model gets the real problem
+        val system = assertIs<CommandResult.Failure<*>>(klerk.handle(Command(DeleteAuthor, rowling), Ctx.system()))
+        assertIs<StateProblem>(system.problems.single())
+        assertEquals(system.problems, system.unmaskedProblems)
+    }
+
+    @Test
     fun `a command token is only applied once, also when used concurrently`() = runBlocking<Unit> {
         val klerk = start { standardRules() }
         val astrid = createAuthorAstrid(klerk)

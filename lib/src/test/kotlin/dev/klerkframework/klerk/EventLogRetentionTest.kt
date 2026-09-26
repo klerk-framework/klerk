@@ -103,6 +103,23 @@ class EventLogRetentionTest {
     }
 
     @Test
+    fun `sequence numbers of erased entries are not reused after a restart`() = runBlocking {
+        for (createStorage in storages) {
+            val storage = createStorage()
+            val retention = EventLogRetention(afterModelDeletion = Duration.ZERO, paramsAndExtra = null)
+            val first = start(storage, retention)
+            createAuthor(first, "Kept") // 1
+            delete(first, createAuthor(first, "Gone")) // 2 and 3, erased at once
+            first.meta.stop()
+
+            val second = start(storage, retention)
+            val author = createAuthor(second, "After")
+            assertEquals(4, log(second, author).single().sequenceNumber)
+            second.meta.stop()
+        }
+    }
+
+    @Test
     fun `a pending erasure survives a restart`() = runBlocking {
         val storage = SQLiteInMemory.create()
         val retention = EventLogRetention(afterModelDeletion = 1.days, paramsAndExtra = null)

@@ -10,6 +10,7 @@ import dev.klerkframework.klerk.log.LogKlerkStarted
 import dev.klerkframework.klerk.log.LogKlerkStopped
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.read.KlerkModelsImpl
+import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.validation.Validator
@@ -73,6 +74,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
         context: C,
         options: ProcessingOptions,
     ): CommandResult<T> {
+        ReadBlockGuard.checkNotInsideReadBlock("handle", "Handle the command after the read block.")
         val result = try {
             eventsManager.handle(command, context, options)
         } catch (e: CancellationException) {
