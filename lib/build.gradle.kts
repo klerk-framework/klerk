@@ -11,6 +11,7 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
+// Keep coroutinesVersion and serializationVersion in sync with klerk-bom.
 val coroutinesVersion = "1.10.2"
 val serializationVersion = "1.9.0"
 val datetimeVersion = "0.7.1"

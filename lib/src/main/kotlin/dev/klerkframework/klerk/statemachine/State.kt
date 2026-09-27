@@ -18,6 +18,7 @@ import dev.klerkframework.klerk.statemachine.Block.VoidLifecycleBlock
 import dev.klerkframework.klerk.statemachine.BlockType.Enter
 import dev.klerkframework.klerk.statemachine.BlockType.Exit
 import dev.klerkframework.klerk.statemachine.BlockType.Time
+import kotlin.reflect.KVisibility
 import kotlin.time.Duration
 import kotlin.time.Instant
 
@@ -66,7 +67,7 @@ public class VoidState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> inte
      * makes sense here, since there is no model to `update`, `delete`, or `transitionTo` yet.
      */
     public fun <P : Any?> onEvent(event: VoidEvent<T, P>, init: VoidEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
-        require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
+        requireEventObject(event)
         val onEventBlock =
             VoidEventBlock<T, P, ModelStates, C, V>("Event block (${event.name}) for initial state", BlockType.Event)
         onEventBlock.init()
@@ -144,7 +145,7 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
      * rejected with a `StateProblem` when submitted.
      */
     public fun <P> onEvent(event: InstanceEvent<T, P>, init: InstanceEventBlock<T, P, ModelStates, C, V>.() -> Unit) {
-        require(event::class.objectInstance != null) { "Event ${event.name} must be declared as 'object'" }
+        requireEventObject(event)
         val onEventBlock = InstanceEventBlock<T, P, ModelStates, C, V>(
             "Event block (${event.name}) for state '$name'",
             BlockType.Event,
@@ -211,4 +212,17 @@ public class InstanceState<T : Any, ModelStates : Enum<*>, C : KlerkContext, V> 
 
     internal fun getBlockByEventReference(id: EventReference): InstanceEventBlock<T, *, ModelStates, C, V> =
         onEventBlocks.single { it.first.id == id }.second
+}
+
+private fun requireEventObject(event: Event<*, *>) {
+    val kClass = event::class
+    require(kClass.visibility != KVisibility.PRIVATE && kClass.visibility != KVisibility.PROTECTED) {
+        "Event ${event.name} must not be ${kClass.visibility?.name?.lowercase()}, since Klerk cannot access it"
+    }
+    val instance = try {
+        kClass.objectInstance
+    } catch (e: IllegalAccessException) {
+        throw IllegalArgumentException("Klerk cannot access the event ${event.name}. Is it in a private class?", e)
+    }
+    require(instance != null) { "Event ${event.name} must be declared as 'object'" }
 }

@@ -6,7 +6,7 @@ describing what happened.
 
 ## Declaring events
 
-An event is a Kotlin `object` extending one of four base classes, chosen along two axes:
+An event is a Kotlin `object` (not `private`) extending one of four base classes, chosen along two axes:
 
 |                                     | No parameters                  | With parameters                     |
 |-------------------------------------|--------------------------------|-------------------------------------|

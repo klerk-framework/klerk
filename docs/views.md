@@ -80,6 +80,14 @@ v.Author.all for parameter favouriteColleague"`). An unregistered `filter`/`sort
 reference to it, but it won't show up in `Specification.registeredViews` and can't be looked up by id. Ids may not
 contain `.` or spaces.
 
+When the id doesn't say what the view contains, give it a description. Tooling shows it, e.g. klerk-mcp to AI agents:
+
+```kotlin
+val greatAuthors = this.all
+    .filter { greatAuthorNames.contains(it.props.firstName.value) }
+    .register("greatAuthors", description = "Authors whose first name is Astrid or Elsa")
+```
+
 ## Views that need more than a property initializer
 
 Some views can't be expressed as a one-line `filter` — e.g. a view that joins across two managed models. For these,

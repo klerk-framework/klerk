@@ -245,14 +245,22 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      * looked up by [ViewID] (e.g. by `validReferences` error messages) and shows up in generated docs. A view
      * that is never registered still works if you hold a reference to it, but can't be looked up by id.
      *
+     * [description] says what the view contains, for views whose id doesn't. Tooling shows it, e.g. klerk-mcp to AI
+     * agents.
+     *
      * @throws IllegalArgumentException if [id] contains `.` or a space
      */
-    public fun register(id: String): ModelView<T, C> {
+    public fun register(id: String, description: String? = null): ModelView<T, C> {
         require("." !in id && " " !in id) { "Illegal view id: $id" }
         this._id = id
+        this.description = description
         modelViews.register(this)
         return this
     }
+
+    /** What the view contains, as given to [register]. */
+    public var description: String? = null
+        private set
 
     /** The id given to [register], or null for a view that was never registered. Available before startup. */
     internal val registeredId: String? get() = _id

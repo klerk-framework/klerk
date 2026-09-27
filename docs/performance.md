@@ -14,6 +14,12 @@ be used again.
 Some indexes are always kept in memory, so Klerk's memory usage will grow with the number of models even if they are
 evicted.
 
+## Garbage collection
+
+A full cache is a large, long-lived live set, which makes the collector matter more than it usually does. On JDK 21 and
+later, run Generational ZGC if pause times matter to you.
+Size the heap for the models you expect to keep resident, plus the indexes that are never evicted.
+
 ## Keep read locks short
 
 Reads run concurrently with each other, but a read (`klerk.read`/`klerk.readSuspend`) blocks command commits for as long

@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.statemachine.stateMachine
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /** Everything a state machine may declare exactly once must fail loudly on the second declaration. */
@@ -62,4 +63,18 @@ class StateMachineDeclarationTest {
             }
         }
     }
+
+    @Test
+    fun `a private event object is reported clearly`() {
+        val e = assertFailsWith<IllegalArgumentException> {
+            stateMachine<Book, BookStates, Ctx, Views> {
+                state(BookStates.Draft) {
+                    onEvent(HiddenEvent) {}
+                }
+            }
+        }
+        assertEquals("Event HiddenEvent must not be private, since Klerk cannot access it", e.message)
+    }
 }
+
+private object HiddenEvent : InstanceEventNoParameters<Book>(EventVisibility.External)
