@@ -156,7 +156,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         val instant = (state.atTimeFunction as? (LifecycleArgs<out Any, C, V>) -> Instant)?.invoke(
             LifecycleArgs(model, context, reader),
         ) ?: state.afterDuration?.let { time.plus(it) }
-        return model.copy(timeTrigger = instant?.let { makeExactSerializable(it) })
+        return model.copy(timeTriggerMicros = instant?.to64bitMicroseconds())
     }
 
     /**

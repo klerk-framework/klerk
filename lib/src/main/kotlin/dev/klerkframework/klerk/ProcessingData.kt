@@ -117,7 +117,7 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
 
             modified[id] = inModified.copy(
                 state = newState,
-                lastStateTransitionAt = time,
+                lastStateTransitionAtMicros = time.to64bitMicroseconds(),
             )
 
             newTransitions.add(id)
@@ -132,7 +132,7 @@ internal data class ProcessingData<Primary : Any, C : KlerkContext, V>(
     internal fun withTimeTriggersOnModels(): ProcessingData<Primary, C, V> {
         val aggStates = aggregatedModelState.toMutableMap()
         for ((id, instant) in timeTriggers) {
-            aggStates[id] = aggregatedModelState.getValue(id).copy(timeTrigger = instant)
+            aggStates[id] = aggregatedModelState.getValue(id).copy(timeTriggerMicros = instant?.to64bitMicroseconds())
         }
         return this.copy(
             aggregatedModelState = aggStates,

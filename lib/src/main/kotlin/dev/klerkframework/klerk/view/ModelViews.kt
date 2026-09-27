@@ -3,6 +3,8 @@ package dev.klerkframework.klerk.view
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.misc.IntIdList
+import dev.klerkframework.klerk.misc.IntIdSet
 
 /**
  * Base class for the set of [ModelView]s belonging to one managed model type `T`. Subclass it, add
@@ -33,11 +35,12 @@ public open class ModelViews<T : Any, C : KlerkContext> {
      */
     public open fun didDelete(deleted: Model<T>) {}
 
-    internal val _all: MutableList<Int> = mutableListOf()
+    // Ordered by createdAt, which rules out a bitmap (sorted by id) despite holding nothing but ids.
+    internal val _all: MutableList<Int> = IntIdList()
 
     // Kept alongside _all purely so that "is this id one of mine" is a set lookup: it is asked once per derived view
     // per write, and _all is a list.
-    private val allIds: MutableSet<Int> = HashSet()
+    private val allIds: MutableSet<Int> = IntIdSet()
 
     /**
      * Set once Klerk has started. Views derived after that point are not attached to the view tree, so they behave as

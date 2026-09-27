@@ -37,7 +37,7 @@ class ProcessingFactTest {
             updatedModels = listOf(authorId),
             aggregatedModelState = mapOf(
                 authorId to authorModel.copy(
-                    lastPropsUpdatedAt = updateTime,
+                    lastPropsUpdatedAtMicros = updateTime.to64bitMicroseconds(),
                     props = author.copy(firstName = FirstName("Another")),
                 ),
             ),

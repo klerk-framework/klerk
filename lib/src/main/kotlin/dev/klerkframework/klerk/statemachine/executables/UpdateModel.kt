@@ -6,8 +6,8 @@ import dev.klerkframework.klerk.ModelArgs
 import dev.klerkframework.klerk.ProcessingData
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.misc.extractNameFromFunction
-import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.to64bitMicroseconds
 import dev.klerkframework.klerk.view.ModelViews
 
 internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>(
@@ -31,7 +31,7 @@ internal class UpdateModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
 
         val updatedModel = model.copy(
             props = newProperties,
-            lastPropsUpdatedAt = makeExactSerializable(args.context.time),
+            lastPropsUpdatedAtMicros = args.context.time.to64bitMicroseconds(),
         )
         return ProcessingData(
             updatedModels = listOf(updatedModel.id),

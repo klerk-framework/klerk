@@ -32,15 +32,42 @@ public data class RegisteredView<C : KlerkContext>(val modelClass: KClass<out An
  * Compare states with [isIn] and get the enum value with [stateAs] rather than comparing this name; it is the raw form,
  * meant for rendering, serializing and matching untyped input.
  */
-public data class Model<T : Any>(
+@ConsistentCopyVisibility
+public data class Model<T : Any> internal constructor(
     val id: ModelID<T>,
-    val createdAt: Instant,
-    val lastPropsUpdatedAt: Instant,
-    val lastStateTransitionAt: Instant,
+    // Packed as microseconds since 1970 (see to64bitMicroseconds), not kept as Instant: a resident model is held for
+    // as long as maxResidentModels allows, and an Instant is a separate heap object per timestamp. Four of them per
+    // model adds up; a Long does not. The same precision is already what survives a trip through Persistence.
+    private val createdAtMicros: Long,
+    private val lastPropsUpdatedAtMicros: Long,
+    private val lastStateTransitionAtMicros: Long,
     val state: String,
-    val timeTrigger: Instant?,
+    private val timeTriggerMicros: Long?,
     val props: T,
 ) {
+    public constructor(
+        id: ModelID<T>,
+        createdAt: Instant,
+        lastPropsUpdatedAt: Instant,
+        lastStateTransitionAt: Instant,
+        state: String,
+        timeTrigger: Instant?,
+        props: T,
+    ) : this(
+        id,
+        createdAt.to64bitMicroseconds(),
+        lastPropsUpdatedAt.to64bitMicroseconds(),
+        lastStateTransitionAt.to64bitMicroseconds(),
+        state,
+        timeTrigger?.to64bitMicroseconds(),
+        props,
+    )
+
+    public val createdAt: Instant get() = decode64bitMicroseconds(createdAtMicros)
+    public val lastPropsUpdatedAt: Instant get() = decode64bitMicroseconds(lastPropsUpdatedAtMicros)
+    public val lastStateTransitionAt: Instant get() = decode64bitMicroseconds(lastStateTransitionAtMicros)
+    public val timeTrigger: Instant? get() = timeTriggerMicros?.let { decode64bitMicroseconds(it) }
+
     /**
      * The time when this model was last modified, either by a state transition or updating properties.
      */

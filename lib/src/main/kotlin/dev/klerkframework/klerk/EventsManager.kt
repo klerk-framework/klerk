@@ -507,7 +507,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         mutex.withLock {
             // Read under the mutex: a command may have changed, transitioned or deleted the model since it was queued.
             val model = readWriteLock.withRead { ReaderWithoutAuth<C, V>(klerk).getOrNull(id) }
-            if (model == null || model.timeTrigger == null || model.timeTrigger > now) {
+            val timeTrigger = model?.timeTrigger
+            if (model == null || timeTrigger == null || timeTrigger > now) {
                 logger.debug { "The time trigger for model $id is no longer due" }
                 return
             }
@@ -539,7 +540,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             commit<Any, Nothing>(
                 ProcessingData(
                     updatedModels = listOf(model.id),
-                    aggregatedModelState = mapOf(model.id to model.copy(timeTrigger = null)),
+                    aggregatedModelState = mapOf(model.id to model.copy(timeTriggerMicros = null)),
                 ),
                 null,
                 null,

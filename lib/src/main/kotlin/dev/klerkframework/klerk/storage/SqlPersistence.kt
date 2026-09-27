@@ -389,11 +389,15 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
      */
     private fun applyAttachedDataDelta(attachedData: AttachedDataDelta) {
         for ((dataId, claim) in attachedData.claimed) {
-            AttachedDataTable.update(where = { AttachedDataTable.id eq dataId }) {
+            val updated = AttachedDataTable.update(where = { AttachedDataTable.id eq dataId }) {
                 it[owner] = claim.owner
                 it[expires] = null
                 it[visibility] = claim.visibility.ordinal.toByte()
             }
+            // The row was reaped between planning the claim and committing it. Reaping now runs under the command
+            // mutex (AttachedDataImpl.maybeReap), so this should not happen; failing loudly beats a model silently
+            // referencing data that is gone.
+            check(updated == 1) { "Could not find attached data with id $dataId to claim it" }
         }
         for (dataId in attachedData.deleted) {
             AttachedDataTable.deleteWhere { id eq dataId }

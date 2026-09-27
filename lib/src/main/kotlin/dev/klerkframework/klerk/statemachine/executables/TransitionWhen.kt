@@ -7,8 +7,8 @@ import dev.klerkframework.klerk.ModelArgs
 import dev.klerkframework.klerk.ProcessingData
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.UnfinalizedTransition
-import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.to64bitMicroseconds
 import dev.klerkframework.klerk.view.ModelViews
 import kotlin.time.Instant
 
@@ -50,7 +50,7 @@ internal fun <Primary : Any, T : Any, C : KlerkContext, V> transition(
     view: ModelViews<T, C>,
 ): ProcessingData<Primary, C, V> {
     val exitBlock = specification.getStateMachine(model).states.single { it.name == model.state }.exitBlock
-    val updatedModel = model.copy(state = targetState, lastStateTransitionAt = makeExactSerializable(time))
+    val updatedModel = model.copy(state = targetState, lastStateTransitionAtMicros = time.to64bitMicroseconds())
     val enterBlock =
         specification.getStateMachine(updatedModel).states.single { it.name == updatedModel.state }.enterBlock
 

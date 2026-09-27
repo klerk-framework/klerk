@@ -623,8 +623,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
     /**
      * Removes expired unclaimed values. Cheap enough to do from [prepare], which is slow anyway, but not more often
      * than once per lifetime window.
+     *
+     * Runs under the command mutex, so it cannot race a command that is planning to claim the same value: either the
+     * claim commits first and the value is no longer unclaimed, or the reap runs first and the claim fails normally
+     * with [dev.klerkframework.klerk.KlerkErrorCode.AttachedDataNotFound]. This is sound only because `prepare` (the
+     * only caller) is unreachable while the mutex is held: executables cannot prepare, and job steps run outside it.
      */
-    private fun maybeReap() {
+    private suspend fun maybeReap() {
         val now = settings.now()
         val previous = lastReap.get()
         if (now < previous.plus(settings.defaultAttachedDataLease)) {
@@ -633,11 +638,13 @@ internal class AttachedDataImpl<C : KlerkContext, V>(
         if (!lastReap.compareAndSet(previous, now)) {
             return
         }
-        entries.entries.removeIf { it.value.isExpired(now) }
-        deleteBytes(settings.persistence.deleteExpiredAttachedData(now))
-        // Whatever no longer has an entry has nothing left to wait for either — a value that was reaped, or one a
-        // step refused that nobody was waiting for.
-        waiters.keys.removeIf { !entries.containsKey(it) }
+        klerk.impl().eventsManager.withCommandMutex {
+            entries.entries.removeIf { it.value.isExpired(now) }
+            deleteBytes(settings.persistence.deleteExpiredAttachedData(now))
+            // Whatever no longer has an entry has nothing left to wait for either — a value that was reaped, or one a
+            // step refused that nobody was waiting for.
+            waiters.keys.removeIf { !entries.containsKey(it) }
+        }
     }
 
     // ---------------------------------------------------------------- authorization

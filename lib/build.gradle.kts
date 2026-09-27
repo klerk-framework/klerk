@@ -22,6 +22,7 @@ val kotlinLoggingVersion = "2.1.21"
 val slf4jVersion = "2.0.9"
 val sqliteJdbcVersion = "3.44.1.0"
 val caffeineVersion = "3.2.4"
+val roaringBitmapVersion = "1.3.0"
 
 group = "dev.klerkframework"
 version = "1.0.0-beta.7-SNAPSHOT"
@@ -46,6 +47,8 @@ dependencies {
     // api: MeterRegistry is a KlerkSettings property.
     api("io.micrometer:micrometer-core:$micrometerVersion")
     implementation("com.github.ben-manes.caffeine:caffeine:$caffeineVersion")
+    // Backs the internal id-set abstraction (IntIdSet); never appears in Klerk's public API.
+    implementation("org.roaringbitmap:RoaringBitmap:$roaringBitmapVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
     testImplementation("org.slf4j:slf4j-simple:$slf4jVersion")
@@ -63,6 +66,25 @@ publishing {
 
 java {
     withSourcesJar()
+}
+
+// Ad hoc memory/latency benchmark (issues #40, #42). Not part of `check`; run with `./gradlew :lib:memoryBenchmark`.
+tasks.register<Test>("memoryBenchmark") {
+    group = "verification"
+    description = "Runs ModelCacheFootprintBenchmark with a large heap. -Dklerk.benchmark.count=N to size it."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    filter {
+        includeTestsMatching("*ModelCacheFootprintBenchmark*")
+    }
+    systemProperty("klerk.benchmark", "true")
+    System.getProperty("klerk.benchmark.count")?.let { systemProperty("klerk.benchmark.count", it) }
+    System.getProperty("klerk.benchmark.reads")?.let { systemProperty("klerk.benchmark.reads", it) }
+    minHeapSize = "512m"
+    maxHeapSize = "4g"
+    testLogging {
+        showStandardStreams = true
+    }
 }
 
 // ktlint's parser cannot yet handle Kotlin context parameters (context(reader: ...)).

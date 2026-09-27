@@ -17,6 +17,7 @@ import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.Executable
+import dev.klerkframework.klerk.to64bitMicroseconds
 import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.view.ModelViews
 import kotlin.time.Instant
@@ -60,7 +61,9 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
             currentModel = created.id,
             remainingBlocks = listOf(voidExitBlock, enterBlock),
             functionsToUpdateViews = listOf {
-                view.internalDidCreate(created.copy(state = initialState.name, lastStateTransitionAt = time))
+                view.internalDidCreate(
+                    created.copy(state = initialState.name, lastStateTransitionAtMicros = time.to64bitMicroseconds()),
+                )
             },
             log = listOf("Creating model using '${extractNameFromFunction(f)}'"),
         )

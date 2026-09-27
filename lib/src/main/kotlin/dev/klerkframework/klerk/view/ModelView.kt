@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ViewID
+import dev.klerkframework.klerk.misc.IntIdSet
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.unauthorized
 
@@ -102,7 +103,7 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
         synchronized(this) {
             index?.let { return it }
             val parentIds = requireNotNull(parent).ensureIndex(unauthorized) ?: return null
-            val built = HashSet<Int>()
+            val built = IntIdSet()
             for (id in parentIds) {
                 if (matches(unauthorized.get(ModelID(id)))) {
                     built.add(id)
