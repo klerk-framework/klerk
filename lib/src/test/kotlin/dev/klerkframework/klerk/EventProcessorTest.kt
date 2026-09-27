@@ -117,6 +117,6 @@ private object MyTimeTriggerManager : TriggerTimeManager {
     override fun start() {
     }
 
-    override fun stop() {
+    override suspend fun stop() {
     }
 }

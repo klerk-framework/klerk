@@ -1,12 +1,14 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.misc.ReadWriteLock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.PriorityBlockingQueue
-import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -15,7 +17,7 @@ internal interface TriggerTimeManager {
 
     fun init(models: List<Model<out Any>>)
     fun start()
-    fun stop()
+    suspend fun stop()
 }
 
 internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
@@ -24,6 +26,7 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
     val klerk: KlerkImpl<C, V>,
 ) : TriggerTimeManager {
 
+    @Volatile
     private var worker: Job? = null
     private lateinit var timeTriggers: PriorityBlockingQueue<TimeTriggerModel>
 
@@ -46,26 +49,25 @@ internal class TriggerTimeManagerImpl<C : KlerkContext, V>(
     }
 
     override fun start() {
-        thread(isDaemon = true) {
-            runBlocking {
-                worker = launch {
-                    while (true) {
-                        try {
-                            do {
-                                val maybeMoreToProcess = processQueue()
-                            } while (maybeMoreToProcess)
-                        } catch (e: Exception) {
-                            logger.error(e) { "Could not handle triggers" }
-                        }
-                        delay(5.seconds)
-                    }
+        worker = CoroutineScope(Dispatchers.IO).launch {
+            while (true) {
+                try {
+                    do {
+                        val maybeMoreToProcess = processQueue()
+                    } while (maybeMoreToProcess)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.error(e) { "Could not handle triggers" }
                 }
+                delay(5.seconds)
             }
         }
     }
 
-    override fun stop() {
-        worker?.cancel()
+    /** Returns when the worker has stopped, so no trigger commits after this. */
+    override suspend fun stop() {
+        worker?.cancelAndJoin()
     }
 
     /**

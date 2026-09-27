@@ -40,11 +40,9 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
         val reader = ReaderWithAuth(klerk, context)
         return readWriteLock.withRead {
             try {
-                val result = ReadBlockGuard.withThreadMarker { reader.readFunction() }
-                klerk.activityLogImpl.addReads(reader.modelsRead.distinctBy { it.id }, context)
-                result
+                ReadBlockGuard.withThreadMarker { reader.readFunction() }
             } finally {
-                reader.finishRead()
+                finish(reader, context)
             }
         }
     }
@@ -55,9 +53,14 @@ internal class KlerkModelsImpl<C : KlerkContext, V>(
             try {
                 withContext(ReadBlockGuard.Marker()) { reader.readFunction() }
             } finally {
-                reader.finishRead()
+                finish(reader, context)
             }
         }
+    }
+
+    private fun finish(reader: ReaderWithAuth<C, V>, context: C) {
+        reader.finishRead()
+        klerk.activityLogImpl.addReads(reader.readModels, context)
     }
 
     fun modelWasModified(modification: ModelModification) {

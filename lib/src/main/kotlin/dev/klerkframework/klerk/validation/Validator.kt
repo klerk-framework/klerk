@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.AuthorizationProblem
 import dev.klerkframework.klerk.BadRequestProblem
 import dev.klerkframework.klerk.CommandRuleArgs
 import dev.klerkframework.klerk.Event
+import dev.klerkframework.klerk.EventOnlyRuleArgs
 import dev.klerkframework.klerk.EventReference
 import dev.klerkframework.klerk.InstanceEventArgs
 import dev.klerkframework.klerk.InstanceEventNoParameters
@@ -252,6 +253,34 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return listOfNotNull(checkAuthorization(currentCommand, reader, context))
     }
 
+    /**
+     * The problem if the rules that only look at the event deny [eventRef] to the actor, whatever the model and
+     * parameters, or null if a command could be authorized.
+     */
+    fun eventOnlyAuthorization(eventRef: EventReference, context: C, reader: ModelReader<C, V>): Problem? {
+        if (context.actor == SystemIdentity) {
+            return null
+        }
+        val authorization = klerk.specification.authorization
+        val args = EventOnlyRuleArgs(klerk.specification.event(eventRef), context, reader)
+        val deny = authorization.eventOnlyNegativeRules.firstOrNull { it(args) == Deny }
+        if (deny != null) {
+            return AuthorizationProblem(
+                context.translation.klerk.unauthorized,
+                RuleDescription(deny, RuleType.Authorization),
+                KlerkErrorCode.CommandNegativeAuthorizationExist,
+            )
+        }
+        if (authorization.hasCommandPositiveRules || authorization.eventOnlyPositiveRules.any { it(args) == Allow }) {
+            return null
+        }
+        return AuthorizationProblem(
+            context.translation.klerk.unauthorized,
+            null,
+            KlerkErrorCode.CommandPositiveAuthorizationMissing,
+        )
+    }
+
     private fun <T : Any, P> checkAuthorization(
         command: Command<T, P>,
         reader: ModelReader<C, V>,
@@ -321,7 +350,11 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         }
 
         problems.addAll(validateWithContext(context, command.event.id))
-        validateReferences(command.event.id, command.params, context)?.let { problems.add(it) }
+        validateReferences(command.event.id, command.params, context)?.let { problem ->
+            // Whether an id is in a view is not for an actor who may never send the event.
+            eventOnlyAuthorization(command.event.id, context, reader)?.let { return listOf(it) }
+            problems.add(problem)
+        }
         validateEnums(command.event.id, command.params)?.let { problems.add(it) }
 
         if (problems.isNotEmpty()) {

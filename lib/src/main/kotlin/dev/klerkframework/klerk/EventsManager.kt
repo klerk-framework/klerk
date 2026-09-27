@@ -478,7 +478,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         timeTriggerManager.start()
     }
 
-    fun stop() {
+    suspend fun stop() {
         timeTriggerManager.stop()
     }
 

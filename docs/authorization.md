@@ -167,10 +167,11 @@ there's no per-entry model here, so this is an all-or-nothing gate rather than s
 
 ### activityLog
 
-Gates whether an actor can read the activity log, `klerk.activityLog`: an in-memory record of recent starts, stops,
-successful commands and model reads, including who read which model. Rules receive an `ActivityLogRuleArgs<C, V>`
-(`context`, `reader`) and decide for the whole log. `entries(context)` throws `AuthorizationException` when denied, and
-so does collecting `subscribe(context)` or `subscribeToReads(context)`.
+Gates whether an actor can read the activity log, `klerk.activityLog`: an in-memory record of recent starts, stops and
+successful commands. `subscribeToReads(context)` also reports who read which model: every model a read block hands out,
+through `get`, `getOrNull`, `referencing`, a view or a query. Rules receive an `ActivityLogRuleArgs<C, V>` (`context`,
+`reader`) and decide for the whole log. `entries(context)` throws `AuthorizationException` when denied, and so does
+collecting `subscribe(context)` or `subscribeToReads(context)`.
 
 ### readAttachedData
 

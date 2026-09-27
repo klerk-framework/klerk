@@ -26,9 +26,7 @@ public interface ModelArgs<T : Any, C : KlerkContext, V> : RuleArgs<C, V> {
     public val model: Model<T>
 }
 
-/**
- * Arguments handed to context-only rules, e.g. rules deciding void events not tied to a model instance.
- */
+/** Arguments handed to the `eventLog` rules. There is no per-entry data, so these rules decide for the whole log. */
 public data class EventLogRuleArgs<C : KlerkContext, V>(
     override val context: C,
     override val reader: ModelReader<C, V>,

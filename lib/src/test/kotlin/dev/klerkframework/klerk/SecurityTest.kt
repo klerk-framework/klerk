@@ -389,6 +389,25 @@ class SecurityTest {
     }
 
     @Test
+    fun `an actor who may never send the event cannot probe view membership through validReferences`() =
+        runBlocking<Unit> {
+            val klerk = start {
+                readModels { positive(::everybodyCanReadModels) }
+                commands { positive(::everybodyMayImproveAuthors) }
+            }
+            val user = Ctx.authenticationIdentity()
+            val params = CreateBookParams(
+                title = BookTitle("Probe"),
+                author = ModelID(123),
+                averageScore = AverageScore(0f),
+                readingTime = ReadingTime(kotlin.time.Duration.ZERO),
+            )
+
+            val problem = klerk.handle(Command(CreateBook, params), user).problems().single()
+            assertEquals(KlerkErrorCode.CommandPositiveAuthorizationMissing, problem.code)
+        }
+
+    @Test
     fun `a rejected command changes nothing`() = runBlocking<Unit> {
         val klerk = start { standardRules() }
         val astrid = createAuthorAstrid(klerk)

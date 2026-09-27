@@ -483,7 +483,8 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
     ) {
         transaction(database) {
             if (value != null) {
-                AttachedDataTable.update(where = { AttachedDataTable.id eq id }) { it[this.value] = ExposedBlob(value.readAllBytes()) }
+                val bytes = ExposedBlob(value.readAllBytes())
+                AttachedDataTable.update(where = { AttachedDataTable.id eq id }) { it[this.value] = bytes }
             }
             // As on insert: the stream has been consumed above, so the digest is complete, and it is written in the
             // same transaction as the bytes it describes.

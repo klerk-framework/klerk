@@ -2,7 +2,6 @@ package dev.klerkframework.klerk.read
 
 import dev.klerkframework.klerk.AttachedDataReader
 import dev.klerkframework.klerk.AuthorizationProblem
-import dev.klerkframework.klerk.EventOnlyRuleArgs
 import dev.klerkframework.klerk.EventReference
 import dev.klerkframework.klerk.EventVisibility
 import dev.klerkframework.klerk.InstanceEvent
@@ -27,6 +26,7 @@ import dev.klerkframework.klerk.storage.EventLogEntry
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.QueryOptions
 import dev.klerkframework.klerk.view.QueryResponse
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.time.Instant
@@ -60,7 +60,12 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
         return eventLogEntryQuery(klerk, sequenceNumber)
     }
 
-    internal val modelsRead = mutableSetOf<Model<*>>()
+    private val modelsRead = ConcurrentHashMap<ModelID<*>, Model<*>>()
+
+    /** The models this reader has handed out, for the activity log. */
+    internal val readModels: Collection<Model<*>> get() = modelsRead.values
+
+    private fun <T : Any> Model<T>.recorded(): Model<T> = also { modelsRead[it.id] = it }
 
     override fun referencingIds(id: ModelID<*>): Set<ModelID<*>> = withoutAuth.referencingIds(id)
 
@@ -77,10 +82,10 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
 
     private fun <T : Any> Set<Model<T>>.readable(): Set<Model<T>> =
         filter { context.actor == SystemIdentity || isAuthorized(it, context, klerk.specification, withoutAuth) }
-            .map { propertyAuth.secure(it) }
+            .map { propertyAuth.secure(it).recorded() }
             .toSet()
 
-    override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).also { modelsRead.add(it) }
+    override fun <T : Any> get(id: ModelID<T>): Model<T> = checkAuth(withoutAuth.get(id)).recorded()
 
     // Only the system gets the cheap answer from the index. Anyone else only sees the models they may read, so that
     // membership and cardinality do not reveal the others.
@@ -108,7 +113,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
     override fun <T : Any> sequence(collection: ModelView<T, C>): Sequence<Model<T>> =
         collection.withReader(withoutAuth)
             .filter { isAuthorized(it, context, klerk.specification, withoutAuth) }
-            .map { propertyAuth.secure(it) }
+            .map { propertyAuth.secure(it).recorded() }
 
     override fun <T : Any> query(
         collection: ModelView<T, C>,
@@ -121,7 +126,7 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
             model
                 .takeIf { isAuthorized(it, context, klerk.specification, withoutAuth) }
                 ?.let { propertyAuth.secure(it) }
-        }
+        }.also { page -> page.items.forEach { it.recorded() } }
 
     override fun <T : Any> queryOrThrow(
         collection: ModelView<T, C>,
@@ -130,14 +135,18 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
     ): QueryResponse<T> {
         // Like query, the authorization check comes before the filter, so `filter` never sees what the actor may not.
         return withoutAuth.queryInternal(collection, options, filter) { checkAuth(it) }
+            .also { page -> page.items.forEach { it.recorded() } }
     }
 
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? {
         val model = withoutAuth.getOrNull(id) ?: return null
         if (context.actor == SystemIdentity) {
-            return model
+            return model.recorded()
         }
-        return if (isAuthorized(model, context, klerk.specification, withoutAuth)) propertyAuth.secure(model) else null
+        if (!isAuthorized(model, context, klerk.specification, withoutAuth)) {
+            return null
+        }
+        return propertyAuth.secure(model).recorded()
     }
 
     private fun <T : Any> checkAuth(model: Model<T>): Model<T> {
@@ -169,20 +178,16 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
             .toSet()
 
     override fun <T : Any> possibleEvents(id: ModelID<T>, visibility: EventVisibility): Set<InstanceEvent<T, *>> {
-        val model = get(id)
+        get(id)
+        // The rules get the model as handle() does, not the property-secured copy.
+        val model = withoutAuth.get(id)
         return klerk.specification.getStateMachine(model).getAvailableEventsForModel(model, visibility)
             .filter { klerk.validator.isPossibleWithoutParameters(it.id, context, model, withoutAuth) }
             .toSet()
     }
 
-    override fun isGenerallyPossible(eventRef: EventReference): Boolean {
-        if (context.actor == SystemIdentity) return true
-        val args = EventOnlyRuleArgs(klerk.specification.event(eventRef), context, withoutAuth)
-        val authorization = klerk.specification.authorization
-        if (authorization.eventOnlyNegativeRules.any { it(args) == NegativeAuthorization.Deny }) return false
-        return authorization.hasCommandPositiveRules ||
-            authorization.eventOnlyPositiveRules.any { it(args) == PositiveAuthorization.Allow }
-    }
+    override fun isGenerallyPossible(eventRef: EventReference): Boolean =
+        klerk.validator.eventOnlyAuthorization(eventRef, context, withoutAuth) == null
 }
 
 internal fun <T : Any, C : KlerkContext, V> isAuthorized(

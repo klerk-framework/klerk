@@ -38,8 +38,8 @@ public class SchemaField internal constructor(
     public val isRequired: Boolean = !parameter.isOptional
 
     /**
-     * True if the field is a `List` or a `Set`. [valueClass], [elementType], [referencedModel] and [enumConstants]
-     * then describe its elements.
+     * True if the field is a `List` or a `Set`. [valueClass], [elementType], [nestedSchema], [referencedModel] and
+     * [enumConstants] then describe its elements.
      */
     public val isCollection: Boolean = schemaType.shape is Shape.Many
 
@@ -59,6 +59,9 @@ public class SchemaField internal constructor(
 
     /** Like [type], but for a collection the kind of its elements. */
     public val elementType: PropertyType? = element.shape.propertyType()
+
+    /** The schema of a nested object (for a collection, of its elements), or null if the field is not one. */
+    public val nestedSchema: ObjectSchema<*>? = (element.shape as? Shape.Nested)?.schema
 
     /** The model class a [ModelID] (or a collection of them) refers to, or null if it is not a reference. */
     public val referencedModel: KClass<*>? = element.referencedModel

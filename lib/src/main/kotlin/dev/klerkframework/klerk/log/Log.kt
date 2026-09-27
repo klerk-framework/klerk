@@ -52,8 +52,11 @@ public interface ActivityLog<C : KlerkContext> {
     public fun subscribe(context: C): Flow<LogEntry>
 
     /**
-     * Read events as they happen. Note that you must handle the events efficiently as there can be a huge amount of
-     * read events in a system. Authorized like [subscribe].
+     * One entry per model read, as it happens: every model a read block (`klerk.read` or `klerk.readSuspend`) hands
+     * out, whether through `get`, `getOrNull`, `referencing`, a view or a query. A model is reported once per block.
+     * Membership and count reads, which hand out no model, are not reported.
+     *
+     * Handle the entries efficiently, as there can be a huge number of them. Authorized like [subscribe].
      */
     public fun subscribeToReads(context: C): Flow<LogEntry>
 }
@@ -119,7 +122,7 @@ internal class ActivityLogImpl<C : KlerkContext, V>(private val klerk: KlerkImpl
     }
 
     /** Records that [models] were read, emitting one [LogReadModel] entry per model to [subscribeToReads]. */
-    internal fun addReads(models: List<Model<*>>, context: KlerkContext) {
+    internal fun addReads(models: Collection<Model<*>>, context: KlerkContext) {
         for (model in models) {
             logEntryReadFlow.tryEmit(LogReadModel(model, context))
         }
