@@ -105,12 +105,12 @@ class EvictionTest {
         klerk.meta.start()
         generateSampleData(12, 2, klerk)
 
-        assertEquals(ModelCache.count, klerk.meta.modelsCount)
-        assertTrue(klerk.meta.modelsCount > 10, "expected more models than the cache can hold")
+        assertEquals(ModelCache.count, klerk.meta.modelsCount())
+        assertTrue(klerk.meta.modelsCount() > 10, "expected more models than the cache can hold")
         // The size bound is a target Caffeine enforces asynchronously, not a hard cap, so this checks that bodies are
         // actually being dropped rather than that some exact number is resident.
         assertTrue(
-            ModelCache.residentCount < klerk.meta.modelsCount,
+            ModelCache.residentCount < klerk.meta.modelsCount(),
             "expected bodies to be evicted, but all ${ModelCache.residentCount} were resident",
         )
         klerk.meta.stop()
@@ -144,7 +144,7 @@ class EvictionTest {
         val author = createAuthor(klerk)
         // Push the author out of the cache by reading past it.
         klerk.read(Ctx.system()) { views.books.all.asSequence().toList().map { it.id } }
-        assertTrue(ModelCache.residentCount < klerk.meta.modelsCount)
+        assertTrue(ModelCache.residentCount < klerk.meta.modelsCount())
 
         klerk.handle(
             Command(ImproveAuthor, author),
@@ -166,14 +166,14 @@ class EvictionTest {
 
         val author = createAuthor(klerk)
         klerk.read(Ctx.system()) { views.books.all.asSequence().toList().map { it.id } } // evict it
-        val countBefore = klerk.meta.modelsCount
+        val countBefore = klerk.meta.modelsCount()
 
         klerk.handle(
             Command(DeleteAuthor, author),
             Ctx.system(),
         ).getOrThrow()
 
-        assertEquals(countBefore - 1, klerk.meta.modelsCount)
+        assertEquals(countBefore - 1, klerk.meta.modelsCount())
         assertNull(klerk.read(Ctx.system()) { getOrNull(author) })
         // The row is gone from storage too, so a miss must not be able to resurrect it.
         assertTrue(ModelCache.isIdAvailable(author.value))

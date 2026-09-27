@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.storage.RamStorage
 import dev.klerkframework.klerk.view.asSequence
 import dev.klerkframework.klerk.view.query
 import kotlinx.coroutines.runBlocking
@@ -17,6 +18,43 @@ import kotlin.test.fail
 import kotlin.time.Clock
 
 class ReaderTest {
+
+    @Test
+    fun `referencingIds follows updates, deletes and restarts`() {
+        runBlocking {
+            fun views() = BookViews().let { Views(it, AuthorViews(it.all)) }
+            val storage = RamStorage()
+            val context = Ctx.system()
+            val klerk = createKlerk(views(), storage)
+            klerk.meta.start()
+
+            val rowling = createAuthorJKRowling(klerk)
+            val astrid = createAuthorAstrid(klerk)
+            val book1 = createBookHarryPotter1(klerk, rowling)
+            val book2 = createBookHarryPotter1(klerk, rowling)
+            assertEquals(setOf(book1, book2), klerk.read(context) { referencingIds(rowling) })
+
+            val book1Props = klerk.read(context) { get(book1) }.props
+            klerk.handle(Command(UpdateBook, book1, book1Props.copy(author = astrid)), context).getOrThrow()
+            klerk.read(context) {
+                assertEquals(setOf(book2), referencingIds(rowling))
+                assertEquals(setOf(book1), referencingIds(astrid))
+            }
+
+            klerk.handle(Command(DeleteBook, book2, null), context).getOrThrow()
+            assertEquals(emptySet(), klerk.read(context) { referencingIds(rowling) })
+            klerk.meta.stop()
+
+            val restarted = createKlerk(views(), storage)
+            restarted.meta.start()
+            restarted.read(context) {
+                assertEquals(emptySet(), referencingIds(rowling))
+                assertEquals(setOf(book1), referencingIds(astrid))
+            }
+            assertEquals(3, restarted.meta.modelsCount())
+            restarted.meta.stop()
+        }
+    }
 
     @Test
     fun getTypedRelationsTest() {
@@ -43,11 +81,7 @@ class ReaderTest {
                 assertEquals(2, referencingIds(rowling).size)
 
                 val booksRelatedToRowling = referencing(Book::class, rowling)
-                assertEquals(2, booksRelatedToRowling.size)
-                assertEquals(
-                    "Harry Potter and the Philosopher's Stone",
-                    booksRelatedToRowling.first().props.title.value,
-                )
+                assertEquals(setOf(harryPotter1, harryPotter2), booksRelatedToRowling.map { it.id }.toSet())
 
                 val authorsRelatedToRowling = referencing(Author::class, rowling)
                 assert(authorsRelatedToRowling.isEmpty())

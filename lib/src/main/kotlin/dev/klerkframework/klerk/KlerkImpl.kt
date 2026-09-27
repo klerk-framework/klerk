@@ -46,7 +46,6 @@ internal class KlerkImpl<C : KlerkContext, V>(
     init {
         specification.initialize(settings)
         ModelCache.initialize(settings.persistence, settings.modelCache)
-        ModelCache.initMetrics(settings.meterRegistry)
 
         for (managed in specification.managedModels) {
             managed.views.initialize()
@@ -122,6 +121,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 }
 
                 klerk.eventsManager.start()
+                ModelCache.initMetrics(klerk.settings.meterRegistry, klerk.readWriteLock)
                 klerk.attachedDataImpl.start()
                 klerk.eventLogRetention.start()
                 // Jobs start last: reloading them may need models and attached data to be in place already.
@@ -158,6 +158,5 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
         klerk.activityLog.add(LogKlerkStopped())
     }
 
-    override val modelsCount: Int
-        get() = ModelCache.count
+    override suspend fun modelsCount(): Int = klerk.readWriteLock.withRead { ModelCache.count }
 }

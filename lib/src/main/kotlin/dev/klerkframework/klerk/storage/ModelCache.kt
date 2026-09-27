@@ -8,14 +8,18 @@ import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.NotFoundProblem
 import dev.klerkframework.klerk.ProcessingData
 import dev.klerkframework.klerk.logger
+import dev.klerkframework.klerk.misc.IntIdRelations
+import dev.klerkframework.klerk.misc.IntIdSet
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.PropertyKey
+import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.envInt
 import dev.klerkframework.klerk.read.ModelReader
 import dev.klerkframework.klerk.read.ReadResult
 import dev.klerkframework.klerk.storage.ModelCache.persistence
 import io.micrometer.core.instrument.Gauge
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
@@ -49,6 +53,11 @@ public data class ModelCacheSettings(val maxResidentModels: Int = 10_000_000) {
     }
 }
 
+/**
+ * [ids] and [relationsTo] are not thread-safe. They are mutated only while holding both the command mutex and the
+ * write lock (a commit, or the startup load), so they must only be read while holding the read lock or the command
+ * mutex.
+ */
 internal object ModelCache {
 
     /** The number of models that exist, whether or not their bodies are in memory. */
@@ -75,17 +84,14 @@ internal object ModelCache {
     /**
      * Every id that exists. Always complete — eviction removes bodies, never ids — so this is what tells "no such
      * model" apart from "not in memory right now".
-     *
-     * Mutated only under the write lock, but concurrent because it is read by concurrent readers.
      */
-    private val ids: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+    private val ids = IntIdSet()
 
     /**
      * Which models refer to a given model. Always resident: it holds nothing but ids, and correctness elsewhere
-     * depends on it being complete. Only accessed while holding the ReadWriteLock, and only mutated under its write
-     * side, so a plain HashMap is safe.
+     * depends on it being complete. Models that nothing refers to have no entry.
      */
-    private val relationsTo: MutableMap<Int, MutableSet<Int>> = HashMap()
+    private val relationsTo = IntIdRelations()
 
     /**
      * The evictable part. A miss is repaired from [persistence] by the reader that hit it; Caffeine makes that
@@ -121,8 +127,12 @@ internal object ModelCache {
         .maximumSize(settings.maxResidentModels.toLong())
         .build()
 
-    internal fun initMetrics(registry: MeterRegistry) {
-        Gauge.builder("klerk.models.count") { count }
+    /**
+     * Registers the gauges. [lock] is taken to read the count, so register after the startup load, or a scrape would
+     * wait for all of it.
+     */
+    internal fun initMetrics(registry: MeterRegistry, lock: ReadWriteLock) {
+        Gauge.builder("klerk.models.count") { runBlocking { lock.withRead { count } } }
             .description("The current number of models")
             .baseUnit("models")
             .register(registry)
@@ -163,7 +173,7 @@ internal object ModelCache {
     }
 
     internal fun <T : Any> store(model: Model<T>) {
-        updateRelations(model, relationsTo, true)
+        updateRelations(model, klerkHasStarted = true)
         ids.add(model.id.value)
         bodies.put(model.id.value, model.copy())
     }
@@ -176,7 +186,7 @@ internal object ModelCache {
         bodies.put(model.id.value, model)
         // Relations are built as models arrive rather than in a pass afterwards, which would have to read every body
         // again -- and with eviction most of them would no longer be resident by then.
-        updateRelations(model, relationsTo, klerkHasStarted = false)
+        updateRelations(model, klerkHasStarted = false)
     }
 
     /**
@@ -209,10 +219,8 @@ internal object ModelCache {
     }
 
     internal fun <T : Any> delete(modelId: ModelID<T>) {
-        for ((_, relationSet) in relationsTo) {
-            relationSet.remove(modelId.value)
-        }
-        relationsTo.remove(modelId.value)
+        relationsTo.removeReferrer(modelId.value)
+        relationsTo.removeReferred(modelId.value)
         ids.remove(modelId.value)
         bodies.invalidate(modelId.value)
     }
@@ -220,10 +228,8 @@ internal object ModelCache {
     /**
      * Finds all models that have a relation to the specified model.
      */
-    internal fun referencingIds(id: ModelID<*>): Set<ModelID<*>> {
-        val relations = relationsTo[id.value] ?: emptySet()
-        return relations.map { ModelID<Any>(it) }.toSet()
-    }
+    internal fun referencingIds(id: ModelID<*>): Set<ModelID<*>> =
+        relationsTo.referrers(id.value).mapTo(LinkedHashSet()) { ModelID<Any>(it) }
 
     @Suppress("UNCHECKED_CAST")
     internal fun <T : Any> referencing(clazz: KClass<T>, id: ModelID<*>): Set<Model<T>> =
@@ -253,13 +259,9 @@ internal object ModelCache {
         }.toSet()
 
     /**
-     * Calculates relations for the model and updates the provided relationsMap
+     * Calculates relations for the model and updates [relationsTo].
      */
-    private fun <T : Any> updateRelations(
-        model: Model<T>,
-        relationsMap: MutableMap<Int, MutableSet<Int>>,
-        klerkHasStarted: Boolean,
-    ) {
+    private fun <T : Any> updateRelations(model: Model<T>, klerkHasStarted: Boolean) {
         // optimization: do this before write lock
         val fromId = model.id.value
 
@@ -268,18 +270,12 @@ internal object ModelCache {
         if (klerkHasStarted && fromId in ids) {
             // Simple (and inefficient?) algorithm: first remove all relations for this model, then create new relations
             // for this model
-            for ((_, relationSet) in relationsMap) {
-                relationSet.remove(fromId)
-            }
+            relationsTo.removeReferrer(fromId)
         }
 
         for (leaf in ObjectSchema.of(model.props::class).leaves(model.props)) {
-            (leaf.value as? ModelID<*>)?.let { createReference(fromId, it.value, relationsMap) }
+            (leaf.value as? ModelID<*>)?.let { relationsTo.add(it.value, fromId) }
         }
-    }
-
-    private fun createReference(fromId: Int, toId: Int, relationsMap: MutableMap<Int, MutableSet<Int>>) {
-        relationsMap.getOrPut(toId) { mutableSetOf() }.add(fromId)
     }
 
     fun isEmpty(): Boolean = ids.isEmpty()
@@ -305,8 +301,8 @@ internal object ModelCache {
     }
 
     /**
-     * The id of every model that exists. [reader] is not used but must be provided to prove that there will be no
-     * concurrent modification.
+     * The id of every model that exists, in ascending order. [reader] is not used but must be provided to prove that
+     * there will be no concurrent modification.
      */
-    internal fun allIds(reader: ModelReader<*, *>): Set<Int> = ids.toSet()
+    internal fun allIds(reader: ModelReader<*, *>): IntArray = ids.toIntArray()
 }

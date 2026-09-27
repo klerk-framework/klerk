@@ -29,7 +29,10 @@ import kotlin.time.measureTime
 /**
  * Not part of the regular suite: creates a large, fully-resident population of models backed by SQLite, then
  * restarts Klerk against the same database. Reports heap usage, create time, restart (reload) time and random-read
- * latency, to measure the effect of the id-set/`Model` timestamp changes (see issues #40 and #42).
+ * latency, to measure the effect of the id-set/`Model` timestamp changes (see issues #40, #42 and #47).
+ *
+ * Every model refers to one of the first [PARENTS] models (few referenced models, many referrers each) and to the
+ * previously created model (one referrer per referenced model), so both shapes of `ModelCache.relationsTo` are covered.
  *
  * Skipped unless `-Dklerk.benchmark=true` is passed, since it takes minutes and needs a large heap. Run it with:
  *
@@ -74,7 +77,12 @@ class ModelCacheFootprintBenchmark {
         val createDuration = measureTime {
             runBlocking {
                 for (i in 0 until count) {
-                    val result = klerk1.handle(Command(CreateBench, null, BenchProps(BenchN(i))), Ctx.system())
+                    val props = BenchProps(
+                        n = BenchN(i),
+                        parent = if (i >= PARENTS) ModelID(ids[i % PARENTS]) else null,
+                        previous = if (i > 0) ModelID(ids[i - 1]) else null,
+                    )
+                    val result = klerk1.handle(Command(CreateBench, null, props), Ctx.system())
                     ids[i] = result.getOrThrow().primaryModel!!.value
                 }
             }
@@ -126,6 +134,11 @@ class ModelCacheFootprintBenchmark {
             klerk2.read(Ctx.system()) { get(ModelID<BenchProps>(ids[0])) }.props.n.value
         }
         check(readableAfterRestart == 0) { "Expected the first created model to survive the restart" }
+        val referrersOfFirst = runBlocking {
+            klerk2.read(Ctx.system()) { referencingIds(ModelID<BenchProps>(ids[0])) }.size
+        }
+        // ids[0] is the parent of every PARENTS-th model from PARENTS on, and the previous of ids[1].
+        check(referrersOfFirst == (count - 1) / PARENTS + 1) { "Expected relations to survive the restart" }
 
         println("---- ModelCacheFootprintBenchmark ----")
         println("models=$count reads=$randomReads")
@@ -146,7 +159,7 @@ class ModelCacheFootprintBenchmark {
     private fun buildSpecification(views: BenchAppViews) = SpecificationBuilder<Ctx, BenchAppViews>(views).build {
         eventLogRetention(afterModelDeletion = null, paramsAndExtra = null)
         managedModels {
-            model(BenchProps::class, benchStateMachine(), views.bench)
+            model(BenchProps::class, benchStateMachine(views), views.bench)
         }
         authorization {
             readModels { positive(::anyoneMayReadBench) }
@@ -167,6 +180,10 @@ class ModelCacheFootprintBenchmark {
     }
 
     private fun mb(bytes: Long): Long = bytes / (1024 * 1024)
+
+    private companion object {
+        const val PARENTS = 1_000
+    }
 }
 
 data class BenchAppViews(val bench: BenchModelViews)
@@ -182,14 +199,17 @@ class BenchN(value: Int) : IntContainer(value) {
     override val max: Int = Int.MAX_VALUE
 }
 
-data class BenchProps(val n: BenchN)
+data class BenchProps(val n: BenchN, val parent: ModelID<BenchProps>?, val previous: ModelID<BenchProps>?)
 
 enum class BenchStates { Created }
 
 object CreateBench : VoidEventWithParameters<BenchProps, BenchProps>(External)
 
-fun benchStateMachine() = stateMachine<BenchProps, BenchStates, Ctx, BenchAppViews> {
-    event(CreateBench) {}
+fun benchStateMachine(views: BenchAppViews) = stateMachine<BenchProps, BenchStates, Ctx, BenchAppViews> {
+    event(CreateBench) {
+        validReferences(BenchProps::parent, views.bench.all)
+        validReferences(BenchProps::previous, views.bench.all)
+    }
     voidState {
         onEvent(CreateBench) { createModel(BenchStates.Created, ::newBenchModel) }
     }

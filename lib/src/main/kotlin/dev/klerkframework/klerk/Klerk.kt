@@ -137,10 +137,11 @@ public interface KlerkMeta {
     public suspend fun stop()
 
     /**
-     * The number of models currently in the system, including those created by plugins.
+     * The number of models currently in the system, including those created by plugins. Suspends while a command is
+     * being committed.
      *
      * So this is not a way to tell whether the application has any data of its own yet — a plugin may have created
      * models at startup. Ask the view instead: `klerk.read(context) { views.users.all.isEmpty() }`.
      */
-    public val modelsCount: Int
+    public suspend fun modelsCount(): Int
 }

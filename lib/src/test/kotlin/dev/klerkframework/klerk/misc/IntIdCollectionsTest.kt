@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk.misc
 
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -60,5 +61,77 @@ class IntIdCollectionsTest {
         val values = (0 until 500).toList()
         list.addAll(values)
         assertEquals(values, list.toList())
+    }
+
+    @Test
+    fun `IntIntHashMap agrees with HashMap under random puts and removes`() {
+        val map = IntIntHashMap()
+        val reference = HashMap<Int, Int>()
+        val random = Random(1)
+        repeat(200_000) {
+            // A small key range forces long probe runs and many collisions.
+            val key = random.nextInt(0, 5_000)
+            if (random.nextInt(3) == 0) {
+                map.remove(key)
+                reference.remove(key)
+            } else {
+                val value = random.nextInt(0, 100)
+                map.put(key, value)
+                reference[key] = value
+            }
+        }
+        assertEquals(reference.size, map.size)
+        for (key in 0 until 5_000) {
+            assertEquals(reference[key] ?: IntIntHashMap.NONE, map[key], "key $key")
+        }
+        map.removeWhereValue(7)
+        reference.values.removeIf { it == 7 }
+        assertEquals(reference.size, map.size)
+        for (key in 0 until 5_000) {
+            assertEquals(reference[key] ?: IntIntHashMap.NONE, map[key], "key $key")
+        }
+    }
+
+    @Test
+    fun `IntHashSet agrees with HashSet under random adds and removes`() {
+        val set = IntHashSet()
+        val reference = HashSet<Int>()
+        val random = Random(2)
+        repeat(200_000) {
+            val key = random.nextInt(0, 5_000)
+            if (random.nextInt(3) == 0) {
+                assertEquals(reference.remove(key), set.remove(key))
+            } else {
+                assertEquals(reference.add(key), set.add(key))
+            }
+        }
+        assertEquals(reference, set.toIntArray().toSet())
+        assertEquals(reference.size, set.size)
+        for (key in 0 until 5_000) {
+            assertEquals(key in reference, key in set, "key $key")
+        }
+    }
+
+    @Test
+    fun `IntIdRelations moves between one and many referrers`() {
+        val relations = IntIdRelations()
+        relations.add(toId = 1, fromId = 10)
+        relations.add(toId = 1, fromId = 10)
+        assertEquals(setOf(10), relations.referrers(1).toSet())
+        relations.add(toId = 1, fromId = 11)
+        relations.add(toId = 2, fromId = 11)
+        assertEquals(setOf(10, 11), relations.referrers(1).toSet())
+
+        relations.removeReferrer(10)
+        assertEquals(setOf(11), relations.referrers(1).toSet())
+        relations.add(toId = 1, fromId = 12)
+        assertEquals(setOf(11, 12), relations.referrers(1).toSet())
+
+        relations.removeReferrer(11)
+        assertEquals(setOf(12), relations.referrers(1).toSet())
+        assertEquals(emptySet(), relations.referrers(2).toSet())
+
+        relations.removeReferred(1)
+        assertEquals(emptySet(), relations.referrers(1).toSet())
     }
 }

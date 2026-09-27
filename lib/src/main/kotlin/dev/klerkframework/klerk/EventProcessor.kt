@@ -43,7 +43,13 @@ internal class EventProcessor<C : KlerkContext, V>(
         .description("How long reading all persisted models took at startup")
         .register(settings.meterRegistry)
 
-    internal suspend fun readAllModelsFromDisk() {
+    /**
+     * Loads every persisted model. Holds the write lock throughout, since it fills [ModelCache] and the views that
+     * readers use.
+     */
+    internal suspend fun readAllModelsFromDisk(): Unit = readWriteLock.withWrite { loadAllModels() }
+
+    private fun loadAllModels() {
         logger.debug { "Reading all persisted models into ModelCache" }
         require(ModelCache.count == 0) { "ModelCache is not empty" }
 
@@ -119,7 +125,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         val reader = ReaderWithoutAuth<C, V>(klerk)
         // Goes through the ids rather than what happens to be resident: every model must be checked, and with a
         // bounded cache some of them will already have been evicted by the time the startup read finishes.
-        val models = ModelCache.allIds(reader).mapNotNull { ModelCache.getOrNull<Any>(ModelID(it)) }
+        val models = ModelCache.allIds(reader).asIterable().mapNotNull { ModelCache.getOrNull<Any>(ModelID(it)) }
         processTriggerTimeForModels(models, reader)
     }
 
