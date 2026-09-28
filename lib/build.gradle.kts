@@ -68,20 +68,20 @@ java {
     withSourcesJar()
 }
 
-// Ad hoc memory/latency benchmark (issues #40, #42). Not part of `check`; run with `./gradlew :lib:memoryBenchmark`.
-tasks.register<Test>("memoryBenchmark") {
+// Performance benchmark. Not part of `check`; run with `./gradlew :lib:benchmark`.
+tasks.register<Test>("benchmark") {
     group = "verification"
-    description = "Runs ModelCacheFootprintBenchmark with a large heap. -Dklerk.benchmark.count=N to size it."
+    description = "Runs PerformanceBenchmark with a large heap. -Dklerk.benchmark.count=N to size it."
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     filter {
-        includeTestsMatching("*ModelCacheFootprintBenchmark*")
+        includeTestsMatching("*PerformanceBenchmark*")
     }
     systemProperty("klerk.benchmark", "true")
     System.getProperty("klerk.benchmark.count")?.let { systemProperty("klerk.benchmark.count", it) }
-    System.getProperty("klerk.benchmark.reads")?.let { systemProperty("klerk.benchmark.reads", it) }
-    minHeapSize = "512m"
+    minHeapSize = "4g"
     maxHeapSize = "4g"
+    outputs.upToDateWhen { false }
     testLogging {
         showStandardStreams = true
     }
