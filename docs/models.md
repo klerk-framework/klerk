@@ -61,8 +61,10 @@ if violated:
 
 * The class must be a `data class`.
 * All properties must be `val`, never `var`.
-* Every property must be a `DataContainer` (see below), or a collection (`List`, `Set`, ...) of one, or a
-  `ModelID<...>`, or another plain data class composed the same way (e.g. `Address(val street: Street)`).
+* Every property must be a `DataContainer` (see below), or a `List`/`Set` of one, or a `ModelID<...>`, or a data class
+  of your own composed the same way (e.g. `Address(val street: Street)`).
+* Standard library classes cannot be used, not even the data classes among them: `Pair`, `Triple` and `Map` are all
+  rejected. A pair of values is a data class of your own with one property per value.
 * The class, its primary constructor and every property must be public, and so must any class it is nested in. This
   also applies to nested classes, event parameters classes, `DataContainer` subclasses and the enums they hold, since
   Klerk reads, stores and copies them. A class that breaks a rule is rejected when Klerk starts.

@@ -158,7 +158,7 @@ Inside `onEvent`, `onEnter`, `onExit`, `after`, and `atTime` blocks you can call
 | `delete(onCondition = ...)`                                                 | Deletes the model. At most one per block.                                                                                     |
 | `transitionTo(State, onCondition = ...)`                                    | Moves the model to `State`. At most one per block.                                                                            |
 | `transitionWhen { on(::decision, State); otherwise(State) }`                 | Evaluates each decision in declaration order and transitions to the first match; `otherwise` if none match.                   |
-| `commands(::fn)`                                                            | Returns a `List<Command<*, *>>` to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
+| `command(::fn)` / `commands(::fn)`                                          | Returns a `Command<*, *>` (or `List<Command<*, *>>`) to submit as part of the same transaction — e.g. cascading an author deletion to their books. |
 | `job(::fn)` / `jobs(::fn)` / `unmanagedJob(::fn, onCondition = ...)`        | Schedule background work — `job` for a single job, `jobs` for a list; see [jobs.md](jobs.md) for the distinction from `unmanagedJob`. |
 
 All of these accept an optional `onCondition` predicate with the same argument type as the main function — if it returns

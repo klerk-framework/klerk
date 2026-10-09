@@ -25,3 +25,20 @@ internal class CreateCommands<T : Any, A, C : KlerkContext, V>(
         log = listOf("Adding commands '${extractNameFromFunction(f)}'"),
     )
 }
+
+internal class CreateCommand<T : Any, A, C : KlerkContext, V>(
+    val f: (args: A) -> Command<out Any, out Any?>,
+    override val onCondition: ((args: A) -> Boolean)?,
+) : Executable<T, A, C, V> {
+
+    override fun <Primary : Any> process(
+        args: A,
+        processingOptions: EventProcessingOptions,
+        view: ModelViews<T, C>,
+        specification: Specification<C, V>,
+        processingDataSoFar: ProcessingData<Primary, C, V>,
+    ): ProcessingData<Primary, C, V> = ProcessingData(
+        remainingCommands = listOf(f(args)),
+        log = listOf("Adding command '${extractNameFromFunction(f)}'"),
+    )
+}

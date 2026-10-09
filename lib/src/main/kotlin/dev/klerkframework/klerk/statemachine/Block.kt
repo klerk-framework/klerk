@@ -12,6 +12,7 @@ import dev.klerkframework.klerk.SpecificationMarker
 import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.job.DeclaredJob
+import dev.klerkframework.klerk.statemachine.executables.CreateCommand
 import dev.klerkframework.klerk.statemachine.executables.CreateCommands
 import dev.klerkframework.klerk.statemachine.executables.CreateModel
 import dev.klerkframework.klerk.statemachine.executables.DeleteModel
@@ -82,6 +83,17 @@ public sealed class Block<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(
             onCondition: ((args: A) -> Boolean)? = null,
         ) {
             executables.add(CreateCommands(function, onCondition))
+        }
+
+        /**
+         * Returns a single command produced by [function], to be submitted as part of the same transaction as the
+         * triggering command. Shorthand for [commands] when there is only one.
+         */
+        public fun command(
+            function: (args: A) -> Command<out Any, out Any?>,
+            onCondition: ((args: A) -> Boolean)? = null,
+        ) {
+            executables.add(CreateCommand(function, onCondition))
         }
 
         /**
