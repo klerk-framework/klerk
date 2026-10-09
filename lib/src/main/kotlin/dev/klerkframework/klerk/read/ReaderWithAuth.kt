@@ -119,10 +119,12 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
+        sort: Comparator<Model<T>>?,
     ): QueryResponse<T> =
         // The authorization check goes into the same pass that cuts the page, so pages stay full and the cursors
-        // describe what the actor can actually see. It also means `filter` never sees a model the actor may not read.
-        withoutAuth.queryInternal(collection, options, filter) { model ->
+        // describe what the actor can actually see. It also means `filter` and `sort` never see a model, or a
+        // property, the actor may not read.
+        withoutAuth.queryInternal(collection, options, filter, sort) { model ->
             model
                 .takeIf { isAuthorized(it, context, klerk.specification, withoutAuth) }
                 ?.let { propertyAuth.secure(it) }
@@ -132,9 +134,10 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
+        sort: Comparator<Model<T>>?,
     ): QueryResponse<T> {
         // Like query, the authorization check comes before the filter, so `filter` never sees what the actor may not.
-        return withoutAuth.queryInternal(collection, options, filter) { checkAuth(it) }
+        return withoutAuth.queryInternal(collection, options, filter, sort) { checkAuth(it) }
             .also { page -> page.items.forEach { it.recorded() } }
     }
 

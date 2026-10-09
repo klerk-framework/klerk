@@ -220,6 +220,16 @@ Pagination follows whatever order the view defines, including a custom `ModelVie
 val newestFirst = views.authors.all.sorted({ it.createdAt }, ascending = false).register("newestFirst")
 ```
 
+For an order picked at request time, e.g. by clicking a column header, pass a `Comparator` to `query` instead:
+
+```kotlin
+views.authors.all.query(options, sort = compareBy { it.props.lastName.valueOrNullIfNotAuthorized })
+```
+
+Like the filter, `sort` only sees models the actor may read, with the properties it may not read masked, so the order
+cannot reveal hidden data. A `sorted` view's selector sees every value, so do not use one to order by a property some
+actors may not read. Both read every model in the view.
+
 ### Cursors
 
 A `QueryListCursor` is an opaque position in a view. It is URL-safe and printable, so it can go straight into a query

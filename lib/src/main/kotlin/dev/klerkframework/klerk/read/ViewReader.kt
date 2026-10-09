@@ -32,6 +32,7 @@ internal interface ViewReader<C : KlerkContext, V> {
         collection: ModelView<T, C>,
         options: QueryOptions? = null,
         filter: ((Model<T>) -> Boolean)? = null,
+        sort: Comparator<Model<T>>? = null,
     ): QueryResponse<T>
 
     /** Throws [dev.klerkframework.klerk.AuthorizationException] if the actor may not read a matching model. */
@@ -39,6 +40,7 @@ internal interface ViewReader<C : KlerkContext, V> {
         collection: ModelView<T, C>,
         options: QueryOptions? = null,
         filter: ((Model<T>) -> Boolean)? = null,
+        sort: Comparator<Model<T>>? = null,
     ): QueryResponse<T>
 }
 

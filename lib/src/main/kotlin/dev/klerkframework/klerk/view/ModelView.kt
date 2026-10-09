@@ -181,6 +181,10 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
     /**
      * Returns a new view with the same models, ordered by [selector].
      *
+     * [selector] sees every value, also the properties the actor reading the view may not read, so the order can
+     * reveal them. To order by such a property, pass a `sort` to [query] instead, which only sees what the actor may
+     * read.
+     *
      * [selector] is evaluated inside the read block, under the read lock, so it must not throw or do IO. See
      * docs/concurrency.md.
      */

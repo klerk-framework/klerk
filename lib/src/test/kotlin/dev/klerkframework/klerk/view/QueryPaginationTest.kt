@@ -10,6 +10,7 @@ import dev.klerkframework.klerk.DeleteAuthor
 import dev.klerkframework.klerk.FirstName
 import dev.klerkframework.klerk.Klerk
 import dev.klerkframework.klerk.LastName
+import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelReadRuleArgs
 import dev.klerkframework.klerk.NegativeAuthorization
@@ -493,5 +494,47 @@ class QueryPaginationTest {
         val view = OddAuthors(views.authors.all)
 
         assertEquals(order(klerk, view), pagesForward(klerk, view, maxItems = 3).flatten())
+    }
+
+    @Test
+    fun `sort orders every match before the page is cut, and pages follow it`() = runBlocking<Unit> {
+        val (klerk, views) = start()
+        klerk.meta.start()
+        createAuthors(klerk, 17)
+        val sort = compareByDescending<Model<Author>> { it.props.lastName.value }
+        val expected = order(klerk, views.authors.all.sorted({ it.props.lastName.value }, ascending = false))
+
+        val pages = mutableListOf<List<ModelID<Author>>>()
+        var cursor: QueryListCursor? = null
+        while (true) {
+            val page = klerk.read(Ctx.system()) {
+                views.authors.all.query(QueryOptions(maxItems = 5, cursor = cursor), sort = sort)
+            }
+            pages.add(page.items.map { it.id })
+            cursor = page.cursorNextPage ?: break
+        }
+        assertEquals(expected, pages.flatten())
+        pages.dropLast(1).forEach { assertEquals(5, it.size) }
+    }
+
+    @Test
+    fun `sort sees masked properties, so it cannot reveal them`() = runBlocking<Unit> {
+        val (klerk, views) = start()
+        klerk.meta.start()
+        // Nobody but the system may read the first name Astrid.
+        val astrid = createAuthor(klerk, "Astrid", "1")
+        val bertil = createAuthor(klerk, "Bertil", "2")
+        val cesar = createAuthor(klerk, "Cesar", "3")
+        val byFirstName = compareBy<Model<Author>, String?>(nullsLast()) {
+            it.props.firstName.valueOrNullIfNotAuthorized
+        }
+
+        val forSystem = klerk.read(Ctx.system()) { views.authors.all.query(sort = byFirstName) }
+        assertEquals(listOf(astrid, bertil, cesar), forSystem.items.map { it.id })
+
+        val forUser = klerk.read(Ctx.authenticationIdentity()) {
+            views.authors.all.query(sort = byFirstName.reversed())
+        }
+        assertEquals(listOf(astrid, cesar, bertil), forUser.items.map { it.id }, "a masked name sorts as null")
     }
 }

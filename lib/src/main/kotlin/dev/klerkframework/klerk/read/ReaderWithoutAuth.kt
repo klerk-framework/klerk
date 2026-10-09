@@ -66,19 +66,21 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
-    ): QueryResponse<T> = queryInternal(collection, options, filter, null)
+        sort: Comparator<Model<T>>?,
+    ): QueryResponse<T> = queryInternal(collection, options, filter, sort, null)
 
     /**
-     * Cuts one page out of [collection], in the view's own order.
+     * Cuts one page out of [collection], in the view's own order or, given [sort], in that order.
      *
-     * One pass over the view's ids. Models outside the page are read only when [authorize] or [filter] has to look at
-     * them; both run before the page is cut, so a page is full whenever enough models match. [authorize] is applied
-     * before [filter], and may replace the model (masked properties). Returning null drops it.
+     * One pass over the view's ids. Models outside the page are read only when [authorize], [filter] or [sort] has to
+     * look at them; all run before the page is cut, so a page is full whenever enough models match. [authorize] is
+     * applied first, and may replace the model (masked properties). Returning null drops it.
      */
     internal fun <T : Any> queryInternal(
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
+        sort: Comparator<Model<T>>?,
         authorize: ((Model<T>) -> Model<T>?)?,
     ): QueryResponse<T> {
         val opts = options ?: QueryOptions()
@@ -101,28 +103,38 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
         val windowFrom = maxOf(0L, cursorOffset - slack + delta - maxItems)
         val windowTo = cursorOffset + slack + delta + maxItems
 
+        fun admit(model: Model<T>): Model<T>? {
+            val authorized = if (authorize == null) model else authorize(model) ?: return null
+            return authorized.takeIf { filter == null || filter(it) }
+        }
+
         val window = mutableListOf<Model<T>>()
         val needsModel = filter != null || authorize != null
         var index = 0L
         var exhausted = true
-        for (id in collection.memberIds(this)) {
-            var model: Model<T>? = null
-            if (needsModel) {
-                model = get(id)
-                if (authorize != null) {
-                    model = authorize(model) ?: continue
-                }
-                if (filter != null && !filter(model)) {
-                    continue
-                }
-            }
+
+        // False once the window is complete and nothing more is needed.
+        fun visit(id: ModelID<T>, model: Model<T>?): Boolean {
             if (index in windowFrom..windowTo) {
                 window.add(model ?: get(id))
             }
             index++
             if (!opts.countTotal && index > windowTo) {
                 exhausted = false
-                break
+                return false
+            }
+            return true
+        }
+
+        if (sort != null) {
+            val sorted = collection.memberIds(this).mapNotNull { admit(get(it)) }.sortedWith(sort)
+            for (model in sorted) {
+                if (!visit(model.id, model)) break
+            }
+        } else {
+            for (id in collection.memberIds(this)) {
+                val model = if (needsModel) admit(get(id)) ?: continue else null
+                if (!visit(id, model)) break
             }
         }
         // Only meaningful when the pass reached the end, which is always the case when counting.
@@ -204,7 +216,8 @@ internal class ReaderWithoutAuth<C : KlerkContext, V>(val klerk: Klerk<C, V>) :
         collection: ModelView<T, C>,
         options: QueryOptions?,
         filter: ((Model<T>) -> Boolean)?,
-    ): QueryResponse<T> = queryInternal(collection, options, filter, null)
+        sort: Comparator<Model<T>>?,
+    ): QueryResponse<T> = queryInternal(collection, options, filter, sort, null)
 
     override fun <T : Any> getOrNull(id: ModelID<T>): Model<T>? = ModelCache.getOrNull(id)
 
