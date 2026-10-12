@@ -66,6 +66,7 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
         val next = cursor.remaining.firstOrNull() ?: return JobResult.Success()
 
         val parsed = parseBookFile(next)          // ordinary work: IO, parsing, an HTTP call
+        args.logger.info("Parsed $next")
 
         return JobResult.Yield(
             cursor = cursor.copy(remaining = cursor.remaining.drop(1), done = cursor.done + 1),
@@ -75,7 +76,6 @@ object ImportBooks : JobType.Local<ImportCursor, Ctx, Views>() {
                 total = cursor.total,
                 message = "Importing $next",
             ),
-            log = listOf(args.info("Parsed $next")),
         )
     }
 }
@@ -154,7 +154,7 @@ Jobs scheduled by a command are persisted in that command's transaction. If the 
 | Result                                                      | Meaning                                                                                                                                                         |
 |-------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Yield(cursor, command?, spawn?, awaitSpawned?, progress?)` | Not done. Command, spawned children and cursor commit atomically; job re-queued at the tail of its priority class, or moved to `Waiting` if it awaits children. |
-| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status. `result` reaches the parent, if any.                                        |
+| `Success(command?, progress?, result?)`                     | Done. Not retried. A command here commits with the terminal status; if it is rejected, the attempt counts as `Fail`. `result` reaches the parent.               |
 | `Fail(reason)`                                              | This attempt failed. Retried with exponential backoff until `maxRetries`, then dead-lettered.                                                                   |
 | `Abort(reason, runHook = true)`                             | This will never work. Straight to dead letter, no retries. Set `runHook = false` when there is deliberately nothing to compensate.                              |
 
@@ -165,16 +165,17 @@ everyone who may see the job; the exception itself is logged. The reason passed 
 account no longer exists, stop." Without `Abort` the only way to give up is to fail `maxRetries` times, which wastes
 time and misreports the reason.
 
-Putting a command on `Success` saves a round trip, but you never see its result. If you need to react to the outcome,
-`Yield` instead and inspect it on the next step.
+Putting a command on `Success` saves a round trip. A job never succeeds without applying it: if it is rejected, nothing
+is committed and the attempt counts as `Fail`, so the step is retried from the same cursor and eventually dead-lettered.
+If a rejection is an expected outcome you want to handle, `Yield` the command instead and inspect it on the next step.
 
 ### Seeing the previous command's result
 
 `args.previousResult` is the `CommandResult` of the command your last step emitted (`null` on the first step, or if the
 last step emitted none).
 
-**A rejected command is data, not a job failure.** The model may have moved on while your job was waiting — that is
-normal, not exceptional:
+**A rejected `Yield` command is data, not a job failure.** The model may have moved on while your job was waiting —
+that is normal, not exceptional:
 
 ```kotlin
 val previous = args.previousResult
@@ -309,11 +310,12 @@ since the dispatcher takes the write lock to claim a job.
 `message` is a plain string without any specific meaning. It will typically not be shown to the user, but may appear in
 an admin UI.
 
-`log` is separate and is for diagnostics, not for progress. Build entries with the helpers on the step's args, which
-stamp them with the step's time:
+The job's log is separate and is for diagnostics, not for progress. Write to it with `args.logger`
+(`debug`, `info`, `warn`, `error`). Entries are saved with the step, whether it yields, succeeds, fails or throws:
 
 ```kotlin
-return JobResult.Fail("timeout", log = listOf(args.warn("The book API did not answer within 30 s")))
+args.logger.warn("The book API did not answer within 30 s")
+return JobResult.Fail("timeout")
 ```
 
 The log is capped at the most recent 200 entries per job, so a long-running job cannot grow without bound.
@@ -584,9 +586,9 @@ fun onlyByOwner(args: InstanceEventArgs<Order, Nothing?, Ctx, Views>): PropertyC
     if (args.model.props.owner == args.context.userId) Valid else Invalid()
 ```
 
-A rule that reads `context.user` instead rejects every command the job emits, and the job still reports **Succeeded** —
-a rejected command is data, not a job failure (see [What a step returns](#what-a-step-returns)). Nothing looks broken
-except that the model never moves.
+A rule that reads `context.user` instead rejects every command the job emits. A command on `Yield` is rejected
+silently — it is data, not a job failure (see [What a step returns](#what-a-step-returns)) — so unless your step checks
+`previousResult`, nothing looks broken except that the model never moves.
 
 Job metadata (status, progress, log) is gated by the `readJobs` rules. Cancelling, resuming and deleting a job is gated
 separately by the `controlJobs` rules, which also get the `operation`:
@@ -622,7 +624,26 @@ never owns a job (see [context.md](context.md)).
 
 ### Restarts and deploys
 
-On `klerk.meta.start()` Klerk reloads persisted jobs. Two things can go wrong, both governed by one setting:
+On `klerk.meta.start()` Klerk reloads persisted jobs. Finished jobs (succeeded, cancelled, dead-lettered) are always
+loaded. An unfinished job cannot be loaded if:
+
+- **its `JobName` is no longer registered** — you deleted or renamed a job type while instances were pending.
+- **its cursor no longer deserializes** — you changed the cursor type while instances were checkpointed against the
+  old shape.
+
+When you remove a job type on purpose, retire its name:
+
+```kotlin
+jobs {
+    retire(JobName("send-reminders"))
+}
+```
+
+At startup, unfinished jobs with a retired name are cancelled without running any hook, and their unfinished
+descendants are cancelled. Once a release with the `retire` has started, you can remove it. A name cannot be both
+registered and retired.
+
+Any other unloadable job is handled by `onUnloadableJob`:
 
 ```kotlin
 KlerkSettings(
@@ -633,13 +654,10 @@ KlerkSettings(
 )
 ```
 
-- **A job whose `JobName` is no longer registered** — you deleted or renamed a job type while instances were pending.
-- **A cursor that no longer deserializes** — you changed the cursor type while instances were checkpointed against the
-  old shape.
-
-`FailToStart` is the default. It is recommended that you control this setting via e.g. an environment variable so that
-you don't have to rebuild the software to change this setting. As an alternative, if you use klerk-web to generate an
-admin UI, you can delete the jobs from there.
+`FailToStart` is the default. It is recommended that you control this setting via e.g. an environment variable
+(`JobSettings.fromEnvVars()` reads `KLERK_JOBS_ON_UNLOADABLE_JOB`) so that you don't have to rebuild the software to
+change it. A dead-lettered unloadable job can only be resumed once its job type and cursor shape are restored;
+otherwise delete it, e.g. from the klerk-web admin UI.
 
 The practical rule: **treat cursor types as a persisted schema.** Add optional fields; do not remove or retype fields
 while jobs may be in flight.

@@ -207,7 +207,8 @@ public data class Specification<C : KlerkContext, V>(
         val block = JobsBlock<C, V>()
         block.seedFrom(jobs)
         PluginJobsBlock(block).init()
-        return copy(jobs = jobs.with(block.types(), block.crons()))
+        block.requireNoneRetiredAndRegistered()
+        return copy(jobs = jobs.with(block.types(), block.crons(), block.retired()))
     }
 
     /**

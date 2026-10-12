@@ -10,8 +10,8 @@ import kotlin.time.Instant
  * The stable, application-chosen identity of a job type.
  *
  * This — not a class or method name — is what is persisted with every job instance, so renaming the Kotlin object that
- * implements a [JobType] is safe while changing its [JobName] is not: after a restart, jobs whose name no longer
- * resolves are handled according to [UnloadableJobPolicy].
+ * implements a [JobType] is safe while changing its [JobName] is not: after a restart, unfinished jobs whose name no
+ * longer resolves are handled according to [UnloadableJobPolicy], unless the name is retired with [JobsBlock.retire].
  *
  * @throws IllegalArgumentException if the name is blank, longer than 100 characters, or contains whitespace.
  */
@@ -169,8 +169,8 @@ public enum class JobLogLevel {
 /**
  * One diagnostic line attached to a job.
  *
- * The log is for diagnostics only — use [JobProgress] to report how far the job has got. Entries are appended in the
- * same transaction as the step that produced them, and are capped at [MAX_ENTRIES] per job (oldest dropped first) so
+ * The log is for diagnostics only — use [JobProgress] to report how far the job has got. Entries are written with `args.logger` and
+ * appended in the same transaction as the step that produced them, and are capped at [MAX_ENTRIES] per job (oldest dropped first) so
  * that a long-running job cannot grow without bound.
  */
 @Serializable

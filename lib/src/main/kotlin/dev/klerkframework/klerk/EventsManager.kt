@@ -224,9 +224,9 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
      * Runs under the same mutex as [handle], so a job's command is serialized against user commands exactly like any
      * other.
      *
-     * **A rejected command is not a job failure.** The model may simply have moved on while the job was queued, so a
-     * command that fails still lets the job's checkpoint commit — the step counted as completed, and the next step
-     * gets to see the failure in `previousResult` and decide what to do. Only the model delta is skipped.
+     * If the command is rejected, the model delta is skipped and [rejectedCommit] (given the masked failure) is
+     * committed instead of [jobCommit]. Without it, the checkpoint commits anyway: the model may simply have moved on
+     * while the job was queued, and the next step sees the failure in `previousResult`.
      *
      * Returns the outcome of [command], or null if the step emitted none.
      */
@@ -235,7 +235,8 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         context: C?,
         options: ProcessingOptions,
         jobCommit: JobCommit,
-    ): CommandResult<T>? = commitJobStepUncounted(command, context, options, jobCommit)?.also {
+        rejectedCommit: ((Failure<T>) -> JobCommit)? = null,
+    ): CommandResult<T>? = commitJobStepUncounted(command, context, options, jobCommit, rejectedCommit)?.also {
         countCommand(requireNotNull(command), it)
     }
 
@@ -244,66 +245,48 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         context: C?,
         options: ProcessingOptions,
         jobCommit: JobCommit,
+        rejectedCommit: ((Failure<T>) -> JobCommit)?,
     ): CommandResult<T>? = mutex.withLock {
-        commitJobStepLocked(command, context, options, jobs.withCurrentControlFlags(jobCommit))
-            ?.let { masked(it, requireNotNull(command), requireNotNull(context)) }
+        if (command == null || context == null) {
+            commitJobsOnly(jobs.withCurrentControlFlags(jobCommit))
+            return@withLock null
+        }
+        val result = commitJobStepLocked(command, context, options, jobs.withCurrentControlFlags(jobCommit))
+        if (result !is Failure) return@withLock result
+        val failure = masked(result, command, context) as Failure<T>
+        val checkpoint = rejectedCommit?.invoke(failure) ?: jobCommit
+        commitJobsOnly(jobs.withCurrentControlFlags(checkpoint))
+        failure
     }
 
+    /** Applies the command together with [jobCommit], or returns the failure having committed nothing. */
     private suspend fun <T : Any, P> commitJobStepLocked(
-        command: Command<T, P>?,
-        context: C?,
+        command: Command<T, P>,
+        context: C,
         options: ProcessingOptions,
         jobCommit: JobCommit,
-    ): CommandResult<T>? = run {
-        if (command == null || context == null) {
-            commitJobsOnly(jobCommit)
-            return@run null
-        }
-
+    ): CommandResult<T> {
         pruneCommandTokens(getCurrentInstant())
-        validateToken(options.token, context)?.let { problem ->
-            checkpointOnly(jobCommit)
-            return@run Failure<T>(listOf(problem))
-        }
+        validateToken(options.token, context)?.let { problem -> return Failure(listOf(problem)) }
 
         val readerWithoutAuth = ReaderWithoutAuth(klerk)
         val delta =
             eventProcessor.processPrimaryCommand(withoutReadRestrictions(command), context, readerWithoutAuth, options)
         val commandResult =
             CommandResult.from(delta, readerWithoutAuth, context, specification, settings.allowBypassAuthRead)
-        when (commandResult) {
-            is Failure -> {
-                checkpointOnly(jobCommit)
-                commandResult
-            }
-
-            is Success -> when (val plan = attachedData.planFor(delta, context)) {
-                is AttachedDataPlan.Rejected -> {
-                    checkpointOnly(jobCommit)
-                    Failure(plan.problems)
-                }
-
-                is AttachedDataPlan.Ok -> when (val jobPlan = jobs.planNewJobs(delta.newJobs, context)) {
-                    is NewJobPlan.Rejected -> {
-                        // A command emitted by a job may itself schedule jobs, and those are new work. Refusing them
-                        // fails that command — which the step sees as an ordinary rejection, not as its own failure.
-                        checkpointOnly(jobCommit)
-                        Failure(jobPlan.problems)
-                    }
-
-                    is NewJobPlan.Ok -> {
-                        val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
-                        commit(delta, command, context, plan.delta, merged, isJobStep = true, token = options.token)
-                        timeTriggerManager.handle(delta)
-                        commandResult
-                    }
-                }
-            }
-        }
+        if (commandResult is Failure) return commandResult
+        val plan = attachedData.planFor(delta, context)
+        if (plan is AttachedDataPlan.Rejected) return Failure(plan.problems)
+        plan as AttachedDataPlan.Ok
+        // A command emitted by a job may itself schedule jobs, and those are new work. Refusing them fails that command.
+        val jobPlan = jobs.planNewJobs(delta.newJobs, context)
+        if (jobPlan is NewJobPlan.Rejected) return Failure(jobPlan.problems)
+        jobPlan as NewJobPlan.Ok
+        val merged = jobCommit.copy(upserted = jobCommit.upserted + jobPlan.records)
+        commit(delta, command, context, plan.delta, merged, isJobStep = true, token = options.token)
+        timeTriggerManager.handle(delta)
+        return commandResult
     }
-
-    /** Writes the job's checkpoint on its own, for a step whose command was not applied. */
-    private suspend fun checkpointOnly(jobCommit: JobCommit) = commitJobsOnly(jobCommit)
 
     /**
      * Persists a commit that touches jobs but no models, and applies it to memory under the write lock.

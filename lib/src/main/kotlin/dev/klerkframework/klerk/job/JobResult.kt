@@ -16,12 +16,6 @@ import dev.klerkframework.klerk.command.ProcessingOptions
 public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
 
     /**
-     * Diagnostic entries to append to the job's log, committed with the step. Build them with the helpers on
-     * [JobStepArgs] / [JobEndArgs] (`args.info("...")`, `args.warn("...")`), which stamp them with the step's time.
-     */
-    public val log: List<JobLogEntry>
-
-    /**
      * Not done yet.
      *
      * The [command] (if any), the spawned children, the new [cursor] and the [progress] all commit together, and the
@@ -52,7 +46,6 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
         public val awaitSpawned: Boolean = false,
         /** How far the job has got, for display. */
         public val progress: JobProgress? = null,
-        override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Cursor, C, V> {
         init {
             require(!awaitSpawned || spawn.isNotEmpty()) {
@@ -67,8 +60,8 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
      */
     public data class Success(
         /**
-         * An optional final command, committed together with the terminal status. Convenient, but you never get to see
-         * its result — [Yield] instead if the outcome matters.
+         * An optional final command, committed together with the terminal status. If it is rejected, nothing is
+         * committed and the attempt counts as [Fail], so the step is retried from the same cursor.
          */
         public val command: Command<*, *>? = null,
         /** Processing options for [command]. */
@@ -80,7 +73,6 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
          * with [encodeJobResult] and the parent decodes it with [ChildOutcome.resultAs].
          */
         public val result: String? = null,
-        override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>
 
     /**
@@ -91,7 +83,6 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
     public data class Fail(
         /** Why the attempt failed, for the job's log. */
         public val reason: String,
-        override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>
 
     /**
@@ -106,6 +97,5 @@ public sealed interface JobResult<out Cursor, out C : KlerkContext, out V> {
          * deliberately nothing to compensate.
          */
         public val runHook: Boolean = true,
-        override val log: List<JobLogEntry> = emptyList(),
     ) : JobResult<Nothing, Nothing, Nothing>
 }

@@ -8,11 +8,10 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * What to do at startup with a persisted job that cannot be loaded.
+ * What to do at startup with an unfinished persisted job that cannot be loaded: its [JobName] is no longer registered,
+ * or its cursor no longer deserializes. Finished jobs are always loaded.
  *
- * Two things can go wrong, and one setting covers both because the operator's answer is the same for each: a job whose
- * [JobName] is no longer registered (you deleted or renamed a job type while instances were pending), and a cursor
- * that no longer deserializes (you changed the cursor type while instances were checkpointed against the old shape).
+ * A job type removed on purpose should be declared with [JobsBlock.retire] instead.
  */
 public enum class UnloadableJobPolicy {
     /**
@@ -27,7 +26,8 @@ public enum class UnloadableJobPolicy {
      * Dead-letter the job and carry on starting.
      *
      * Such a job runs **no** end-of-life hook: the thing that failed is deserializing the very cursor the hook would
-     * need. This is the one dead-letter path with no compensation.
+     * need. This is the one dead-letter path with no compensation. It can only be resumed once its job type and
+     * cursor shape are restored.
      */
     DeadLetter,
 }
@@ -51,7 +51,8 @@ public enum class JobExecution {
 public data class JobSettings(
 
     /**
-     * What to do at startup with a job whose name is no longer registered, or whose cursor no longer deserializes.
+     * What to do at startup with an unfinished job whose name is no longer registered, or whose cursor no longer
+     * deserializes.
      */
     val onUnloadableJob: UnloadableJobPolicy = UnloadableJobPolicy.FailToStart,
 

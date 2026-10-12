@@ -47,22 +47,25 @@ internal class ProcessAttachedData<C : KlerkContext, V> : JobType.Local<ProcessB
         )
         return try {
             when (val progress = attachedData.processNextStep(declaration)) {
-                is BlobProcessing.More -> JobResult.Yield(
-                    cursor = args.cursor,
-                    progress = JobProgress(progress.completed, progress.total),
-                    log = listOf(args.info("Executed '${progress.ran}'")),
-                )
+                is BlobProcessing.More -> {
+                    args.logger.info("Executed '${progress.ran}'")
+                    JobResult.Yield(
+                        cursor = args.cursor,
+                        progress = JobProgress(progress.completed, progress.total),
+                    )
+                }
 
-                is BlobProcessing.Done -> JobResult.Success(
-                    progress = JobProgress(progress.total, progress.total),
-                    log = listOf(args.info("The blob ${args.cursor.blobId} is through every step")),
-                )
+                is BlobProcessing.Done -> {
+                    args.logger.info("The blob ${args.cursor.blobId} is through every step")
+                    JobResult.Success(progress = JobProgress(progress.total, progress.total))
+                }
             }
         } catch (e: BlobRejectedException) {
             // A verdict, not a failure: retrying would reach the same conclusion, and the file must not be stored.
             val reason = e.reason
             attachedData.rejected(args.cursor.blobId, reason)
-            JobResult.Abort(reason, log = listOf(args.warn(reason)))
+            args.logger.warn(reason)
+            JobResult.Abort(reason)
         }
     }
 }

@@ -20,6 +20,8 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
     public val crons: List<CronSchedule<C, V>>,
     /** Decides whether new work may be queued. */
     public val admission: (AdmissionArgs<C>) -> AdmissionDecision,
+    /** The names of removed job types. See [JobsBlock.retire]. */
+    public val retired: Set<JobName> = emptySet(),
 ) {
 
     /**
@@ -46,10 +48,12 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
     internal fun with(
         types: Map<JobName, JobType<*, C, V>>,
         crons: List<CronSchedule<C, V>>,
+        retired: Set<JobName>,
     ): JobsSpecification<C, V> = JobsSpecification(
         types = types,
         crons = crons,
         admission = admission,
+        retired = retired,
     )
 
     public companion object {
@@ -87,6 +91,11 @@ public class PluginJobsBlock<C : KlerkContext, V> internal constructor(private v
     ) {
         delegate.cron(type, expression, init)
     }
+
+    /** Declares that a job type the plugin used to register has been removed. See [JobsBlock.retire]. */
+    public fun retire(name: JobName) {
+        delegate.retire(name)
+    }
 }
 
 /**
@@ -112,11 +121,12 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
 
     private val types = mutableMapOf<JobName, JobType<*, C, V>>()
     private val crons = mutableListOf<CronSchedule<C, V>>()
+    private val retired = mutableSetOf<JobName>()
     private var admissionPolicy: (AdmissionArgs<C>) -> AdmissionDecision = AdmissionPolicy::delayBudget
 
     /**
-     * Makes a job type loadable by name. A persisted job whose name is not registered here cannot be run — see
-     * [JobSettings.onUnloadableJob].
+     * Makes a job type loadable by name. An unfinished persisted job whose name is not registered here cannot be run —
+     * see [retire] and [JobSettings.onUnloadableJob].
      *
      * @throws IllegalArgumentException if another type with the same [JobName] is already registered, or if the
      * type's cursor cannot be serialized.
@@ -174,6 +184,24 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
     }
 
     /**
+     * Declares that the job type named [name] has been removed.
+     *
+     * At startup, every unfinished job with this name is set to [JobStatus.Cancelled] without running any hook, and
+     * its unfinished descendants are cancelled. Finished jobs never block startup, so the declaration can be removed
+     * once a release containing it has started.
+     *
+     * ```
+     * jobs {
+     *     retire(JobName("send-reminders"))
+     * }
+     * ```
+     * @throws IllegalArgumentException if a job type with the same name is registered.
+     */
+    public fun retire(name: JobName) {
+        retired.add(name)
+    }
+
+    /**
      * Replaces the admission policy. Must be a named function reference, and should be a pure function — it runs
      * inside command processing on the single writer. If it throws, the job is refused with
      * [dev.klerkframework.klerk.KlerkErrorCode.Internal].
@@ -189,6 +217,8 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
 
     internal fun crons(): List<CronSchedule<C, V>> = crons.toList()
 
+    internal fun retired(): Set<JobName> = retired.toSet()
+
     /**
      * Starts from what an application already configured, so that a plugin's `register` sees existing names (and
      * rejects a collision) and its `cron` can refer to a type either of them registered.
@@ -196,16 +226,26 @@ public class JobsBlock<C : KlerkContext, V> internal constructor() {
     internal fun seedFrom(existing: JobsSpecification<C, V>) {
         types.putAll(existing.types)
         crons.addAll(existing.crons)
+        retired.addAll(existing.retired)
     }
 
     internal fun build(): JobsSpecification<C, V> {
         require(crons.map { it.id }.toSet().size == crons.size) {
             "Two cron schedules for the same job type cannot have the same expression"
         }
+        requireNoneRetiredAndRegistered()
         return JobsSpecification(
             types = types.toMap(),
             crons = crons.toList(),
             admission = admissionPolicy,
+            retired = retired.toSet(),
         )
+    }
+
+    internal fun requireNoneRetiredAndRegistered() {
+        val both = retired.filter { it in types || it.value == PROCESS_ATTACHED_DATA }
+        require(both.isEmpty()) {
+            "Job names cannot be both registered and retired: ${both.joinToString(", ") { it.value }}"
+        }
     }
 }

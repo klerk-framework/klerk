@@ -10,30 +10,36 @@ import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import kotlin.time.Instant
 
 /**
- * The log entries a step or an end-of-life hook can build, all stamped with the step's own [time].
- *
- * Entries are returned on the [JobResult], not written directly, so that they commit with the step.
+ * Writes to the job's log, which is for diagnostics. Entries are stamped with the step's time and committed with the
+ * step, whether it yields, succeeds, fails or throws. A job keeps its most recent [JobLogEntry.MAX_ENTRIES] entries.
  */
-public interface JobLogging {
+public interface JobLogger {
+    public fun debug(message: String)
 
-    /** The time this step is considered to happen at, taken from the configured clock. */
-    public val time: Instant
+    public fun info(message: String)
 
-    /** Builds a log entry stamped with this step's time. */
-    public fun log(message: String, level: JobLogLevel = JobLogLevel.Info): JobLogEntry =
-        JobLogEntry(time, level, message)
+    public fun warn(message: String)
 
-    /** Builds a debug log entry stamped with this step's time. */
-    public fun debug(message: String): JobLogEntry = log(message, JobLogLevel.Debug)
+    public fun error(message: String)
+}
 
-    /** Builds an info log entry stamped with this step's time. */
-    public fun info(message: String): JobLogEntry = log(message, JobLogLevel.Info)
+internal class JobLogBuffer(private val time: () -> Instant) : JobLogger {
+    private val entries = mutableListOf<JobLogEntry>()
 
-    /** Builds a warning log entry stamped with this step's time. */
-    public fun warn(message: String): JobLogEntry = log(message, JobLogLevel.Warn)
+    private fun add(level: JobLogLevel, message: String) {
+        val entry = JobLogEntry(time(), level, message)
+        synchronized(entries) { entries.add(entry) }
+    }
 
-    /** Builds an error log entry stamped with this step's time. */
-    public fun error(message: String): JobLogEntry = log(message, JobLogLevel.Error)
+    fun drain(): List<JobLogEntry> = synchronized(entries) { entries.toList() }
+
+    override fun debug(message: String) = add(JobLogLevel.Debug, message)
+
+    override fun info(message: String) = add(JobLogLevel.Info, message)
+
+    override fun warn(message: String) = add(JobLogLevel.Warn, message)
+
+    override fun error(message: String) = add(JobLogLevel.Error, message)
 }
 
 /**
@@ -43,8 +49,7 @@ public interface JobLogging {
  * read; [Portable] jobs must find everything they need in their cursor, which is what will later let them run on a
  * remote worker.
  */
-public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancellationRequested: Boolean) :
-    JobLogging {
+public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancellationRequested: Boolean) {
 
     /**
      * Re-read on every access while the step runs, so that a long step sees a cancellation that arrives after it
@@ -91,7 +96,10 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
      */
     public val cancellationRequested: Boolean get() = cancellationProvider()
 
-    override val time: Instant get() = context.time
+    internal val logBuffer: JobLogBuffer = JobLogBuffer { context.time }
+
+    /** Writes to the job's log. */
+    public val logger: JobLogger get() = logBuffer
 
     override fun toString(): String =
         "JobStepArgs.${this::class.simpleName}(job=${job.id}, step=${job.step}, cursor=$cursor)"
@@ -145,7 +153,7 @@ public sealed class JobStepArgs<Cursor : Any, C : KlerkContext, V>(initialCancel
  * designed, while the event log is authorization-gated and may have been erased by retention rules. The hook's own
  * [cursor] is checkpointed separately, so unwinding never destroys [failedAtCursor].
  */
-public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
+public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> {
 
     /** The hook's own state, as returned by the previous hook step (it starts out equal to [failedAtCursor]). */
     public abstract val cursor: Cursor
@@ -171,7 +179,10 @@ public sealed class JobEndArgs<Cursor : Any, C : KlerkContext, V> : JobLogging {
     /** Which hook is running. */
     public val kind: JobHookKind get() = requireNotNull(job.hook) { "A JobEndArgs always belongs to a hook" }
 
-    override val time: Instant get() = context.time
+    internal val logBuffer: JobLogBuffer = JobLogBuffer { context.time }
+
+    /** Writes to the job's log. */
+    public val logger: JobLogger get() = logBuffer
 
     override fun toString(): String =
         "JobEndArgs.${this::class.simpleName}(job=${job.id}, cursor=$cursor, reason=$reason)"

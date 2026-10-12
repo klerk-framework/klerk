@@ -549,6 +549,83 @@ class JobManagerImplTest {
     }
 
     @Test
+    fun `a finished job of an unregistered type does not block startup`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val first = fixture(storage = storage) { register(Counter) }
+        val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(0)), Ctx.system())
+        first.klerk.jobs.runUntilIdle()
+        assertEquals(JobStatus.Succeeded, first.job(id).status)
+        first.klerk.meta.stop()
+
+        val second = fixture(storage = storage)
+        assertEquals(JobStatus.Succeeded, second.job(id).status)
+        second.klerk.jobs.delete(id, Ctx.system())
+        assertTrue(second.klerk.jobs.all(Ctx.system()).none { it.id == id })
+    }
+
+    @Test
+    fun `a dead-lettered job of an unregistered type cannot be resumed`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val first = fixture(storage = storage) { register(Counter) }
+        val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
+        first.klerk.meta.stop()
+
+        fixture(storage = storage, jobs = deadLetterUnloadable()).klerk.meta.stop()
+        val third = fixture(storage = storage)
+        assertEquals(JobStatus.DeadLettered, third.job(id).status)
+        assertFailsWith<IllegalStateException> { third.klerk.jobs.resume(id, Ctx.system()) }
+    }
+
+    @Test
+    fun `an unfinished job of a retired type is cancelled at startup`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val first = fixture(storage = storage) { register(Counter) }
+        val id = first.klerk.jobs.schedule(Counter.declare(CountCursor(1)), Ctx.system())
+        first.klerk.meta.stop()
+
+        val second = fixture(storage = storage) { retire(Counter.name) }
+        assertEquals(JobStatus.Cancelled, second.job(id).status)
+        assertTrue(second.job(id).reason!!.contains("retired"))
+        second.klerk.meta.stop()
+
+        // Persisted, and loads without the retire declaration.
+        assertEquals(JobStatus.Cancelled, fixture(storage = storage).job(id).status)
+    }
+
+    @Test
+    fun `retiring a parent type cancels its unfinished children`() = runBlocking<Unit> {
+        val storage = RamStorage()
+        val first = fixture(storage = storage) {
+            register(Parent)
+            register(Child)
+        }
+        val id = first.klerk.jobs.schedule(Parent.declare(FanOutCursor(children = 2)), Ctx.system())
+        assertTrue(first.klerk.jobs.step())
+        assertEquals(JobStatus.Waiting, first.job(id).status)
+        first.klerk.meta.stop()
+
+        val second = fixture(storage = storage) {
+            register(Child)
+            retire(Parent.name)
+        }
+        assertEquals(JobStatus.Cancelled, second.job(id).status)
+        second.klerk.jobs.runUntilIdle()
+        val children = second.klerk.jobs.all(Ctx.system()).filter { it.parent == id }
+        assertEquals(2, children.size)
+        assertTrue(children.all { it.status == JobStatus.Cancelled })
+    }
+
+    @Test
+    fun `a job name cannot be both registered and retired`() {
+        assertFailsWith<IllegalArgumentException> {
+            JobsBlock<Ctx, Views>().apply {
+                register(Counter)
+                retire(Counter.name)
+            }.build()
+        }
+    }
+
+    @Test
     fun `a cron fires on the schedule and catches up once after downtime`() = runBlocking<Unit> {
         val clock = MutableClock(Instant.parse("2026-01-01T02:59:00Z"))
         val f = fixture(clock) {

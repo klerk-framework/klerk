@@ -145,8 +145,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
     /**
      * Reloads every persisted job, resolves it against the registry, and starts dispatching.
      *
-     * Every cursor is decoded here rather than lazily, so a deploy that changed a cursor type is caught at startup —
-     * loudly, once — instead of on whichever step happens to run first.
+     * Every cursor of an unfinished job is decoded here rather than lazily, so a deploy that changed a cursor type is
+     * caught at startup — loudly, once — instead of on whichever step happens to run first. Finished jobs never run
+     * again, so they are loaded as they are.
      */
     suspend fun start() {
         check(!started) { "The job manager has already been started" }
@@ -161,6 +162,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             }
         }
         handleUnloadable(unloadable, now)
+        cancelRetired(now)
         initialiseCronState(now)
         logger.info { "Jobs ready (${records.size} jobs, ${jobSpec.allTypes.size} registered types)" }
 
@@ -191,7 +193,13 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         currentScope.cancel()
     }
 
-    private fun whyUnloadable(record: JobRecord): String? {
+    private fun whyUnloadable(record: JobRecord): String? = when {
+        record.status.isTerminal -> null
+        record.name in jobSpec.retired -> null
+        else -> whyUnrunnable(record)
+    }
+
+    private fun whyUnrunnable(record: JobRecord): String? {
         val type = jobSpec.allTypes[record.name]
             ?: return "there is no job type registered under the name '${record.name.value}'"
         return try {
@@ -222,9 +230,10 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         when (jobSettings.onUnloadableJob) {
             UnloadableJobPolicy.FailToStart -> throw IllegalConfigurationException(
                 KlerkErrorCode.UnregisteredJobName,
-                "${unloadable.size} persisted job(s) cannot be loaded:\n$described\n" +
-                    "Either restore the job types and cursor shapes, or set " +
-                    "'jobs { onUnloadableJob = UnloadableJobPolicy.DeadLetter }' to dead-letter them instead. " +
+                "${unloadable.size} unfinished persisted job(s) cannot be loaded:\n$described\n" +
+                    "If you removed a job type on purpose, declare it with 'jobs { retire(JobName(\"...\")) }'. " +
+                    "Otherwise restore the job types and cursor shapes, or set " +
+                    "'JobSettings(onUnloadableJob = UnloadableJobPolicy.DeadLetter)' to dead-letter them instead. " +
                     "Treat cursor types as a persisted schema: add optional fields, never remove or retype them " +
                     "while jobs may be in flight.",
             )
@@ -246,6 +255,43 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 klerk.settings.persistence.commitJobStep(CommitBatch(jobs = JobCommit(upserted = dead)))
             }
         }
+    }
+
+    /**
+     * Cancels the unfinished jobs of [JobsSpecification.retired] types without a hook (there is no type to run it),
+     * and requests ordinary cancellation of their unfinished descendants.
+     */
+    private fun cancelRetired(now: Instant) {
+        val retired = records.values.filter { it.name in jobSpec.retired && !it.status.isTerminal }
+        if (retired.isEmpty()) {
+            return
+        }
+        val retiredIds = retired.map { it.id }.toSet()
+        val cancelled = retired.map {
+            it.copy(
+                status = JobStatus.Cancelled,
+                readyAt = null,
+                cancellationRequested = true,
+                hookKind = null,
+                hookCursor = null,
+                reason = "The job type '${it.name.value}' has been retired",
+                lastAttemptFinished = now,
+            )
+        }
+        val cancelling = retired
+            .flatMap { descendantsOf(it.id) }
+            .filter { !it.status.isTerminal && it.id !in retiredIds }
+            .distinctBy { it.id }
+            .map { cancellingRow(it, "An ancestor job's type has been retired", now) }
+        val upserted = cancelled + cancelling
+        logger.warn {
+            "Cancelled ${cancelled.size} job(s) of retired types and ${cancelling.size} of their descendants: " +
+                cancelled.joinToString(", ") { "${it.id} (${it.name})" }
+        }
+        for (record in upserted) {
+            records[record.id] = record
+        }
+        klerk.settings.persistence.commitJobStep(CommitBatch(jobs = JobCommit(upserted = upserted)))
     }
 
     // ------------------------------------------------------------------ dispatch
@@ -433,10 +479,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
         val info = started.toJobInfo()
         val context = buildContext(started, info, now)
+        var buffer: JobLogBuffer? = null
         val result = withContext(RunningJobElement(record.id)) {
-            invokeStep(type, started, info, context)
+            invokeStep(type, started, info, context) { buffer = it }
         }
-        commitOutcome(started, type, result, context)
+        commitOutcome(started, type, result, context, stepLog = buffer?.drain().orEmpty())
     }
 
     /**
@@ -461,6 +508,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         record: JobRecord,
         info: JobInfo,
         context: C,
+        onLogBuffer: (JobLogBuffer) -> Unit,
     ): JobResult<Any, C, V> = try {
         val cursor = type.decodeCursor(record.activeCursor)
         val previous = previousResults[record.id]
@@ -478,7 +526,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             klerk = klerk,
                             children = outcomes,
                             cancellationRequested = record.cancellationRequested,
-                        ),
+                        ).also { onLogBuffer(it.logBuffer) },
                     )
 
                     else -> {
@@ -491,7 +539,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             context = context,
                             klerk = klerk,
                             children = outcomes,
-                        )
+                        ).also { onLogBuffer(it.logBuffer) }
                         if (record.hookKind == JobHookKind.OnCancelled) {
                             local.onCancelled(args)
                         } else {
@@ -505,14 +553,14 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                 val portable = type as JobType.Portable<Any, C, V>
                 when (record.hookKind) {
                     null -> portable.step(
-                        JobStepArgs.Portable(
+                        JobStepArgs.Portable<Any, C, V>(
                             cursor = cursor,
                             previousResult = previous,
                             job = info,
                             context = context,
                             children = outcomes,
                             cancellationRequested = record.cancellationRequested,
-                        ),
+                        ).also { onLogBuffer(it.logBuffer) },
                     )
 
                     else -> {
@@ -524,7 +572,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
                             job = info,
                             context = context,
                             children = outcomes,
-                        )
+                        ).also { onLogBuffer(it.logBuffer) }
                         if (record.hookKind == JobHookKind.OnCancelled) {
                             portable.onCancelled(args)
                         } else {
@@ -583,22 +631,35 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         result: JobResult<Any, C, V>,
         context: C?,
         isCommitFailure: Boolean = false,
+        stepLog: List<JobLogEntry> = emptyList(),
     ) {
         val now = klerk.settings.now()
         val transition = try {
-            planTransition(refreshControlFlags(record), type, result, now)
+            planTransition(refreshControlFlags(record), type, result, now, stepLog)
         } catch (e: Exception) {
             logger.error(e) { "Bug in Klerk: could not plan the outcome of job ${record.id}" }
             releaseWithoutCommit(record.id)
             return
         }
 
+        // A job must not succeed unless its final command was applied, so a rejected one fails the attempt instead.
+        var finalCommandRejected = false
+        val rejectedCommit = if (result is JobResult.Success) {
+            { failure: CommandResult.Failure<Any> ->
+                finalCommandRejected = true
+                val reason = "The final command was rejected: ${failure.problems.joinToString(", ")}"
+                planTransition(refreshControlFlags(record), type, JobResult.Fail(reason), now, stepLog).commit
+            }
+        } else {
+            null
+        }
         val commandResult = try {
             klerk.eventsManager.commitJobStep(
                 command = transition.command,
                 context = if (transition.command == null) null else context,
                 options = transition.options ?: ProcessingOptions(),
                 jobCommit = transition.commit,
+                rejectedCommit = rejectedCommit,
             )
         } catch (e: Exception) {
             logger.error(e) { "Could not commit the step of job ${record.id}" }
@@ -610,7 +671,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             } else {
                 // Nothing was written. Record a failed attempt instead, so that backoff and dead-lettering apply.
                 val failed = JobResult.Fail("Could not commit the step: ${e::class.simpleName}")
-                commitOutcome(record, type, failed, context, isCommitFailure = true)
+                commitOutcome(record, type, failed, context, isCommitFailure = true, stepLog = stepLog)
             }
             return
         }
@@ -619,7 +680,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         // the state readers do not see (previousResults) and the Running overlay, which they do.
         lock.withLock {
             klerk.readWriteLock.withWrite { running.remove(record.id) }
-            if (commandResult == null) {
+            if (commandResult == null || finalCommandRejected) {
                 previousResults.remove(record.id)
             } else {
                 previousResults[record.id] = commandResult
@@ -646,8 +707,9 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         type: JobType<*, C, V>,
         result: JobResult<Any, C, V>,
         now: Instant,
+        stepLog: List<JobLogEntry>,
     ): Transition {
-        val logged = record.withLog(result.log).copy(lastAttemptFinished = now)
+        val logged = record.withLog(stepLog).copy(lastAttemptFinished = now)
         val rows = RowSet(records)
 
         val command = when (result) {
@@ -1171,19 +1233,21 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
             if (it.id in running || it.status == JobStatus.Running) {
                 it.copy(cancellationRequested = true, reason = it.reason ?: reason)
             } else {
-                it.copy(
-                    cancellationRequested = true,
-                    reason = it.reason ?: reason,
-                    status = JobStatus.Cancelling,
-                    readyAt = now,
-                    hookKind = it.hookKind ?: JobHookKind.OnCancelled,
-                    hookCursor = it.hookCursor ?: it.cursor,
-                    failedAtCursor = it.failedAtCursor ?: it.cursor,
-                )
+                cancellingRow(it, reason, now)
             }
         }
         commitControlChange(JobCommit(upserted = updated))
     }
+
+    private fun cancellingRow(record: JobRecord, reason: String, now: Instant): JobRecord = record.copy(
+        cancellationRequested = true,
+        reason = record.reason ?: reason,
+        status = JobStatus.Cancelling,
+        readyAt = now,
+        hookKind = record.hookKind ?: JobHookKind.OnCancelled,
+        hookCursor = record.hookCursor ?: record.cursor,
+        failedAtCursor = record.failedAtCursor ?: record.cursor,
+    )
 
     override suspend fun resume(id: JobID, context: C) {
         val record = records[id] ?: throw NoSuchElementException("There is no job with id $id")
@@ -1191,6 +1255,7 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         check(record.status == JobStatus.DeadLettered || record.status == JobStatus.CompensationFailed) {
             "Only a dead-lettered job can be resumed, but job $id is ${record.status}"
         }
+        whyUnrunnable(record)?.let { error("Job $id cannot be resumed: $it") }
         val now = klerk.settings.now()
         // From the checkpoint, never from step 0: the commands of steps 1..n have already been applied and Klerk has
         // no way to recognise re-emitted ones.
