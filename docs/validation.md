@@ -5,16 +5,16 @@ short-circuits the rest and is returned as a `Problem` in a `CommandResult.Failu
 [events and commands](events-and-commands.md)):
 
 1. Per-property rules on each `DataContainer` in the event's parameters.
-2. Cross-property rules on the parameters class as a whole (`Validatable`).
+2. Cross-property rules on the parameters class and the classes nested in it (`Validatable`).
 3. Rules that use the `Ctx` (`validateWithContext`).
 4. `ModelID`s are checked against a declared [view](views.md) (`validReferences`).
 5. `EnumContainer`s are checked against a declared set of allowed values (`validEnums`).
-
-Steps 1, 4 and 5 cover every value in the parameters, also those in a `List`, a `Set` or a nested class. A problem
-names the value by its path, e.g. `address.street` or `tags[1]`.
 6. Rules that see the full picture — parameters, context, and (for instance events) the current model (`validate` /
    `validateWithParameters`).
 7. [Authorization](authorization.md) rules.
+
+Steps 1, 2, 4 and 5 cover every value in the parameters, also those in a `List`, a `Set` or a nested class. A problem
+from step 1, 4 or 5 names the value by its path, e.g. `address.street` or `tags[1]`.
 
 Every rule and validator must be a named function reference, such as `::mustBeEven`, since its name identifies the rule
 in messages, translations and documentation. A lambda is rejected when Klerk starts.
@@ -45,8 +45,8 @@ See [models](models.md) for the full list of built-in containers.
 
 ## 2. Cross-property rules (Validatable)
 
-When a rule needs to look at more than one property together — of a model, or of an event's parameters class — implement
-`Validatable`:
+When a rule needs to look at more than one property together — of a model, of an event's parameters class, or of a
+class nested in one — implement `Validatable`:
 
 ```kotlin
 data class CreateAuthorParams(
@@ -74,8 +74,10 @@ each kind has its own `Invalid`. All of them are in `dev.klerkframework.klerk.va
 * `fieldMustBeNull` / `fieldMustNotBeNull` — a `KProperty0<DataContainer<*>?>` pointing at the offending field (s), so
   that the error can be attributed to a specific field instead of just the object as a whole.
 
-`Validatable` works exactly the same way whether you implement it on a model class (`Author`) or on an event's
-parameters class (`CreateAuthorParams`) — see [models](models.md) for the model-level example.
+`Validatable` works exactly the same way whether you implement it on a model class (`Author`), on an event's
+parameters class (`CreateAuthorParams`) or on a nested class — see [models](models.md) for examples. Klerk runs the
+validators of the top-level class and of every nested object that is `Validatable`, including those in collections, so a
+value class like `Price(amount, currency)` validates itself wherever it is used.
 
 ## 3–6. Rules declared in the state machine
 

@@ -25,7 +25,6 @@ import dev.klerkframework.klerk.RuleType
 import dev.klerkframework.klerk.StateProblem
 import dev.klerkframework.klerk.SystemIdentity
 import dev.klerkframework.klerk.Translation
-import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventArgs
 import dev.klerkframework.klerk.VoidEventNoParameters
 import dev.klerkframework.klerk.VoidEventWithParameters
@@ -47,7 +46,7 @@ Before a command is accepted, a lot of rules must be evaluated.
 
 Using event parameters:
 * DataContainers used in event parameters
-* Validation functions on the parameters class (if is Validatable)
+* Validation functions on the parameters class and the objects nested in it (those that are Validatable)
 
 Using parameters and context:
 * Validate the context
@@ -364,16 +363,14 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return validateEventRules(context, command.event, command.model, command.params, reader)
     }
 
-    private fun validatePropertyCollection(params: Any, translation: Translation): Collection<Problem> {
-        if (params !is Validatable) {
-            return emptyList()
-        }
-        return params.validators()
-            .onEach { requireNamedRule(it, "A validator of ${params::class.simpleName}") }
-            .associateWith { it.invoke() }
-            .filter { it.value is PropertyCollectionValidity.Invalid }
-            .map { (it.value as PropertyCollectionValidity.Invalid).toProblem(it.key, translation) }
-    }
+    private fun validatePropertyCollection(params: Any, translation: Translation): Collection<Problem> =
+        ObjectSchema.of(params::class).validatables(params).flatMap { validatable ->
+            validatable.validators()
+                .onEach { requireNamedRule(it, "A validator of ${validatable::class.simpleName}") }
+                .associateWith { it.invoke() }
+                .filter { it.value is PropertyCollectionValidity.Invalid }
+                .map { (it.value as PropertyCollectionValidity.Invalid).toProblem(it.key, translation) }
+        }.toList()
 
     /**
      * True if the actor could submit [eventRef] right now, as far as can be told without parameters: the validation

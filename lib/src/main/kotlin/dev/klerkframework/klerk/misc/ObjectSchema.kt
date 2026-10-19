@@ -177,6 +177,35 @@ public class ObjectSchema<T : Any> private constructor(
         }
     }
 
+    /**
+     * [value] itself if it is [Validatable], followed by every nested object in it that is, including those in
+     * collections, in declaration order. Klerk runs the validators of all of them.
+     */
+    public fun validatables(value: Any): Sequence<Validatable> = sequence { yieldValidatables(value) }
+
+    private suspend fun SequenceScope<Validatable>.yieldValidatables(value: Any) {
+        if (value is Validatable) {
+            yield(value)
+        }
+        for (field in fields) {
+            val fieldValue = field.get(value) ?: continue
+            yieldNestedValidatables(field.schemaType.shape, fieldValue)
+        }
+    }
+
+    private suspend fun SequenceScope<Validatable>.yieldNestedValidatables(shape: Shape, value: Any) {
+        when (shape) {
+            is Shape.Many -> for (element in value as Collection<*>) {
+                if (element != null) {
+                    yieldNestedValidatables(shape.element.shape, element)
+                }
+            }
+
+            is Shape.Nested -> with(shape.schema) { yieldValidatables(value) }
+            else -> Unit
+        }
+    }
+
     /** Every place a leaf (see [leaves]) can be, with collections and nested objects unwrapped. */
     internal fun leafFields(): List<LeafField> = leafFields("")
 

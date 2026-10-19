@@ -12,8 +12,8 @@ import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.StateProblem
 import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.UnfinalizedTransition
-import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.VoidEventArgs
+import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.extractNameFromFunction
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.statemachine.Executable
@@ -71,11 +71,9 @@ internal class CreateModel<ModelStates : Enum<*>, T : Any, P, C : KlerkContext, 
 }
 
 internal fun validateModelProps(props: Any, translation: Translation): List<Problem> {
-    if (props !is Validatable) {
-        return emptyList()
-    }
+    val rules = ObjectSchema.of(props::class).validatables(props).flatMap { it.validators() }
     // Its own error code: the parameters were fine, it is the model they would produce that is not.
-    return props.validators().mapNotNull { rule ->
+    return rules.toList().mapNotNull { rule ->
         (rule.invoke() as? PropertyCollectionValidity.Invalid)?.message(rule, translation)?.let { message ->
             StateProblem(
                 message,

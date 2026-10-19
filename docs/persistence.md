@@ -72,8 +72,8 @@ up its directory as well. See [attached data](attached-data.md).
 
 A model is stored as a JSON object with one key per constructor parameter of its class. A `DataContainer` is stored as
 its `valueWithoutAuthorization` (e.g. an `InstantContainer` as microseconds since 1970), a `ModelID` as a number, a
-`List` or `Set` as an array and a nested class as an object. A `ULongContainer` is stored as a JSON string, since its
-range exceeds what a JSON number can represent exactly.
+`List` or `Set` as an array and a nested class as an object. A `ULongContainer` and a `DecimalContainer` are stored as
+JSON strings, since a JSON number cannot represent every value exactly.
 
 `klerk.meta.start()` runs any pending [migration steps](#migrations) and then reads every stored model into its model
 class. A stored model must match its class exactly:

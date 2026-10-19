@@ -46,6 +46,9 @@ public interface KlerkTranslation {
     /** The message when a number is larger than [value]. */
     public fun mustBeAtMost(value: Number): String
 
+    /** The message when a decimal number has more than [scale] digits after the decimal point. */
+    public fun tooManyDecimals(scale: Int): String
+
     /** The message when the validator [functionName] rejects the property [propertyName]. */
     public fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String
 
@@ -113,6 +116,7 @@ public object DefaultKlerkTranslation : KlerkTranslation {
     override fun tooManyLines(maxLines: Int): String = "Must be at most $maxLines lines"
     override fun mustBeAtLeast(value: Number): String = "Must be at least $value"
     override fun mustBeAtMost(value: Number): String = "Must be at most $value"
+    override fun tooManyDecimals(scale: Int): String = "Must have at most $scale decimals"
     override val invalid: String = "Invalid"
     override val internalError: String = "Internal error"
     override val unauthorized: String = "Unauthorized"

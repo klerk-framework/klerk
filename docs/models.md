@@ -42,11 +42,14 @@ data class Model<T : Any>(
 with `isIn`, or get the enum value with `stateAs`, rather than with the name:
 
 ```kotlin
-if (book.isIn(BookStates.Published)) { ... }
+if (book.isIn(BookStates.Published)) {
+    ...
+}
 
 when (book.stateAs<BookStates>()) {
-    BookStates.Draft -> ...
-    BookStates.Published -> ...
+    BookStates.Draft ->...
+    BookStates.Published
+    ->...
 }
 ```
 
@@ -101,25 +104,26 @@ class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value)
 
 Built-in containers:
 
-| Container              | Wraps                   | Built-in constraints                                                                                                 |
-|------------------------|-------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `StringContainer`      | `String`                | `minLength`, `maxLength`, `maxLines`, optional `regexPattern`                                                        |
-| `IntContainer`         | `Int`                   | `min`, `max`                                                                                                         |
-| `LongContainer`        | `Long`                  | `min`, `max`                                                                                                         |
-| `ShortContainer`       | `Short`                 | `min`, `max`                                                                                                         |
-| `ByteContainer`        | `Byte`                  | `min`, `max`                                                                                                         |
-| `UIntContainer`        | `UInt`                  | `min`, `max`                                                                                                         |
-| `ULongContainer`       | `ULong`                 | `min`, `max`                                                                                                         |
-| `UShortContainer`      | `UShort`                | `min`, `max`                                                                                                         |
-| `UByteContainer`       | `UByte`                 | `min`, `max`                                                                                                         |
-| `FloatContainer`       | `Float`                 | `min`, `max`                                                                                                         |
-| `DoubleContainer`      | `Double`                | `min`, `max`                                                                                                         |
-| `BooleanContainer`     | `Boolean`               | none                                                                                                                 |
-| `EnumContainer<E>`     | an `Enum`               | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
-| `InstantContainer`     | `kotlin.time.Instant`   | none (microsecond resolution)                                                                                        |
+| Container              | Wraps                        | Built-in constraints                                                                                                 |
+|------------------------|------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `StringContainer`      | `String`                     | `minLength`, `maxLength`, `maxLines`, optional `regexPattern`                                                        |
+| `IntContainer`         | `Int`                        | `min`, `max`                                                                                                         |
+| `LongContainer`        | `Long`                       | `min`, `max`                                                                                                         |
+| `ShortContainer`       | `Short`                      | `min`, `max`                                                                                                         |
+| `ByteContainer`        | `Byte`                       | `min`, `max`                                                                                                         |
+| `UIntContainer`        | `UInt`                       | `min`, `max`                                                                                                         |
+| `ULongContainer`       | `ULong`                      | `min`, `max`                                                                                                         |
+| `UShortContainer`      | `UShort`                     | `min`, `max`                                                                                                         |
+| `UByteContainer`       | `UByte`                      | `min`, `max`                                                                                                         |
+| `FloatContainer`       | `Float`                      | `min`, `max`                                                                                                         |
+| `DoubleContainer`      | `Double`                     | `min`, `max`                                                                                                         |
+| `DecimalContainer`     | `java.math.BigDecimal`       | `min`, `max`, `scale` (max decimals); exact, never rounded. Use it for money                                         |
+| `BooleanContainer`     | `Boolean`                    | none                                                                                                                 |
+| `EnumContainer<E>`     | an `Enum`                    | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
+| `InstantContainer`     | `kotlin.time.Instant`        | none (microsecond resolution)                                                                                        |
 | `DateContainer`        | `kotlinx.datetime.LocalDate` | none — a calendar date with no time of day or time zone                                                              |
-| `DurationContainer`    | `kotlin.time.Duration`  | none (microsecond resolution)                                                                                        |
-| `GeoPositionContainer` | `GeoPosition` (lat/lon) | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
+| `DurationContainer`    | `kotlin.time.Duration`       | none (microsecond resolution)                                                                                        |
+| `GeoPositionContainer` | `GeoPosition` (lat/lon)      | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
 
 All the numeric containers extend `NumberContainer`, which is what code that handles any number generically uses: it
 exposes `min`, `max` and `hasDecimals` without knowing the exact kind.
@@ -140,6 +144,72 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 
 See [validation](validation.md) for how all of this fits into the full validation pipeline, and how to add model-wide
 validation that spans several properties (`Validatable`).
+
+### Money
+
+Use a `DecimalContainer` for the amount, together with the
+currency in a nested class. Make the currency an enum of the currencies your application supports, named by their ISO
+4217 codes:
+
+```kotlin
+class Amount(value: BigDecimal) : DecimalContainer(value) {
+    override val min = BigDecimal.ZERO
+    override val max = BigDecimal("1000000000")
+    override val scale = 2
+}
+
+enum class CurrencyCode { SEK, EUR, USD }
+
+class CurrencyContainer(value: CurrencyCode) : EnumContainer<CurrencyCode>(value)
+
+data class Price(val amount: Amount, val currency: CurrencyContainer)
+
+data class Product(val name: ProductName, val price: Price)
+```
+
+A value with more decimals than `scale` is invalid; Klerk never rounds it. Do arithmetic and rounding in your own code
+or in a money library (see [below](#using-a-money-library)).
+
+`klerk.meta.start()` fails if a stored model holds a constant that no longer exists (see
+[persistence](persistence.md#stored-models-must-match-the-model-classes)), so don't remove a currency that is in use.
+
+If one field holds amounts in currencies with different numbers of decimals, set `scale` to the largest, put the number
+of decimals on the enum and check the amount against it in `Price` itself (see [Validatable](#validatable)):
+
+```kotlin
+enum class CurrencyCode(val decimals: Int) { SEK(2), JPY(0), KWD(3) }
+
+data class Price(val amount: Amount, val currency: CurrencyContainer) : Validatable {
+    override fun validators(): Set<() -> PropertyCollectionValidity> = setOf(::amountFitsCurrency)
+
+    private fun amountFitsCurrency(): PropertyCollectionValidity =
+        if (amount.value.stripTrailingZeros().scale() <= currency.value.decimals) Valid else Invalid()
+}
+```
+
+#### Using a money library
+
+Klerk only stores and validates the amount. For calculations, you may want to use a library such as
+[Money](https://github.com/eriksencosta/money) with two extension functions:
+
+```kotlin
+import com.eriksencosta.money.Money
+import com.eriksencosta.money.money
+
+fun Price.toMoney(): Money = amount.value money currency.value.name
+
+fun Money.toPrice(): Price = Price(Amount(amount), CurrencyContainer(CurrencyCode.valueOf(currency.code)))
+```
+
+Calculate with `Money` and convert back to store the result:
+
+```kotlin
+val total = (product.price.toMoney() * quantity).toPrice()
+```
+
+Arithmetic in the library rounds to the number of decimals of the currency, but creating a `Money` doesn't. Call
+`round()` before `toPrice()` on a `Money` that isn't the result of a calculation, otherwise it may have more decimals
+than `scale` and fail validation. `CurrencyCode.valueOf` throws for a currency your application doesn't support.
 
 ### Reading a container's value
 
@@ -171,8 +241,8 @@ a `Command` (see [events and commands](events-and-commands.md)).
 
 ## Validatable
 
-Rules that need to see more than one property at once — of either a model or an event's parameters class — go on
-`Validatable`:
+Rules that need to see more than one property at once — of a model, an event's parameters class or a class nested in
+one — go on `Validatable`:
 
 ```kotlin
 data class Author(val firstName: FirstName, val lastName: LastName) : Validatable {
@@ -183,6 +253,8 @@ data class Author(val firstName: FirstName, val lastName: LastName) : Validatabl
     }
 }
 ```
+
+A nested class that is `Validatable` is validated wherever it is used, including in collections.
 
 Full details, including how this interacts with per-container validators and event-level rules, are in
 [validation](validation.md).

@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.datatypes.ByteContainer
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.DateContainer
+import dev.klerkframework.klerk.datatypes.DecimalContainer
 import dev.klerkframework.klerk.datatypes.DoubleContainer
 import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
@@ -26,6 +27,7 @@ import dev.klerkframework.klerk.datatypes.ULongContainer
 import dev.klerkframework.klerk.datatypes.UShortContainer
 import kotlinx.datetime.LocalDate
 import java.lang.reflect.InvocationTargetException
+import java.math.BigDecimal
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -177,6 +179,7 @@ internal sealed class Shape {
             ContainerKind.UShort -> PropertyType.UShort
             ContainerKind.UByte -> PropertyType.UByte
             ContainerKind.Double -> PropertyType.Double
+            ContainerKind.Decimal -> PropertyType.Decimal
         }
     }
 }
@@ -196,6 +199,7 @@ internal enum class ContainerKind(val base: KClass<out DataContainer<*>>, val du
     UByte(UByteContainer::class, 0.toUByte()),
     Float(FloatContainer::class, 0f),
     Double(DoubleContainer::class, 0.0),
+    Decimal(DecimalContainer::class, BigDecimal.ZERO),
     Boolean(BooleanContainer::class, false),
     Enum(EnumContainer::class, null),
     Instant(InstantContainer::class, kotlin.time.Instant.fromEpochSeconds(0)),

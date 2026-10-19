@@ -101,8 +101,10 @@ public data class Model<T : Any> internal constructor(
 }
 
 /**
- * Implemented by a props class to declare cross-property validation rules (rules spanning more than one property).
- * Each function returns a [PropertyCollectionValidity] evaluated after individual property validation passes.
+ * Implemented by a model props class, an event parameters class, or a class nested in one, to declare cross-property
+ * validation rules (rules spanning more than one property). Each function returns a [PropertyCollectionValidity]
+ * evaluated after individual property validation passes. A nested class is validated wherever it is used, e.g. a
+ * `Price(amount, currency)` checks that the amount fits the currency in every model and parameters class holding one.
  */
 public fun interface Validatable {
     /** The cross-property rules. Each must be a named function reference. */

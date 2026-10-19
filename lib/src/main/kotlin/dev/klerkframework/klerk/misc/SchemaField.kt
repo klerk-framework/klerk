@@ -3,9 +3,8 @@ package dev.klerkframework.klerk.misc
 import dev.klerkframework.klerk.camelCaseToPretty
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.datatypes.FloatContainer
-import dev.klerkframework.klerk.datatypes.IntContainer
-import dev.klerkframework.klerk.datatypes.LongContainer
+import dev.klerkframework.klerk.datatypes.DecimalContainer
+import dev.klerkframework.klerk.datatypes.NumberContainer
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.logger
 import kotlin.reflect.KClass
@@ -151,6 +150,7 @@ public enum class PropertyType {
     UByte,
     Float,
     Double,
+    Decimal,
     Boolean,
     Ref,
     AttachedDataRef,
@@ -192,19 +192,12 @@ private fun describeRules(container: DataContainer<*>): Map<String, String> {
             container.regexPattern?.let { rules["pattern"] = it }
         }
 
-        is IntContainer -> {
+        is NumberContainer<*> -> {
             rules["min"] = container.min.toString()
             rules["max"] = container.max.toString()
-        }
-
-        is LongContainer -> {
-            rules["min"] = container.min.toString()
-            rules["max"] = container.max.toString()
-        }
-
-        is FloatContainer -> {
-            rules["min"] = container.min.toString()
-            rules["max"] = container.max.toString()
+            if (container is DecimalContainer) {
+                rules["max decimals"] = container.scale.toString()
+            }
         }
 
         else -> Unit

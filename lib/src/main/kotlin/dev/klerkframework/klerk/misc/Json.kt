@@ -23,6 +23,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import java.lang.reflect.InvocationTargetException
+import java.math.BigDecimal
 import kotlin.reflect.KClass
 import kotlin.time.Duration.Companion.microseconds
 
@@ -102,6 +103,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.UByte -> JsonPrimitive((value as UByte).toInt())
         ContainerKind.Float -> JsonPrimitive(value as Float)
         ContainerKind.Double -> JsonPrimitive(value as Double)
+        ContainerKind.Decimal -> JsonPrimitive((value as BigDecimal).toPlainString())
         ContainerKind.Boolean -> JsonPrimitive(value as Boolean)
         ContainerKind.Geo -> JsonPrimitive((container as GeoPositionContainer).value.uLongEncoded.toLong())
     }
@@ -160,6 +162,7 @@ private fun decodeContainerArgument(shape: Shape.Container, json: JsonElement, p
     ContainerKind.UByte -> json.uByte(path)
     ContainerKind.Float -> json.float(path)
     ContainerKind.Double -> json.double(path)
+    ContainerKind.Decimal -> json.decimal(path)
     ContainerKind.Boolean -> json.boolean(path)
     ContainerKind.Enum -> {
         val name = json.string(path)
@@ -260,6 +263,10 @@ private fun JsonElement.float(path: String): Float =
 
 private fun JsonElement.double(path: String): Double =
     number(path, "a number").content.toDoubleOrNull() ?: mismatch(path, "is ${describe(this)}, expected a number")
+
+/** Stored as a string, since a JSON number may lose precision. */
+private fun JsonElement.decimal(path: String): BigDecimal =
+    string(path).toBigDecimalOrNull() ?: mismatch(path, "is a string, but not a decimal number")
 
 private fun JsonElement.boolean(path: String): Boolean =
     (this as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
