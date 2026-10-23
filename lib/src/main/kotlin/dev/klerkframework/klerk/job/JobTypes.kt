@@ -136,6 +136,12 @@ public enum class JobOperation {
 
     /** [dev.klerkframework.klerk.JobManager.delete] */
     Delete,
+
+    /**
+     * [dev.klerkframework.klerk.JobManager.runNow]. The rules see the job that would be created, which has not been
+     * given a real id yet.
+     */
+    TriggerCron,
 }
 
 /**

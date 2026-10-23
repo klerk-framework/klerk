@@ -512,6 +512,12 @@ jobs {
 - A cron whose `JobName` is not registered at startup obeys the same
   [`UnloadableJobPolicy`](#restarts-and-deploys) as a persisted job.
 
+**Running a schedule now.** `klerk.jobs.runNow(schedule, context)` starts a schedule's job immediately, in addition to
+its regular occurrences, and returns the new `JobID`. `catchUp` and `jitter` do not apply, `overlap = Skip` makes it fail
+with `IllegalStateException` while the previous run is going, and the actor in `context` becomes the job's owner.
+Whether the actor may is decided by the `controlJobs` rules, which see the job that would be created with
+`JobOperation.TriggerCron`. `canRunNow(schedule, context)` answers the same question without running anything.
+
 **Cron or a state-machine time trigger?** Time triggers (see [state-machines.md](state-machines.md)) belong to a *model
 instance* and are part of its lifecycle — "cancel this booking if unconfirmed after 48 h". Crons are system-wide
 recurring work with no model behind them — "delete expired sessions every night".
@@ -531,6 +537,9 @@ override fun mergeSpecification(previous: Specification<C, V>): Specification<C,
 A plugin can add work, not change how the job module runs: `execution`, `pollInterval`, `hardQueueLimit` and the rest
 live in `KlerkSettings.jobs`, which a plugin never sees. Job names are global, so prefix a plugin's names with the
 plugin's own — registering a name the application already used fails when the specification is built.
+
+`JobsSpecification.registeredBy(name)` returns the name of the plugin that registered a job type, or null if the
+application did. The klerk-web admin UI shows it next to each job and lets you sort and filter the job list on it.
 
 Some of the official Klerk plugins (and Klerk itself) register their own jobs and crons.
 
@@ -590,7 +599,7 @@ A rule that reads `context.user` instead rejects every command the job emits. A 
 silently — it is data, not a job failure (see [What a step returns](#what-a-step-returns)) — so unless your step checks
 `previousResult`, nothing looks broken except that the model never moves.
 
-Job metadata (status, progress, log) is gated by the `readJobs` rules. Cancelling, resuming and deleting a job is gated
+Job metadata (status, progress, log) is gated by the `readJobs` rules. Cancelling, resuming and deleting a job, and running a cron schedule now, is gated
 separately by the `controlJobs` rules, which also get the `operation`:
 
 ```kotlin

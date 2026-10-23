@@ -129,6 +129,10 @@ object RenameCoAuthorsToCoWriters : ModelMigrationStep {
 }
 ```
 
+A step that needs to look at other models, e.g. to find the ID of a particular user, overrides
+`prepare(models: List<MigrationModelV1>)`. It is called once with every persisted model, before the first `migrateModel`
+call of that step.
+
 Adding a property means adding its key, also when the property is nullable or has a default value. A step can rewrite
 values as well, e.g. when a property changes type:
 

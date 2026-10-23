@@ -646,6 +646,39 @@ class JobManagerImplTest {
     }
 
     @Test
+    fun `runNow starts the job immediately and respects Overlap Skip`() = runBlocking<Unit> {
+        val f = fixture {
+            register(Nightly)
+            cron(Nightly, "0 3 * * *") { cursor = CountCursor(0) }
+        }
+        Nightly.runs = 0
+        val schedule = f.klerk.specification.jobs.crons.single()
+
+        assertTrue(f.klerk.jobs.canRunNow(schedule, Ctx.system()))
+        val id = f.klerk.jobs.runNow(schedule, Ctx.system())
+        assertFailsWith<IllegalStateException> { f.klerk.jobs.runNow(schedule, Ctx.system()) }
+        f.klerk.jobs.runUntilIdle()
+
+        assertEquals(1, Nightly.runs)
+        assertEquals(JobStatus.Succeeded, f.job(id).status)
+        f.klerk.jobs.runNow(schedule, Ctx.system())
+    }
+
+    @Test
+    fun `runNow is gated by the controlJobs rules`() = runBlocking<Unit> {
+        val f = fixture {
+            register(Nightly)
+            cron(Nightly, "0 3 * * *") { cursor = CountCursor(0) }
+        }
+        val schedule = f.klerk.specification.jobs.crons.single()
+        val user = Ctx.authenticationIdentity()
+
+        assertFalse(f.klerk.jobs.canRunNow(schedule, user))
+        assertFailsWith<AuthorizationException> { f.klerk.jobs.runNow(schedule, user) }
+        assertTrue(f.klerk.jobs.all(Ctx.system()).isEmpty())
+    }
+
+    @Test
     fun `the admission policy can refuse new work but never a retry`() = runBlocking<Unit> {
         val f = fixture {
             register(Counter)

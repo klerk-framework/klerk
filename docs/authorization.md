@@ -230,9 +230,10 @@ allow controlling it.
 
 ### controlJobs
 
-Who may cancel, resume or delete a job through `JobManager.cancel`, `JobManager.resume` and `JobManager.delete`. The
-rules receive a `JobControlRuleArgs`, which adds the `operation` (`JobOperation.Cancel`, `Resume` or `Delete`) to what
-`JobReadRuleArgs` has:
+Who may cancel, resume or delete a job through `JobManager.cancel`, `JobManager.resume` and `JobManager.delete`, and who
+may start a cron schedule with `JobManager.runNow`. The rules receive a `JobControlRuleArgs`, which adds the `operation`
+(`JobOperation.Cancel`, `Resume`, `Delete` or `TriggerCron`) to what `JobReadRuleArgs` has. For `TriggerCron`, `job` is
+the job that would be created:
 
 ```kotlin
 controlJobs {

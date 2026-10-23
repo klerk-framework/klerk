@@ -1,9 +1,11 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.job.CronSchedule
 import dev.klerkframework.klerk.job.DeclaredJob
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.job.JobInfo
 import dev.klerkframework.klerk.job.JobOperation
+import dev.klerkframework.klerk.job.Overlap
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
@@ -50,6 +52,23 @@ public interface JobManager<C : KlerkContext, V> {
      * @throws JobRejectedException if the job was refused by the admission policy or the hard queue cap.
      */
     public suspend fun schedule(job: DeclaredJob<C, V>, context: C): JobID
+
+    /**
+     * Runs [schedule] right now, in addition to its regular occurrences, and returns the id of the new job. The regular
+     * occurrences are not affected. [CronSchedule.catchUp] and [CronSchedule.jitter] do not apply.
+     *
+     * The actor in [context] becomes the job's owner. The `controlJobs` rules decide, and see the not yet scheduled job
+     * with [JobOperation.TriggerCron]. [CronSchedule.overlap] is respected: with [Overlap.Skip] this fails while the
+     * previous run is going. Use [canRunNow] to decide whether to show a button.
+     *
+     * @throws AuthorizationException if the `controlJobs` rules do not allow the actor to trigger the schedule.
+     * @throws IllegalStateException if [Overlap.Skip] applies and the previous run is still going.
+     * @throws JobRejectedException if the job was refused by the admission policy or the hard queue cap.
+     */
+    public suspend fun runNow(schedule: CronSchedule<C, V>, context: C): JobID
+
+    /** True if the `controlJobs` rules allow the actor to [runNow] the [schedule]. */
+    public suspend fun canRunNow(schedule: CronSchedule<C, V>, context: C): Boolean
 
     /**
      * Everything known about one job.

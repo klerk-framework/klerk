@@ -40,6 +40,12 @@ public sealed interface MigrationStep {
 public interface ModelMigrationStep : MigrationStep {
 
     /**
+     * Called once, before any [migrateModel] call of this step, with every persisted model as it is before this step.
+     * Override it when migrating a model requires looking at other models.
+     */
+    public fun prepare(models: List<MigrationModelV1>) {}
+
+    /**
      * Called for every persisted model when this step runs. Return [original] unchanged to leave the stored model
      * untouched, a modified copy to rewrite its stored JSON, or `null` to delete the model.
      */

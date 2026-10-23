@@ -365,6 +365,9 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
             for (migration in migrations) {
                 logger.info { "Applying migration: ${migration.description}" }
                 val executionTime = measureTimeMillis {
+                    if (migration is ModelMigrationStep) {
+                        migration.prepare(ModelsTable.selectAll().map { it.toMigrationModelV1() })
+                    }
                     for (row in ModelsTable.selectAll()) {
                         when (migration) {
                             is ModelMigrationStep -> migrateV1toV1(migration, row)
@@ -716,16 +719,18 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
+    private fun ResultRow.toMigrationModelV1() = MigrationModelV1(
+        type = this[ModelsTable.type],
+        id = this[ModelsTable.id],
+        createdAt = decode64bitMicroseconds(this[ModelsTable.createdAt]),
+        lastPropsUpdatedAt = decode64bitMicroseconds(this[ModelsTable.lastPropsUpdatedAt]),
+        lastStateTransitionAt = decode64bitMicroseconds(this[ModelsTable.lastStateTransitionAt]),
+        state = this[ModelsTable.state],
+        props = Json.parseToJsonElement(this[ModelsTable.properties]).jsonObject,
+    )
+
     private fun migrateV1toV1(migration: ModelMigrationStep, row: ResultRow) {
-        val before = MigrationModelV1(
-            type = row[ModelsTable.type],
-            id = row[ModelsTable.id],
-            createdAt = decode64bitMicroseconds(row[ModelsTable.createdAt]),
-            lastPropsUpdatedAt = decode64bitMicroseconds(row[ModelsTable.lastPropsUpdatedAt]),
-            lastStateTransitionAt = decode64bitMicroseconds(row[ModelsTable.lastStateTransitionAt]),
-            state = row[ModelsTable.state],
-            props = Json.parseToJsonElement(row[ModelsTable.properties]).jsonObject,
-        )
+        val before = row.toMigrationModelV1()
         val after = migration.migrateModel(before)
         if (after == before) {
             return

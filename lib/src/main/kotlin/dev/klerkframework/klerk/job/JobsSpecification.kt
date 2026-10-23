@@ -22,7 +22,11 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
     public val admission: (AdmissionArgs<C>) -> AdmissionDecision,
     /** The names of removed job types. See [JobsBlock.retire]. */
     public val retired: Set<JobName> = emptySet(),
+    private val pluginOfType: Map<JobName, String> = emptyMap(),
 ) {
+
+    /** The name of the plugin that registered the job type, or null if the application did. */
+    public fun registeredBy(name: JobName): String? = pluginOfType[name]
 
     /**
      * Runs the steps a blob's declaration declares. Klerk schedules it itself, so it is registered whether or not the
@@ -54,7 +58,17 @@ public class JobsSpecification<C : KlerkContext, V> internal constructor(
         crons = crons,
         admission = admission,
         retired = retired,
+        pluginOfType = pluginOfType,
     )
+
+    internal fun withPluginOfNewTypes(pluginName: String, before: JobsSpecification<C, V>): JobsSpecification<C, V> =
+        JobsSpecification(
+            types = types,
+            crons = crons,
+            admission = admission,
+            retired = retired,
+            pluginOfType = pluginOfType + (types.keys - before.types.keys).associateWith { pluginName },
+        )
 
     public companion object {
         /** No job types and no crons, with the default admission policy. */

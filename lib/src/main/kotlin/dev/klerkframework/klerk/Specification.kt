@@ -220,7 +220,11 @@ public data class Specification<C : KlerkContext, V>(
         require(plugins.none { it.name == plugin.name }) { "There is already a plugin named '${plugin.name}'" }
         val updatedPlugins = plugins.toMutableList()
         updatedPlugins.add(plugin)
-        return plugin.mergeSpecification(this).copy(plugins = updatedPlugins)
+        val merged = plugin.mergeSpecification(this)
+        return merged.copy(
+            plugins = updatedPlugins,
+            jobs = merged.jobs.withPluginOfNewTypes(plugin.name, before = jobs),
+        )
     }
 }
 

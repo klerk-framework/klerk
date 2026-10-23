@@ -1163,6 +1163,43 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         return id
     }
 
+    override suspend fun runNow(schedule: CronSchedule<C, V>, context: C): JobID {
+        check(started) { "Klerk has not been started" }
+        require(jobSpec.crons.any { it.id == schedule.id }) { "$schedule is not declared in this specification" }
+        val id = allocateId()
+        try {
+            val declared = DeclaredJob(schedule.type, schedule.encodedCursor, scheduleAt = null, priority = null)
+            val plan = planNewJobs(listOf(PendingJob(id, declared)), context)
+            val planned = (plan as? NewJobPlan.Ok)?.records?.single()?.toJobInfo()
+            authorizeControl(planned ?: prospectiveCronJob(schedule, id, context), JobOperation.TriggerCron, context)
+            if (plan is NewJobPlan.Rejected) {
+                throw JobRejectedException(plan.problems.first())
+            }
+            check(schedule.overlap != Overlap.Skip || !hasActiveRun(schedule)) {
+                "The previous run of $schedule is still going"
+            }
+            val admitted = (plan as NewJobPlan.Ok).records.map { it.copy(cronScheduleId = schedule.id) }
+            val commit = JobCommit(upserted = admitted)
+            klerk.settings.persistence.commitJobStep(CommitBatch(jobs = commit))
+            withContext(NonCancellable) {
+                lock.withLock { klerk.readWriteLock.withWrite { applyToMemory(commit) } }
+                notifyCommitted(commit)
+            }
+        } finally {
+            releaseReservations(listOf(id))
+        }
+        return id
+    }
+
+    override suspend fun canRunNow(schedule: CronSchedule<C, V>, context: C): Boolean =
+        controlFailure(prospectiveCronJob(schedule, JobID(0), context), JobOperation.TriggerCron, context) == null
+
+    private fun prospectiveCronJob(schedule: CronSchedule<C, V>, id: JobID, context: C): JobInfo {
+        val declared = DeclaredJob(schedule.type, schedule.encodedCursor, scheduleAt = null, priority = null)
+        return newRecord(id, declared, schedule.type.priority ?: JobPriority.Normal, context, klerk.settings.now())
+            .toJobInfo()
+    }
+
     // ------------------------------------------------------------------ inspection and control
 
     /**
