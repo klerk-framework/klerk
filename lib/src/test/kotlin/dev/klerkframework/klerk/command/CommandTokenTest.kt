@@ -54,6 +54,25 @@ class CommandTokenTest {
     }
 
     @Test
+    fun `Tokens for the same key can only be used once, and a failed command does not use the key`() {
+        runBlocking {
+            val bc = BookViews()
+            val klerk = createKlerk(Views(bc, AuthorViews(bc.all)), RamStorage())
+            klerk.meta.start()
+            val create = Command(CreateAuthor, createAstridParameters)
+
+            klerk.handle(create, Ctx.system(), ProcessingOptions(CommandToken.forKey("other"))).getOrThrow()
+            val unknown = Command.dynamic(ImproveAuthor, ModelID<Author>(99999), null)
+            klerk.handle(unknown, Ctx.system(), ProcessingOptions(CommandToken.forKey("k")))
+            klerk.handle(create, Ctx.system(), ProcessingOptions(CommandToken.forKey("k"))).getOrThrow()
+
+            val retry = klerk.handle(create, Ctx.system(), ProcessingOptions(CommandToken.forKey("k")))
+            val problem = assertIs<CommandResult.Failure<*>>(retry).problems.single()
+            assertEquals(KlerkErrorCode.CommandTokenAlreadyUsed, problem.code)
+        }
+    }
+
+    @Test
     fun `A token can only be used once`() {
         runBlocking {
             val bc = BookViews()

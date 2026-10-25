@@ -108,9 +108,11 @@ target model (s) haven't changed since the token was created:
 CommandToken.simple()                                     // no idempotency guarantee beyond single-use
 CommandToken.requireUnmodifiedModel(bookId)                // fails if `bookId` changed after the token was created
 CommandToken.requireUnmodifiedModels(setOf(bookId, authorId))
+CommandToken.forKey("order-7f3a")                          // the same key always gives a token that can be used once
 ```
 
-A token can only be used once — reusing one fails with `IdempotenceProblem` (`CommandTokenAlreadyUsed`), also after a
+`forKey` lets a client retry safely: the first successful command with a given key is applied, and a command that
+failed does not use up the key. A token can only be used once — reusing one fails with `IdempotenceProblem` (`CommandTokenAlreadyUsed`), also after a
 restart. A token is valid for `KlerkSettings.commandTokenValidity` (24 hours by default) after it was created; an older
 token fails with `IdempotenceProblem` (`CommandTokenExpired`), so a form kept open longer than that has to be reloaded.
 If a `requireUnmodified...` token's model(s) were changed by another command in the meantime, handling fails with a

@@ -15,6 +15,8 @@ import dev.klerkframework.klerk.misc.decodeBase64String
 import dev.klerkframework.klerk.misc.encodeBase64
 import dev.klerkframework.klerk.misc.getCurrentInstant
 import dev.klerkframework.klerk.to64bitMicroseconds
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 import java.security.SecureRandom
 import kotlin.time.Instant
 
@@ -144,6 +146,19 @@ public class CommandToken private constructor(
          * A token that additionally fails the command if any model in [ids] was modified after the token was created.
          */
         public fun requireUnmodifiedModels(ids: Set<ModelID<out Any>>): CommandToken = create(ids)
+
+        /**
+         * A token whose identity is derived from [key], so that a client can retry a command without knowing whether
+         * the first attempt succeeded: only the first successful command with the same [key] is applied, and a retry
+         * fails with [dev.klerkframework.klerk.KlerkErrorCode.CommandTokenAlreadyUsed]. A command that failed does not
+         * use up the key. The key is forgotten after [dev.klerkframework.klerk.KlerkSettings.commandTokenValidity].
+         * The key is global, so include whatever should keep keys apart (e.g. the actor). If [models] is not empty,
+         * the command also fails if any of them were modified after this call.
+         */
+        public fun forKey(key: String, models: Set<ModelID<out Any>> = emptySet()): CommandToken {
+            val hash = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+            return CommandToken(ByteBuffer.wrap(hash).getLong(), getCurrentInstant(), models)
+        }
 
         /**
          * Parses a token previously produced by [CommandToken.toString].

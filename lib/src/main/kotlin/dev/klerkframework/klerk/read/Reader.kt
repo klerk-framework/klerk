@@ -145,6 +145,9 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
     /**
      * Returns the void events (i.e. events that create a new model of type [clazz]) that the actor could
      * successfully submit right now: authorization and validation rules are both evaluated, but nothing is executed.
+     * Only events with a [EventVisibility] of at least [visibility] are included. Pass [EventVisibility.External] to
+     * get the events that a UI or API should offer. The event parameters are not known, so an event that is only
+     * impossible for certain parameters is still included.
      */
     public fun <T : Any> possibleVoidEvents(
         clazz: KClass<T>,
@@ -154,6 +157,9 @@ public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
     /**
      * Returns the instance events that the actor could successfully submit right now against the model with [id],
      * given its current state: authorization and validation rules are both evaluated, but nothing is executed.
+     * Only events with a [EventVisibility] of at least [visibility] are included. Pass [EventVisibility.External] to
+     * get the events that a UI or API should offer. The event parameters are not known, so an event that is only
+     * impossible for certain parameters is still included.
      *
      * @throws AuthorizationException if the actor is not allowed to read the model itself
      */
