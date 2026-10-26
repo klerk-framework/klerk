@@ -234,11 +234,14 @@ rule in `readProperties { }` can use it with `args.property.category`, and `Sche
 tooling. There is no default: a container without a `category` does not compile.
 
 ```kotlin
-class EmailAddress(value: String) : StringContainer(value) {
+class Nickname(value: String) : StringContainer(value) {
     override val category = DataCategory.PersonalData
     // ...
 }
 ```
+
+Klerk ships `EmailAddress` (`PersonalData`, loosely validated, `EmailAddress.normalized(input)` trims and lower-cases),
+which klerk-web renders as `<input type="email">`.
 
 ### Reading a container's value
 

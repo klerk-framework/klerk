@@ -238,7 +238,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
      * be created for each model:
      * ```
      * class Email(value: String) : StringContainer(value) {
-     *     override val validRegexPattern = Regex("^(.+)@(\\S+)$")
+     *     override val regexPattern = Regex("^(.+)@(\\S+)$")
      * }
      * ```
      */
