@@ -2,6 +2,7 @@ package dev.klerkframework.klerk.misc
 
 import dev.klerkframework.klerk.camelCaseToPretty
 import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.DecimalContainer
 import dev.klerkframework.klerk.datatypes.NumberContainer
@@ -97,6 +98,12 @@ public class SchemaField internal constructor(
      * @throws IllegalArgumentException if the field is not a [DataContainer]
      */
     public fun dummyContainer(): DataContainer<*> = containerShape().dummy()
+
+    /**
+     * The [DataCategory] of the field's container (for a collection, of its elements), or null if the field is not a
+     * [DataContainer].
+     */
+    public val category: DataCategory? by lazy { (element.shape as? Shape.Container)?.dummy()?.category }
 
     /** The container's validation rules, described for humans, e.g. `min length` to `1`. Empty if not a container. */
     public val validationRulesDescriptions: Map<String, String> by lazy {

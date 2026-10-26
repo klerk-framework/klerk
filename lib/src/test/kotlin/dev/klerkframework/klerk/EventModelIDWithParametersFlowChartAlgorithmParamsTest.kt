@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.misc.ObjectSchema
 import kotlin.test.Test
@@ -38,6 +39,7 @@ data class SecondContainer(val stringThree: NonEmptyString)
 data class BadContainer(val stringFour: String)
 
 class NonEmptyString(string: String) : StringContainer(string) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 10000
     override val maxLines: Int = 1

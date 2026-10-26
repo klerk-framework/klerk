@@ -255,6 +255,10 @@ SpecificationBuilder<Ctx, Views>(views).build {
 never stored. Any other value must be at least one hour, since Klerk erases what has expired once an hour. Leaving out
 `eventLogRetention` fails the build with `ERROR-SPEC-18`.
 
+The parameters of a `Sensitive` container are never stored, whatever the retention: the log has `[redacted]` in their
+place. Parameters of a `PersonalData` container are stored and erased as above. See
+[data categories](models.md#data-categories).
+
 An entry can disappear, or lose its `params`, between creating a query and calling `get()`. Erasure does not reach
 database backups.
 

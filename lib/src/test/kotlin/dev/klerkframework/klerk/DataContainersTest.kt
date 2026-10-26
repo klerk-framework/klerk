@@ -1,6 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.datatypes.ByteContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DateContainer
 import dev.klerkframework.klerk.datatypes.DoubleContainer
 import dev.klerkframework.klerk.datatypes.DurationContainer
@@ -28,42 +29,55 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
-class TestInstant(value: Instant) : InstantContainer(value)
-class TestDate(value: LocalDate) : DateContainer(value)
-class TestDuration(value: Duration) : DurationContainer(value)
+class TestInstant(value: Instant) : InstantContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class TestDate(value: LocalDate) : DateContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class TestDuration(value: Duration) : DurationContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 data class GenreHolder(val genre: BookGenreContainer)
 
 class TestShort(value: Short) : ShortContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Short = -100
     override val max: Short = 100
 }
 
 class TestByte(value: Byte) : ByteContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Byte = -10
     override val max: Byte = 10
 }
 
 class TestULong(value: ULong) : ULongContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: ULong = 0uL
     override val max: ULong = ULong.MAX_VALUE
 }
 
 class TestUInt(value: UInt) : UIntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: UInt = 0u
     override val max: UInt = 100u
 }
 
 class TestUShort(value: UShort) : UShortContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: UShort = 0u
     override val max: UShort = 100u
 }
 
 class TestUByte(value: UByte) : UByteContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: UByte = 0u
     override val max: UByte = 100u
 }
 
 class TestDouble(value: Double) : DoubleContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Double = -100.0
     override val max: Double = 100.0
 }

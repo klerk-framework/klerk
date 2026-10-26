@@ -32,6 +32,7 @@ import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStep
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.noPreAttachProcessing
 import dev.klerkframework.klerk.doodleStateMachine
 import dev.klerkframework.klerk.generousAuthRules
@@ -511,12 +512,14 @@ class AttachedBlobContainerTest {
 
 /** Declares the same step twice, so it runs twice. */
 class CountedTwice(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val acceptUnrecognised: Boolean = true
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::countIt)
 }
 
 /** Steps named like InventoryCsv's, but that let anything through. */
 class LenientCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("text/plain")
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
 }
@@ -528,6 +531,7 @@ private suspend fun normaliseLineEndings(args: BlobPreAttachStepArgs): BlobPreAt
 
 /** Says both that there is something to do and that there is not. */
 class Confused(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing, ::countIt)
 }
 
@@ -537,17 +541,20 @@ private var flaky = 0
 
 /** A container Klerk cannot build on its own, since it wants something the id does not tell it. */
 class NeedsMoreThanAnId(id: AttachedBlobID, val extra: String) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 /** A container whose second step fails the first time it is asked, standing in for a scanner that is briefly down. */
 class FlakyDocument(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val acceptUnrecognised: Boolean = true
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt, ::failOnce)
 }
 
 /** A container with steps that no model property or event parameter uses. */
 class UnusedDocument(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val acceptUnrecognised: Boolean = true
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::countIt)
 }

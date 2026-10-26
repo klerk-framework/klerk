@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.ProcessingOptions
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
@@ -219,6 +220,7 @@ class ValidatorTest {
 }
 
 open class EvenIntContainer(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
 
     init {
         require(value % 2 == 0) { "Value must be even" }
@@ -231,6 +233,7 @@ open class EvenIntContainer(value: Int) : IntContainer(value) {
 }
 
 class IntWithTwoOrFourOrThree(value: Int) : EvenIntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     init {
         require(value == 2 || value == 3 || value == 4) { "Value must be 2 or 4" }
         println("B")

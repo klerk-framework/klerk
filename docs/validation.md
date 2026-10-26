@@ -26,6 +26,7 @@ Every `DataContainer` subclass validates its own value: the built-in constraints
 
 ```kotlin
 class BookTitle(value: String) : StringContainer(value) {
+    override val category = DataCategory.NonSensitive
     override val minLength = 2
     override val maxLength = 100
     override val maxLines = 1

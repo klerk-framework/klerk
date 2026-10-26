@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.datatypes.BlobPreAttachStep
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
 import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
 import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.datatypes.FloatContainer
@@ -293,11 +294,14 @@ data class Author(
     override fun toString(): String = "$firstName $lastName"
 }
 
-class ReleasePartyPosition(value: GeoPosition) : GeoPositionContainer(value)
+class ReleasePartyPosition(value: GeoPosition) : GeoPositionContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
 // data class Shop(val shopName: ShopName, val owner: Reference<Author>) : CudModel
 
 class ShopName(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
@@ -663,12 +667,14 @@ suspend fun createBookHarryPotter2(
 }
 
 class PhoneNumber(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.PersonalData
     override val minLength = 3
     override val maxLength = 10
     override val maxLines = 1
 }
 
 class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Int = 2
     override val max: Int = Int.MAX_VALUE
 
@@ -683,6 +689,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 }
 
 class FirstName(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.PersonalData
     override val minLength = 1
     override val maxLength = 50
     override val maxLines: Int = 1
@@ -690,12 +697,14 @@ class FirstName(value: String) : StringContainer(value) {
 }
 
 class LastName(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.PersonalData
     override val minLength = 1
     override val maxLength = 50
     override val maxLines: Int = 1
 }
 
 class BookTitle(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength = 2
     override val maxLength = 100
     override val maxLines: Int = 1
@@ -706,34 +715,46 @@ class BookTitle(value: String) : StringContainer(value) {
 }
 
 class BookTag(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
 }
 
 class SecretPasscode(value: Long) : LongContainer(value) {
+    override val category: DataCategory = DataCategory.Sensitive
     override val min: Long = Long.MIN_VALUE
     override val max: Long = Long.MAX_VALUE
 }
 
-class IsActive(value: Boolean) : BooleanContainer(value)
+class IsActive(value: Boolean) : BooleanContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
 class Quantity(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Int = 0
     override val max: Int = Int.MAX_VALUE
 }
 
-class BookWrittenAt(value: Instant) : InstantContainer(value)
+class BookWrittenAt(value: Instant) : InstantContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
-class ReadingTime(value: Duration) : DurationContainer(value)
+class ReadingTime(value: Duration) : DurationContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
 enum class BookGenre { Fiction, Mystery, Fantasy }
 
-class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value)
+class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
 data class Address(val street: Street)
 
 class Street(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
@@ -947,6 +968,7 @@ data class CreateBookParams(
 )
 
 class AverageScore(value: Float) : FloatContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Float = 0f
     override val max: Float = Float.MAX_VALUE
 }
@@ -957,6 +979,7 @@ data class Painting(val title: PaintingTitle, val image: PaintingImage)
 enum class PaintingStates { Hung }
 
 class PaintingTitle(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
@@ -964,6 +987,7 @@ class PaintingTitle(value: String) : StringContainer(value) {
 
 /** Images only, published to the world, and small. */
 class PaintingImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("image/png", "image/jpeg")
     override val maxSize: Long = 1000
     override val visibility: AttachedDataVisibility = AttachedDataVisibility.Public
@@ -998,24 +1022,29 @@ private fun newPainting(args: VoidEventArgs<Painting, CreatePaintingParams, Ctx,
 // Blob properties must be declared in an AttachedBlobContainer. These three accept anything, which is what the
 // attached-data tests need; PaintingImage above is the one that declares real constraints.
 class AuthorPicture(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 class BookCover(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 class BookThumbnail(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::noPreAttachProcessing)
 }
 
 // String properties must likewise be declared in an AttachedStringContainer. These accept text/plain, which is all
 // the attached-data tests write.
 class BookNotes(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("text/plain")
 }
 
 class BookChapter(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("text/plain")
 }
 
@@ -1026,6 +1055,7 @@ data class Note(val title: NoteTitle, val body: NoteBody)
 enum class NoteStates { Written }
 
 class NoteTitle(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
@@ -1033,6 +1063,7 @@ class NoteTitle(value: String) : StringContainer(value) {
 
 /** Plain text only, and small. */
 class NoteBody(id: AttachedStringID) : AttachedStringContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("text/plain")
     override val maxSize: Long = 20
 }
@@ -1093,6 +1124,7 @@ private fun newScribble(args: VoidEventArgs<Scribble, Scribble, Ctx, Views>): Sc
 
 // A container that declares no step at all, which the specification must refuse. Never registered in createConfig.
 class DoodleImage(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val preAttachSteps: List<BlobPreAttachStep> = emptyList()
 }
 
@@ -1118,12 +1150,14 @@ data class Inventory(val name: InventoryName, val rows: InventoryCsv)
 enum class InventoryStates { Counted }
 
 class InventoryName(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 1
     override val maxLength: Int = 100
     override val maxLines: Int = 1
 }
 
 class InventoryCsv(id: AttachedBlobID) : AttachedBlobContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val accept: Set<String> = setOf("text/plain")
     override val preAttachSteps: List<BlobPreAttachStep> = listOf(::checkTheHeader, ::normaliseLineEndings)
 }

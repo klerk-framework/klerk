@@ -393,7 +393,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                     actorType = context.actor.type,
                     actorReference = context.actor.id?.value,
                     actorExternalId = context.actor.externalId,
-                    params = if (keepsParamsAndExtra) KlerkJson.encode(command.params) else null,
+                    params = if (keepsParamsAndExtra) KlerkJson.encodeForLog(command.params) else null,
                     extra = if (keepsParamsAndExtra) context.eventLogExtra else null,
                 )
             },

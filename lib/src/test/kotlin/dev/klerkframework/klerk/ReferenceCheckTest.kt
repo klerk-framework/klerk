@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.view.ModelViews
@@ -83,6 +84,7 @@ class ReferenceCheckTest {
 }
 
 class NodeName(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength = 1
     override val maxLength = 50
     override val maxLines: Int = 1

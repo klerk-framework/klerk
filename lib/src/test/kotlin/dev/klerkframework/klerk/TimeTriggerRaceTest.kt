@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.misc.MutableClock
 import dev.klerkframework.klerk.statemachine.stateMachine
@@ -19,6 +20,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 class Mark(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength = 1
     override val maxLength = 50
     override val maxLines: Int = 1

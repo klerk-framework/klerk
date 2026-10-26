@@ -128,7 +128,7 @@ public abstract class DecimalContainer(value: BigDecimal) : NumberContainer<BigD
         return super.validate(propertyName, translation)
     }
 
-    override fun toString(): String = valueOrNullIfNotAuthorized?.toPlainString() ?: super.toString()
+    override fun format(value: BigDecimal): String = value.toPlainString()
 
     override fun equals(other: Any?): Boolean =
         other?.javaClass == javaClass && rawValue.compareTo((other as DecimalContainer).rawValue) == 0

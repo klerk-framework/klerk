@@ -118,7 +118,8 @@ fun cannotReadAstridsFirstName(args: PropertyReadRuleArgs<Ctx, Views>): Negative
 This is evaluated at most once per [`DataContainer`](models.md) property on the model (recursively, including containers
 nested in plain data classes, `Set`s and `List`s). If unauthorized, `DataContainer.value` throws
 `AuthorizationException` when accessed; `valueOrNullIfNotAuthorized` returns `null` instead, and `toString()` prints the
-masked placeholder. See [models](models.md) for details on `DataContainer`'s authorization-aware accessors.
+masked placeholder. A rule can look at `args.property.category` to treat personal data and secrets differently. See
+[models](models.md) for details on `DataContainer`'s authorization-aware accessors.
 
 ### commands
 

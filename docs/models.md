@@ -84,22 +84,26 @@ several reasons at once:
 3. Distinct types prevent mixing up e.g. a `Username` and a `Password` even though both wrap a `String`.
 4. You can attach behavior — units, formatting, parsing — to a specific kind of value.
 
-You subclass one of the built-in containers and fill in its constraints:
+You subclass one of the built-in containers and fill in its constraints and its [category](#data-categories):
 
 ```kotlin
 class BookTitle(value: String) : StringContainer(value) {
+    override val category = DataCategory.NonSensitive
     override val minLength = 2
     override val maxLength = 100
     override val maxLines = 1
 }
 
 class AverageScore(value: Float) : FloatContainer(value) {
+    override val category = DataCategory.NonSensitive
     override val min = 0f
     override val max = Float.MAX_VALUE
 }
 
 enum class BookGenre { Fiction, Mystery, Fantasy }
-class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value)
+class BookGenreContainer(value: BookGenre) : EnumContainer<BookGenre>(value) {
+    override val category = DataCategory.NonSensitive
+}
 ```
 
 Built-in containers:
@@ -132,6 +136,7 @@ On top of the built-in constraints, add custom rules via `validators`:
 
 ```kotlin
 class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
+    override val category = DataCategory.NonSensitive
     override val min = 2
     override val max = Int.MAX_VALUE
     override val validators = setOf(::mustBeEven)
@@ -153,6 +158,7 @@ currency in a nested class. Make the currency an enum of the currencies your app
 
 ```kotlin
 class Amount(value: BigDecimal) : DecimalContainer(value) {
+    override val category = DataCategory.NonSensitive
     override val min = BigDecimal.ZERO
     override val max = BigDecimal("1000000000")
     override val scale = 2
@@ -160,7 +166,9 @@ class Amount(value: BigDecimal) : DecimalContainer(value) {
 
 enum class CurrencyCode { SEK, EUR, USD }
 
-class CurrencyContainer(value: CurrencyCode) : EnumContainer<CurrencyCode>(value)
+class CurrencyContainer(value: CurrencyCode) : EnumContainer<CurrencyCode>(value) {
+    override val category = DataCategory.NonSensitive
+}
 
 data class Price(val amount: Amount, val currency: CurrencyContainer)
 
@@ -211,13 +219,38 @@ Arithmetic in the library rounds to the number of decimals of the currency, but 
 `round()` before `toPrice()` on a `Money` that isn't the result of a calculation, otherwise it may have more decimals
 than `scale` and fail validation. `CurrencyCode.valueOf` throws for a currency your application doesn't support.
 
+### Data categories
+
+Every container declares what kind of data it holds, with `category`:
+
+| `DataCategory` | For                                                     | `toString()` | Event log                                 |
+|----------------|---------------------------------------------------------|--------------|-------------------------------------------|
+| `NonSensitive` | Everything that needs no protection.                    | the value    | stored                                    |
+| `PersonalData` | A name, an email address, a national identity number... | masked       | stored, erased by `paramsAndExtra`        |
+| `Sensitive`    | A password, a token, a key...                           | masked       | not stored: the parameter is `[redacted]` |
+
+The category belongs to the type, so it applies wherever the type is used, also in nested objects and collections. A
+rule in `readProperties { }` can use it with `args.property.category`, and `SchemaField.category` gives it to generic
+tooling. There is no default: a container without a `category` does not compile.
+
+```kotlin
+class EmailAddress(value: String) : StringContainer(value) {
+    override val category = DataCategory.PersonalData
+    // ...
+}
+```
+
 ### Reading a container's value
 
 Different ways to read the wrapped value:
 
-* `toString()` on a container renders the value with a sensible formatting and with the masked placeholder `[••••••]`
-  instead of the value if the actor isn't authorized to read it. This is the recommended way to present the value in a
-  UI. If you want to render the value in a different format, you can override `toString()` on the container.
+* `toString()` on a container renders the value with a sensible formatting, but only for a `NonSensitive` container that
+  the actor is allowed to read. Otherwise it returns the masked placeholder `[••••••]`, so that personal data and
+  secrets never end up in a log or a message by accident. It cannot be overridden: override `format(value)` on the
+  container to change how the value is written.
+* `displayText()` — the value written like `toString()` writes a non-sensitive value, whatever the category, or the
+  masked placeholder if the actor isn't allowed to read it. Use it to show a personal or secret value to someone who may
+  see it, for example in a page for the person it belongs to.
 * `value` — throws `AuthorizationException` if the current actor is not authorized to read this property (per your
   [authorization](authorization.md) rules).
 * `valueWithoutAuthorization` — bypasses authorization. On the models returned by a read or a command result for an

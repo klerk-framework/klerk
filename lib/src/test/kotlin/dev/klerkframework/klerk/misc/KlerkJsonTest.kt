@@ -6,6 +6,7 @@ import dev.klerkframework.klerk.BookGenreContainer
 import dev.klerkframework.klerk.IllegalConfigurationException
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.datatypes.BooleanContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DateContainer
 import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.FloatContainer
@@ -30,31 +31,45 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 class Name(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength = 0
     override val maxLength = 100
     override val maxLines = 1
 }
 
 class Score(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0
     override val max = 100
 }
 
 class Count(value: Long) : LongContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0L
     override val max = Long.MAX_VALUE
 }
 
 class Ratio(value: Float) : FloatContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0f
     override val max = 1f
 }
 
-class Flag(value: Boolean) : BooleanContainer(value)
-class Moment(value: Instant) : InstantContainer(value)
-class Day(value: LocalDate) : DateContainer(value)
-class Span(value: kotlin.time.Duration) : DurationContainer(value)
-class Place(value: GeoPosition) : GeoPositionContainer(value)
+class Flag(value: Boolean) : BooleanContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class Moment(value: Instant) : InstantContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class Day(value: LocalDate) : DateContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class Span(value: kotlin.time.Duration) : DurationContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
+class Place(value: GeoPosition) : GeoPositionContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}
 
 data class Inner(val name: Name)
 
@@ -78,6 +93,7 @@ data class Everything(
 )
 
 class Big(value: ULong) : ULongContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0uL
     override val max = ULong.MAX_VALUE
 }

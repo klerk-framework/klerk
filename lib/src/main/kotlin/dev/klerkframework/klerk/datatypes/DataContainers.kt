@@ -42,9 +42,8 @@ internal val instantToStringFormat = LocalDateTime.Format {
  * 1. this is where you place validation rules
  * 2. authorization rules are applied when you try to extract the value in the container
  * 3. it is possible to add labels and descriptions to containers (can be used by your UI)
- * 4. it is possible to add tags to containers. This enables authorization rules like 'Top secret facts can only be
- *    read by 2-star generals and above'. It also enables queries like 'Show me all info about user X but omit any
- *    Personally Identifiable Information (PII)'.
+ * 4. every container declares a [DataCategory], which keeps secrets and personal data out of logs and gives
+ *    authorization rules something to work with, e.g. 'Personal data can only be read by the data owner'.
  * 5. they make it impossible to confuse parameters, e.g. a Username and a Password even though they are both Strings
  * 6. you can use types that adds meaning to the data.
  *      E.g. let's say you have a DistanceMeters: DoubleContainer. Instead of hoping that all parts in the code that
@@ -178,19 +177,36 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     protected override fun clone(): Any = super.clone()
 
     /**
-     * Labels usable by authorization rules and queries, e.g. to allow "read everything except properties tagged PII".
-     * Not enforced by Klerk itself.
-     */
-    public open val tags: Set<String> = emptySet()
-
-    /**
      * A good default value for the property, e.g. to prefill a form. Read it through
      * [dev.klerkframework.klerk.misc.SchemaField.defaultContainer]. The application developer can choose to ignore it
      * and provide a different default value.
      */
     public open val recommendedDefault: T? = null
 
-    override fun toString(): String = if (authorizedToRead) rawValue.toString() else MASKED
+    /**
+     * What kind of data the container holds. See [DataCategory].
+     */
+    public abstract val category: DataCategory
+
+    /**
+     * The value as text, or a mask if the container is not [DataCategory.NonSensitive] or the actor that read it is not
+     * allowed to read it.
+     */
+    final override fun toString(): String =
+        if (authorizedToRead && category == DataCategory.NonSensitive) format(rawValue) else MASKED
+
+    /**
+     * The value as text, to show to someone who may read it, whatever the [category]. It is written the same way as
+     * [toString] writes a non-sensitive value, e.g. a [DecimalContainer] without an exponent. A container that the actor
+     * is not allowed to read gives the masked placeholder.
+     *
+     * [toString] is masked for personal data and secrets so that they cannot end up in a log by accident; this function
+     * is the deliberate way to show them, for example in a page for the person they belong to.
+     */
+    public fun displayText(): String = if (authorizedToRead) format(rawValue) else MASKED
+
+    /** How the value is written as text by [toString]. */
+    protected open fun format(value: T): String = value.toString()
 
     override fun equals(other: Any?): Boolean {
         if (other?.javaClass != this.javaClass) {
@@ -286,11 +302,9 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
 public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(value) {
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
 
-    /** `yyyy-MM-dd HH:mm:ss` in the system default time zone, or the masked placeholder if unauthorized. */
-    override fun toString(): String {
-        val v = valueOrNullIfNotAuthorized ?: return super.toString()
-        return instantToStringFormat.format(v.toLocalDateTime(TimeZone.currentSystemDefault()))
-    }
+    /** `yyyy-MM-dd HH:mm:ss` in the system default time zone. */
+    override fun format(value: Instant): String =
+        instantToStringFormat.format(value.toLocalDateTime(TimeZone.currentSystemDefault()))
 }
 
 /**
@@ -298,12 +312,6 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(
  */
 public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>(value) {
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
-
-    /** ISO-8601 calendar date (`yyyy-MM-dd`), or the masked placeholder if unauthorized. */
-    override fun toString(): String {
-        val v = valueOrNullIfNotAuthorized ?: return super.toString()
-        return v.toString()
-    }
 }
 
 /**
@@ -311,12 +319,6 @@ public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>
  */
 public abstract class DurationContainer(value: Duration) : DataContainer<Duration>(value) {
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
-
-    /** The [Duration]'s default rendering (e.g. `1h 30m`), or the masked placeholder if unauthorized. */
-    override fun toString(): String {
-        val v = valueOrNullIfNotAuthorized ?: return super.toString()
-        return v.toString()
-    }
 }
 
 /**
@@ -410,6 +412,8 @@ public data class GeoPosition(val latitude: Double, val longitude: Double) {
  * A [DataContainer] wrapping a [JobID], so that a model can hold a reference to a job it started.
  */
 public class JobIdContainer(value: Long) : LongContainer(value) {
+
+    override val category: DataCategory = DataCategory.NonSensitive
 
     public companion object {
         /** Wraps [id]. */

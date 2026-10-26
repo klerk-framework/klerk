@@ -20,6 +20,7 @@ import dev.klerkframework.klerk.Views
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.createKlerk
 import dev.klerkframework.klerk.datatypes.AttachedStringContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.generousAuthRules
 import dev.klerkframework.klerk.scribbleStateMachine
 import dev.klerkframework.klerk.storage.AttachedBlobStore
@@ -130,4 +131,6 @@ class AttachedStringContainerTest {
 }
 
 /** A container Klerk cannot build on its own, since it wants something the id does not tell it. */
-class NeedsMoreThanAnIdString(id: AttachedStringID, val extra: String) : AttachedStringContainer(id)
+class NeedsMoreThanAnIdString(id: AttachedStringID, val extra: String) : AttachedStringContainer(id) {
+    override val category: DataCategory = DataCategory.NonSensitive
+}

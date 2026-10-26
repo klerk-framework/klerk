@@ -4,13 +4,9 @@ import dev.klerkframework.klerk.AttachedBlobID
 import dev.klerkframework.klerk.AttachedStringID
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.datatypes.AttachedDataContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DataContainer
-import dev.klerkframework.klerk.datatypes.DateContainer
-import dev.klerkframework.klerk.datatypes.DurationContainer
-import dev.klerkframework.klerk.datatypes.EnumContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
-import dev.klerkframework.klerk.datatypes.GeoPositionContainer
-import dev.klerkframework.klerk.datatypes.InstantContainer
 import dev.klerkframework.klerk.decode64bitMicroseconds
 import dev.klerkframework.klerk.to64bitMicroseconds
 import kotlinx.datetime.LocalDate
@@ -25,7 +21,9 @@ import kotlinx.serialization.json.booleanOrNull
 import java.lang.reflect.InvocationTargetException
 import java.math.BigDecimal
 import kotlin.reflect.KClass
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
+import kotlin.time.Instant
 
 /**
  * The JSON that model props and event parameters are stored as.
@@ -39,7 +37,11 @@ internal object KlerkJson {
 
     fun encode(value: Any?): String = value?.let { encodeToElement(it).toString() } ?: JsonNull.toString()
 
-    fun encodeToElement(value: Any): JsonObject = encodeObject(ObjectSchema.of(value::class), value)
+    fun encodeToElement(value: Any): JsonObject = encodeObject(ObjectSchema.of(value::class), value, forLog = false)
+
+    /** Like [encode], but the value of a [DataCategory.Sensitive] container is replaced by a mask. */
+    fun encodeForLog(value: Any?): String =
+        value?.let { encodeObject(ObjectSchema.of(it::class), it, forLog = true).toString() } ?: JsonNull.toString()
 
     /** @throws JsonMismatchException if [json] does not match [kClass] exactly */
     fun <T : Any> decode(kClass: KClass<T>, json: String): T {
@@ -66,22 +68,31 @@ private fun mismatch(path: String, problem: String, cause: Throwable? = null): N
 
 private fun join(path: String, key: String) = if (path.isEmpty()) key else "$path.$key"
 
-private fun encodeObject(schema: ObjectSchema<*>, value: Any): JsonObject =
-    JsonObject(schema.fields.associate { it.name to encodeValue(it.schemaType, it.get(value)) })
+private fun encodeObject(schema: ObjectSchema<*>, value: Any, forLog: Boolean): JsonObject =
+    JsonObject(schema.fields.associate { it.name to encodeValue(it.schemaType, it.get(value), forLog) })
 
-private fun encodeValue(type: SchemaType, value: Any?): JsonElement {
+private fun encodeValue(type: SchemaType, value: Any?, forLog: Boolean): JsonElement {
     if (value == null) {
         return JsonNull
     }
     return when (val shape = type.shape) {
-        is Shape.Container -> encodeContainer(shape.kind, value as DataContainer<*>)
+        is Shape.Container -> {
+            val container = value as DataContainer<*>
+            if (forLog && container.category == DataCategory.Sensitive) {
+                JsonPrimitive(LOG_MASK)
+            } else {
+                encodeContainer(shape.kind, container)
+            }
+        }
         Shape.Reference -> JsonPrimitive((value as ModelID<*>).value)
         Shape.BlobID -> JsonPrimitive((value as AttachedBlobID).value)
         Shape.StringID -> JsonPrimitive((value as AttachedStringID).value)
-        is Shape.Many -> JsonArray((value as Collection<*>).map { encodeValue(shape.element, it) })
-        is Shape.Nested -> encodeObject(shape.schema, value)
+        is Shape.Many -> JsonArray((value as Collection<*>).map { encodeValue(shape.element, it, forLog) })
+        is Shape.Nested -> encodeObject(shape.schema, value, forLog)
     }
 }
+
+private const val LOG_MASK = "[redacted]"
 
 private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): JsonElement {
     val value = container.rawValue
@@ -89,12 +100,12 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.AttachedBlob, ContainerKind.AttachedString ->
             JsonPrimitive((container as AttachedDataContainer<*>).rawId)
         ContainerKind.String -> JsonPrimitive(value as String)
-        ContainerKind.Enum -> JsonPrimitive((container as EnumContainer<*>).value.name)
+        ContainerKind.Enum -> JsonPrimitive((value as Enum<*>).name)
         ContainerKind.Int -> JsonPrimitive(value as Int)
-        ContainerKind.Date -> JsonPrimitive((container as DateContainer).value.toEpochDays().toInt())
+        ContainerKind.Date -> JsonPrimitive((value as LocalDate).toEpochDays().toInt())
         ContainerKind.Long -> JsonPrimitive(value as Long)
-        ContainerKind.Instant -> JsonPrimitive((container as InstantContainer).value.to64bitMicroseconds())
-        ContainerKind.Duration -> JsonPrimitive((container as DurationContainer).value.inWholeMicroseconds)
+        ContainerKind.Instant -> JsonPrimitive((value as Instant).to64bitMicroseconds())
+        ContainerKind.Duration -> JsonPrimitive((value as Duration).inWholeMicroseconds)
         ContainerKind.Short -> JsonPrimitive(value as Short)
         ContainerKind.Byte -> JsonPrimitive(value as Byte)
         ContainerKind.ULong -> JsonPrimitive((value as ULong).toString())
@@ -105,7 +116,7 @@ private fun encodeContainer(kind: ContainerKind, container: DataContainer<*>): J
         ContainerKind.Double -> JsonPrimitive(value as Double)
         ContainerKind.Decimal -> JsonPrimitive((value as BigDecimal).toPlainString())
         ContainerKind.Boolean -> JsonPrimitive(value as Boolean)
-        ContainerKind.Geo -> JsonPrimitive((container as GeoPositionContainer).value.uLongEncoded.toLong())
+        ContainerKind.Geo -> JsonPrimitive((value as GeoPosition).uLongEncoded.toLong())
     }
 }
 

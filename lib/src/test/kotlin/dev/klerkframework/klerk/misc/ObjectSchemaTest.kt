@@ -14,6 +14,7 @@ import dev.klerkframework.klerk.Translation
 import dev.klerkframework.klerk.Validatable
 import dev.klerkframework.klerk.attacheddata.collectAttachedData
 import dev.klerkframework.klerk.datatypes.ByteContainer
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DoubleContainer
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.datatypes.ShortContainer
@@ -56,6 +57,7 @@ data class SchemaBodyVar(val street: Street) {
 data class SchemaWithDefault(val street: Street, val other: Street = Street("default"))
 
 class LambdaValidated(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0
     override val max = 10
     override val validators = setOf<(Int, Translation) -> PropertyValidity>({ _, _ -> PropertyValidity.Invalid() })
@@ -74,6 +76,7 @@ class SchemaOuter {
 }
 
 internal class InternalStreet(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength = 0
     override val maxLength = 10
     override val maxLines = 1
@@ -219,30 +222,37 @@ class ObjectSchemaTest {
 private fun sampleRule(context: Ctx): PropertyCollectionValidity = Valid
 
 class SchemaShort(value: Short) : ShortContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toShort()
     override val max = 9.toShort()
 }
 class SchemaByte(value: Byte) : ByteContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toByte()
     override val max = 9.toByte()
 }
 class SchemaUInt(value: UInt) : UIntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0u
     override val max = 9u
 }
 class SchemaULong(value: ULong) : ULongContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0uL
     override val max = 9uL
 }
 class SchemaUShort(value: UShort) : UShortContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toUShort()
     override val max = 9.toUShort()
 }
 class SchemaUByte(value: UByte) : UByteContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toUByte()
     override val max = 9.toUByte()
 }
 class SchemaDouble(value: Double) : DoubleContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.0
     override val max = 9.0
 }

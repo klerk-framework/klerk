@@ -1,5 +1,6 @@
 package dev.klerkframework.klerk
 
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DecimalContainer
 import dev.klerkframework.klerk.datatypes.StringContainer
 import dev.klerkframework.klerk.misc.KlerkJson
@@ -19,12 +20,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class Amount(value: BigDecimal) : DecimalContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: BigDecimal = BigDecimal.ZERO
     override val max: BigDecimal = BigDecimal("1000000")
     override val scale: Int = 3
 }
 
 class CurrencyCode(value: String) : StringContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val minLength: Int = 3
     override val maxLength: Int = 3
     override val maxLines: Int = 1

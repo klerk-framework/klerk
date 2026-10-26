@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.command.Command
+import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.IntContainer
 import dev.klerkframework.klerk.statemachine.stateMachine
 import dev.klerkframework.klerk.storage.ModelCacheSettings
@@ -178,6 +179,7 @@ class BenchModelViews : ModelViews<BenchProps, Ctx>() {
 }
 
 class BenchN(value: Int) : IntContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
     override val min: Int = Int.MIN_VALUE
     override val max: Int = Int.MAX_VALUE
 }
