@@ -18,7 +18,11 @@ public interface KlerkPlugin<C : KlerkContext, V> {
     /** Returns [previous] augmented with the plugin's own models, events, rules and jobs. */
     public fun mergeSpecification(previous: Specification<C, V>): Specification<C, V>
 
-    /** Called once after Klerk has started. Use it to kick off whatever background work the plugin needs. */
+    /**
+     * Called once after Klerk has started. Use it to kick off whatever background work the plugin needs.
+     *
+     * No job step runs until every plugin's `start` has returned.
+     */
     public suspend fun start(klerk: Klerk<C, V>)
 
     /**

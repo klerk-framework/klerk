@@ -124,12 +124,13 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 ModelCache.initMetrics(klerk.settings.meterRegistry, klerk.readWriteLock)
                 klerk.attachedDataImpl.start()
                 klerk.eventLogRetention.start()
-                // Jobs start last: reloading them may need models and attached data to be in place already.
+                // Jobs are loaded last, but dispatched only once the plugins have started.
                 klerk.jobs.start()
                 for (plugin in klerk.specification.plugins) {
                     logger.info { "Initializing plugin: ${plugin.name}" }
                     plugin.start(klerk)
                 }
+                klerk.jobs.beginDispatching()
             }
             klerk.activityLog.add(LogKlerkStarted(startTime))
         } else {

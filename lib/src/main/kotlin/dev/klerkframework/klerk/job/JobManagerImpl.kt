@@ -165,7 +165,11 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
         cancelRetired(now)
         initialiseCronState(now)
         logger.info { "Jobs ready (${records.size} jobs, ${jobSpec.allTypes.size} registered types)" }
+    }
 
+    /** Begins dispatching jobs. Called after the plugins have started, so no step runs before they are ready. */
+    fun beginDispatching() {
+        check(started) { "The job manager has not been started" }
         if (jobSettings.execution == JobExecution.Automatic) {
             val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             scope = newScope
