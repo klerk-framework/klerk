@@ -67,6 +67,7 @@ public class InvalidPropertyProblem(
 ) : Problem(endUserTranslatedMessage, KlerkErrorCode.InvalidProperty) {
     override fun asException(): IllegalArgumentException = IllegalArgumentException(toString())
     override val equalityKey: List<Any?> get() = super.equalityKey + propertyName
+    override fun toString(): String = "${super.toString()} (property: $propertyName)"
 }
 
 /** Identifies the validation/authorization function that rejected a command or read, for diagnostics/logging. */
@@ -211,7 +212,7 @@ public class PersistedModelValidationException(
 ) : KlerkException(
     KlerkErrorCode.PersistedModelInvalid,
     "The stored $modelType with id $modelId no longer passes validation: $reason. Register a MigrationStep " +
-        "that makes the stored data valid.",
+        "that makes the stored data valid, or change the validation rules.",
 )
 
 /**

@@ -15,7 +15,7 @@ KlerkSettings(persistence = SqlPersistence(myDataSource))
 Backed by a SQL database via a `javax.sql.DataSource`, using [Exposed](https://github.com/JetBrains/Exposed) as the SQL
 layer. On construction it connects and creates its tables if missing (event log, models, schema-migration tracking,
 attached data, jobs, cron state, used command tokens), then reads the current model schema version from the
-`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON. Rows in the event log are
+`klerk_model_schema_migrations` table. Model `props` and command `params` are stored as JSON, with no limit on the length. The whole `props` of a model is kept in memory, so keep it small: put large values (documents, imported files, long texts) in [attached data](attached-data.md) and refer to them from the model. Rows in the event log are
 erased according to the specification's [event-log retention](events-and-commands.md#retention).
 
 For production, supply a

@@ -21,6 +21,11 @@ import dev.klerkframework.klerk.createConfig
 import dev.klerkframework.klerk.generateSampleData
 import dev.klerkframework.klerk.testSettings
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.sqlite.SQLiteDataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -64,6 +69,37 @@ class SqlPersistenceTest {
             val difference = autorFirstRun.copy(props = autorFirstRun.props.copy(lastName = LastName("Other name")))
             assertNotEquals(difference, authorSecondRun)
         }
+    }
+
+    @Test
+    fun `props and params are not limited in length`() {
+        val ds = SQLiteDataSource().apply { url = "jdbc:sqlite:file:large${System.nanoTime()}?mode=memory&cache=shared" }
+        val keepAlive = ds.connection
+        SqlPersistence(ds)
+        val large = "x".repeat(1_000_000)
+        val database = Database.connect(ds)
+        transaction(database) {
+            ModelsTable.insert {
+                it[id] = 1
+                it[type] = "T"
+                it[createdAt] = 0
+                it[lastPropsUpdatedAt] = 0
+                it[lastStateTransitionAt] = 0
+                it[state] = "S"
+                it[properties] = large
+            }
+            EventLogTable.insert {
+                it[sequenceNumber] = 1
+                it[timestamp] = 0
+                it[event] = "E"
+                it[modelId] = 1
+                it[params] = large
+                it[actorIdentityType] = 0
+            }
+            assertEquals(large, ModelsTable.selectAll().single()[ModelsTable.properties])
+            assertEquals(large, EventLogTable.selectAll().single()[EventLogTable.params])
+        }
+        keepAlive.close()
     }
 
     @Test

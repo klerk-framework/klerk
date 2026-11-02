@@ -7,7 +7,7 @@ internal object EventLogTable : Table("\"klerk_event_log\"") {
     val timestamp = long("timestamp").index() // microseconds since 1970
     val event = varchar("event_id", length = 100)
     val modelId = integer("model_id").index()
-    val params = varchar("params", length = 100000).nullable() // null once erased
+    val params = largeText("params").nullable() // null once erased
     val actorIdentityType = byte("actor_identity_type")
     val actorIdentityReference = integer("actor_identity_reference").nullable()
     val actorIdentityExternalId = long("actor_identity_externalId").nullable()
@@ -37,7 +37,7 @@ internal object ModelsTable : Table("\"klerk_models\"") {
     val lastStateTransitionAt = long("last_transition_at") // microseconds since 1970
     val state = varchar("state", length = 50)
     val timeTrigger = long("time_trigger").nullable() // microseconds since 1970
-    val properties = varchar("props", length = 100000)
+    val properties = largeText("props")
     override val primaryKey = PrimaryKey(id)
 }
 
