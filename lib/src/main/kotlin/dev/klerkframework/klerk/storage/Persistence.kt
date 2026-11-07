@@ -51,8 +51,8 @@ public data class EventLogEntry(
  * @property updatedModels models that existed before, to be replaced. Never overlaps [createdModels].
  * @property deletedModels ids of the models to remove.
  * @property eventLogEntry the entry to append, or null when the commit came from no command (e.g. a job checkpoint).
- * @property eventLogTombstones deleted models whose event log is to be erased later, with when they were deleted. To
- * be stored until [Persistence.eraseEventLogsOfDeletedModels] erases them.
+ * @property eventLogTombstones deleted models whose event log is to be erased later, with when to erase it:
+ * [Instant.DISTANT_FUTURE] if never. To be stored until [Persistence.eraseEventLogsOfDeletedModels] erases them.
  * @property commandToken the token of the command, to be stored until [Persistence.deleteCommandTokens] deletes it, or
  * null when the commit came from no command.
  */
@@ -151,19 +151,21 @@ public interface Persistence {
     public fun lastEventLogSequenceNumber(): Long
 
     /**
-     * Deletes the event-log entries of every model tombstoned (see [CommitBatch.eventLogTombstones]) at or before
-     * [deletedAtOrBefore], together with those tombstones. Called periodically, concurrently with commits and reads.
+     * Deletes the event-log entries of every model tombstoned (see [CommitBatch.eventLogTombstones]) with an erasure
+     * time at or before [eraseAtOrBefore], together with those tombstones. Called periodically, concurrently with
+     * commits and reads.
      */
-    public fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant)
+    public fun eraseEventLogsOfDeletedModels(eraseAtOrBefore: Instant)
 
-    /** Every stored tombstone (see [CommitBatch.eventLogTombstones]): the deleted model id and when it was deleted. */
+    /** Every stored tombstone (see [CommitBatch.eventLogTombstones]): the deleted model id and when to erase its log. */
     public fun readEventLogTombstones(): Map<Int, Instant>
 
     /**
-     * Sets [EventLogEntry.params] and [EventLogEntry.extra] to null on every entry whose [EventLogEntry.time] is before
-     * [before]. Called periodically, concurrently with commits and reads.
+     * Sets [EventLogEntry.params] and [EventLogEntry.extra] to null on every entry whose [EventLogEntry.time] is at or
+     * before what [before] says for the entry's [EventLogEntry.eventReference], or on none of an event's entries if
+     * [before] returns null for it. Called periodically, concurrently with commits and reads.
      */
-    public fun eraseEventLogParamsAndExtra(before: Instant)
+    public fun eraseEventLogParamsAndExtra(before: (EventReference) -> Instant?)
 
     /** Every stored [CommitBatch.commandToken] created at or after [createdAtOrAfter]. Read once at startup. */
     public fun readCommandTokens(createdAtOrAfter: Instant): List<UsedCommandToken>

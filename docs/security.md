@@ -62,3 +62,26 @@ parameters of every entry after another, keeping who did what and when without k
 Authorization isn't just "can this actor see this model" — `readProperties` rules gate individual properties on a model
 the actor can otherwise read (see [authorization.md](authorization.md#readproperties)), e.g. so that any actor can read
 an `Author`'s name while only some can read a sensitive field on the same model.
+
+## NIS2
+
+The NIS2 directive requires organizations to take technical and organizational measures (article 21). Using Klerk helps but does
+not make an application compliant, since most measures concern processes rather than code. The table shows which
+measures Klerk's features can support.
+
+| NIS2 measure | Support in Klerk |
+|---|---|
+| Access control (21.2i) | [Authorization](authorization.md): default-deny rules for every kind of access, including `readProperties` |
+| Multi-factor authentication (21.2j) | Delegated to the identity provider with the OpenID Connect module |
+| Logging and incident analysis (21.2b) | [Event log](events-and-commands.md#the-event-log) of every command, with the actor |
+| Data minimization | `eventLogRetention` and `DataCategory` (see [Models](models.md)) |
+| Monitoring | [Metrics](metrics.md) |
+| Secure development (21.2e) | Typed models, validated schema at startup, deny-by-default authorization |
+
+Not provided by Klerk, and left to the application and its operations:
+
+* Tamper protection of the event log. Restrict write access to the database.
+* Forwarding denied operations and failed logins to a monitoring system.
+* Encryption at rest of the database and attached data. Use the encryption of the database or disk.
+* Backup and restore. The event log is not a substitute for database backups.
+* Risk analysis, incident reporting, training and supplier management.

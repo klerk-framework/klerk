@@ -30,6 +30,7 @@ dependencies {
 | Name | Type | Tags | |
 |---|---|---|---|
 | `klerk.commands` | counter | `model`, `event`, `outcome` | Commands handled, from `klerk.handle` and job steps. `outcome` is `success` or `failure`. Dry runs are not counted. |
+| `klerk.time_trigger.blocked` | counter | `model`, `state` | Time triggers that were blocked, e.g. a `delete()` of a model that is still referenced. A blocked trigger is logged at warning level and is not retried. |
 | `klerk.models.count` | gauge | | The number of models. |
 | `klerk.models.resident` | gauge | | The number of model bodies held in memory. See [performance](performance.md). |
 | `klerk.models.load` | timer | | How long reading all persisted models took at startup. |

@@ -139,8 +139,9 @@ fun later(args: LifecycleArgs<Author, Ctx, Views>): Instant = args.context.time.
   data (so it can depend on model properties, not just a fixed offset).
 
 There's no guarantee the block runs at the exact instant — expect a few seconds of variation — and if the block would
-violate a rule (e.g. `delete()` is blocked because another model still refers to this one), it silently does not run,
-and won't be retried. Avoid triggers that create loops (e.g. a state whose time trigger transitions back into a state
+violate a rule (e.g. `delete()` is blocked because another model still refers to this one), it does not run and won't
+be retried. Klerk logs a warning and counts it in the metric `klerk.time_trigger.blocked` (see [metrics](metrics.md)).
+To delete a model that others refer to, remove the references in the same block with `commands`. Avoid triggers that create loops (e.g. a state whose time trigger transitions back into a state
 with the same trigger), as this can put continuous load on the system.
 
 A time trigger fires on its own, in the background, with no command and no caller-supplied context — notice

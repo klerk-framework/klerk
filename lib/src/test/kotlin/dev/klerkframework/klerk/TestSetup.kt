@@ -86,7 +86,7 @@ fun createConfig(
     configureAuthorization: SpecificationBuilder.AuthorizationRulesBlock<Ctx, Views>.() -> Unit = {},
     retention: EventLogRetention = EventLogRetention(afterModelDeletion = null, paramsAndExtra = null),
 ): Specification<Ctx, Views> = SpecificationBuilder<Ctx, Views>(collections).build {
-    eventLogRetention(retention.afterModelDeletion, retention.paramsAndExtra)
+    eventLogRetention(retention)
     jobContextProvider(::myJobContextProvider)
     jobs {
         register(MyJob)

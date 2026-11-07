@@ -255,6 +255,26 @@ SpecificationBuilder<Ctx, Views>(views).build {
 never stored. Any other value must be at least one hour, since Klerk erases what has expired once an hour. Leaving out
 `eventLogRetention` fails the build with `ERROR-SPEC-18`.
 
+To keep different things for different times, give two named functions instead of durations:
+
+```kotlin
+eventLogRetention(afterModelDeletion = ::keepAfterDeletion, paramsAndExtra = ::keepParams)
+
+fun keepAfterDeletion(args: DeletedModelArgs): Duration? = when (args.model.props) {
+    is Document -> Duration.ZERO   // a scrapped document leaves no trace
+    else -> 1825.days
+}
+
+fun keepParams(event: EventReference): Duration? = if (event.modelName == "Customer") 30.days else 365.days
+```
+
+`afterModelDeletion` is asked when a model is deleted, with the model as it was just before, and decides when its log is
+erased. A model that is created and deleted by the same command is not known to the function and gets zero (or the duration, if you gave durations). `paramsAndExtra`
+is asked for the event of every entry, when it is written and every hour when expired entries are erased; changing it
+to a shorter time erases what was stored before. The functions must be named function references, depend on nothing but
+their argument, and be quick: they run while commands are processed. A duration that is not null, zero or at least one
+hour makes the command fail.
+
 The parameters of a `Sensitive` container are never stored, whatever the retention: the log has `[redacted]` in their
 place. Parameters of a `PersonalData` container are stored and erased as above. See
 [data categories](models.md#data-categories).

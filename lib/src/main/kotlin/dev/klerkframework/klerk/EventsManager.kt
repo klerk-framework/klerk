@@ -375,7 +375,6 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         fun model(id: ModelID<out Any>) =
             requireNotNull(delta.aggregatedModelState[id]) { "Could not find $id among the modified models" }
         val retention = specification.eventLogRetention
-        val keepsParamsAndExtra = retention.paramsAndExtra != Duration.ZERO
 
         return CommitBatch(
             createdModels = delta.createdModels.map(::model),
@@ -385,6 +384,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             eventLogEntry = if (command == null || context == null) {
                 null
             } else {
+                val keepsParamsAndExtra = retention.paramsAndExtra(command.event.id) != Duration.ZERO
                 EventLogEntry(
                     sequenceNumber = sequenceNumber,
                     time = context.time,
@@ -400,7 +400,12 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
             attachedData = attachedDataDelta,
             jobs = jobCommit,
             // Always written, also when the log is kept forever: a tombstone is what keeps the id from being reused.
-            eventLogTombstones = settings.now().let { now -> delta.deletedModels.associateWith { now } },
+            eventLogTombstones = settings.now().let { now ->
+                delta.deletedModels.associateWith { id ->
+                    val model = delta.aggregatedModelState[id] ?: ModelCache.getOrNull(id)
+                    klerk.eventLogRetention.eraseAtForDeletion(model, now)
+                }
+            },
         )
     }
 
@@ -517,9 +522,17 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         val delta = eventProcessor.processTimeTrigger(model, options, now)
         if (delta.problems.isNotEmpty()) {
             val problem = delta.problems.first()
-            logger.info {
-                "The time-trigger for model ${model.id} was blocked. Reason: $problem"
+            logger.warn {
+                "The time-trigger for ${model.props::class.simpleName} ${model.id} in state ${model.state} was " +
+                    "blocked and will not be retried. Reason: $problem"
             }
+            Counter.builder("klerk.time_trigger.blocked")
+                .description("Time triggers that were blocked, e.g. a delete() of a model that is still referenced")
+                .baseUnit("triggers")
+                .tag("model", model.props::class.simpleName ?: "unknown")
+                .tag("state", model.state)
+                .register(settings.meterRegistry)
+                .increment()
             commit<Any, Nothing>(
                 ProcessingData(
                     updatedModels = listOf(model.id),

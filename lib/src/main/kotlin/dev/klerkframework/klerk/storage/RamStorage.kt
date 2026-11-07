@@ -4,6 +4,7 @@ import dev.klerkframework.klerk.AttachedDataID
 import dev.klerkframework.klerk.AttachedDataKind
 import dev.klerkframework.klerk.AttachedDataMetadata
 import dev.klerkframework.klerk.AttachedDataVisibility
+import dev.klerkframework.klerk.EventReference
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.Specification
 import dev.klerkframework.klerk.job.JobID
@@ -76,8 +77,8 @@ public open class RamStorage : Persistence {
         for (model in batch.deletedModels) {
             models.remove(model.value)
         }
-        for ((modelId, deletedAt) in batch.eventLogTombstones) {
-            tombstones[modelId.value] = deletedAt
+        for ((modelId, eraseAt) in batch.eventLogTombstones) {
+            tombstones[modelId.value] = eraseAt
         }
         batch.commandToken?.let { commandTokens[it.nonce] = it.createdAt }
     }
@@ -136,17 +137,21 @@ public open class RamStorage : Persistence {
 
     override fun lastEventLogSequenceNumber(): Long = synchronized(lock) { eventLogHighWaterMark }
 
-    override fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant) {
+    override fun eraseEventLogsOfDeletedModels(eraseAtOrBefore: Instant) {
         synchronized(lock) {
-            val due = tombstones.filterValues { it <= deletedAtOrBefore }.keys
+            val due = tombstones.filterValues { it <= eraseAtOrBefore }.keys
             eventLog.removeIf { it.model.value in due }
             tombstones.keys.removeAll(due)
         }
     }
 
-    override fun eraseEventLogParamsAndExtra(before: Instant) {
+    override fun eraseEventLogParamsAndExtra(before: (EventReference) -> Instant?) {
         synchronized(lock) {
-            val expired = eventLog.filter { it.time < before && (it.params != null || it.extra != null) }
+            val cutoffs = eventLog.map { it.eventReference }.toSet().associateWith(before)
+            val expired = eventLog.filter { entry ->
+                val cutoff = cutoffs[entry.eventReference]
+                cutoff != null && entry.time <= cutoff && (entry.params != null || entry.extra != null)
+            }
             eventLog.removeAll(expired.toSet())
             eventLog.addAll(expired.map { it.copy(params = null, extra = null) })
         }

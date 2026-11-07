@@ -250,8 +250,97 @@ class EventLogRetentionTest {
         klerk.meta.stop()
     }
 
+    @Test
+    fun `the retention after deletion can depend on the model that was deleted`() = runBlocking {
+        for (storage in storages) {
+            val klerk = start(storage(), EventLogRetention(::retainBySecrecy, ::retainOneWeek))
+            val secret = createAuthor(klerk, "Secret")
+            val ordinary = createAuthor(klerk, "Ordinary")
+            delete(klerk, secret)
+            delete(klerk, ordinary)
+
+            assertEquals(emptyList(), log(klerk, secret), "erased at once")
+            assertEquals(2, log(klerk, ordinary).size)
+            assertFalse(klerk.isRetired(secret))
+            assertTrue(klerk.isRetired(ordinary))
+
+            clock.advance(30.days)
+            klerk.sweep()
+            assertEquals(emptyList(), log(klerk, ordinary))
+            assertFalse(klerk.isRetired(ordinary))
+            klerk.meta.stop()
+        }
+    }
+
+    @Test
+    fun `the retention of params can depend on the event`() = runBlocking {
+        for (storage in storages) {
+            val klerk = start(storage(), EventLogRetention(::retainBySecrecy, ::retainByEvent))
+            val kept = createAuthor(klerk, "Kept")
+            val deleted = createAuthor(klerk, "Deleted")
+            delete(klerk, deleted)
+            assertNull(log(klerk, deleted).last().params, "DeleteAuthor is never stored")
+            assertNotNull(log(klerk, deleted).first().params)
+
+            clock.advance(7.days)
+            klerk.sweep()
+            assertNotNull(log(klerk, kept).single().params, "CreateAuthor is kept for 30 days")
+
+            clock.advance(23.days)
+            klerk.sweep()
+            assertNull(log(klerk, kept).single().params)
+            klerk.meta.stop()
+        }
+    }
+
+    @Test
+    fun `a rule must be a named function`() {
+        val e = assertFailsWith<IllegalConfigurationException> { EventLogRetention({ null }, ::retainOneWeek) }
+        assertEquals(KlerkErrorCode.RuleMustBeNamed, e.code)
+        val e2 = assertFailsWith<IllegalConfigurationException> { EventLogRetention(::retainBySecrecy, { null }) }
+        assertEquals(KlerkErrorCode.RuleMustBeNamed, e2.code)
+    }
+
+    @Test
+    fun `a rule that returns a retention that is too short makes the command fail`() = runBlocking {
+        val klerk = start(RamStorage(), EventLogRetention(::retainTooShort, ::retainOneWeek))
+        val author = createAuthor(klerk, "Ordinary")
+
+        assertFailsWith<Exception> { delete(klerk, author) }
+
+        assertNotNull(klerk.read(Ctx.system()) { getOrNull(author) }, "the author must not have been deleted")
+        klerk.meta.stop()
+    }
+
+    @Test
+    fun `a params rule that returns zero erases what was stored before`() = runBlocking {
+        val storage = SQLiteInMemory.create()
+        val first = start(storage, EventLogRetention(afterModelDeletion = null, paramsAndExtra = null))
+        val author = createAuthor(first, "Before")
+        first.meta.stop()
+
+        val second = start(storage, EventLogRetention(::retainBySecrecy, ::retainNothing))
+        second.sweep()
+        assertNull(log(second, author).single().params)
+        second.meta.stop()
+    }
+
     private fun candidates(vararg ids: Int): () -> Int {
         val remaining = ids.iterator()
         return { remaining.next() }
     }
+}
+
+fun retainBySecrecy(args: DeletedModelArgs): Duration? =
+    if ((args.model.props as Author).firstName.value == "Secret") Duration.ZERO else 30.days
+
+fun retainTooShort(args: DeletedModelArgs): Duration? = 5.minutes
+
+fun retainOneWeek(event: EventReference): Duration? = 7.days
+
+fun retainNothing(event: EventReference): Duration? = Duration.ZERO
+
+fun retainByEvent(event: EventReference): Duration? = when (event) {
+    CreateAuthor.id -> 30.days
+    else -> Duration.ZERO
 }

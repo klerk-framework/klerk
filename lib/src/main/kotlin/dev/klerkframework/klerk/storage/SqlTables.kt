@@ -22,10 +22,10 @@ internal object EventLogHighWaterMarkTable : Table("\"klerk_event_log_high_water
     override val primaryKey = PrimaryKey(id)
 }
 
-/** Deleted models whose event log is still to be erased. */
+/** Deleted models whose event log is still to be erased, and when to erase it. */
 internal object EventLogTombstonesTable : Table("\"klerk_event_log_tombstones\"") {
     val modelId = integer("model_id")
-    val deletedAt = long("deleted_at").index() // microseconds since 1970
+    val eraseAt = long("erase_at").index() // microseconds since 1970
     override val primaryKey = PrimaryKey(modelId)
 }
 

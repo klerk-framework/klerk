@@ -119,6 +119,27 @@ public class SpecificationBuilder<C : KlerkContext, V>(private val views: V) {
     }
 
     /**
+     * Like the other [eventLogRetention], but decided per deleted model and per event by two named functions. See
+     * [EventLogRetention].
+     *
+     * ```kotlin
+     * eventLogRetention(afterModelDeletion = ::keepAfterDeletion, paramsAndExtra = ::keepParams)
+     * ```
+     *
+     * @throws IllegalConfigurationException if a function is a lambda
+     */
+    public fun eventLogRetention(
+        afterModelDeletion: (DeletedModelArgs) -> Duration?,
+        paramsAndExtra: (EventReference) -> Duration?,
+    ) {
+        eventLogRetentionValue = EventLogRetention(afterModelDeletion, paramsAndExtra)
+    }
+
+    internal fun eventLogRetention(retention: EventLogRetention) {
+        eventLogRetentionValue = retention
+    }
+
+    /**
      * Registers [KlerkPlugin]s. Each plugin contributes its own models, events, rules and jobs, and is started and
      * stopped together with Klerk. They are merged in the order given, so a plugin that builds on another must come
      * after it.

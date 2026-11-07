@@ -199,10 +199,10 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
             ModelsTable.deleteWhere { id eq modelId.value }
         }
 
-        for ((modelId, deletedAt) in batch.eventLogTombstones) {
+        for ((modelId, eraseAt) in batch.eventLogTombstones) {
             EventLogTombstonesTable.insert {
                 it[this.modelId] = modelId.value
-                it[this.deletedAt] = deletedAt.to64bitMicroseconds()
+                it[this.eraseAt] = eraseAt.to64bitMicroseconds()
             }
         }
 
@@ -307,11 +307,11 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         extra = row[EventLogTable.extra],
     )
 
-    override fun eraseEventLogsOfDeletedModels(deletedAtOrBefore: Instant) {
-        val cutoff = deletedAtOrBefore.to64bitMicroseconds()
+    override fun eraseEventLogsOfDeletedModels(eraseAtOrBefore: Instant) {
+        val cutoff = eraseAtOrBefore.to64bitMicroseconds()
         transaction(database) {
             val modelIds = EventLogTombstonesTable.select(EventLogTombstonesTable.modelId)
-                .where { EventLogTombstonesTable.deletedAt lessEq cutoff }
+                .where { EventLogTombstonesTable.eraseAt lessEq cutoff }
                 .map { it[EventLogTombstonesTable.modelId] }
             for (chunk in modelIds.chunked(ERASE_CHUNK_SIZE)) {
                 EventLogTable.deleteWhere { EventLogTable.modelId inList chunk }
@@ -320,21 +320,25 @@ public class SqlPersistence(private val dataSource: DataSource) : Persistence {
         }
     }
 
-    override fun eraseEventLogParamsAndExtra(before: Instant) {
-        val cutoff = before.to64bitMicroseconds()
+    override fun eraseEventLogParamsAndExtra(before: (EventReference) -> Instant?) {
         transaction(database) {
-            EventLogTable.update({
-                (timestamp less cutoff) and (EventLogTable.params.isNotNull() or EventLogTable.extra.isNotNull())
-            }) {
-                it[params] = null
-                it[extra] = null
+            val events = EventLogTable.select(event).withDistinct().map { it[event] }
+            for (name in events) {
+                val cutoff = before(EventReference.parse(name))?.to64bitMicroseconds() ?: continue
+                EventLogTable.update({
+                    (event eq name) and (timestamp lessEq cutoff) and
+                        (EventLogTable.params.isNotNull() or EventLogTable.extra.isNotNull())
+                }) {
+                    it[params] = null
+                    it[extra] = null
+                }
             }
         }
     }
 
     override fun readEventLogTombstones(): Map<Int, Instant> = transaction(database) {
         EventLogTombstonesTable.selectAll().associate {
-            it[EventLogTombstonesTable.modelId] to decode64bitMicroseconds(it[EventLogTombstonesTable.deletedAt])
+            it[EventLogTombstonesTable.modelId] to decode64bitMicroseconds(it[EventLogTombstonesTable.eraseAt])
         }
     }
 
