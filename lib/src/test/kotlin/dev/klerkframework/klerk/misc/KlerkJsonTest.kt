@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DateContainer
 import dev.klerkframework.klerk.datatypes.DurationContainer
+import dev.klerkframework.klerk.datatypes.Epsg
 import dev.klerkframework.klerk.datatypes.FloatContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.datatypes.GeoPositionContainer
@@ -68,6 +69,7 @@ class Span(value: kotlin.time.Duration) : DurationContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
 }
 class Place(value: GeoPosition) : GeoPositionContainer(value) {
+    override val epsg: Int = Epsg.WGS84
     override val category: DataCategory = DataCategory.NonSensitive
 }
 

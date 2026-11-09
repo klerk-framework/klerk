@@ -127,7 +127,18 @@ Built-in containers:
 | `InstantContainer`     | `kotlin.time.Instant`        | none (microsecond resolution)                                                                                        |
 | `DateContainer`        | `kotlinx.datetime.LocalDate` | none — a calendar date with no time of day or time zone                                                              |
 | `DurationContainer`    | `kotlin.time.Duration`       | none (microsecond resolution)                                                                                        |
-| `GeoPositionContainer` | `GeoPosition` (lat/lon)      | validated by `GeoPosition` itself; serializes as ISO 6709                                                            |
+| `GeoPositionContainer` | `GeoPosition` (lat/lon)      | validated by `GeoPosition` itself; serializes as ISO 6709; subclasses declare `epsg` (see below)                     |
+
+`GeoPositionContainer` holds degrees. Klerk does not convert between coordinate systems: each subclass declares the
+EPSG code of the geographic system its positions use, and the application must only store positions in that system.
+`Epsg` has constants for the common ones.
+
+```kotlin
+class PropertyPosition(value: GeoPosition) : GeoPositionContainer(value) {
+    override val category = NonSensitive
+    override val epsg = Epsg.WGS84
+}
+```
 
 All the numeric containers extend `NumberContainer`, which is what code that handles any number generically uses: it
 exposes `min`, `max` and `hasDecimals` without knowing the exact kind.

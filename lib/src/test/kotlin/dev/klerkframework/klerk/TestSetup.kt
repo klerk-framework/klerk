@@ -17,6 +17,7 @@ import dev.klerkframework.klerk.datatypes.BooleanContainer
 import dev.klerkframework.klerk.datatypes.DataCategory
 import dev.klerkframework.klerk.datatypes.DurationContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
+import dev.klerkframework.klerk.datatypes.Epsg
 import dev.klerkframework.klerk.datatypes.FloatContainer
 import dev.klerkframework.klerk.datatypes.GeoPosition
 import dev.klerkframework.klerk.datatypes.GeoPositionContainer
@@ -295,6 +296,7 @@ data class Author(
 }
 
 class ReleasePartyPosition(value: GeoPosition) : GeoPositionContainer(value) {
+    override val epsg: Int = Epsg.WGS84
     override val category: DataCategory = DataCategory.NonSensitive
 }
 

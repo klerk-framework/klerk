@@ -322,12 +322,30 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Duratio
 }
 
 /**
- * A container for latitude and longitude.
+ * A container for latitude and longitude in degrees.
  *
- * The precision is at least 6 decimals, which translates to sub-meter precision.
+ * Klerk does not convert between coordinate systems. [epsg] tells which geographic coordinate system the degrees
+ * belong to, e.g. [Epsg.WGS84], and the application must only store positions in that system. The precision is at
+ * least 6 decimals, which translates to sub-meter precision.
  */
 public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<GeoPosition>(value) {
+
+    /** The EPSG code of the geographic coordinate system of the positions, e.g. [Epsg.WGS84]. */
+    public abstract val epsg: Int
+
     override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+}
+
+/** EPSG codes of geographic (latitude/longitude) coordinate systems, for [GeoPositionContainer.epsg]. */
+public object Epsg {
+    /** WGS 84, used by GPS and most web maps. */
+    public const val WGS84: Int = 4326
+
+    /** ETRS89, the European reference system. */
+    public const val ETRS89: Int = 4258
+
+    /** SWEREF 99, the Swedish reference system (geographic). */
+    public const val SWEREF99: Int = 4619
 }
 
 /**
