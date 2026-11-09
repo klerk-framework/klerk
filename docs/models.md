@@ -126,8 +126,17 @@ Built-in containers:
 | `EnumContainer<E>`     | an `Enum`                    | none (use `validEnums` in the state machine to restrict which values are accepted — see [validation](validation.md)) |
 | `InstantContainer`     | `kotlin.time.Instant`        | none (microsecond resolution)                                                                                        |
 | `DateContainer`        | `kotlinx.datetime.LocalDate` | none — a calendar date with no time of day or time zone                                                              |
-| `DurationContainer`    | `kotlin.time.Duration`       | none (microsecond resolution)                                                                                        |
+| `DurationContainer`    | `kotlin.time.Duration`       | `min`, `max` (finite), `resolution` (smallest unit, `MICROSECONDS` or larger; the value must be a whole multiple) |
 | `GeoPositionContainer` | `GeoPosition` (lat/lon)      | validated by `GeoPosition` itself; serializes as ISO 6709; subclasses declare `epsg` (see below)                     |
+
+```kotlin
+class Length(value: Duration) : DurationContainer(value) {
+    override val category = DataCategory.NonSensitive
+    override val min = Duration.ZERO
+    override val max = 3.days
+    override val resolution = DurationUnit.MINUTES   // 90 seconds is rejected
+}
+```
 
 `GeoPositionContainer` holds degrees. Klerk does not convert between coordinate systems: each subclass declares the
 EPSG code of the geographic system its positions use, and the application must only store positions in that system.

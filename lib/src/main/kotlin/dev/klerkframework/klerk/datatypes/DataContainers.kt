@@ -17,7 +17,9 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
+import kotlin.time.DurationUnit
 import kotlin.time.Instant
+import kotlin.time.toDuration
 
 private const val MASKED = "[••••••]"
 
@@ -315,10 +317,50 @@ public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>
 }
 
 /**
- * A container for Durations with microsecond resolution.
+ * A container for a [Duration], constrained to the inclusive range [min]..[max] and to whole multiples of
+ * [resolution].
+ *
+ * Forms rendered by klerk-web show one input per unit from the largest that fits in [max] down to [resolution].
+ *
+ * ```kotlin
+ * class Length(value: Duration) : DurationContainer(value) {
+ *     override val category = NonSensitive
+ *     override val min = Duration.ZERO
+ *     override val max = 3.days
+ *     override val resolution = DurationUnit.MINUTES
+ * }
+ * ```
  */
 public abstract class DurationContainer(value: Duration) : DataContainer<Duration>(value) {
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+
+    /** The shortest allowed duration, inclusive. */
+    public abstract val min: Duration
+
+    /** The longest allowed duration, inclusive. Must be finite. */
+    public abstract val max: Duration
+
+    /**
+     * The smallest unit that can be specified. A value that is not a whole number of this unit is invalid. Must be
+     * [DurationUnit.MICROSECONDS] or larger.
+     */
+    public abstract val resolution: DurationUnit
+
+    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+        check(max >= min) { "max < min" }
+        check(max.isFinite()) { "max must be finite" }
+        check(resolution >= DurationUnit.MICROSECONDS) { "resolution must be MICROSECONDS or larger" }
+        if (rawValue < min) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(min), propertyName)
+        }
+        if (rawValue > max) {
+            return InvalidPropertyProblem(translation.klerk.mustBeAtMost(max), propertyName)
+        }
+        val unitMicros = 1.toDuration(resolution).inWholeMicroseconds
+        if (rawValue.inWholeMicroseconds % unitMicros != 0L) {
+            return InvalidPropertyProblem(translation.klerk.mustBeWholeUnits(resolution), propertyName)
+        }
+        return firstInvalidValidator(propertyName, translation)
+    }
 }
 
 /**

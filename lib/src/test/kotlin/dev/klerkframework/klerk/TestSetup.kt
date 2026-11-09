@@ -55,11 +55,6 @@ import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.view.asSequence
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.Serializable
-import org.sqlite.SQLiteConfig
-import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
 import kotlin.reflect.KFunction
@@ -67,9 +62,16 @@ import kotlin.reflect.KProperty1
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
+import org.sqlite.SQLiteConfig
+import org.sqlite.SQLiteDataSource
 
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
@@ -744,6 +746,9 @@ class BookWrittenAt(value: Instant) : InstantContainer(value) {
 }
 
 class ReadingTime(value: Duration) : DurationContainer(value) {
+    override val min = Duration.ZERO
+    override val max = 1000.days
+    override val resolution = DurationUnit.MICROSECONDS
     override val category: DataCategory = DataCategory.NonSensitive
 }
 

@@ -73,7 +73,9 @@ class SqlPersistenceTest {
 
     @Test
     fun `props and params are not limited in length`() {
-        val ds = SQLiteDataSource().apply { url = "jdbc:sqlite:file:large${System.nanoTime()}?mode=memory&cache=shared" }
+        val ds = SQLiteDataSource().apply {
+            url = "jdbc:sqlite:file:large${System.nanoTime()}?mode=memory&cache=shared"
+        }
         val keepAlive = ds.connection
         SqlPersistence(ds)
         val large = "x".repeat(1_000_000)

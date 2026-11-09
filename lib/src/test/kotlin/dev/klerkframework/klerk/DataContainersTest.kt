@@ -14,9 +14,6 @@ import dev.klerkframework.klerk.datatypes.ULongContainer
 import dev.klerkframework.klerk.datatypes.UShortContainer
 import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.KlerkJson
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.test.Test
@@ -26,8 +23,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 class TestInstant(value: Instant) : InstantContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
@@ -36,7 +39,16 @@ class TestDate(value: LocalDate) : DateContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
 }
 class TestDuration(value: Duration) : DurationContainer(value) {
+    override val min = Duration.ZERO
+    override val max = 1000.days
+    override val resolution = DurationUnit.MICROSECONDS
     override val category: DataCategory = DataCategory.NonSensitive
+}
+class TestMinutes(value: Duration) : DurationContainer(value) {
+    override val category: DataCategory = DataCategory.NonSensitive
+    override val min = Duration.ZERO
+    override val max = 3.days
+    override val resolution = DurationUnit.MINUTES
 }
 data class GenreHolder(val genre: BookGenreContainer)
 
@@ -197,6 +209,25 @@ class DataContainersTest {
         assertEquals(
             instantToStringFormat.format(instant.toLocalDateTime(TimeZone.currentSystemDefault())),
             s,
+        )
+    }
+
+    @Test
+    fun durationContainerValidation() {
+        assertNull(TestDuration(90.minutes).validate("d", DefaultTranslation))
+        assertNull(TestDuration(Duration.ZERO).validate("d", DefaultTranslation))
+        assertNull(TestDuration(1000.days).validate("d", DefaultTranslation))
+        assertEquals("Must be at least 0s", TestDuration((-1).seconds).validate("d", DefaultTranslation)?.endUserTranslatedMessage)
+        assertNotNull(TestDuration(1001.days).validate("d", DefaultTranslation))
+        assertNotNull(TestDuration(Duration.INFINITE).validate("d", DefaultTranslation))
+    }
+
+    @Test
+    fun durationContainerResolution() {
+        assertNull(TestMinutes(90.minutes).validate("d", DefaultTranslation))
+        assertEquals(
+            "Must be a whole number of minutes",
+            TestMinutes(90.seconds).validate("d", DefaultTranslation)?.endUserTranslatedMessage,
         )
     }
 

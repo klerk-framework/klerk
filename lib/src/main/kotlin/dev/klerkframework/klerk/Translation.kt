@@ -3,6 +3,8 @@ package dev.klerkframework.klerk
 import dev.klerkframework.klerk.misc.functionName
 import java.util.Locale
 import kotlin.reflect.KProperty1
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
 
 /** Converts a camelCase identifier to a space-separated, capitalized phrase, e.g. `"firstName"` -> `"First name"`. */
 public fun camelCaseToPretty(s: String): String = buildString {
@@ -45,6 +47,15 @@ public interface KlerkTranslation {
 
     /** The message when a number is larger than [value]. */
     public fun mustBeAtMost(value: Number): String
+
+    /** The message when a duration is shorter than [value]. */
+    public fun mustBeAtLeast(value: Duration): String
+
+    /** The message when a duration is longer than [value]. */
+    public fun mustBeAtMost(value: Duration): String
+
+    /** The message when a duration is not a whole number of [unit]. */
+    public fun mustBeWholeUnits(unit: DurationUnit): String
 
     /** The message when a decimal number has more than [scale] digits after the decimal point. */
     public fun tooManyDecimals(scale: Int): String
@@ -116,6 +127,9 @@ public object DefaultKlerkTranslation : KlerkTranslation {
     override fun tooManyLines(maxLines: Int): String = "Must be at most $maxLines lines"
     override fun mustBeAtLeast(value: Number): String = "Must be at least $value"
     override fun mustBeAtMost(value: Number): String = "Must be at most $value"
+    override fun mustBeAtLeast(value: Duration): String = "Must be at least $value"
+    override fun mustBeAtMost(value: Duration): String = "Must be at most $value"
+    override fun mustBeWholeUnits(unit: DurationUnit): String = "Must be a whole number of ${unit.name.lowercase()}"
     override fun tooManyDecimals(scale: Int): String = "Must have at most $scale decimals"
     override val invalid: String = "Invalid"
     override val internalError: String = "Internal error"
