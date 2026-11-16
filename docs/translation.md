@@ -27,6 +27,7 @@ interface KlerkTranslation {
     fun property(property: KProperty1<*, *>): String
     fun propertyDescription(property: KProperty1<*, *>): String?
     fun event(event: EventReference): String
+    fun enumValue(value: Enum<*>): String
     fun function(f: Function<Any>): String
     fun mustBeAtLeast(value: Number): String
     fun mustBeAtMost(value: Number): String
@@ -41,11 +42,19 @@ interface KlerkTranslation {
     val internalError: String
     val unauthorized: String
     val noAllowingRule: String
+    val id: String
+    val state: String
+    val created: String
+    val updated: String
+    val properties: String
 }
 ```
 
-These are exactly the messages produced by the [validation](validation.md) and [authorization](authorization.md)
-pipelines — e.g. `tooShort`/`tooLong` come from a `StringContainer`'s length check, `mustBeAtLeast`/`mustBeAtMost`
+`enumValue` is the name of an enum value, e.g. in a drop-down list. `id`, `state`, `created`, `updated` and `properties` are the names of a model's ID, state, creation time, last
+modification time and property summary. klerk-web uses them as column headers.
+
+The other strings are exactly the messages produced by the [validation](validation.md) and
+[authorization](authorization.md) pipelines — e.g. `tooShort`/`tooLong` come from a `StringContainer`'s length check, `mustBeAtLeast`/`mustBeAtMost`
 from a numeric container's range check, and `unauthorized`/`noAllowingRule` from failed authorization rules.
 A rule never spells out its own message. `invalidPropertyCollection` builds the one for a failed
 `Validatable`/`PropertyCollectionValidity` rule, and `preventedByRule` the one for a failed `validateWithContext`

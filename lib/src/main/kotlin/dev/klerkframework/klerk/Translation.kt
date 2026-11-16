@@ -92,6 +92,24 @@ public interface KlerkTranslation {
 
     /** The message when no authorization rule allowed the operation. */
     public val noAllowingRule: String
+
+    /** The name of the enum [value], as shown to an end user. */
+    public fun enumValue(value: Enum<*>): String
+
+    /** The name of a model's ID, e.g. as a column header. */
+    public val id: String
+
+    /** The name of a model's state, e.g. as a column header. */
+    public val state: String
+
+    /** The name of when a model was created, e.g. as a column header. */
+    public val created: String
+
+    /** The name of when a model was last modified, e.g. as a column header. */
+    public val updated: String
+
+    /** The name of a summary of a model's properties, e.g. as a column header. */
+    public val properties: String
 }
 
 /**
@@ -103,6 +121,14 @@ public object DefaultTranslation : Translation {
 
 /** The English strings Klerk uses by default. */
 public object DefaultKlerkTranslation : KlerkTranslation {
+
+    override fun enumValue(value: Enum<*>): String = camelCaseToPretty(value.name)
+
+    override val id: String = "ID"
+    override val state: String = "State"
+    override val created: String = "Created"
+    override val updated: String = "Updated"
+    override val properties: String = "Properties"
 
     override fun property(property: KProperty1<*, *>): String = camelCaseToPretty(property.name)
 

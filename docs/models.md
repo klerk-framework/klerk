@@ -198,6 +198,16 @@ data class Product(val name: ProductName, val price: Price)
 A value with more decimals than `scale` is invalid; Klerk never rounds it. Do arithmetic and rounding in your own code
 or in a money library (see [below](#using-a-money-library)).
 
+Round before constructing the container, e.g. a price multiplied by a quantity:
+
+```kotlin
+val total = Amount((unitPrice.value * quantity).setScale(2, RoundingMode.HALF_UP))
+```
+
+Compare amounts with `compareTo`, not `==`: `BigDecimal.equals` also compares the scale, so `BigDecimal("100")` does not
+equal `BigDecimal("100.00")`. Two containers are equal regardless of trailing zeros, so `Amount(...) == Amount(...)`
+is fine.
+
 `klerk.meta.start()` fails if a stored model holds a constant that no longer exists (see
 [persistence](persistence.md#stored-models-must-match-the-model-classes)), so don't remove a currency that is in use.
 
