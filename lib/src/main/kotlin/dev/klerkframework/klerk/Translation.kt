@@ -2,6 +2,7 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.misc.functionName
 import java.util.Locale
+import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.time.Duration
 import kotlin.time.DurationUnit
@@ -93,6 +94,9 @@ public interface KlerkTranslation {
     /** The message when no authorization rule allowed the operation. */
     public val noAllowingRule: String
 
+    /** The name of the model whose props class is [kClass], as shown to an end user. */
+    public fun modelName(kClass: KClass<*>): String
+
     /** The name of the enum [value], as shown to an end user. */
     public fun enumValue(value: Enum<*>): String
 
@@ -121,6 +125,8 @@ public object DefaultTranslation : Translation {
 
 /** The English strings Klerk uses by default. */
 public object DefaultKlerkTranslation : KlerkTranslation {
+
+    override fun modelName(kClass: KClass<*>): String = camelCaseToPretty(requireNotNull(kClass.simpleName))
 
     override fun enumValue(value: Enum<*>): String = camelCaseToPretty(value.name)
 

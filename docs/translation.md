@@ -27,6 +27,7 @@ interface KlerkTranslation {
     fun property(property: KProperty1<*, *>): String
     fun propertyDescription(property: KProperty1<*, *>): String?
     fun event(event: EventReference): String
+    fun modelName(kClass: KClass<*>): String
     fun enumValue(value: Enum<*>): String
     fun function(f: Function<Any>): String
     fun mustBeAtLeast(value: Number): String
@@ -50,7 +51,7 @@ interface KlerkTranslation {
 }
 ```
 
-`enumValue` is the name of an enum value, e.g. in a drop-down list. `id`, `state`, `created`, `updated` and `properties` are the names of a model's ID, state, creation time, last
+`modelName` is the name of a model (given its props class), e.g. in a page title, and `enumValue` the name of an enum value, e.g. in a drop-down list. `id`, `state`, `created`, `updated` and `properties` are the names of a model's ID, state, creation time, last
 modification time and property summary. klerk-web uses them as column headers.
 
 The other strings are exactly the messages produced by the [validation](validation.md) and

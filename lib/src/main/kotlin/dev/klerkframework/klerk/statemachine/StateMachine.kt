@@ -43,6 +43,9 @@ public class StateMachine<T : Any, ModelStates : Enum<*>, C : KlerkContext, V>(i
     public val instanceStates: List<InstanceState<T, ModelStates, C, V>>
         get() = _states.filterIsInstance<InstanceState<T, ModelStates, C, V>>()
 
+    /** The constant of the states enum that the state named [name] was declared from, or null if there is none. */
+    public fun stateValue(name: String): ModelStates? = modelStatesClass?.enumConstants?.firstOrNull { it.name == name }
+
     internal val declaredEvents = mutableListOf<Event<T, *>>()
 
     /**
