@@ -1,37 +1,11 @@
 package dev.klerkframework.klerk.validation
 
-import dev.klerkframework.klerk.AuthorizationProblem
-import dev.klerkframework.klerk.BadRequestProblem
-import dev.klerkframework.klerk.CommandRuleArgs
-import dev.klerkframework.klerk.Event
-import dev.klerkframework.klerk.EventOnlyRuleArgs
-import dev.klerkframework.klerk.EventReference
-import dev.klerkframework.klerk.InstanceEventArgs
-import dev.klerkframework.klerk.InstanceEventNoParameters
-import dev.klerkframework.klerk.InstanceEventWithParameters
-import dev.klerkframework.klerk.InvalidPropertyProblem
-import dev.klerkframework.klerk.KlerkContext
-import dev.klerkframework.klerk.KlerkErrorCode
-import dev.klerkframework.klerk.KlerkImpl
-import dev.klerkframework.klerk.Model
-import dev.klerkframework.klerk.ModelID
+import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
-import dev.klerkframework.klerk.NotFoundProblem
 import dev.klerkframework.klerk.PositiveAuthorization.Allow
-import dev.klerkframework.klerk.PreventedByRuleProblem
-import dev.klerkframework.klerk.Problem
-import dev.klerkframework.klerk.RuleDescription
-import dev.klerkframework.klerk.RuleType
-import dev.klerkframework.klerk.StateProblem
-import dev.klerkframework.klerk.SystemIdentity
-import dev.klerkframework.klerk.Translation
-import dev.klerkframework.klerk.VoidEventArgs
-import dev.klerkframework.klerk.VoidEventNoParameters
-import dev.klerkframework.klerk.VoidEventWithParameters
 import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.datatypes.EnumContainer
-import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.misc.ObjectSchema
 import dev.klerkframework.klerk.misc.functionName
 import dev.klerkframework.klerk.misc.getStateMachine
@@ -155,7 +129,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             if (result is ContextValidity.Invalid) {
                 PreventedByRuleProblem(
                     endUserTranslatedMessage = translation.klerk.preventedByRule(
-                        functionName(rule) ?: translation.klerk.invalid,
+                        functionName(rule) ?: translation.klerk.text(KlerkText.Invalid),
                         result.translationInfo,
                     ),
                     violatedRule = RuleDescription(rule, RuleType.ContextValidation),
@@ -211,7 +185,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
     }
 
     /** Validates every [DataContainer] in [instance], also in collections and nested objects. */
-    fun validateDataContainers(instance: Any, translation: Translation): Set<InvalidPropertyProblem> =
+    fun validateDataContainers(instance: Any, translation: HasKlerkTranslation): Set<InvalidPropertyProblem> =
         ObjectSchema.of(instance::class).leaves(instance)
             .mapNotNull { leaf -> (leaf.value as? DataContainer<*>)?.validate(leaf.path, translation) }
             .toSet()
@@ -265,7 +239,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val deny = authorization.eventOnlyNegativeRules.firstOrNull { it(args) == Deny }
         if (deny != null) {
             return AuthorizationProblem(
-                context.translation.klerk.unauthorized,
+                context.translation.klerk.text(KlerkText.Unauthorized),
                 RuleDescription(deny, RuleType.Authorization),
                 KlerkErrorCode.CommandNegativeAuthorizationExist,
             )
@@ -274,7 +248,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
             return null
         }
         return AuthorizationProblem(
-            context.translation.klerk.unauthorized,
+            context.translation.klerk.text(KlerkText.Unauthorized),
             null,
             KlerkErrorCode.CommandPositiveAuthorizationMissing,
         )
@@ -292,7 +266,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         val negativeAuthProblem = klerk.specification.authorization.eventNegativeRules.firstOrNull { it(args) == Deny }
         if (negativeAuthProblem != null) {
             return AuthorizationProblem(
-                context.translation.klerk.unauthorized,
+                context.translation.klerk.text(KlerkText.Unauthorized),
                 RuleDescription(negativeAuthProblem, RuleType.Authorization),
                 KlerkErrorCode.CommandNegativeAuthorizationExist,
             )
@@ -301,7 +275,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         if (!positiveRuleExists) {
             logger.info("Event '${command.event}' was not accepted since no rule explicitly permitted the operation")
             return AuthorizationProblem(
-                context.translation.klerk.unauthorized,
+                context.translation.klerk.text(KlerkText.Unauthorized),
                 null,
                 KlerkErrorCode.CommandPositiveAuthorizationMissing,
             )
@@ -363,7 +337,7 @@ internal class Validator<C : KlerkContext, V>(private val klerk: KlerkImpl<C, V>
         return validateEventRules(context, command.event, command.model, command.params, reader)
     }
 
-    private fun validatePropertyCollection(params: Any, translation: Translation): Collection<Problem> =
+    private fun validatePropertyCollection(params: Any, translation: HasKlerkTranslation): Collection<Problem> =
         ObjectSchema.of(params::class).validatables(params).flatMap { validatable ->
             validatable.validators()
                 .onEach { requireNamedRule(it, "A validator of ${validatable::class.simpleName}") }

@@ -14,7 +14,7 @@ public interface KlerkContext {
     public val eventLogExtra: String?
 
     /** The language that end-user messages, such as validation problems, are produced in. */
-    public val translation: Translation
+    public val translation: HasKlerkTranslation
 
     /**
      * The instant the operation is considered to happen at. Business logic should read time from here, not

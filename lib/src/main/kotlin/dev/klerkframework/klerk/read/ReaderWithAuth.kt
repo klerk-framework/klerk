@@ -9,6 +9,7 @@ import dev.klerkframework.klerk.JobReader
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
 import dev.klerkframework.klerk.KlerkImpl
+import dev.klerkframework.klerk.KlerkText
 import dev.klerkframework.klerk.Model
 import dev.klerkframework.klerk.ModelID
 import dev.klerkframework.klerk.ModelReadRuleArgs
@@ -215,7 +216,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
     if (brokenRule != null) {
         return ReadResult.Fail(
             AuthorizationProblem(
-                context.translation.klerk.unauthorized,
+                context.translation.klerk.text(KlerkText.Unauthorized),
                 RuleDescription(brokenRule, RuleType.Authorization),
                 KlerkErrorCode.ReadNegativeAuthorizationExist,
             ),
@@ -228,7 +229,7 @@ internal fun <T : Any, C : KlerkContext, V> evaluateAuthorization(
         logger.info("No policy explicitly allowed the request")
         return ReadResult.Fail(
             AuthorizationProblem(
-                context.translation.klerk.unauthorized,
+                context.translation.klerk.text(KlerkText.Unauthorized),
                 null,
                 KlerkErrorCode.ReadPositiveAuthorizationMissing,
             ),

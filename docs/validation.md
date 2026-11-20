@@ -38,7 +38,7 @@ class BookTitle(value: String) : StringContainer(value) {
 }
 ```
 
-A validator function takes the value and the current `Translation`, and returns `Valid` or
+A validator function takes the value and the current `HasKlerkTranslation`, and returns `Valid` or
 `PropertyValidity.Invalid(translationInfo)`. This check happens purely on the container's own value — it never sees
 sibling properties, the context, or the model. Since the value is passed in, a rule can be a top-level function shared
 by several containers.
@@ -70,8 +70,9 @@ Each validator returns `Valid` or `PropertyCollectionValidity.Invalid(...)`. `Va
 each kind has its own `Invalid`. All of them are in `dev.klerkframework.klerk.validation`.
 `Invalid` optionally carries:
 
-* `translationInfo` — a detail handed to the `Translation` when it builds the message, e.g. which field is missing.
-  The message itself always comes from the `Translation`, keyed on the rule's name; a rule never spells it out.
+* `translationInfo` — a detail handed to the `HasKlerkTranslation` when it builds the message, e.g. which field is
+  missing.
+  The message itself always comes from the `HasKlerkTranslation`, keyed on the rule's name; a rule never spells it out.
 * `fieldMustBeNull` / `fieldMustNotBeNull` — a `KProperty0<DataContainer<*>?>` pointing at the offending field (s), so
   that the error can be attributed to a specific field instead of just the object as a whole.
 
@@ -172,6 +173,6 @@ specific reason first (a bad property beats a generic "unauthorized").
 
 ## Translated messages
 
-Every message shown to an end user goes through the `Translation` on the current `Ctx` (see
+Every message shown to an end user goes through the `HasKlerkTranslation` on the current `Ctx` (see
 [context](context.md)), so validation failures are automatically localized without your validators needing to know about
 languages.

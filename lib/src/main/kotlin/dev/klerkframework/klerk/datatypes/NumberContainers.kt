@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk.datatypes
 
+import dev.klerkframework.klerk.HasKlerkTranslation
 import dev.klerkframework.klerk.InvalidPropertyProblem
-import dev.klerkframework.klerk.Translation
 import java.math.BigDecimal
 
 /**
@@ -25,7 +25,7 @@ public abstract class NumberContainer<T : Comparable<T>> internal constructor(va
     /** Lossy for values above [Long.MAX_VALUE]; only used to build messages. */
     internal abstract fun asNumber(value: T): Number
 
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         if (rawValue < min) {
             return InvalidPropertyProblem(translation.klerk.mustBeAtLeast(asNumber(min)), propertyName)
@@ -121,7 +121,7 @@ public abstract class DecimalContainer(value: BigDecimal) : NumberContainer<BigD
 
     override fun asNumber(value: BigDecimal): Number = if (value.scale() < 0) value.setScale(0) else value
 
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? {
         if (rawValue.stripTrailingZeros().scale() > scale) {
             return InvalidPropertyProblem(translation.klerk.tooManyDecimals(scale), propertyName)
         }

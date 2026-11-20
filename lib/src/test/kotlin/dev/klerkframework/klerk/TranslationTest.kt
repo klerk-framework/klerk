@@ -23,6 +23,20 @@ class TranslationTest {
     private fun mustBeEven(): Int = 2
 
     @Test
+    fun `Swedish translates all texts except those that are the same`() {
+        assertEquals(listOf(KlerkText.Id), SwedishKlerkTranslation.untranslatedTexts())
+    }
+
+    @Test
+    fun `untranslatedTexts lists the texts that are still English`() {
+        assertEquals(KlerkText.entries, DefaultKlerkTranslation.untranslatedTexts())
+        val partly = object : KlerkTranslation by DefaultKlerkTranslation {
+            override fun text(key: KlerkText) = if (key == KlerkText.Unauthorized) "Obehörig" else key.english
+        }
+        assertEquals(KlerkText.entries - KlerkText.Unauthorized, partly.untranslatedTexts())
+    }
+
+    @Test
     fun test() {
         val evenInt = PositiveEvenIntContainer(3)
         val validation = evenInt.validate("myEvenIntField", SwedishTranslation)

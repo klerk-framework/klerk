@@ -1,7 +1,7 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.misc.functionName
-import java.util.Locale
+import java.util.*
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.time.Duration
@@ -21,7 +21,7 @@ public fun camelCaseToPretty(s: String): String = buildString {
 /**
  * Supplies human-readable text for validation, property, and event names. Implement to support additional languages.
  */
-public interface Translation {
+public interface HasKlerkTranslation {
     /** The strings Klerk itself produces. */
     public val klerk: KlerkTranslation
 }
@@ -70,9 +70,6 @@ public interface KlerkTranslation {
     /** The message when a `validateWithContext` rule refuses a command based on the context alone. */
     public fun preventedByRule(functionName: String, translationInfo: String?): String
 
-    /** The message when a required value is missing. */
-    public val mustBeProvided: String
-
     /** The message when a string is shorter than [minLength]. */
     public fun tooShort(minLength: Int): String
 
@@ -82,44 +79,20 @@ public interface KlerkTranslation {
     /** The message when a string has more than [maxLines] lines. */
     public fun tooManyLines(maxLines: Int): String
 
-    /** A generic message for an invalid value. */
-    public val invalid: String
-
-    /** The message when something went wrong inside Klerk. */
-    public val internalError: String
-
-    /** The message when the actor is not allowed to do something. */
-    public val unauthorized: String
-
-    /** The message when no authorization rule allowed the operation. */
-    public val noAllowingRule: String
-
     /** The name of the model whose props class is [kClass], as shown to an end user. */
     public fun modelName(kClass: KClass<*>): String
 
     /** The name of the enum [value], as shown to an end user. */
     public fun enumValue(value: Enum<*>): String
 
-    /** The name of a model's ID, e.g. as a column header. */
-    public val id: String
-
-    /** The name of a model's state, e.g. as a column header. */
-    public val state: String
-
-    /** The name of when a model was created, e.g. as a column header. */
-    public val created: String
-
-    /** The name of when a model was last modified, e.g. as a column header. */
-    public val updated: String
-
-    /** The name of a summary of a model's properties, e.g. as a column header. */
-    public val properties: String
+    /** The text for [key]; English unless overridden. */
+    public fun text(key: KlerkText): String = key.english
 }
 
 /**
  * The DefaultTranslator can be used when you don't want to translate your application
  */
-public object DefaultTranslation : Translation {
+public object DefaultTranslation : HasKlerkTranslation {
     override val klerk: KlerkTranslation = DefaultKlerkTranslation
 }
 
@@ -130,19 +103,14 @@ public object DefaultKlerkTranslation : KlerkTranslation {
 
     override fun enumValue(value: Enum<*>): String = camelCaseToPretty(value.name)
 
-    override val id: String = "ID"
-    override val state: String = "State"
-    override val created: String = "Created"
-    override val updated: String = "Updated"
-    override val properties: String = "Properties"
-
     override fun property(property: KProperty1<*, *>): String = camelCaseToPretty(property.name)
 
     override fun propertyDescription(property: KProperty1<*, *>): String? = null
 
     override fun event(event: EventReference): String = camelCaseToPretty(event.eventName)
 
-    override fun function(f: Function<Any>): String = functionName(f)?.let { camelCaseToPretty(it) } ?: invalid
+    override fun function(f: Function<Any>): String =
+        functionName(f)?.let { camelCaseToPretty(it) } ?: text(KlerkText.Invalid)
 
     override fun invalidProperty(propertyName: String, functionName: String, translationInfo: String?): String =
         camelCaseToPretty(functionName)
@@ -153,7 +121,6 @@ public object DefaultKlerkTranslation : KlerkTranslation {
     override fun preventedByRule(functionName: String, translationInfo: String?): String =
         camelCaseToPretty(functionName)
 
-    override val mustBeProvided: String = "Must be provided"
     override fun tooShort(minLength: Int): String = "Must be at least $minLength characters"
     override fun tooLong(maxLength: Int): String = "Must be at most $maxLength characters"
     override fun tooManyLines(maxLines: Int): String = "Must be at most $maxLines lines"
@@ -163,8 +130,43 @@ public object DefaultKlerkTranslation : KlerkTranslation {
     override fun mustBeAtMost(value: Duration): String = "Must be at most $value"
     override fun mustBeWholeUnits(unit: DurationUnit): String = "Must be a whole number of ${unit.name.lowercase()}"
     override fun tooManyDecimals(scale: Int): String = "Must have at most $scale decimals"
-    override val invalid: String = "Invalid"
-    override val internalError: String = "Internal error"
-    override val unauthorized: String = "Unauthorized"
-    override val noAllowingRule: String = "No policy explicitly allowed the request"
 }
+
+/** The fixed texts of Klerk. Get the text in a [HasKlerkTranslation] with [KlerkTranslation.text]. */
+public enum class KlerkText(
+    /** The English text. */
+    public val english: String,
+) {
+    /** The message when a required value is missing. */
+    MustBeProvided("Must be provided"),
+
+    /** A generic message for an invalid value. */
+    Invalid("Invalid"),
+
+    /** The message when something went wrong inside Klerk. */
+    InternalError("Internal error"),
+
+    /** The message when the actor is not allowed to do something. */
+    Unauthorized("Unauthorized"),
+
+    /** The message when no authorization rule allowed the operation. */
+    NoAllowingRule("No policy explicitly allowed the request"),
+
+    /** The name of a model's ID, e.g. as a column header. */
+    Id("ID"),
+
+    /** The name of a model's state, e.g. as a column header. */
+    State("State"),
+
+    /** The name of when a model was created, e.g. as a column header. */
+    Created("Created"),
+
+    /** The name of when a model was last modified, e.g. as a column header. */
+    Updated("Updated"),
+
+    /** The name of a summary of a model's properties, e.g. as a column header. */
+    Properties("Properties"),
+}
+
+/** The texts in [KlerkText] that [translation] has not translated, i.e. that are still the English default. */
+public fun KlerkTranslation.untranslatedTexts(): List<KlerkText> = KlerkText.entries.filter { text(it) == it.english }

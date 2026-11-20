@@ -14,6 +14,9 @@ import dev.klerkframework.klerk.datatypes.ULongContainer
 import dev.klerkframework.klerk.datatypes.UShortContainer
 import dev.klerkframework.klerk.datatypes.instantToStringFormat
 import dev.klerkframework.klerk.misc.KlerkJson
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.test.Test
@@ -28,9 +31,6 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlin.time.Instant
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 class TestInstant(value: Instant) : InstantContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
@@ -217,7 +217,10 @@ class DataContainersTest {
         assertNull(TestDuration(90.minutes).validate("d", DefaultTranslation))
         assertNull(TestDuration(Duration.ZERO).validate("d", DefaultTranslation))
         assertNull(TestDuration(1000.days).validate("d", DefaultTranslation))
-        assertEquals("Must be at least 0s", TestDuration((-1).seconds).validate("d", DefaultTranslation)?.endUserTranslatedMessage)
+        assertEquals(
+            "Must be at least 0s",
+            TestDuration((-1).seconds).validate("d", DefaultTranslation)?.endUserTranslatedMessage,
+        )
         assertNotNull(TestDuration(1001.days).validate("d", DefaultTranslation))
         assertNotNull(TestDuration(Duration.INFINITE).validate("d", DefaultTranslation))
     }

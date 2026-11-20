@@ -1,52 +1,20 @@
 package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.AlwaysFalseDecisions.Something
-import dev.klerkframework.klerk.AuthorStates.Amateur
-import dev.klerkframework.klerk.AuthorStates.Established
-import dev.klerkframework.klerk.AuthorStates.Improving
+import dev.klerkframework.klerk.AuthorStates.*
 import dev.klerkframework.klerk.EventVisibility.External
 import dev.klerkframework.klerk.NegativeAuthorization.Deny
 import dev.klerkframework.klerk.NegativeAuthorization.Pass
 import dev.klerkframework.klerk.command.Command
-import dev.klerkframework.klerk.datatypes.AttachedBlobContainer
-import dev.klerkframework.klerk.datatypes.AttachedStringContainer
-import dev.klerkframework.klerk.datatypes.BlobPreAttachStep
-import dev.klerkframework.klerk.datatypes.BlobPreAttachStepArgs
-import dev.klerkframework.klerk.datatypes.BlobPreAttachStepResult
-import dev.klerkframework.klerk.datatypes.BooleanContainer
-import dev.klerkframework.klerk.datatypes.DataCategory
-import dev.klerkframework.klerk.datatypes.DurationContainer
-import dev.klerkframework.klerk.datatypes.EnumContainer
-import dev.klerkframework.klerk.datatypes.Epsg
-import dev.klerkframework.klerk.datatypes.FloatContainer
-import dev.klerkframework.klerk.datatypes.GeoPosition
-import dev.klerkframework.klerk.datatypes.GeoPositionContainer
-import dev.klerkframework.klerk.datatypes.InstantContainer
-import dev.klerkframework.klerk.datatypes.IntContainer
-import dev.klerkframework.klerk.datatypes.LongContainer
-import dev.klerkframework.klerk.datatypes.StringContainer
-import dev.klerkframework.klerk.datatypes.noPreAttachProcessing
-import dev.klerkframework.klerk.job.DeclaredJob
-import dev.klerkframework.klerk.job.JobAgent
-import dev.klerkframework.klerk.job.JobExecution
-import dev.klerkframework.klerk.job.JobName
-import dev.klerkframework.klerk.job.JobProgress
-import dev.klerkframework.klerk.job.JobResult
-import dev.klerkframework.klerk.job.JobSettings
-import dev.klerkframework.klerk.job.JobStepArgs
-import dev.klerkframework.klerk.job.JobType
-import dev.klerkframework.klerk.job.JobsBlock
+import dev.klerkframework.klerk.datatypes.*
+import dev.klerkframework.klerk.job.*
 import dev.klerkframework.klerk.misc.AlgorithmBuilder
 import dev.klerkframework.klerk.misc.Decision
 import dev.klerkframework.klerk.misc.FlowChartAlgorithm
 import dev.klerkframework.klerk.misc.ShouldSendNotificationAlgorithm
 import dev.klerkframework.klerk.statemachine.StateMachine
 import dev.klerkframework.klerk.statemachine.stateMachine
-import dev.klerkframework.klerk.storage.AttachedBlobStore
-import dev.klerkframework.klerk.storage.ModelCacheSettings
-import dev.klerkframework.klerk.storage.Persistence
-import dev.klerkframework.klerk.storage.RamStorage
-import dev.klerkframework.klerk.storage.SqlPersistence
+import dev.klerkframework.klerk.storage.*
 import dev.klerkframework.klerk.validation.ContextValidity
 import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.validation.PropertyCollectionValidity.Invalid
@@ -55,6 +23,11 @@ import dev.klerkframework.klerk.validation.Valid
 import dev.klerkframework.klerk.view.ModelView
 import dev.klerkframework.klerk.view.ModelViews
 import dev.klerkframework.klerk.view.asSequence
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
+import org.sqlite.SQLiteConfig
+import org.sqlite.SQLiteDataSource
 import java.sql.Connection
 import java.sql.DriverManager
 import kotlin.reflect.KFunction
@@ -67,11 +40,6 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.DurationUnit
 import kotlin.time.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.Serializable
-import org.sqlite.SQLiteConfig
-import org.sqlite.SQLiteDataSource
 
 var onEnterAmateurStateActionCallback: (() -> Unit)? = null
 var onEnterImprovingStateActionCallback: (() -> Unit)? = null
@@ -169,7 +137,7 @@ fun createKlerk(
 fun myContextProvider(): Ctx = Ctx(
     actor = SystemIdentity,
 
-)
+    )
 
 /** Gives a job step a context whose time comes from the configured clock, so job time is controllable in tests. */
 fun myJobContextProvider(request: JobContextRequest): Ctx = Ctx(actor = request.actor, time = request.time)
@@ -684,7 +652,7 @@ class PositiveEvenIntContainer(value: Int) : IntContainer(value) {
 
     override val validators = setOf(::mustBeEven)
 
-    fun mustBeEven(value: Int, t: Translation): PropertyValidity {
+    fun mustBeEven(value: Int, t: HasKlerkTranslation): PropertyValidity {
         if (value % 2 == 0) {
             return Valid
         }
@@ -715,7 +683,7 @@ class BookTitle(value: String) : StringContainer(value) {
     override val regexPattern = ".*"
     override val validators = setOf(::`title must be catchy`)
 
-    private fun `title must be catchy`(title: String, translation: Translation): PropertyValidity = Valid
+    private fun `title must be catchy`(title: String, translation: HasKlerkTranslation): PropertyValidity = Valid
 }
 
 class BookTag(value: String) : StringContainer(value) {
@@ -859,7 +827,7 @@ data class Ctx(
     override val actor: dev.klerkframework.klerk.ActorIdentity,
     override val eventLogExtra: String? = null,
     override val time: Instant = Clock.System.now(),
-    override val translation: Translation = DefaultTranslation,
+    override val translation: HasKlerkTranslation = DefaultTranslation,
     val user: Model<User>? = null,
     val purpose: String = "Pass the butter",
 ) : KlerkContext {
@@ -902,11 +870,11 @@ object MyJob : JobType.Local<MyJobCursor, Ctx, Views>() {
 
 val english = EnglishKlerkTranslation(DefaultKlerkTranslation)
 
-object SwedishTranslation : Translation {
-    override val klerk: KlerkTranslation = SwedishKlerkTranslation(english)
+object SwedishTranslation : HasKlerkTranslation {
+    override val klerk: KlerkTranslation = BookSwedishKlerkTranslation(english)
 }
 
-class SwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation by default {
+class BookSwedishKlerkTranslation(val default: KlerkTranslation) : KlerkTranslation by default {
 
     override fun property(property: KProperty1<*, *>): String = when (property) {
         CreateAuthorParams::firstName -> "Förnamn på den nya författaren"

@@ -1,11 +1,6 @@
 package dev.klerkframework.klerk.datatypes
 
-import dev.klerkframework.klerk.AttachedBlobID
-import dev.klerkframework.klerk.AttachedDataMetadata
-import dev.klerkframework.klerk.AttachedDataVisibility
-import dev.klerkframework.klerk.AttachedStringID
-import dev.klerkframework.klerk.InvalidPropertyProblem
-import dev.klerkframework.klerk.Translation
+import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.misc.functionName
 import java.io.InputStream
 
@@ -64,7 +59,7 @@ public sealed class AttachedDataContainer<ID>(id: ID) : DataContainer<ID>(id) {
      * Always valid: there is no value here to check. What this container declares is checked when a command attaches
      * the value, against metadata Klerk produced while the bytes were being written.
      */
-    final override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    final override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 
     /**
      * Whether [metadata] satisfies what this property declares. Returns null if it does, otherwise a description of

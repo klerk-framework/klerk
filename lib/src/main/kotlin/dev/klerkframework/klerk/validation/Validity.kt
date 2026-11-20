@@ -1,7 +1,8 @@
 package dev.klerkframework.klerk.validation
 
+import dev.klerkframework.klerk.HasKlerkTranslation
 import dev.klerkframework.klerk.InvalidPropertyCollectionProblem
-import dev.klerkframework.klerk.Translation
+import dev.klerkframework.klerk.KlerkText
 import dev.klerkframework.klerk.datatypes.DataContainer
 import dev.klerkframework.klerk.misc.functionName
 import kotlin.reflect.KProperty0
@@ -17,7 +18,7 @@ public sealed interface PropertyValidity : Validity {
 
     /** The value is invalid. */
     public class Invalid(
-        /** Optional detail passed to [Translation] when building the end-user error message. */
+        /** Optional detail passed to [HasKlerkTranslation] when building the end-user error message. */
         public val translationInfo: String? = null,
     ) : PropertyValidity {
         override fun toString(): String = "Invalid(${translationInfo ?: ""})"
@@ -35,7 +36,7 @@ public sealed interface PropertyCollectionValidity : Validity {
     public class Invalid(
         /**
          * Optional detail passed to [dev.klerkframework.klerk.KlerkTranslation.invalidPropertyCollection] when building
-         * the end-user message. The message itself comes from the [Translation], so a rule never spells it out.
+         * the end-user message. The message itself comes from the [HasKlerkTranslation], so a rule never spells it out.
          */
         public val translationInfo: String? = null,
         /** The property the rule requires to be null, e.g. to grey out an input. */
@@ -44,12 +45,12 @@ public sealed interface PropertyCollectionValidity : Validity {
         public val fieldMustNotBeNull: KProperty0<DataContainer<*>?>? = null,
     ) : PropertyCollectionValidity {
         /**
-         * The end-user message for this result, as [Translation] builds it from the name of [rule] (the validator
+         * The end-user message for this result, as [HasKlerkTranslation] builds it from the name of [rule] (the validator
          * function that returned this) and [translationInfo].
          */
-        public fun message(rule: Function<Any>, translation: Translation): String =
+        public fun message(rule: Function<Any>, translation: HasKlerkTranslation): String =
             translation.klerk.invalidPropertyCollection(
-                functionName(rule) ?: translation.klerk.invalid,
+                functionName(rule) ?: translation.klerk.text(KlerkText.Invalid),
                 translationInfo,
             )
 
@@ -58,7 +59,7 @@ public sealed interface PropertyCollectionValidity : Validity {
          * [dev.klerkframework.klerk.Validatable.validators] yourself, e.g. to show the errors in a form before
          * submitting the command, so the message is built the same way.
          */
-        public fun toProblem(rule: Function<Any>, translation: Translation): InvalidPropertyCollectionProblem =
+        public fun toProblem(rule: Function<Any>, translation: HasKlerkTranslation): InvalidPropertyCollectionProblem =
             InvalidPropertyCollectionProblem(
                 endUserTranslatedMessage = message(rule, translation),
                 fieldsMustBeNull = setOfNotNull(fieldMustBeNull),

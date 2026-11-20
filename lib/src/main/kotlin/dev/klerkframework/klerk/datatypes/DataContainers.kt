@@ -1,9 +1,10 @@
 package dev.klerkframework.klerk.datatypes
 
 import dev.klerkframework.klerk.AuthorizationException
+import dev.klerkframework.klerk.HasKlerkTranslation
 import dev.klerkframework.klerk.InvalidPropertyProblem
 import dev.klerkframework.klerk.KlerkErrorCode
-import dev.klerkframework.klerk.Translation
+import dev.klerkframework.klerk.KlerkText
 import dev.klerkframework.klerk.job.JobID
 import dev.klerkframework.klerk.logger
 import dev.klerkframework.klerk.misc.requireNamedRule
@@ -112,7 +113,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
 
     /**
      * Custom validation rules, checked after the container's built-in constraints (e.g. [StringContainer.minLength]).
-     * Override to add rules like "must be even". Each function is called with the value and the current [Translation]
+     * Override to add rules like "must be even". Each function is called with the value and the current [HasKlerkTranslation]
      * and returns [Valid] or [PropertyValidity.Invalid].
      *
      * Each must be a named function reference, e.g. `setOf(::mustBeEven)`, since its name identifies the rule in
@@ -121,7 +122,7 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
      * The value is passed in rather than read from the container, so a rule can be a top-level function shared by
      * several containers.
      */
-    public open val validators: Set<(value: T, translation: Translation) -> PropertyValidity> =
+    public open val validators: Set<(value: T, translation: HasKlerkTranslation) -> PropertyValidity> =
         emptySet()
 
     /** @throws IllegalConfigurationException if [validator] is not a named function reference */
@@ -134,10 +135,13 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
      * Returns null if valid, otherwise the first failing rule as an [InvalidPropertyProblem] whose message names
      * [propertyName].
      */
-    public abstract fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem?
+    public abstract fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem?
 
     /** The first [validators] rule that rejects the value, or null if they all accept it. */
-    protected fun firstInvalidValidator(propertyName: String, translation: Translation): InvalidPropertyProblem? =
+    protected fun firstInvalidValidator(
+        propertyName: String,
+        translation: HasKlerkTranslation
+    ): InvalidPropertyProblem? =
         validators.firstNotNullOfOrNull { validator ->
             (validator(rawValue, translation) as? Invalid)?.let {
                 InvalidPropertyProblem(
@@ -246,13 +250,13 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
      */
     public open val regexPattern: String? = null
 
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? {
         check(minLength >= 0) { "validLengthMin cannot be < 0" }
         check(maxLength >= minLength) { "minLength > maxLength" }
         if (rawValue.length < minLength) {
             return InvalidPropertyProblem(
                 if (rawValue.isEmpty()) {
-                    translation.klerk.mustBeProvided
+                    translation.klerk.text(KlerkText.MustBeProvided)
                 } else {
                     translation.klerk.tooShort(
                         minLength,
@@ -273,7 +277,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
             !regexPatterns.computeIfAbsent(regex) { Regex(regex) }
                 .matches(rawValue)
         ) {
-            return InvalidPropertyProblem(translation.klerk.invalid, propertyName)
+            return InvalidPropertyProblem(translation.klerk.text(KlerkText.Invalid), propertyName)
         }
         return firstInvalidValidator(propertyName, translation)
     }
@@ -288,12 +292,12 @@ private val regexPatterns: ConcurrentHashMap<String, Regex> = ConcurrentHashMap(
  * parameter accepts.
  */
 public abstract class EnumContainer<E : Enum<E>>(value: E) : DataContainer<E>(value) {
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 }
 
 /** A [DataContainer] wrapping a [Boolean]. No built-in constraints. */
 public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(value) {
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 }
 
 /**
@@ -302,7 +306,7 @@ public abstract class BooleanContainer(value: Boolean) : DataContainer<Boolean>(
  * Handles years between -290308 and +294247. Instants earlier/later will be set to -290308/+294247 respectively.
  */
 public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(value) {
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 
     /** `yyyy-MM-dd HH:mm:ss` in the system default time zone. */
     override fun format(value: Instant): String =
@@ -313,7 +317,7 @@ public abstract class InstantContainer(value: Instant) : DataContainer<Instant>(
  * A container for a calendar date, without a time of day or time zone — e.g. a contract's start date.
  */
 public abstract class DateContainer(value: LocalDate) : DataContainer<LocalDate>(value) {
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 }
 
 /**
@@ -345,7 +349,7 @@ public abstract class DurationContainer(value: Duration) : DataContainer<Duratio
      */
     public abstract val resolution: DurationUnit
 
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? {
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? {
         check(max >= min) { "max < min" }
         check(max.isFinite()) { "max must be finite" }
         check(resolution >= DurationUnit.MICROSECONDS) { "resolution must be MICROSECONDS or larger" }
@@ -375,7 +379,7 @@ public abstract class GeoPositionContainer(value: GeoPosition) : DataContainer<G
     /** The EPSG code of the geographic coordinate system of the positions, e.g. [Epsg.WGS84]. */
     public abstract val epsg: Int
 
-    override fun validate(propertyName: String, translation: Translation): InvalidPropertyProblem? = null
+    override fun validate(propertyName: String, translation: HasKlerkTranslation): InvalidPropertyProblem? = null
 }
 
 /** EPSG codes of geographic (latitude/longitude) coordinate systems, for [GeoPositionContainer.epsg]. */

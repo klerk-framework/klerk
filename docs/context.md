@@ -79,8 +79,10 @@ choosing between time triggers, `scheduleAt` and cron.
 
 ## translation
 
-`translation` carries a `Translation`, which supplies human-readable text for validation messages, property names, event
-names, and so on (see [translation](translation.md)). Passing a different `Translation` per context is how you support
+`translation` carries a `HasKlerkTranslation`, which supplies human-readable text for validation messages, property
+names, event
+names, and so on (see [translation](translation.md)). Passing a different `HasKlerkTranslation` per context is how you
+support
 multiple languages for the same actor pool — e.g. `Ctx.swedishUnauthenticated()` in the test suite uses a
 `SwedishTranslation` while the default uses `DefaultTranslation`.
 

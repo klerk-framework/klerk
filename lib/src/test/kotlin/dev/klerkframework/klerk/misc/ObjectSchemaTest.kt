@@ -1,39 +1,12 @@
 package dev.klerkframework.klerk.misc
 
-import dev.klerkframework.klerk.AttachedBlobID
-import dev.klerkframework.klerk.Author
-import dev.klerkframework.klerk.Ctx
-import dev.klerkframework.klerk.DefaultTranslation
-import dev.klerkframework.klerk.IllegalConfigurationException
-import dev.klerkframework.klerk.KlerkErrorCode
-import dev.klerkframework.klerk.ModelID
-import dev.klerkframework.klerk.RuleDescription
-import dev.klerkframework.klerk.RuleType
-import dev.klerkframework.klerk.Street
-import dev.klerkframework.klerk.Translation
-import dev.klerkframework.klerk.Validatable
+import dev.klerkframework.klerk.*
 import dev.klerkframework.klerk.attacheddata.collectAttachedData
-import dev.klerkframework.klerk.datatypes.ByteContainer
-import dev.klerkframework.klerk.datatypes.DataCategory
-import dev.klerkframework.klerk.datatypes.DoubleContainer
-import dev.klerkframework.klerk.datatypes.IntContainer
-import dev.klerkframework.klerk.datatypes.ShortContainer
-import dev.klerkframework.klerk.datatypes.StringContainer
-import dev.klerkframework.klerk.datatypes.UByteContainer
-import dev.klerkframework.klerk.datatypes.UIntContainer
-import dev.klerkframework.klerk.datatypes.ULongContainer
-import dev.klerkframework.klerk.datatypes.UShortContainer
+import dev.klerkframework.klerk.datatypes.*
 import dev.klerkframework.klerk.validation.PropertyCollectionValidity
 import dev.klerkframework.klerk.validation.PropertyValidity
 import dev.klerkframework.klerk.validation.Valid
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertSame
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 data class SchemaAddress(val street: Street, val owner: ModelID<Author>?)
 
@@ -54,13 +27,15 @@ data class SchemaNestedBlobs(val holders: List<SchemaBlobHolder>)
 data class SchemaBodyVar(val street: Street) {
     var counter: Int = 0
 }
+
 data class SchemaWithDefault(val street: Street, val other: Street = Street("default"))
 
 class LambdaValidated(value: Int) : IntContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0
     override val max = 10
-    override val validators = setOf<(Int, Translation) -> PropertyValidity>({ _, _ -> PropertyValidity.Invalid() })
+    override val validators =
+        setOf<(Int, HasKlerkTranslation) -> PropertyValidity>({ _, _ -> PropertyValidity.Invalid() })
 }
 
 data class SchemaLambdaValidated(val number: LambdaValidated)
@@ -226,31 +201,37 @@ class SchemaShort(value: Short) : ShortContainer(value) {
     override val min = 0.toShort()
     override val max = 9.toShort()
 }
+
 class SchemaByte(value: Byte) : ByteContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toByte()
     override val max = 9.toByte()
 }
+
 class SchemaUInt(value: UInt) : UIntContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0u
     override val max = 9u
 }
+
 class SchemaULong(value: ULong) : ULongContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0uL
     override val max = 9uL
 }
+
 class SchemaUShort(value: UShort) : UShortContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toUShort()
     override val max = 9.toUShort()
 }
+
 class SchemaUByte(value: UByte) : UByteContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.toUByte()
     override val max = 9.toUByte()
 }
+
 class SchemaDouble(value: Double) : DoubleContainer(value) {
     override val category: DataCategory = DataCategory.NonSensitive
     override val min = 0.0

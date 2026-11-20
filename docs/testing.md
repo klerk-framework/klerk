@@ -119,6 +119,7 @@ assertFailsWith<IllegalConfigurationException> {
 
 ## Translation
 
-If your application supports multiple languages (see [translation](translation.md)), pass the `Translation` you want to
+If your application supports multiple languages (see [translation](translation.md)), pass the `HasKlerkTranslation` you
+want to
 test through the `Ctx` (e.g. `Ctx.swedishUnauthenticated()` in this repo's test suite) and assert on
 `Problem.endUserTranslatedMessage` rather than on the underlying rule.

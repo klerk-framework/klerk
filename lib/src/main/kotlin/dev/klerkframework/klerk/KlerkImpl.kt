@@ -80,7 +80,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
             throw e
         } catch (e: Exception) {
             logger.error(e) { "Bug in Klerk: Could not process command (${command.event})" }
-            return CommandResult.Failure(listOf(InternalProblem(DefaultKlerkTranslation.internalError)))
+            return CommandResult.Failure(listOf(InternalProblem(DefaultKlerkTranslation.text(KlerkText.InternalError))))
         }
 
         if (result is CommandResult.Success<T>) {
