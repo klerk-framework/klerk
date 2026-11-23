@@ -80,6 +80,13 @@ public abstract class ModelView<T : Any, C : KlerkContext>(internal val parent: 
      */
     internal open fun matches(model: Model<T>): Boolean = true
 
+    /**
+     * Whether [model] would be in this view, judged by the predicates alone. True whenever that cannot be told, e.g. for
+     * a custom [ModelView].
+     */
+    internal open fun couldContain(model: Model<T>): Boolean =
+        !narrowsByPredicate || (requireNotNull(parent).couldContain(model) && matches(model))
+
     /** Whether this view contains [id], answered from the index. Only valid once [ensureIndex] has run. */
     internal open fun containsId(id: Int): Boolean = index?.contains(id) == true
 
@@ -295,6 +302,7 @@ internal class SortedModelView<T : Any, R : Comparable<R>, C : KlerkContext>(
     override val isIndexable: Boolean get() = previous.isIndexable
     override fun containsId(id: Int): Boolean = previous.containsId(id)
     override fun <V> ensureIndex(reader: ModelReader<C, V>): Set<Int>? = previous.ensureIndex(reader)
+    override fun couldContain(model: Model<T>): Boolean = previous.couldContain(model)
 
     // Cardinality is a question about membership, so it goes to the parent rather than through memberIds, which would
     // read and sort every model just to count it.

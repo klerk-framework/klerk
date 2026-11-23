@@ -2,13 +2,8 @@ package dev.klerkframework.klerk
 
 import dev.klerkframework.klerk.misc.requireNamedRule
 import dev.klerkframework.klerk.storage.EventLogEntry
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import dev.klerkframework.klerk.subscription.ChangeHub
+import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -127,6 +122,7 @@ public class DeletedModelArgs(
 internal class EventLogRetentionManager(
     private val retention: EventLogRetention,
     private val settings: KlerkSettings,
+    private val changeHub: ChangeHub,
 ) {
     private var scope: CoroutineScope? = null
 
@@ -166,9 +162,9 @@ internal class EventLogRetentionManager(
     fun sweep() {
         val now = settings.now()
         eraseDeletedModels(eraseAtOrBefore = now)
-        settings.persistence.eraseEventLogParamsAndExtra { event ->
-            retention.paramsAndExtra(event)?.let { now - it }
-        }
+        val cutoff = { event: EventReference -> retention.paramsAndExtra(event)?.let { now - it } }
+        settings.persistence.eraseEventLogParamsAndExtra(cutoff)
+        changeHub.eraseParamsAndExtra(cutoff)
     }
 
     /** When the event log of a model deleted now is to be erased, according to [retention]. */
@@ -191,7 +187,9 @@ internal class EventLogRetentionManager(
 
     private fun eraseDeletedModels(eraseAtOrBefore: Instant) {
         settings.persistence.eraseEventLogsOfDeletedModels(eraseAtOrBefore)
-        tombstones.values.removeIf { it <= eraseAtOrBefore }
+        val erased = tombstones.filterValues { it <= eraseAtOrBefore }.keys
+        tombstones.keys.removeAll(erased)
+        changeHub.eraseEventLogs(erased)
     }
 
     companion object {

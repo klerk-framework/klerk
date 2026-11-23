@@ -140,20 +140,19 @@ public abstract class DataContainer<T> internal constructor(internal val rawValu
     /** The first [validators] rule that rejects the value, or null if they all accept it. */
     protected fun firstInvalidValidator(
         propertyName: String,
-        translation: HasKlerkTranslation
-    ): InvalidPropertyProblem? =
-        validators.firstNotNullOfOrNull { validator ->
-            (validator(rawValue, translation) as? Invalid)?.let {
-                InvalidPropertyProblem(
-                    endUserTranslatedMessage = translation.klerk.invalidProperty(
-                        propertyName,
-                        nameOf(validator),
-                        it.translationInfo,
-                    ),
-                    propertyName = propertyName,
-                )
-            }
+        translation: HasKlerkTranslation,
+    ): InvalidPropertyProblem? = validators.firstNotNullOfOrNull { validator ->
+        (validator(rawValue, translation) as? Invalid)?.let {
+            InvalidPropertyProblem(
+                endUserTranslatedMessage = translation.klerk.invalidProperty(
+                    propertyName,
+                    nameOf(validator),
+                    it.translationInfo,
+                ),
+                propertyName = propertyName,
+            )
         }
+    }
 
     /**
      * Returns a copy of this container that carries the provided authorization. The copy is made with [clone] rather
@@ -256,7 +255,7 @@ public abstract class StringContainer(value: String) : DataContainer<String>(val
         if (rawValue.length < minLength) {
             return InvalidPropertyProblem(
                 if (rawValue.isEmpty()) {
-                    translation.klerk.text(KlerkText.MustBeProvided)
+                    translation.klerk.text(KlerkText.FillInThisField)
                 } else {
                     translation.klerk.tooShort(
                         minLength,

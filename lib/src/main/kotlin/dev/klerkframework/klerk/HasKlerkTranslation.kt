@@ -28,6 +28,9 @@ public interface HasKlerkTranslation {
 
 /** Built-in framework-level strings (used by [DefaultKlerkTranslation] unless overridden). */
 public interface KlerkTranslation {
+    /** The BCP 47 language tag of the texts, e.g. `"en"` or `"sv"`. Used for the `lang` attribute of pages. */
+    public val languageTag: String get() = "en"
+
     /** The name of [property], as shown to an end user. */
     public fun property(property: KProperty1<*, *>): String
 
@@ -138,7 +141,7 @@ public enum class KlerkText(
     public val english: String,
 ) {
     /** The message when a required value is missing. */
-    MustBeProvided("Must be provided"),
+    FillInThisField("Please fill in this field"),
 
     /** A generic message for an invalid value. */
     Invalid("Invalid"),

@@ -40,6 +40,9 @@ object DummyReader : Reader<Ctx, Views> {
     override val jobs: JobReader
         get() = throw exception
 
+    override val sequenceNumber: Long
+        get() = throw exception
+
     override val attachedData: AttachedDataReader
         get() = throw exception
 

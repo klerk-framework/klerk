@@ -67,6 +67,7 @@ val myBook = klerk.read(context) { get(myBookId) }
 * [Authorization](docs/authorization.md) — who can read and write what
 * [Views](docs/views.md) — declaring queryable, live-updating lists of models
 * [Reading data](docs/reading.md) — reading models and views: filtering, ordering, pagination and cursors
+* [Subscriptions](docs/subscriptions.md) — being told when a model, a view, the event log or a job changes
 * [Context](docs/context.md) — actor, time, and translation for every operation
 * [Jobs](docs/jobs.md) — background work, managed and unmanaged
 * [Time](docs/time.md) — where "now" comes from, and choosing between time triggers, `scheduleAt` and cron

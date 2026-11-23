@@ -27,6 +27,7 @@ import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -36,6 +37,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.job
@@ -1241,10 +1243,17 @@ internal class JobManagerImpl<C : KlerkContext, V>(private val klerk: KlerkImpl<
 
     override suspend fun all(context: C): List<JobInfo> = reading(context) { it.all() }
 
-    override fun subscribe(id: JobID?, context: C): Flow<JobInfo> = changes
+    /** Every change of a job the actor may see, or only of the job [id] if given. */
+    internal fun changes(id: JobID?, context: C): Flow<JobInfo> = changes
         .filter { id == null || it.id == id }
         .map { it.toJobInfoWithRunningOverlay() }
         .filter { isAuthorized(it, context) }
+
+    /** The job [id] as it is now, then its changes. Subscribes before reading, so no change is missed. */
+    internal fun currentAndChanges(id: JobID, context: C): Flow<JobInfo> = channelFlow {
+        launch(start = CoroutineStart.UNDISPATCHED) { changes(id, context).collect { send(it) } }
+        send(get(id, context))
+    }
 
     override suspend fun cancel(id: JobID, context: C, reason: String) {
         val found = records[id] ?: throw NoSuchElementException("There is no job with id $id")

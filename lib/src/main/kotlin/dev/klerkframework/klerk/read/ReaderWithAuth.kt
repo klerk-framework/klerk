@@ -51,6 +51,9 @@ internal class ReaderWithAuth<C : KlerkContext, V>(val klerk: KlerkImpl<C, V>, v
 
     override val attachedData: AttachedDataReader get() = attachedDataReader
 
+    // Constant while the read lock is held, which is the only time the reader may be used.
+    override val sequenceNumber: Long get() = klerk.eventsManager.visibleSequenceNumber
+
     override fun eventLog(id: ModelID<out Any>?, after: Instant, before: Instant): PendingRead<List<EventLogEntry>> {
         checkEventLogAuthorization(klerk, context, withoutAuth)
         return eventLogQuery(klerk, id, after, before)

@@ -15,7 +15,6 @@ import dev.klerkframework.klerk.log.LogLevel
 import dev.klerkframework.klerk.misc.KlerkJson
 import dev.klerkframework.klerk.misc.ReadWriteLock
 import dev.klerkframework.klerk.misc.getCurrentInstant
-import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.ReaderWithoutAuth
 import dev.klerkframework.klerk.read.isAuthorized
 import dev.klerkframework.klerk.read.withoutReadRestrictions
@@ -26,6 +25,8 @@ import dev.klerkframework.klerk.storage.ModelCache
 import dev.klerkframework.klerk.storage.UsedCommandToken
 import dev.klerkframework.klerk.storage.spi.AttachedDataDelta
 import dev.klerkframework.klerk.storage.spi.JobCommit
+import dev.klerkframework.klerk.subscription.CommitRecord
+import dev.klerkframework.klerk.subscription.ModelDelta
 import dev.klerkframework.klerk.validation.modelNotFound
 import io.micrometer.core.instrument.Counter
 import kotlinx.coroutines.NonCancellable
@@ -327,10 +328,12 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         val sequenceNumber = assignedSequenceNumber.incrementAndGet()
         ModelCache.beginCommit(touchedIds)
         val tombstones: Map<ModelID<out Any>, Instant>
+        val eventLogEntry: EventLogEntry?
         try {
             val batch = toCommitBatch(delta, command, context, attachedDataDelta, jobCommit, sequenceNumber)
                 .copy(commandToken = token?.let { UsedCommandToken(it.nonce, it.time) })
             tombstones = batch.eventLogTombstones
+            eventLogEntry = batch.eventLogEntry
             if (isJobStep) {
                 settings.persistence.commitJobStep(batch)
             } else {
@@ -344,7 +347,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
         // Persisted, so memory must follow even if the caller is cancelled meanwhile.
         withContext(NonCancellable) {
             token?.let { processedCommandTokens[it.nonce] = it.time }
-            val modifications = modificationsOf(delta)
+            val record = CommitRecord(sequenceNumber, modelDeltas(delta), eventLogEntry, command?.event?.forModel)
             readWriteLock.withWrite {
                 ModelCache.handleDelta(delta)
                 attachedData.applyToMemory(attachedDataDelta)
@@ -354,9 +357,7 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
                 ModelCache.endCommit()
             }
             jobs.notifyCommitted(jobCommit)
-            for (modification in modifications) {
-                klerk.modelsManager.modelWasModified(modification)
-            }
+            klerk.subscriptionsImpl.hub.publish(record)
             if (delta.deletedModels.isNotEmpty()) {
                 klerk.eventLogRetention.afterDeletion(tombstones)
             }
@@ -471,19 +472,20 @@ internal class EventsManagerImpl<C : KlerkContext, V>(
     }
 
     /**
-     * Must run before the delta is applied to the cache, which is where a deleted model's class is looked up. A model
-     * created and deleted by the same command is known by neither, and is left out.
+     * Must run before the delta is applied to the cache, which is where the models as they were before are looked up. A
+     * model created and deleted by the same command is known by neither, and is left out.
      */
-    private fun modificationsOf(delta: ProcessingData<*, C, V>): List<ModelModification> {
+    private fun modelDeltas(delta: ProcessingData<*, C, V>): List<ModelDelta> {
+        val created = delta.createdModels.toSet()
         val deleted = delta.deletedModels.toSet()
-        fun classOf(id: ModelID<out Any>) =
-            (delta.aggregatedModelState[id] ?: ModelCache.getOrNull(id))?.props?.let { it::class }
-        return delta.createdModels
-            .filter { it !in deleted }
-            .mapNotNull { id -> classOf(id)?.let { ModelModification.Created(id, it) } } +
-            delta.updatedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.PropsUpdated(id, it) } } +
-            delta.transitions.mapNotNull { id -> classOf(id)?.let { ModelModification.Transitioned(id, it) } } +
-            delta.deletedModels.mapNotNull { id -> classOf(id)?.let { ModelModification.Deleted(id, it) } }
+        return (delta.createdModels + delta.updatedModels + delta.transitions + delta.deletedModels)
+            .distinct()
+            .mapNotNull { id ->
+                val before = if (id in created) null else ModelCache.getOrNull(id)
+                val after = if (id in deleted) null else delta.aggregatedModelState[id]
+                val kClass = (after ?: before)?.props?.let { it::class } ?: return@mapNotNull null
+                ModelDelta(id, kClass, before, after)
+            }
     }
 
     /**

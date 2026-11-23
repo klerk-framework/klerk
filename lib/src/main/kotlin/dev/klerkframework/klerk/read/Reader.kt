@@ -143,6 +143,13 @@ public interface ModelReader<C : KlerkContext, V> {
 public interface Reader<C : KlerkContext, V> : ModelReader<C, V> {
 
     /**
+     * The sequence number of the latest commit this read block sees. Pass it as `after` to a
+     * [dev.klerkframework.klerk.subscription.KlerkSubscriptions] function to get the changes this block did not see.
+     * Do not show it to end users, as it reveals how many commits the application has made.
+     */
+    public val sequenceNumber: Long
+
+    /**
      * Returns the void events (i.e. events that create a new model of type [clazz]) that the actor could
      * successfully submit right now: authorization and validation rules are both evaluated, but nothing is executed.
      * Only events with a [EventVisibility] of at least [visibility] are included. Pass [EventVisibility.External] to

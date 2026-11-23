@@ -44,6 +44,8 @@ interface KlerkTranslation {
 }
 ```
 
+`languageTag` is the BCP 47 tag of the language, e.g. `"sv"`. klerk-web uses it as the `lang` of its pages. It is `"en"` unless you override it.
+
 `modelName` is the name of a model (given its props class), e.g. in a page title, and `enumValue` the name of an enum
 value, e.g. in a drop-down list.
 

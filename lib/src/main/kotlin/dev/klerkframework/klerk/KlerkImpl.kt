@@ -13,6 +13,9 @@ import dev.klerkframework.klerk.read.KlerkModelsImpl
 import dev.klerkframework.klerk.read.ReadBlockGuard
 import dev.klerkframework.klerk.read.Reader
 import dev.klerkframework.klerk.storage.ModelCache
+import dev.klerkframework.klerk.subscription.ChangeHub
+import dev.klerkframework.klerk.subscription.KlerkSubscriptions
+import dev.klerkframework.klerk.subscription.SubscriptionsImpl
 import dev.klerkframework.klerk.validation.Validator
 import dev.klerkframework.klerk.view.ModelViews
 import kotlinx.coroutines.CancellationException
@@ -36,7 +39,9 @@ internal class KlerkImpl<C : KlerkContext, V>(
     internal val readWriteLock = ReadWriteLock()
     internal val modelsManager = KlerkModelsImpl<C, V>(this, readWriteLock)
     internal val attachedDataImpl = AttachedDataImpl<C, V>(this, readWriteLock, settings)
-    internal val eventLogRetention = EventLogRetentionManager(specification.eventLogRetention, settings)
+    internal val subscriptionsImpl = SubscriptionsImpl(this, ChangeHub(settings.subscriptionHistory))
+    internal val eventLogRetention =
+        EventLogRetentionManager(specification.eventLogRetention, settings, subscriptionsImpl.hub)
     internal val eventsManager =
         EventsManagerImpl<C, V>(specification, this, readWriteLock, settings, jobs, attachedDataImpl)
     private val klerkMeta = KlerkMetaImpl(this)
@@ -60,7 +65,7 @@ internal class KlerkImpl<C : KlerkContext, V>(
         specification.managedModels.find { it.kClass.simpleName == modelType }?.views
             ?: error("Can't find model view for type '$modelType'")
 
-    override val modelChanges = modelsManager
+    override val subscriptions: KlerkSubscriptions<C, V> = subscriptionsImpl
 
     override val meta = klerkMeta
 
@@ -100,6 +105,8 @@ internal class KlerkImpl<C : KlerkContext, V>(
 internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C, V>) : KlerkMeta {
     private val state = AtomicInteger(0) // 0 = not started, 1 = started, 2 = stopped
 
+    override val sequenceNumber: Long get() = klerk.eventsManager.visibleSequenceNumber
+
     override suspend fun start(installShutdownHook: Boolean) {
         if (state.compareAndSet(0, 1)) {
             if (installShutdownHook) {
@@ -121,6 +128,7 @@ internal class KlerkMetaImpl<V, C : KlerkContext>(private val klerk: KlerkImpl<C
                 }
 
                 klerk.eventsManager.start()
+                klerk.subscriptionsImpl.hub.started(klerk.eventsManager.visibleSequenceNumber)
                 ModelCache.initMetrics(klerk.settings.meterRegistry, klerk.readWriteLock)
                 klerk.attachedDataImpl.start()
                 klerk.eventLogRetention.start()

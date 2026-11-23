@@ -550,7 +550,7 @@ class SecurityTest {
         val bob = Ctx(ModelReferenceIdentity(ModelID<User>(2)))
 
         val firstSeenByAlice = async(start = CoroutineStart.UNDISPATCHED) {
-            klerk.jobs.subscribe(null, alice).first()
+            klerk.subscriptions.jobs(alice).first()
         }
         klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), bob)
         val alicesJob = klerk.jobs.schedule(MyJob.declare(MyJobCursor("hi")), alice)

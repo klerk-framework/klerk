@@ -14,8 +14,10 @@ import kotlin.time.DurationUnit
  * ```
  */
 public object SwedishKlerkTranslation : KlerkTranslation by DefaultKlerkTranslation {
+    override val languageTag: String = "sv"
+
     private val texts = mapOf(
-        KlerkText.MustBeProvided to "Måste anges",
+        KlerkText.FillInThisField to "Fyll i det här fältet",
         KlerkText.Invalid to "Ogiltigt",
         KlerkText.InternalError to "Internt fel",
         KlerkText.Unauthorized to "Obehörig",

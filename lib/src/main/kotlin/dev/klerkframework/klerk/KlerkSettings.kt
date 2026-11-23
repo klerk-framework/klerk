@@ -5,6 +5,7 @@ import dev.klerkframework.klerk.attacheddata.DefaultContentTypeDetector
 import dev.klerkframework.klerk.job.JobSettings
 import dev.klerkframework.klerk.misc.envBoolean
 import dev.klerkframework.klerk.misc.envDuration
+import dev.klerkframework.klerk.misc.envInt
 import dev.klerkframework.klerk.misc.makeExactSerializable
 import dev.klerkframework.klerk.storage.AttachedBlobStore
 import dev.klerkframework.klerk.storage.ModelCacheSettings
@@ -105,7 +106,18 @@ public data class KlerkSettings(
      * signatures; replace it to recognise more formats, e.g. with a detector backed by Apache Tika.
      */
     val contentTypeDetector: ContentTypeDetector = DefaultContentTypeDetector,
+
+    /**
+     * How many of the latest commits are kept in memory for [dev.klerkframework.klerk.subscription.KlerkSubscriptions],
+     * with the models as they were before and after each commit. A subscriber that is further behind, or continues
+     * from an older sequence number, gets [dev.klerkframework.klerk.subscription.MissedChanges].
+     */
+    val subscriptionHistory: Int = 1024,
 ) {
+
+    init {
+        require(subscriptionHistory > 0) { "subscriptionHistory must be positive" }
+    }
 
     /**
      * The current time for background work, at the precision Klerk persists timestamps with (see
@@ -117,8 +129,8 @@ public data class KlerkSettings(
 
         /**
          * Builds a [KlerkSettings] from environment variables, falling back to the regular default for any variable
-         * that is unset. Only the settings with simple (boolean/[Duration]) types are read this way — `KLERK_` plus
-         * the property name in `SCREAMING_SNAKE_CASE`, e.g. [maxAttachedDataLease] from
+         * that is unset. Only the settings with simple (boolean/integer/[Duration]) types are read this way —
+         * `KLERK_` plus the property name in `SCREAMING_SNAKE_CASE`, e.g. [maxAttachedDataLease] from
          * `KLERK_MAX_ATTACHED_DATA_LEASE`. A [Duration] variable is parsed with [Duration.parse], so both `"24h"` and
          * `"PT24H"` work. [jobs] and [modelCache] default to [JobSettings.fromEnvVars] and
          * [ModelCacheSettings.fromEnvVars], so their settings are read from `KLERK_JOBS_`- and
@@ -151,6 +163,7 @@ public data class KlerkSettings(
                 maxAttachedDataLease = envDuration("KLERK_MAX_ATTACHED_DATA_LEASE") ?: defaults.maxAttachedDataLease,
                 commandTokenValidity = envDuration("KLERK_COMMAND_TOKEN_VALIDITY") ?: defaults.commandTokenValidity,
                 contentTypeDetector = contentTypeDetector,
+                subscriptionHistory = envInt("KLERK_SUBSCRIPTION_HISTORY") ?: defaults.subscriptionHistory,
             )
         }
     }

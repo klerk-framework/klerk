@@ -9,7 +9,6 @@ import dev.klerkframework.klerk.job.Overlap
 import dev.klerkframework.klerk.job.PendingJob
 import dev.klerkframework.klerk.storage.spi.JobCommit
 import dev.klerkframework.klerk.storage.spi.JobRecord
-import kotlinx.coroutines.flow.Flow
 
 /**
  * Reads job state from inside a read block, as [dev.klerkframework.klerk.read.Reader.jobs].
@@ -80,12 +79,6 @@ public interface JobManager<C : KlerkContext, V> {
 
     /** Every job the actor is allowed to see, newest first. */
     public suspend fun all(context: C): List<JobInfo>
-
-    /**
-     * Emits a [JobInfo] every time a job the actor may see changes — for a live progress bar. If [id] is given, only
-     * that job's changes are emitted.
-     */
-    public fun subscribe(id: JobID?, context: C): Flow<JobInfo>
 
     /**
      * Requests cancellation, and returns as soon as the request has been recorded.

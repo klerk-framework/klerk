@@ -60,8 +60,8 @@ public data class QueryResponse<T : Any>(
     val cursorLastPage: QueryListCursor?,
     /** The size of the whole view, or null unless [QueryOptions.countTotal] was set. */
     val totalCount: Int?,
-    /** Where [items] start in the view, needed by [cursorAt]. */
-    internal val offset: Int = 0,
+    /** Where [items] start in the view: the number of models before the first one. */
+    val offset: Int = 0,
 ) {
 
     /** True if there is a page before this one. */

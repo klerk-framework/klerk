@@ -213,8 +213,8 @@ What is left for these rules is the `kind` ("anyone may upload JSON, only editor
 ### readJobs
 
 Who may see a job's metadata — its status, progress and log — through `JobManager.get`, `JobManager.all` and
-`JobManager.subscribe`. The rules receive a `JobReadRuleArgs`, whose `isOwnedByActor()` answers "did this actor
-schedule it?" (`isOwnedBy(actor)` asks about someone else). It uses `ActorIdentity.isSameAs`, so an actor without `id`
+`klerk.subscriptions.job`/`jobs`. The rules receive a `JobReadRuleArgs`, whose `isOwnedByActor()` answers "did this
+actor schedule it?" (`isOwnedBy(actor)` asks about someone else). It uses `ActorIdentity.isSameAs`, so an actor without `id`
 or `externalId`, e.g. `Unauthenticated`, owns no jobs.
 
 ```kotlin

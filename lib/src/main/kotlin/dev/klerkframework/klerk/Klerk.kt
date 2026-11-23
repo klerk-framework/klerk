@@ -4,9 +4,8 @@ import dev.klerkframework.klerk.command.Command
 import dev.klerkframework.klerk.command.CommandToken
 import dev.klerkframework.klerk.command.ProcessingOptions
 import dev.klerkframework.klerk.log.ActivityLog
-import dev.klerkframework.klerk.read.ModelModification
 import dev.klerkframework.klerk.read.Reader
-import kotlinx.coroutines.flow.Flow
+import dev.klerkframework.klerk.subscription.KlerkSubscriptions
 
 /** A running Klerk application. Create one with [Klerk.create]. */
 public interface Klerk<C : KlerkContext, V> {
@@ -20,8 +19,8 @@ public interface Klerk<C : KlerkContext, V> {
     /** Background jobs: submitting, inspecting and controlling them. */
     public val jobs: JobManager<C, V>
 
-    /** Subscriptions to model changes. */
-    public val modelChanges: KlerkModelChanges<C, V>
+    /** Subscriptions to changes of models, views, the event log and jobs. */
+    public val subscriptions: KlerkSubscriptions<C, V>
 
     /** Large immutable data (blobs and strings) attached to models. */
     public val attachedData: KlerkAttachedData<C>
@@ -98,24 +97,6 @@ public interface PendingRead<out T> {
     public suspend fun get(): T
 }
 
-/**
- * Subscriptions to model changes, as [Klerk.modelChanges].
- */
-public interface KlerkModelChanges<C : KlerkContext, V> {
-
-    /**
-     * Subscribes to changes of the model [id], or of all models if [id] is null. The actor in [context] is used for
-     * authorization.
-     *
-     * Changes of models the actor may not read are left out, and so are changes of a model that no longer exists when
-     * the change is delivered. Deletions are always sent.
-     *
-     * Commands never wait for a subscriber, so a subscriber may issue commands itself. One that falls more than 1024
-     * changes behind misses the oldest of them.
-     */
-    public fun subscribe(id: ModelID<out Any>?, context: C): Flow<ModelModification>
-}
-
 /** Lifecycle and information about a running Klerk instance, as [Klerk.meta]. */
 public interface KlerkMeta {
 
@@ -144,4 +125,14 @@ public interface KlerkMeta {
      * models at startup. Ask the view instead: `klerk.read(context) { views.users.all.isEmpty() }`.
      */
     public suspend fun modelsCount(): Int
+
+    /**
+     * The sequence number of the latest commit that reads can see, as in
+     * [dev.klerkframework.klerk.storage.EventLogEntry.sequenceNumber].
+     *
+     * To subscribe to what a read did not see, use [dev.klerkframework.klerk.read.Reader.sequenceNumber], or take this
+     * before the read: taken after, it may include a commit the read did not see. Do not show it to end users, as it
+     * reveals how many commits the application has made.
+     */
+    public val sequenceNumber: Long
 }

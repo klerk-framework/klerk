@@ -271,7 +271,7 @@ two requests gives no such guarantee.
 | `view.asSequence()` / `view.query(options)`               | silently skips it                         |
 | `view.count()` / `isEmpty()` / `ids()` / `id in view`     | silently skips it                         |
 | `view.asSequenceOrThrow()` / `view.queryOrThrow(options)` | throws `AuthorizationException`           |
-| `modelChanges.subscribe(id, context)`                     | silently skips it; deletions are always sent |
+| `klerk.subscriptions.model(id, context)` / `view(...)`   | skips it, unless it was readable before the change |
 
 `asSequence()` / `query()` skip unreadable matches, which is what a list rendered for an actor that only sees part of
 the data needs (e.g. a supplier that may read only its own rows) — a throw would turn the whole page into a 500. The
