@@ -22,6 +22,8 @@ public object SwedishKlerkTranslation : KlerkTranslation by DefaultKlerkTranslat
         KlerkText.InternalError to "Internt fel",
         KlerkText.Unauthorized to "Obehörig",
         KlerkText.NoAllowingRule to "Ingen tillåtande regel",
+        KlerkText.UsedElsewhere to "Kan inte raderas eftersom den används på annat håll.",
+        KlerkText.ReferenceDoesNotExist to "Ändringen hänvisar till något som inte finns.",
         KlerkText.State to "Status",
         KlerkText.Created to "Skapad",
         KlerkText.Updated to "Ändrad",

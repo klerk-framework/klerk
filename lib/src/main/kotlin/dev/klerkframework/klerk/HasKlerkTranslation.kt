@@ -169,6 +169,12 @@ public enum class KlerkText(
 
     /** The name of a summary of a model's properties, e.g. as a column header. */
     Properties("Properties"),
+
+    /** The message when a model cannot be deleted because other models refer to it. */
+    UsedElsewhere("Cannot delete since it is used elsewhere."),
+
+    /** The message when a change would refer to a model that does not exist. */
+    ReferenceDoesNotExist("The change refers to something that does not exist."),
 }
 
 /** The texts in [KlerkText] that [translation] has not translated, i.e. that are still the English default. */

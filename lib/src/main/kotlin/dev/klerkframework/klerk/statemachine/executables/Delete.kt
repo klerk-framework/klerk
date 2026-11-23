@@ -3,6 +3,7 @@ package dev.klerkframework.klerk.statemachine.executables
 import dev.klerkframework.klerk.EventProcessingOptions
 import dev.klerkframework.klerk.KlerkContext
 import dev.klerkframework.klerk.KlerkErrorCode
+import dev.klerkframework.klerk.KlerkText
 import dev.klerkframework.klerk.ModelArgs
 import dev.klerkframework.klerk.ProcessingData
 import dev.klerkframework.klerk.Specification
@@ -34,7 +35,7 @@ internal class DeleteModel<T : Any, A : ModelArgs<T, C, V>, C : KlerkContext, V>
                 return ProcessingData(
                     problems = listOf(
                         StateProblem(
-                            endUserTranslatedMessage = "Cannot delete since it is used elsewhere.",
+                            endUserTranslatedMessage = args.context.translation.klerk.text(KlerkText.UsedElsewhere),
                             internalDescription = "Cannot delete model ${model.id} since these models have a " +
                                 "reference to it: ${currentReferencesToModel.joinToString(", ")}",
                             KlerkErrorCode.BrokenReference,

@@ -178,7 +178,7 @@ internal class EventProcessor<C : KlerkContext, V>(
     ): ProcessingData<T, C, V> {
         val processingData = ProcessingData<T, C, V>(remainingCommands = listOf(command), primaryModel = command.model)
         val result = process(processingData, context, reader, isPrimary = true, options, context.time)
-        return withReferenceCheck(result)
+        return withReferenceCheck(result, context)
     }
 
     /**
@@ -187,7 +187,7 @@ internal class EventProcessor<C : KlerkContext, V>(
      * The checks along the way (`validReferences`, the delete check) only see what is committed, not what the same run
      * created, changed or deleted, and a model's references need not come from the event parameters at all.
      */
-    private fun <T : Any> withReferenceCheck(data: ProcessingData<T, C, V>): ProcessingData<T, C, V> {
+    private fun <T : Any> withReferenceCheck(data: ProcessingData<T, C, V>, context: C): ProcessingData<T, C, V> {
         if (data.problems.isNotEmpty()) {
             return data
         }
@@ -205,7 +205,7 @@ internal class EventProcessor<C : KlerkContext, V>(
                     return ProcessingData(
                         problems = listOf(
                             StateProblem(
-                                "The change refers to something that does not exist.",
+                                context.translation.klerk.text(KlerkText.ReferenceDoesNotExist),
                                 "Model $id would refer to model $reference in ${leaf.path}, which would not exist",
                                 KlerkErrorCode.BrokenReference,
                             ),
@@ -226,7 +226,7 @@ internal class EventProcessor<C : KlerkContext, V>(
         return readWriteLock.withRead {
             val reader = ReaderWithoutAuth(klerk)
             val context = klerk.specification.systemContextProvider.invoke()
-            withReferenceCheck(process(processingData, context, reader, isPrimary = true, options, time))
+            withReferenceCheck(process(processingData, context, reader, isPrimary = true, options, time), context)
         }
     }
 
